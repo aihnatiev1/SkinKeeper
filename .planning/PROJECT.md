@@ -2,11 +2,28 @@
 
 ## What This Is
 
-A Steam CS2 skin inventory tracker and trading tool. Flutter mobile app with Express.js backend that lets users track skin values, monitor price changes, and sell items directly on the Steam Community Market with smart pricing.
+Mobile-first CS2 skin inventory tracker and trading tool with freemium model. Flutter app with Express.js backend that lets users track skin values across multiple price sources, monitor price changes with push notifications, and sell items directly on the Steam Community Market with smart pricing. Competitive advantage: mobile push notifications + multi-source pricing cheaper than Skinledger.
 
 ## Core Value
 
-Users can sell their CS2 skins quickly and profitably — either at a custom price or with one-tap quick sell at the lowest market price minus 1 kopek to undercut competition.
+Users can track their CS2 inventory value and sell skins quickly — with real market prices from multiple sources, instant price alerts, and one-tap quick sell at market minimum minus 1 kopek.
+
+## Business Model — Freemium
+
+### Free Tier
+- 1 Steam account
+- Inventory view with Steam Market prices
+- Portfolio total value
+- 7-day price history
+
+### Premium ($4.99/mo or $29.99/yr)
+- Unlimited Steam accounts
+- Buff/CSFloat/Skinport prices (real market prices)
+- Full price history + trend charts
+- Push notifications ("AWP Asiimov +10% this week")
+- Profit/loss tracking (bought at X, now worth Y)
+- Cross-market price comparison
+- CSV/Excel export
 
 ## Requirements
 
@@ -24,49 +41,61 @@ Users can sell their CS2 skins quickly and profitably — either at a custom pri
 - ✓ Multi-account support — existing
 - ✓ Dark theme UI with bottom navigation — existing
 
-### Active
+### Active (Milestone 1 — Auth & Selling)
 
-- [ ] Steam session authentication — 3 methods: QR code, login+Steam Guard, ClientJS token (`/chat/clientjstoken`)
-- [ ] Improved sell UX — two clear buttons per item: "Sell" (custom price) and "Quick Sell" (market min - 1 kopek)
-- [ ] Robust Steam session management — session validation, refresh, expiry handling
-- [ ] Enhanced batch selling — select multiple items, preview total, execute with progress feedback
-- [ ] Enhanced price alerts — more granular triggers, notification delivery
-- [ ] Enhanced transaction history — better sync, filtering, profit/loss tracking
+- [ ] Steam session authentication — 3 methods: QR code, login+Steam Guard, ClientJS token
+- [ ] Improved sell UX — "Sell" (custom price) and "Quick Sell" (market min - 1 kopek)
+- [ ] Robust Steam session management — validation, refresh, expiry handling
+- [ ] Enhanced batch selling — progress feedback, sell all duplicates
+- [ ] Security hardening — fix SQL injection, encrypt credentials, real sessionid
+
+### Future (Milestone 2 — Premium & Growth)
+
+- [ ] Freemium tier system with subscription payments
+- [ ] Multi-source pricing — Buff, CSFloat, Skinport real prices
+- [ ] Push notifications for price alerts
+- [ ] Profit/loss tracking per item
+- [ ] Cross-market price comparison
+- [ ] CSV/Excel export
+- [ ] Competitor parity with Skinledger (research needed)
 
 ### Out of Scope
 
-- Third-party marketplaces (DMarket, Skinport selling) — Steam Community Market only for now
-- Desktop app — mobile-first, Flutter can expand later
+- Third-party marketplace selling (DMarket, Skinport) — Steam Community Market only
+- Desktop-specific UI — mobile-first
 - Real-time price streaming — polling/cron is sufficient
-- Trading between users — only marketplace selling
-- Payment processing — all transactions go through Steam
+- User-to-user trading — only marketplace selling
+- Game mechanics / gambling features
 
 ## Context
 
-The app already has a working foundation with inventory tracking, price collection, and basic selling. The main gap is **proper Steam session authentication** — current OpenID login only provides read access. For selling and transaction history, the app needs Steam session cookies (`steamLoginSecure`, `sessionid`) which require one of three auth methods:
+The app already has a working foundation with inventory tracking, price collection, and basic selling.
 
-1. **QR Code** — Steam's new auth flow, user scans with Steam mobile app
-2. **Login + Steam Guard** — traditional username/password + 2FA code from Steam Guard
-3. **ClientJS Token** — redirect to `steamcommunity.com/chat/clientjstoken`, capture the JSON response containing session token
+**Milestone 1 (current)** focuses on proper Steam session auth and enhanced selling — the features that make the app actually useful for trading. Three auth methods for session cookies, two sell buttons, batch operations.
 
-Session cookies are already stored in the `users` table (`steam_session_id`, `steam_login_secure`, `steam_access_token`) but there's no proper flow for obtaining them from the user.
+**Milestone 2 (next)** will add the freemium business model, multi-source pricing, push notifications, and premium features to compete with Skinledger.
+
+**Competitor reference:** [skinledger.com](https://skinledger.com/) — needs detailed research before Milestone 2 to identify features to match and differentiate on.
 
 ## Constraints
 
-- **Steam API rate limits**: Market sell operations need 1.5s delay between requests; inventory fetches throttled on 429
-- **Session cookies expire**: Need validation and refresh logic to avoid silent failures
-- **Steam Guard requirement**: All accounts likely have 2FA enabled, must handle Steam Guard codes
+- **Steam API rate limits**: Market sell operations need 1.5s delay; inventory fetches throttled on 429
+- **Session cookies expire**: Need validation and refresh logic
+- **Steam Guard**: All accounts likely have 2FA, must handle Steam Guard codes
 - **No official sell API docs**: Steam Market sell endpoint is unofficial, reverse-engineered
+- **Mobile-first**: All features must work great on mobile before considering desktop
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Three auth methods for session | Different users prefer different flows; QR is cleanest, login+guard is most reliable, clientjstoken is a middle ground | — Pending |
-| Quick sell = market min - 1 kopek | Guarantees fastest sale by undercutting lowest listing | — Pending |
-| Flutter + Express.js stack | Already built and working, no reason to change | ✓ Good |
-| PostgreSQL with raw SQL | Already in use, works well for this scale | ✓ Good |
-| Skinport for bulk pricing | Free API, good coverage of CS2 items | ✓ Good |
+| Freemium model ($4.99/mo) | Lower price than Skinledger, mobile advantage | — Pending |
+| Three auth methods for session | QR cleanest, login+guard reliable, clientjstoken fallback | — Pending |
+| Quick sell = market min - 1 kopek | Guarantees fastest sale by undercutting | — Pending |
+| Flutter + Express.js stack | Already built and working | ✓ Good |
+| PostgreSQL with raw SQL | Works well for this scale | ✓ Good |
+| Skinport for bulk pricing (free tier) | Free API, good CS2 coverage | ✓ Good |
+| Multi-source pricing for premium | Buff + CSFloat + Skinport = real market value | — Pending |
 
 ---
-*Last updated: 2026-03-08 after initialization*
+*Last updated: 2026-03-08 after adding freemium vision and competitor context*
