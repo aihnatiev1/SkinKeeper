@@ -1,10 +1,6 @@
 import axios from "axios";
 import { pool } from "../db/pool.js";
-
-interface SteamSession {
-  sessionId: string;
-  steamLoginSecure: string;
-}
+import type { SteamSession } from "./steamSession.js";
 
 export interface Transaction {
   id: string;
