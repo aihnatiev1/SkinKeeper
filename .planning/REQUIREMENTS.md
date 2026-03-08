@@ -1,7 +1,7 @@
 # Requirements: SkinTracker
 
 **Defined:** 2026-03-08
-**Core Value:** Users can sell their CS2 skins quickly and profitably — either at a custom price or with one-tap quick sell at market min - 1 kopek
+**Core Value:** Users can sell their CS2 skins quickly and profitably -- either at a custom price or with one-tap quick sell at market min - 1 kopek
 
 ## v1 Requirements
 
@@ -73,27 +73,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
-| SEC-03 | — | Pending |
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| AUTH-04 | — | Pending |
-| SELL-01 | — | Pending |
-| SELL-02 | — | Pending |
-| SELL-03 | — | Pending |
-| SELL-04 | — | Pending |
-| SESS-01 | — | Pending |
-| SESS-02 | — | Pending |
-| SESS-03 | — | Pending |
-| SESS-04 | — | Pending |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Pending |
+| SEC-03 | Phase 1 | Pending |
+| AUTH-01 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Pending |
+| AUTH-04 | Phase 2 | Pending |
+| SELL-01 | Phase 3 | Pending |
+| SELL-02 | Phase 3 | Pending |
+| SELL-03 | Phase 3 | Pending |
+| SELL-04 | Phase 3 | Pending |
+| SESS-01 | Phase 1 | Pending |
+| SESS-02 | Phase 1 | Pending |
+| SESS-03 | Phase 3 | Pending |
+| SESS-04 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-08*
-*Last updated: 2026-03-08 after initial definition*
+*Last updated: 2026-03-08 after roadmap creation*
