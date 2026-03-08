@@ -28,11 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Steam sessionid used in sell operations comes from Steam's actual session state, not fabricated random bytes
   4. App checks session validity before attempting any sell operation and returns a clear "session expired" response if invalid
   5. A single SteamSessionService handles all session operations, replacing scattered getUserSession() helpers across route files
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md — Test infrastructure, SQL injection fix (SEC-01), AES-256-GCM crypto module (SEC-02 foundation)
+- [ ] 01-02-PLAN.md — Centralized SteamSessionService with encryption at rest, real sessionid extraction, session validation, route rewiring (SEC-02, SEC-03, SESS-01, SESS-02)
 
 ### Phase 2: Steam Authentication
 **Goal**: Users can authenticate their Steam session through any of three methods and see their session status in the app
