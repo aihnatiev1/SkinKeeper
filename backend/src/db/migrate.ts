@@ -92,6 +92,10 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, tx_date DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_type ON transactions(user_id, type);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_item ON transactions(user_id, market_hash_name);
+
+-- Steam session auth method tracking
+ALTER TABLE users ADD COLUMN IF NOT EXISTS steam_refresh_token TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_method VARCHAR(20);
 `;
 
 export async function migrate() {
