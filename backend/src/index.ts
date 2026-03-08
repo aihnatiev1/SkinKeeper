@@ -11,6 +11,7 @@ import portfolioRoutes from "./routes/portfolio.js";
 import alertsRoutes from "./routes/alerts.js";
 import marketRoutes from "./routes/market.js";
 import transactionsRoutes from "./routes/transactions.js";
+import sessionRouter from "./routes/session.js";
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.use("/api/portfolio", portfolioRoutes);
 app.use("/api/alerts", alertsRoutes);
 app.use("/api/market", marketRoutes);
 app.use("/api/transactions", transactionsRoutes);
+app.use("/api/session", sessionRouter);
 
 // Health check
 app.get("/api/health", (_req, res) => {
