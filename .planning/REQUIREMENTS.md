@@ -9,8 +9,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Security
 
-- [ ] **SEC-01**: Fix SQL injection vulnerability in `getTransactionStats` query
-- [ ] **SEC-02**: Encrypt stored session credentials in database (replace plaintext storage)
+- [x] **SEC-01**: Fix SQL injection vulnerability in `getTransactionStats` query
+- [~] **SEC-02**: Encrypt stored session credentials in database (replace plaintext storage) *(foundation: crypto module complete, encryption at rest in Plan 02)*
 - [ ] **SEC-03**: Use real Steam CSRF sessionid from Steam's session state instead of fabricated random bytes
 
 ### Authentication
@@ -73,8 +73,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | Phase 1 | Pending |
-| SEC-02 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Complete |
+| SEC-02 | Phase 1 | In Progress (crypto module done, encryption at rest in Plan 02) |
 | SEC-03 | Phase 1 | Pending |
 | AUTH-01 | Phase 2 | Pending |
 | AUTH-02 | Phase 2 | Pending |

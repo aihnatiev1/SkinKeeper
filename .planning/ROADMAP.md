@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Test infrastructure, SQL injection fix (SEC-01), AES-256-GCM crypto module (SEC-02 foundation)
+- [x] 01-01-PLAN.md — Test infrastructure, SQL injection fix (SEC-01), AES-256-GCM crypto module (SEC-02 foundation)
 - [ ] 01-02-PLAN.md — Centralized SteamSessionService with encryption at rest, real sessionid extraction, session validation, route rewiring (SEC-02, SEC-03, SESS-01, SESS-02)
 
 ### Phase 2: Steam Authentication
@@ -75,6 +75,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security Hardening and Session Foundation | 0/2 | Not started | - |
+| 1. Security Hardening and Session Foundation | 1/2 | In progress | - |
 | 2. Steam Authentication | 0/2 | Not started | - |
 | 3. Enhanced Selling and Session Lifecycle | 0/3 | Not started | - |
