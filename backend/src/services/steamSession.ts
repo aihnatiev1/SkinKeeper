@@ -119,7 +119,7 @@ export class SteamSessionService {
       if (!cookies) return null;
       for (const cookie of cookies) {
         const match = cookie.match(/sessionid=([^;]+)/);
-        if (match) return match[1];
+        if (match) return decodeURIComponent(match[1]);
       }
       return null;
     } catch {
@@ -394,6 +394,91 @@ export class SteamSessionService {
     return isValid ? "valid" : "expired";
   }
 
+  // ─── Session Refresh ────────────────────────────────────────────────
+
+  /**
+   * Attempt to refresh a user's Steam session using their stored refresh token.
+   * Returns { refreshed: true } on success, or { refreshed: false, reason } on failure.
+   */
+  static async refreshSession(
+    userId: number
+  ): Promise<{ refreshed: boolean; reason?: string }> {
+    const { rows } = await pool.query(
+      `SELECT steam_refresh_token FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    const row = rows[0];
+    if (!row?.steam_refresh_token) {
+      return { refreshed: false, reason: "no_refresh_token" };
+    }
+
+    const refreshToken = this.safeDecrypt(row.steam_refresh_token);
+
+    try {
+      const loginSession = new LoginSession(EAuthTokenPlatformType.WebBrowser);
+      loginSession.refreshToken = refreshToken;
+
+      // Trigger a refresh of the access token
+      await loginSession.refreshAccessToken();
+
+      // Obtain fresh web cookies
+      const cookieStrings = await loginSession.getWebCookies();
+      const session = this.parseCookies(cookieStrings);
+
+      // Persist the new session credentials
+      await this.saveSession(userId, session);
+
+      // Update refresh token if steam-session issued a new one
+      if (loginSession.refreshToken && loginSession.refreshToken !== refreshToken) {
+        await this.saveSessionMeta(
+          userId,
+          "refresh",
+          loginSession.refreshToken
+        );
+      }
+
+      return { refreshed: true };
+    } catch (err) {
+      console.error(`[Session] Refresh failed for user ${userId}:`, err);
+      return { refreshed: false, reason: "refresh_failed" };
+    }
+  }
+
+  /**
+   * Ensure a user has a valid Steam session, refreshing if necessary.
+   * Throws if the session cannot be obtained or refreshed.
+   */
+  static async ensureValidSession(userId: number): Promise<SteamSession> {
+    const status = await this.getSessionStatus(userId);
+
+    if (status === "valid") {
+      const session = await this.getSession(userId);
+      if (session) return session;
+    }
+
+    if (status === "expiring" || status === "expired") {
+      const result = await this.refreshSession(userId);
+      if (result.refreshed) {
+        const session = await this.getSession(userId);
+        if (session) return session;
+      }
+    }
+
+    // Last resort: check if we have a session at all (maybe it was just slow)
+    if (status !== "none") {
+      const session = await this.getSession(userId);
+      if (session) {
+        const isValid = await this.validateSession(session);
+        if (isValid) return session;
+      }
+    }
+
+    const error = new Error("Steam session expired or not configured. Please re-authenticate.");
+    (error as any).code = "SESSION_EXPIRED";
+    throw error;
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────────
 
   /**
@@ -409,7 +494,7 @@ export class SteamSessionService {
       const value = valueParts.join("="); // Handle values with = in them
 
       if (name === "sessionid") {
-        sessionId = value;
+        sessionId = decodeURIComponent(value);
       } else if (name === "steamLoginSecure") {
         steamLoginSecure = value;
       }
