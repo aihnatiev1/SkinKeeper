@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
+milestone: v2.0
+milestone_name: Premium & Growth
 status: in-progress
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-08T10:31:33Z"
-last_activity: 2026-03-08 -- Completed 02-01 (Backend auth endpoints for Steam session)
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-08T18:47:36Z"
+last_activity: 2026-03-08 -- Completed 04-01 (Backend CSFloat + DMarket price fetchers)
 progress:
-  total_phases: 3
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 3
-  percent: 50
+  total_phases: 10
+  completed_phases: 3
+  total_plans: 17
+  completed_plans: 7
+  percent: 41
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** Users can sell their CS2 skins quickly and profitably -- either at a custom price or with one-tap quick sell at market min - 1 kopek
-**Current focus:** Phase 2: Steam Authentication
+**Current focus:** Phase 4: Multi-Source Pricing
 
 ## Current Position
 
-Phase: 2 of 3 (Steam Authentication)
-Plan: 1 of 2 in current phase (02-01 complete, 02-02 next)
-Status: Plan 02-01 complete, ready for 02-02
-Last activity: 2026-03-08 -- Completed 02-01 (Backend auth endpoints for Steam session)
+Phase: 4 of 10 (Multi-Source Pricing)
+Plan: 1 of 2 in current phase (04-01 complete, 04-02 next)
+Status: Plan 04-01 complete, ready for 04-02
+Last activity: 2026-03-08 -- Completed 04-01 (Backend CSFloat + DMarket price fetchers)
 
-Progress: [█████░░░░░] 50%
+Progress: [████░░░░░░] 41%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 3.3min
-- Total execution time: 0.17 hours
+- Total plans completed: 7
+- Average duration: 3.4min
+- Total execution time: 0.40 hours
 
 **By Phase:**
 
@@ -45,9 +45,10 @@ Progress: [█████░░░░░] 50%
 |-------|-------|-------|----------|
 | 01-security | 2 | 7min | 3.5min |
 | 02-auth | 1 | 3min | 3min |
+| 04-pricing | 1 | 4min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3min), 01-02 (4min), 02-01 (3min)
+- Last 5 plans: 01-01 (3min), 01-02 (4min), 02-01 (3min), 04-01 (4min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [02-01]: Pending sessions stored in-memory with Map, cleaned up every 60s with 5-min TTL
 - [02-01]: Refresh token encrypted and stored alongside session method in DB
 - [02-01]: Session status uses 20-hour threshold for 'expiring' warning
+- [04-01]: Used native Node.js crypto.sign for Ed25519 instead of tweetnacl -- zero new dependencies
+- [04-01]: PKCS8 DER prefix constructed manually for Ed25519 private key from hex seed
+- [04-01]: Conservative 200ms delay between per-item API requests for rate limiting
 
 ### Pending Todos
 
@@ -83,5 +87,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-08
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
