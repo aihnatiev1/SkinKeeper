@@ -12,7 +12,7 @@ SkinTracker has a working foundation for inventory tracking, price collection, a
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Security Hardening and Session Foundation** - Fix vulnerabilities, encrypt credentials, build centralized SteamSessionService and validation middleware
+- [x] **Phase 1: Security Hardening and Session Foundation** - Fix vulnerabilities, encrypt credentials, build centralized SteamSessionService and validation middleware
 - [ ] **Phase 2: Steam Authentication** - Deliver all three auth methods (QR code, ClientJS token, login+Steam Guard) and session status UI
 - [ ] **Phase 3: Enhanced Selling and Session Lifecycle** - Redesigned sell UX with quick sell/custom price, batch operations, session auto-refresh, and rate limit awareness
 
@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — Test infrastructure, SQL injection fix (SEC-01), AES-256-GCM crypto module (SEC-02 foundation)
-- [ ] 01-02-PLAN.md — Centralized SteamSessionService with encryption at rest, real sessionid extraction, session validation, route rewiring (SEC-02, SEC-03, SESS-01, SESS-02)
+- [x] 01-02-PLAN.md — Centralized SteamSessionService with encryption at rest, real sessionid extraction, session validation, route rewiring (SEC-02, SEC-03, SESS-01, SESS-02)
 
 ### Phase 2: Steam Authentication
 **Goal**: Users can authenticate their Steam session through any of three methods and see their session status in the app
@@ -75,6 +75,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security Hardening and Session Foundation | 1/2 | In progress | - |
+| 1. Security Hardening and Session Foundation | 2/2 | Complete | 2026-03-08 |
 | 2. Steam Authentication | 0/2 | Not started | - |
 | 3. Enhanced Selling and Session Lifecycle | 0/3 | Not started | - |

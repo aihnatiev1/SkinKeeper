@@ -10,8 +10,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Security
 
 - [x] **SEC-01**: Fix SQL injection vulnerability in `getTransactionStats` query
-- [~] **SEC-02**: Encrypt stored session credentials in database (replace plaintext storage) *(foundation: crypto module complete, encryption at rest in Plan 02)*
-- [ ] **SEC-03**: Use real Steam CSRF sessionid from Steam's session state instead of fabricated random bytes
+- [x] **SEC-02**: Encrypt stored session credentials in database (replace plaintext storage)
+- [x] **SEC-03**: Use real Steam CSRF sessionid from Steam's session state instead of fabricated random bytes
 
 ### Authentication
 
@@ -29,8 +29,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Session Management
 
-- [ ] **SESS-01**: App validates Steam session is active before attempting sell operations
-- [ ] **SESS-02**: Centralized SteamSessionService replaces duplicated `getUserSession()` helpers
+- [x] **SESS-01**: App validates Steam session is active before attempting sell operations
+- [x] **SESS-02**: Centralized SteamSessionService replaces duplicated `getUserSession()` helpers
 - [ ] **SESS-03**: App auto-refreshes Steam session before expiry using stored refresh tokens
 - [ ] **SESS-04**: App tracks daily sell volume and warns user when approaching Steam rate limits
 
@@ -74,8 +74,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SEC-01 | Phase 1 | Complete |
-| SEC-02 | Phase 1 | In Progress (crypto module done, encryption at rest in Plan 02) |
-| SEC-03 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Complete |
+| SEC-03 | Phase 1 | Complete |
 | AUTH-01 | Phase 2 | Pending |
 | AUTH-02 | Phase 2 | Pending |
 | AUTH-03 | Phase 2 | Pending |
@@ -84,8 +84,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SELL-02 | Phase 3 | Pending |
 | SELL-03 | Phase 3 | Pending |
 | SELL-04 | Phase 3 | Pending |
-| SESS-01 | Phase 1 | Pending |
-| SESS-02 | Phase 1 | Pending |
+| SESS-01 | Phase 1 | Complete |
+| SESS-02 | Phase 1 | Complete |
 | SESS-03 | Phase 3 | Pending |
 | SESS-04 | Phase 3 | Pending |
 
@@ -96,4 +96,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-08*
-*Last updated: 2026-03-08 after roadmap creation*
+*Last updated: 2026-03-08 after 01-02 completion*
