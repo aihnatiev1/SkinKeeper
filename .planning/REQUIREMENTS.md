@@ -76,10 +76,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-01 | Phase 1 | Complete |
 | SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 1 | Complete |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 2 | Pending |
+| AUTH-01 | Phase 2 | In Progress (backend done) |
+| AUTH-02 | Phase 2 | In Progress (backend done) |
+| AUTH-03 | Phase 2 | In Progress (backend done) |
+| AUTH-04 | Phase 2 | In Progress (backend done) |
 | SELL-01 | Phase 3 | Pending |
 | SELL-02 | Phase 3 | Pending |
 | SELL-03 | Phase 3 | Pending |
@@ -96,4 +96,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-08*
-*Last updated: 2026-03-08 after 01-02 completion*
+*Last updated: 2026-03-08 after 02-01 completion*

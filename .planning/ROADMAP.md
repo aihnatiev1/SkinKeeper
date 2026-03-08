@@ -46,7 +46,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Backend auth flows: steam-session + qrcode install, SteamSessionService auth methods, /api/session/* endpoints, DB migration
+- [x] 02-01-PLAN.md -- Backend auth flows: steam-session + qrcode install, SteamSessionService auth methods, /api/session/* endpoints, DB migration
 - [ ] 02-02-PLAN.md -- Flutter session UI: tabbed auth picker (QR/login/token), session status widget in app bar, navigation wiring
 
 ### Phase 3: Enhanced Selling and Session Lifecycle
@@ -76,5 +76,5 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Security Hardening and Session Foundation | 2/2 | Complete | 2026-03-08 |
-| 2. Steam Authentication | 0/2 | Not started | - |
+| 2. Steam Authentication | 1/2 | In progress | - |
 | 3. Enhanced Selling and Session Lifecycle | 0/3 | Not started | - |

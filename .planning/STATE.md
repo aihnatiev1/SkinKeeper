@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-02-PLAN.md (Phase 1 complete)
-last_updated: "2026-03-08T10:16:28.798Z"
-last_activity: 2026-03-08 -- Completed 01-02 (Steam session service + encryption at rest)
+status: in-progress
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-08T10:31:33Z"
+last_activity: 2026-03-08 -- Completed 02-01 (Backend auth endpoints for Steam session)
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 33
+  total_plans: 4
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State
@@ -21,32 +21,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** Users can sell their CS2 skins quickly and profitably -- either at a custom price or with one-tap quick sell at market min - 1 kopek
-**Current focus:** Phase 1: Security Hardening and Session Foundation
+**Current focus:** Phase 2: Steam Authentication
 
 ## Current Position
 
-Phase: 1 of 3 (Security Hardening and Session Foundation) -- COMPLETE
-Plan: 2 of 2 in current phase (phase complete)
-Status: Phase 1 complete, ready for Phase 2
-Last activity: 2026-03-08 -- Completed 01-02 (Steam session service + encryption at rest)
+Phase: 2 of 3 (Steam Authentication)
+Plan: 1 of 2 in current phase (02-01 complete, 02-02 next)
+Status: Plan 02-01 complete, ready for 02-02
+Last activity: 2026-03-08 -- Completed 02-01 (Backend auth endpoints for Steam session)
 
-Progress: [███░░░░░░░] 33%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 3.5min
-- Total execution time: 0.12 hours
+- Total plans completed: 3
+- Average duration: 3.3min
+- Total execution time: 0.17 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-security | 2 | 7min | 3.5min |
+| 02-auth | 1 | 3min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3min), 01-02 (4min)
+- Last 5 plans: 01-01 (3min), 01-02 (4min), 02-01 (3min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -66,6 +67,10 @@ Recent decisions affecting current work:
 - [01-02]: Dual-read strategy: try decrypt, fallback to plaintext for migration compatibility
 - [01-02]: Session validation at sell-time only (not every read) to avoid latency
 - [01-02]: exchangeTokenForSession returns null instead of fake sessionid when Steam extraction fails
+- [02-01]: Used submitSteamGuardCode method instead of steamGuard event callback (actual steam-session API differs from research assumptions)
+- [02-01]: Pending sessions stored in-memory with Map, cleaned up every 60s with 5-min TTL
+- [02-01]: Refresh token encrypted and stored alongside session method in DB
+- [02-01]: Session status uses 20-hour threshold for 'expiring' warning
 
 ### Pending Todos
 
@@ -73,11 +78,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Research]: steam-session package versions are from training data -- verify with npm before implementation
 - [Research]: Currency detection for fee calculation needs investigation during Phase 3 planning
 
 ## Session Continuity
 
 Last session: 2026-03-08
-Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
