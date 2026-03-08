@@ -43,11 +43,11 @@ Plans:
   2. User can authenticate via the ClientJS token flow (redirect to /chat/clientjstoken) as a fallback method
   3. User can authenticate via username + password + Steam Guard 2FA code as a third option
   4. User can see whether their current Steam session is valid, expiring soon, or expired directly in the app UI
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Backend auth flows: steam-session + qrcode install, SteamSessionService auth methods, /api/session/* endpoints, DB migration
+- [ ] 02-02-PLAN.md -- Flutter session UI: tabbed auth picker (QR/login/token), session status widget in app bar, navigation wiring
 
 ### Phase 3: Enhanced Selling and Session Lifecycle
 **Goal**: Users can sell skins quickly and confidently with clear pricing, batch operations, and a session that stays alive without manual intervention
@@ -61,7 +61,7 @@ Plans:
   5. App auto-refreshes the Steam session before expiry so the user does not encounter unexpected session errors mid-operation
   6. App tracks daily sell volume and warns the user when approaching Steam rate limits to prevent account restrictions
 
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 03-01: TBD
