@@ -41,27 +41,36 @@ Users can track their CS2 inventory value and sell skins quickly — with real m
 - ✓ Multi-account support — existing
 - ✓ Dark theme UI with bottom navigation — existing
 
-### Active (Milestone 1 — Auth & Selling)
+### Complete (Milestone 1 — Auth & Selling)
 
-- [ ] Steam session authentication — 3 methods: QR code, login+Steam Guard, ClientJS token
-- [ ] Improved sell UX — "Sell" (custom price) and "Quick Sell" (market min - 1 kopek)
-- [ ] Robust Steam session management — validation, refresh, expiry handling
-- [ ] Enhanced batch selling — progress feedback, sell all duplicates
-- [ ] Security hardening — fix SQL injection, encrypt credentials, real sessionid
+- [x] Steam session authentication — 3 methods: QR code, login+Steam Guard, ClientJS token
+- [x] Improved sell UX — "Sell" (custom price) and "Quick Sell" (market min - 1 kopek)
+- [x] Robust Steam session management — validation, refresh, expiry handling
+- [x] Enhanced batch selling — progress feedback, sell all duplicates
+- [x] Security hardening — fix SQL injection, encrypt credentials, real sessionid
 
-### Future (Milestone 2 — Premium & Growth)
+### Active (Milestone 2 — Premium & Growth)
 
-- [ ] Freemium tier system with subscription payments
-- [ ] Multi-source pricing — Buff, CSFloat, Skinport real prices
-- [ ] Push notifications for price alerts
-- [ ] Profit/loss tracking per item
+Free tier:
+- [ ] Multi-source pricing — CSFloat + Skinport + DMarket (free for all users)
 - [ ] Cross-market price comparison
-- [ ] CSV/Excel export
-- [ ] Competitor parity with Skinledger (research needed)
+- [ ] P/L tracking (basic — total portfolio profit)
+- [ ] Float value + stickers (with wear) + charms display
+- [ ] Onboarding flow (3-4 screens)
+
+Premium tier ($4.99/mo or $29.99/yr):
+- [ ] In-app purchases — paywall, subscription management
+- [ ] Push notifications + flexible alerts (price/% threshold, cross-market)
+- [ ] P/L tracking (detailed — per-item, charts, history)
+- [ ] CSV/Excel export (date range filter, buy/sell filter)
+- [ ] Multi-account support
+
+Cross-cutting:
+- [ ] ASO — app name, keywords, screenshots, localization, review prompts, privacy policy
 
 ### Out of Scope
 
-- Third-party marketplace selling (DMarket, Skinport) — Steam Community Market only
+- Buff pricing — complex registration, geo-blocking (revisit later)
 - Desktop-specific UI — mobile-first
 - Real-time price streaming — polling/cron is sufficient
 - User-to-user trading — only marketplace selling
@@ -71,11 +80,11 @@ Users can track their CS2 inventory value and sell skins quickly — with real m
 
 The app already has a working foundation with inventory tracking, price collection, and basic selling.
 
-**Milestone 1 (current)** focuses on proper Steam session auth and enhanced selling — the features that make the app actually useful for trading. Three auth methods for session cookies, two sell buttons, batch operations.
+**Milestone 1 (complete)** — Steam session auth (3 methods), enhanced selling (quick sell, custom price, batch ops, duplicates), security hardening.
 
-**Milestone 2 (next)** will add the freemium business model, multi-source pricing, push notifications, and premium features to compete with Skinledger.
+**Milestone 2 (current)** — Freemium business model, multi-source pricing (CSFloat + Skinport + DMarket as free tier), push notifications, P/L tracking, float/stickers/charms, ASO, in-app purchases.
 
-**Competitor reference:** [skinledger.com](https://skinledger.com/) — needs detailed research before Milestone 2 to identify features to match and differentiate on.
+**DMarket integration:** Existing DMarket bot project in adjacent directory provides API reference for price fetching.
 
 ## Constraints
 
@@ -89,13 +98,15 @@ The app already has a working foundation with inventory tracking, price collecti
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Freemium model ($4.99/mo) | Lower price than Skinledger, mobile advantage | — Pending |
-| Three auth methods for session | QR cleanest, login+guard reliable, clientjstoken fallback | — Pending |
-| Quick sell = market min - 1 kopek | Guarantees fastest sale by undercutting | — Pending |
+| Freemium model ($4.99/mo) | Lower price than Skinledger, mobile advantage | ✓ Confirmed |
+| Three auth methods for session | QR cleanest, login+guard reliable, clientjstoken fallback | ✓ Built |
+| Quick sell = market min - 1 kopek | Guarantees fastest sale by undercutting | ✓ Built |
 | Flutter + Express.js stack | Already built and working | ✓ Good |
 | PostgreSQL with raw SQL | Works well for this scale | ✓ Good |
 | Skinport for bulk pricing (free tier) | Free API, good CS2 coverage | ✓ Good |
-| Multi-source pricing for premium | Buff + CSFloat + Skinport = real market value | — Pending |
+| Multi-source pricing FREE for all | CSFloat + Skinport + DMarket = attracts users, premium upsells on alerts/export | ✓ Confirmed |
+| Buff pricing deferred | Complex registration + geo-blocking, revisit when revenue covers effort | ✓ Deferred |
+| Basic P/L free, detailed P/L premium | Free hook: see total profit → premium: per-item breakdown | ✓ Confirmed |
 
 ---
-*Last updated: 2026-03-08 after adding freemium vision and competitor context*
+*Last updated: 2026-03-08 after Milestone 1 completion, M2 planning*
