@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Premium & Growth
 status: in-progress
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-08T18:47:36Z"
-last_activity: 2026-03-08 -- Completed 04-01 (Backend CSFloat + DMarket price fetchers)
+stopped_at: Completed 04-02-PLAN.md (awaiting human verification checkpoint)
+last_updated: "2026-03-08T18:54:10Z"
+last_activity: 2026-03-08 -- Completed 04-02 tasks 1-2 (Cross-market price UI)
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 17
-  completed_plans: 7
-  percent: 41
+  completed_plans: 8
+  percent: 47
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 ## Current Position
 
 Phase: 4 of 10 (Multi-Source Pricing)
-Plan: 1 of 2 in current phase (04-01 complete, 04-02 next)
-Status: Plan 04-01 complete, ready for 04-02
-Last activity: 2026-03-08 -- Completed 04-01 (Backend CSFloat + DMarket price fetchers)
+Plan: 2 of 2 in current phase (04-02 complete, awaiting human verification)
+Status: Phase 4 code complete, awaiting checkpoint verification
+Last activity: 2026-03-08 -- Completed 04-02 (Cross-market price comparison UI)
 
-Progress: [████░░░░░░] 41%
+Progress: [█████░░░░░] 47%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 3.4min
-- Total execution time: 0.40 hours
+- Total plans completed: 8
+- Average duration: 3.5min
+- Total execution time: 0.47 hours
 
 **By Phase:**
 
@@ -45,10 +45,10 @@ Progress: [████░░░░░░] 41%
 |-------|-------|-------|----------|
 | 01-security | 2 | 7min | 3.5min |
 | 02-auth | 1 | 3min | 3min |
-| 04-pricing | 1 | 4min | 4min |
+| 04-pricing | 2 | 8min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3min), 01-02 (4min), 02-01 (3min), 04-01 (4min)
+- Last 5 plans: 01-01 (3min), 01-02 (4min), 02-01 (3min), 04-01 (4min), 04-02 (4min)
 - Trend: stable
 
 *Updated after each plan completion*
@@ -75,6 +75,9 @@ Recent decisions affecting current work:
 - [04-01]: Used native Node.js crypto.sign for Ed25519 instead of tweetnacl -- zero new dependencies
 - [04-01]: PKCS8 DER prefix constructed manually for Ed25519 private key from hex seed
 - [04-01]: Conservative 200ms delay between per-item API requests for rate limiting
+- [04-02]: Source colors: steam=blue, skinport=green, csfloat=orange, dmarket=purple -- shared across table, chart, card
+- [04-02]: Item tap navigates to detail screen; sell sheet moved to long-press selection flow
+- [04-02]: Price history fetched locally in ConsumerStatefulWidget initState (not provider)
 
 ### Pending Todos
 
@@ -87,5 +90,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-08
-Stopped at: Completed 04-01-PLAN.md
+Stopped at: Completed 04-02-PLAN.md (awaiting human verification checkpoint)
 Resume file: None

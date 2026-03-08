@@ -27,7 +27,7 @@ Milestone 1 (Security + Auth + Selling) is complete. Milestone 2 focuses on turn
 
 ### Milestone 2 (Active)
 
-- [ ] **Phase 4: Multi-Source Pricing** — Add CSFloat + DMarket price sources, unified price aggregation, cross-market comparison UI (FREE tier)
+- [x] **Phase 4: Multi-Source Pricing** — Add CSFloat + DMarket price sources, unified price aggregation, cross-market comparison UI (FREE tier) (completed 2026-03-08)
 - [ ] **Phase 5: Item Details — Float, Stickers, Charms** — Inspect link parsing, float value display, sticker/charm visualization on item cards (FREE tier)
 - [ ] **Phase 6: Profit/Loss Tracking** — Purchase price recording, per-item P/L, portfolio P/L summary (basic FREE, detailed PREMIUM)
 - [ ] **Phase 7: In-App Purchases** — Paywall screen, StoreKit/Google Play subscriptions, receipt verification, premium gating
@@ -156,7 +156,7 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 5 → 6 → 7 → 
 | 1. Security Hardening | 2/2 | Complete | 2026-03-08 |
 | 2. Steam Authentication | 2/2 | Complete | 2026-03-08 |
 | 3. Enhanced Selling | 2/2 | Complete | 2026-03-08 |
-| 4. Multi-Source Pricing | 1/2 | In progress | - |
+| 4. Multi-Source Pricing | 2/2 | Complete   | 2026-03-08 |
 | 5. Item Details (Float/Stickers) | 0/2 | Not started | - |
 | 6. Profit/Loss Tracking | 0/2 | Not started | - |
 | 7. In-App Purchases | 0/2 | Not started | - |
