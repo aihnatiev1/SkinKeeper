@@ -48,7 +48,7 @@ class InventoryItem {
   double? get dmarketPrice => prices['dmarket'];
 
   String get fullIconUrl =>
-      'https://community.cloudflare.steamstatic.com/economy/image/$iconUrl/360fx360f';
+      'https://community.steamstatic.com/economy/image/$iconUrl';
 
   factory InventoryItem.fromJson(Map<String, dynamic> json) {
     return InventoryItem(

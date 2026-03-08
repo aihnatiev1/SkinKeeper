@@ -1,8 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../../models/inventory_item.dart';
-import 'price_comparison_table.dart' show sourceColor, sourceDisplayName;
-
 class ItemCard extends StatelessWidget {
   final InventoryItem item;
   final bool compact;
@@ -72,54 +70,29 @@ class ItemCard extends StatelessWidget {
                           fontSize: 11, color: Colors.white54),
                     ),
                     const SizedBox(height: 4),
-                    if (item.bestPrice != null) ...[
+                    if (item.steamPrice != null)
                       Text(
-                        '\$${item.bestPrice!.toStringAsFixed(2)}',
+                        '\$${item.steamPrice!.toStringAsFixed(2)}',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).colorScheme.secondary,
                         ),
                       ),
-                      if (item.bestPriceSource != null)
-                        Text(
-                          sourceDisplayName(item.bestPriceSource!),
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: sourceColor(item.bestPriceSource!)
-                                .withAlpha(200),
-                          ),
-                        ),
-                    ],
                   ],
                 ),
               ),
-            if (compact && item.bestPrice != null)
+            if (compact && item.steamPrice != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '\$${item.bestPrice!.toStringAsFixed(2)}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                    ),
-                    if (item.bestPriceSource != null)
-                      Text(
-                        sourceDisplayName(item.bestPriceSource!),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 8,
-                          color: sourceColor(item.bestPriceSource!)
-                              .withAlpha(200),
-                        ),
-                      ),
-                  ],
+                child: Text(
+                  '\$${item.steamPrice!.toStringAsFixed(2)}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
                 ),
               ),
           ],
