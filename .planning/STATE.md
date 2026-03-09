@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: M3
 milestone_name: Post-Launch Features
 status: in-progress
-stopped_at: Completed 12-01-PLAN.md (cache service)
-last_updated: "2026-03-09T21:00:00.000Z"
-last_activity: 2026-03-09 -- Phase 12 Plan 1 complete (Hive cache service)
+stopped_at: Completed 13-01-PLAN.md (native widget extensions)
+last_updated: "2026-03-09T22:00:00.000Z"
+last_activity: 2026-03-09 -- Phase 13 Plan 1 complete (iOS WidgetKit + Android AppWidget + home_widget bridge)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
-  percent: 17
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Users can track their CS2 inventory value and sell skins quickly — with real market prices, instant price alerts, and one-tap quick sell.
-**Current focus:** Phase 12: Offline Price Cache
+**Current focus:** Phase 13: Home Screen Widget
 
 ## Current Position
 
-Phase: 12 of 13 (Offline Price Cache)
+Phase: 13 of 13 (Home Screen Widget)
 Plan: 1 of 2 complete
 Status: In progress
-Last activity: 2026-03-09 -- Phase 12 Plan 1 complete (Hive cache service)
+Last activity: 2026-03-09 -- Phase 13 Plan 1 complete (native widget extensions + home_widget bridge)
 
-Progress: [█░░░░░░░░░] 17%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -50,6 +50,9 @@ Progress: [█░░░░░░░░░] 17%
 - [M3-Roadmap]: Hive or Drift for local price cache (TBD during planning)
 - [12-01]: Chose Hive ^2.2.3 for local cache (plan specified ^4.0.0 which does not exist)
 - [M3-Roadmap]: Widget shows portfolio value + 24h change, P/L for premium
+- [13-01]: iOS containerBackground uses availability check for iOS 17+ with gradient fallback
+- [13-01]: project.pbxproj not auto-modified — Xcode manual setup needed for widget extension target
+- [13-01]: Android widget uses unicode arrows for change indicators
 
 ### Pending Todos
 
@@ -62,5 +65,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-09
-Stopped at: Completed 12-01-PLAN.md (cache service)
+Stopped at: Completed 13-01-PLAN.md (native widget extensions)
 Resume file: None

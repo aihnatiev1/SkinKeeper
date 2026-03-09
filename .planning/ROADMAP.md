@@ -115,4 +115,4 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 10. ASO | 1/1 | Complete | 2026-03-09 |
 | 11. Multi-Account Support | 0/2 | Pending | — |
 | 12. Offline Price Cache | 0/2 | Pending | — |
-| 13. Home Screen Widget | 0/2 | Pending | — |
+| 13. Home Screen Widget | 1/2 | In Progress | — |
