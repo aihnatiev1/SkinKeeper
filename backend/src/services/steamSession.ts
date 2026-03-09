@@ -4,6 +4,7 @@ import axios from "axios";
 import { LoginSession, EAuthTokenPlatformType } from "steam-session";
 import QRCode from "qrcode";
 import crypto from "crypto";
+import { detectWalletCurrency } from "./currency.js";
 
 export interface SteamSession {
   sessionId: string;
@@ -14,7 +15,7 @@ export interface SteamSession {
 interface PendingSession {
   loginSession: LoginSession;
   createdAt: Date;
-  userId: number;
+  accountId: number;
   status: "pending" | "guard_required" | "authenticated" | "expired";
   cookies?: SteamSession;
 }
@@ -42,26 +43,55 @@ export class SteamSessionService {
 
   /**
    * Decrypt a single field with plaintext fallback for migration compatibility.
-   * During migration period, DB may contain both encrypted and plaintext values.
    */
   private static safeDecrypt(value: string): string {
     try {
       return decrypt(value);
     } catch {
-      // Plaintext fallback during migration period
       return value;
     }
   }
 
+  // ─── Active Account Resolution ────────────────────────────────────────
+
   /**
-   * Get a user's Steam session from DB, decrypting credentials.
-   * Returns null if session not configured.
+   * Get the active steam_accounts.id for a user.
+   * Falls back to the first linked account if active_account_id is not set.
    */
-  static async getSession(userId: number): Promise<SteamSession | null> {
+  static async getActiveAccountId(userId: number): Promise<number> {
+    const { rows } = await pool.query(
+      `SELECT active_account_id FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (rows[0]?.active_account_id) return rows[0].active_account_id;
+
+    // Fallback: first linked account
+    const { rows: accounts } = await pool.query(
+      `SELECT id FROM steam_accounts WHERE user_id = $1 ORDER BY added_at LIMIT 1`,
+      [userId]
+    );
+    if (accounts.length === 0) {
+      throw new Error("No linked Steam accounts");
+    }
+
+    // Persist the default
+    await pool.query(
+      `UPDATE users SET active_account_id = $1 WHERE id = $2`,
+      [accounts[0].id, userId]
+    );
+    return accounts[0].id;
+  }
+
+  // ─── Session CRUD ─────────────────────────────────────────────────────
+
+  /**
+   * Get a Steam session for a specific account, decrypting credentials.
+   */
+  static async getSession(accountId: number): Promise<SteamSession | null> {
     const { rows } = await pool.query(
       `SELECT steam_session_id, steam_login_secure, steam_access_token
-       FROM users WHERE id = $1`,
-      [userId]
+       FROM steam_accounts WHERE id = $1`,
+      [accountId]
     );
     const row = rows[0];
     if (!row?.steam_session_id || !row?.steam_login_secure) return null;
@@ -76,14 +106,15 @@ export class SteamSessionService {
   }
 
   /**
-   * Save a user's Steam session to DB, encrypting all credential fields.
+   * Save a Steam session for a specific account, encrypting all credential fields.
+   * Also triggers wallet currency detection in the background.
    */
   static async saveSession(
-    userId: number,
+    accountId: number,
     session: SteamSession
   ): Promise<void> {
     await pool.query(
-      `UPDATE users
+      `UPDATE steam_accounts
        SET steam_session_id = $1,
            steam_login_secure = $2,
            steam_access_token = $3,
@@ -93,14 +124,50 @@ export class SteamSessionService {
         encrypt(session.sessionId),
         encrypt(session.steamLoginSecure),
         session.accessToken ? encrypt(session.accessToken) : null,
-        userId,
+        accountId,
+      ]
+    );
+
+    // Detect wallet currency in the background (non-blocking)
+    detectWalletCurrency(session.steamLoginSecure)
+      .then(async (currencyId) => {
+        if (currencyId) {
+          await pool.query(
+            "UPDATE steam_accounts SET wallet_currency = $1 WHERE id = $2",
+            [currencyId, accountId]
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn("[Session] Wallet currency detection failed:", err.message);
+      });
+  }
+
+  /**
+   * Save session method and optional refresh token.
+   */
+  private static async saveSessionMeta(
+    accountId: number,
+    method: string,
+    refreshToken: string | null
+  ): Promise<void> {
+    await pool.query(
+      `UPDATE steam_accounts
+       SET session_method = $1,
+           steam_refresh_token = $2
+       WHERE id = $3`,
+      [
+        method,
+        refreshToken ? encrypt(refreshToken) : null,
+        accountId,
       ]
     );
   }
 
+  // ─── Session Validation ───────────────────────────────────────────────
+
   /**
    * Extract real sessionid from Steam by making a GET request with steamLoginSecure.
-   * Returns the sessionid from Set-Cookie header, or null if not found.
    */
   static async extractSessionId(
     steamLoginSecure: string
@@ -119,7 +186,7 @@ export class SteamSessionService {
       if (!cookies) return null;
       for (const cookie of cookies) {
         const match = cookie.match(/sessionid=([^;]+)/);
-        if (match) return decodeURIComponent(match[1]);
+        if (match) return match[1];
       }
       return null;
     } catch {
@@ -128,27 +195,26 @@ export class SteamSessionService {
   }
 
   /**
-   * Validate that a Steam session is still active by checking Steam Market.
-   * Returns false if Steam redirects to login or on network error.
+   * Validate that a Steam session is still active by checking Steam.
    */
   static async validateSession(session: SteamSession): Promise<boolean> {
     try {
       const { status, headers } = await axios.get(
-        "https://steamcommunity.com/market/",
+        "https://steamcommunity.com/my/",
         {
           headers: {
-            Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`,
+            Cookie: `steamLoginSecure=${session.steamLoginSecure}`,
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           },
           maxRedirects: 0,
-          validateStatus: (s: number) => s < 400,
+          validateStatus: () => true,
           timeout: 10000,
         }
       );
-      const location = headers["location"] || "";
+      const location = (headers["location"] || "") as string;
       if (location.includes("/login")) return false;
-      return status === 200;
+      return status === 200 || (status === 302 && !location.includes("/login"));
     } catch {
       return false;
     }
@@ -157,10 +223,10 @@ export class SteamSessionService {
   // ─── QR Code Auth Flow ───────────────────────────────────────────────
 
   /**
-   * Start a QR login session. Returns QR image (base64 data URL) and nonce.
+   * Start a QR login session for a specific account.
    */
   static async startQRSession(
-    userId: number
+    accountId: number
   ): Promise<{ qrImage: string; nonce: string }> {
     const loginSession = new LoginSession(EAuthTokenPlatformType.WebBrowser);
     const startResult = await loginSession.startWithQR();
@@ -175,11 +241,10 @@ export class SteamSessionService {
     const pending: PendingSession = {
       loginSession,
       createdAt: new Date(),
-      userId,
+      accountId,
       status: "pending",
     };
 
-    // Listen for successful authentication
     loginSession.on("authenticated", async () => {
       try {
         const cookieStrings = await loginSession.getWebCookies();
@@ -191,12 +256,10 @@ export class SteamSessionService {
       }
     });
 
-    // Listen for timeout
     loginSession.on("timeout", () => {
       pending.status = "expired";
     });
 
-    // Listen for errors to prevent unhandled crashes
     loginSession.on("error", (err) => {
       console.error("QR login session error:", err);
       pending.status = "expired";
@@ -207,22 +270,21 @@ export class SteamSessionService {
   }
 
   /**
-   * Poll a QR session for status. Returns status and saves session on success.
+   * Poll a QR session for status. Saves session to the account on success.
    */
   static async pollQRSession(
     nonce: string,
-    userId: number
+    accountId: number
   ): Promise<{ status: "pending" | "authenticated" | "expired" }> {
     const pending = this.pendingSessions.get(nonce);
-    if (!pending || pending.userId !== userId) {
+    if (!pending || pending.accountId !== accountId) {
       return { status: "expired" };
     }
 
     if (pending.status === "authenticated" && pending.cookies) {
-      // Save session and refresh token to DB
-      await this.saveSession(userId, pending.cookies);
+      await this.saveSession(accountId, pending.cookies);
       const refreshToken = pending.loginSession.refreshToken;
-      await this.saveSessionMeta(userId, "qr", refreshToken || null);
+      await this.saveSessionMeta(accountId, "qr", refreshToken || null);
       this.pendingSessions.delete(nonce);
       return { status: "authenticated" };
     }
@@ -238,10 +300,10 @@ export class SteamSessionService {
   // ─── Credential + Guard Auth Flow ────────────────────────────────────
 
   /**
-   * Start a credential login. Returns nonce and whether Steam Guard is required.
+   * Start a credential login for a specific account.
    */
   static async startCredentialLogin(
-    userId: number,
+    accountId: number,
     username: string,
     password: string
   ): Promise<{ nonce: string; guardRequired: boolean }> {
@@ -251,11 +313,10 @@ export class SteamSessionService {
     const pending: PendingSession = {
       loginSession,
       createdAt: new Date(),
-      userId,
+      accountId,
       status: "pending",
     };
 
-    // Listen for successful authentication
     loginSession.on("authenticated", async () => {
       try {
         const cookieStrings = await loginSession.getWebCookies();
@@ -278,13 +339,11 @@ export class SteamSessionService {
 
     this.pendingSessions.set(nonce, pending);
 
-    // Start with credentials -- may throw on invalid password
     const startResult = await loginSession.startWithCredentials({
       accountName: username,
       password,
     });
 
-    // Determine if guard code is required
     const guardRequired = startResult.actionRequired === true;
     if (guardRequired) {
       pending.status = "guard_required";
@@ -295,7 +354,6 @@ export class SteamSessionService {
 
   /**
    * Submit a Steam Guard code for a pending credential login.
-   * Returns the session on success, null on failure/timeout.
    */
   static async submitGuardCode(
     nonce: string,
@@ -309,21 +367,19 @@ export class SteamSessionService {
     try {
       await pending.loginSession.submitSteamGuardCode(code);
     } catch {
-      // Code was incorrect or other error
       return null;
     }
 
-    // Wait up to 5 seconds for authenticated status
     const maxWait = 5000;
     const interval = 500;
     let waited = 0;
 
     while (waited < maxWait) {
       if ((pending.status as string) === "authenticated" && pending.cookies) {
-        await this.saveSession(pending.userId, pending.cookies);
+        await this.saveSession(pending.accountId, pending.cookies);
         const refreshToken = pending.loginSession.refreshToken;
         await this.saveSessionMeta(
-          pending.userId,
+          pending.accountId,
           "credentials",
           refreshToken || null
         );
@@ -334,18 +390,16 @@ export class SteamSessionService {
       waited += interval;
     }
 
-    // Timed out waiting for authentication
     return null;
   }
 
   // ─── Client JS Token Flow ───────────────────────────────────────────
 
   /**
-   * Handle a clientjstoken -- extract session from steamLoginSecure cookie.
-   * Returns session on success, null on failure.
+   * Handle a clientjstoken for a specific account.
    */
   static async handleClientToken(
-    userId: number,
+    accountId: number,
     tokenData: { steamLoginSecure: string; steamId?: string }
   ): Promise<SteamSession | null> {
     const sessionId = await this.extractSessionId(tokenData.steamLoginSecure);
@@ -356,38 +410,35 @@ export class SteamSessionService {
       steamLoginSecure: tokenData.steamLoginSecure,
     };
 
-    await this.saveSession(userId, session);
-    await this.saveSessionMeta(userId, "clienttoken", null);
+    await this.saveSession(accountId, session);
+    await this.saveSessionMeta(accountId, "clienttoken", null);
     return session;
   }
 
   // ─── Session Status ─────────────────────────────────────────────────
 
   /**
-   * Check the current session status for a user.
-   * Returns: 'valid' | 'expiring' | 'expired' | 'none'
+   * Check the current session status for a specific account.
    */
   static async getSessionStatus(
-    userId: number
+    accountId: number
   ): Promise<"valid" | "expiring" | "expired" | "none"> {
     const { rows } = await pool.query(
       `SELECT steam_login_secure, session_updated_at
-       FROM users WHERE id = $1`,
-      [userId]
+       FROM steam_accounts WHERE id = $1`,
+      [accountId]
     );
 
     const row = rows[0];
     if (!row?.steam_login_secure) return "none";
 
-    // Check if session is approaching expiry (>20 hours old)
     if (row.session_updated_at) {
       const updatedAt = new Date(row.session_updated_at).getTime();
       const hoursSinceUpdate = (Date.now() - updatedAt) / (1000 * 60 * 60);
       if (hoursSinceUpdate > 20) return "expiring";
     }
 
-    // Validate session by checking with Steam
-    const session = await this.getSession(userId);
+    const session = await this.getSession(accountId);
     if (!session) return "none";
 
     const isValid = await this.validateSession(session);
@@ -397,15 +448,14 @@ export class SteamSessionService {
   // ─── Session Refresh ────────────────────────────────────────────────
 
   /**
-   * Attempt to refresh a user's Steam session using their stored refresh token.
-   * Returns { refreshed: true } on success, or { refreshed: false, reason } on failure.
+   * Attempt to refresh a Steam session using stored refresh token.
    */
   static async refreshSession(
-    userId: number
+    accountId: number
   ): Promise<{ refreshed: boolean; reason?: string }> {
     const { rows } = await pool.query(
-      `SELECT steam_refresh_token FROM users WHERE id = $1`,
-      [userId]
+      `SELECT steam_refresh_token FROM steam_accounts WHERE id = $1`,
+      [accountId]
     );
 
     const row = rows[0];
@@ -419,20 +469,16 @@ export class SteamSessionService {
       const loginSession = new LoginSession(EAuthTokenPlatformType.WebBrowser);
       loginSession.refreshToken = refreshToken;
 
-      // Trigger a refresh of the access token
       await loginSession.refreshAccessToken();
 
-      // Obtain fresh web cookies
       const cookieStrings = await loginSession.getWebCookies();
       const session = this.parseCookies(cookieStrings);
 
-      // Persist the new session credentials
-      await this.saveSession(userId, session);
+      await this.saveSession(accountId, session);
 
-      // Update refresh token if steam-session issued a new one
       if (loginSession.refreshToken && loginSession.refreshToken !== refreshToken) {
         await this.saveSessionMeta(
-          userId,
+          accountId,
           "refresh",
           loginSession.refreshToken
         );
@@ -440,34 +486,32 @@ export class SteamSessionService {
 
       return { refreshed: true };
     } catch (err) {
-      console.error(`[Session] Refresh failed for user ${userId}:`, err);
+      console.error(`[Session] Refresh failed for account ${accountId}:`, err);
       return { refreshed: false, reason: "refresh_failed" };
     }
   }
 
   /**
-   * Ensure a user has a valid Steam session, refreshing if necessary.
-   * Throws if the session cannot be obtained or refreshed.
+   * Ensure a specific account has a valid Steam session, refreshing if necessary.
    */
-  static async ensureValidSession(userId: number): Promise<SteamSession> {
-    const status = await this.getSessionStatus(userId);
+  static async ensureValidSession(accountId: number): Promise<SteamSession> {
+    const status = await this.getSessionStatus(accountId);
 
     if (status === "valid") {
-      const session = await this.getSession(userId);
+      const session = await this.getSession(accountId);
       if (session) return session;
     }
 
     if (status === "expiring" || status === "expired") {
-      const result = await this.refreshSession(userId);
+      const result = await this.refreshSession(accountId);
       if (result.refreshed) {
-        const session = await this.getSession(userId);
+        const session = await this.getSession(accountId);
         if (session) return session;
       }
     }
 
-    // Last resort: check if we have a session at all (maybe it was just slow)
     if (status !== "none") {
-      const session = await this.getSession(userId);
+      const session = await this.getSession(accountId);
       if (session) {
         const isValid = await this.validateSession(session);
         if (isValid) return session;
@@ -483,19 +527,25 @@ export class SteamSessionService {
 
   /**
    * Parse cookie strings from getWebCookies() into a SteamSession.
-   * Cookie format: 'name=value'
    */
   private static parseCookies(cookieStrings: string[]): SteamSession {
     let sessionId = "";
     let steamLoginSecure = "";
 
-    for (const cookie of cookieStrings) {
-      const [name, ...valueParts] = cookie.split("=");
-      const value = valueParts.join("="); // Handle values with = in them
+    for (const rawCookie of cookieStrings) {
+      const lower = rawCookie.toLowerCase();
 
-      if (name === "sessionid") {
-        sessionId = decodeURIComponent(value);
-      } else if (name === "steamLoginSecure") {
+      if (lower.includes("domain=") && !lower.includes("steamcommunity.com")) {
+        continue;
+      }
+
+      const cookie = rawCookie.split(";")[0].trim();
+      const [name, ...valueParts] = cookie.split("=");
+      const value = valueParts.join("=");
+
+      if (name === "sessionid" && !sessionId) {
+        sessionId = value;
+      } else if (name === "steamLoginSecure" && !steamLoginSecure) {
         steamLoginSecure = value;
       }
     }
@@ -507,26 +557,5 @@ export class SteamSessionService {
     }
 
     return { sessionId, steamLoginSecure };
-  }
-
-  /**
-   * Save session method and optional refresh token to DB.
-   */
-  private static async saveSessionMeta(
-    userId: number,
-    method: string,
-    refreshToken: string | null
-  ): Promise<void> {
-    await pool.query(
-      `UPDATE users
-       SET session_method = $1,
-           steam_refresh_token = $2
-       WHERE id = $3`,
-      [
-        method,
-        refreshToken ? encrypt(refreshToken) : null,
-        userId,
-      ]
-    );
   }
 }

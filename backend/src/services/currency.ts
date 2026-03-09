@@ -1,0 +1,423 @@
+/**
+ * Steam wallet currency service.
+ *
+ * Steam's /market/sellitem/ interprets the `price` parameter in the user's
+ * wallet currency, NOT USD. This module:
+ *   1. Detects the wallet currency from Steam community pages
+ *   2. Maintains an exchange rate cache (USD → wallet currency)
+ *   3. Converts USD cents to wallet currency smallest unit before sell
+ */
+
+import axios from "axios";
+import { pool } from "../db/pool.js";
+
+// ─── Steam currency ID → metadata ──────────────────────────────────────
+
+interface CurrencyInfo {
+  code: string;
+  symbol: string;
+  /** Decimal places used (2 for most, 0 for JPY/VND/KRW) */
+  decimals: number;
+}
+
+const STEAM_CURRENCIES: Record<number, CurrencyInfo> = {
+  1: { code: "USD", symbol: "$", decimals: 2 },
+  2: { code: "GBP", symbol: "£", decimals: 2 },
+  3: { code: "EUR", symbol: "€", decimals: 2 },
+  5: { code: "RUB", symbol: "₽", decimals: 2 },
+  6: { code: "PLN", symbol: "zł", decimals: 2 },
+  7: { code: "BRL", symbol: "R$", decimals: 2 },
+  8: { code: "JPY", symbol: "¥", decimals: 0 },
+  9: { code: "NOK", symbol: "kr", decimals: 2 },
+  10: { code: "IDR", symbol: "Rp", decimals: 2 },
+  11: { code: "MYR", symbol: "RM", decimals: 2 },
+  12: { code: "PHP", symbol: "₱", decimals: 2 },
+  13: { code: "SGD", symbol: "S$", decimals: 2 },
+  14: { code: "THB", symbol: "฿", decimals: 2 },
+  15: { code: "VND", symbol: "₫", decimals: 0 },
+  16: { code: "KRW", symbol: "₩", decimals: 0 },
+  17: { code: "TRY", symbol: "₺", decimals: 2 },
+  18: { code: "UAH", symbol: "₴", decimals: 2 },
+  19: { code: "MXN", symbol: "Mex$", decimals: 2 },
+  20: { code: "CAD", symbol: "C$", decimals: 2 },
+  21: { code: "AUD", symbol: "A$", decimals: 2 },
+  22: { code: "NZD", symbol: "NZ$", decimals: 2 },
+  23: { code: "CNY", symbol: "¥", decimals: 2 },
+  24: { code: "INR", symbol: "₹", decimals: 2 },
+  25: { code: "CLP", symbol: "CLP$", decimals: 0 },
+  26: { code: "PEN", symbol: "S/.", decimals: 2 },
+  27: { code: "COP", symbol: "COL$", decimals: 2 },
+  28: { code: "ZAR", symbol: "R", decimals: 2 },
+  29: { code: "HKD", symbol: "HK$", decimals: 2 },
+  30: { code: "TWD", symbol: "NT$", decimals: 0 },
+  31: { code: "SAR", symbol: "SR", decimals: 2 },
+  32: { code: "AED", symbol: "AED", decimals: 2 },
+  34: { code: "ARS", symbol: "ARS$", decimals: 2 },
+  35: { code: "ILS", symbol: "₪", decimals: 2 },
+  37: { code: "KZT", symbol: "₸", decimals: 2 },
+};
+
+export function getCurrencyInfo(steamCurrencyId: number): CurrencyInfo | null {
+  return STEAM_CURRENCIES[steamCurrencyId] ?? null;
+}
+
+// ─── Exchange rate cache ────────────────────────────────────────────────
+
+interface CachedRate {
+  rate: number; // multiplier: walletCents = usdCents * rate
+  fetchedAt: number;
+}
+
+const RATE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const rateCache = new Map<number, CachedRate>();
+
+// Multiple probe items for resilience against rate limits
+const RATE_PROBE_ITEMS = [
+  "AK-47 | Redline (Field-Tested)",
+  "AWP | Asiimov (Field-Tested)",
+  "Desert Eagle | Blaze (Factory New)",
+];
+
+/**
+ * Parse a Steam-formatted price string into a float.
+ * Handles: "$12.34", "12,34€", "12,34₴", "123 456,78₽", "¥1,234"
+ */
+function parseSteamPrice(s: string | undefined): number | null {
+  if (!s) return null;
+  const cleaned = s.replace(/[^\d.,]/g, "").replace(/\s/g, "");
+  if (!cleaned) return null;
+  let normalized: string;
+  const lastDot = cleaned.lastIndexOf(".");
+  const lastComma = cleaned.lastIndexOf(",");
+  if (lastComma > lastDot) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = cleaned.replace(/,/g, "");
+  }
+  const val = parseFloat(normalized);
+  return isNaN(val) ? null : val;
+}
+
+/**
+ * Fetch the exchange rate from USD to a Steam currency.
+ * Uses Steam's own priceoverview endpoint to derive the real rate.
+ * Tries multiple items in case of rate limiting.
+ */
+async function fetchExchangeRate(
+  targetCurrencyId: number
+): Promise<number | null> {
+  if (targetCurrencyId === 1) return 1;
+
+  for (const item of RATE_PROBE_ITEMS) {
+    try {
+      // Sequential calls to avoid double rate-limiting
+      const usdRes = await axios.get(
+        "https://steamcommunity.com/market/priceoverview/",
+        {
+          params: { appid: 730, currency: 1, market_hash_name: item },
+          timeout: 10000,
+        }
+      );
+
+      if (!usdRes.data.success) continue;
+
+      // Small delay between requests to avoid rate limit
+      await new Promise((r) => setTimeout(r, 1500));
+
+      const targetRes = await axios.get(
+        "https://steamcommunity.com/market/priceoverview/",
+        {
+          params: {
+            appid: 730,
+            currency: targetCurrencyId,
+            market_hash_name: item,
+          },
+          timeout: 10000,
+        }
+      );
+
+      if (!targetRes.data.success) continue;
+
+      const usdPrice = parseSteamPrice(
+        usdRes.data.lowest_price || usdRes.data.median_price
+      );
+      const targetPrice = parseSteamPrice(
+        targetRes.data.lowest_price || targetRes.data.median_price
+      );
+
+      if (!usdPrice || !targetPrice || usdPrice === 0) continue;
+
+      const rate = targetPrice / usdPrice;
+      console.log(
+        `[Currency] Exchange rate USD → ${getCurrencyInfo(targetCurrencyId)?.code}: ${rate.toFixed(4)} (${item}: $${usdPrice} → ${targetPrice})`
+      );
+      return rate;
+    } catch (err: any) {
+      console.warn(
+        `[Currency] Rate probe failed for "${item}":`,
+        err.response?.status || err.message
+      );
+      // Wait before trying next item
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+
+  // Fallback: try a forex API
+  return fetchForexRate(targetCurrencyId);
+}
+
+/**
+ * Fallback: get exchange rate from a free forex API.
+ * Less accurate than Steam's own rates but always available.
+ */
+async function fetchForexRate(
+  targetCurrencyId: number
+): Promise<number | null> {
+  const info = getCurrencyInfo(targetCurrencyId);
+  if (!info) return null;
+
+  try {
+    // Use exchangerate.host (free, no API key required)
+    const { data } = await axios.get(
+      `https://open.er-api.com/v6/latest/USD`,
+      { timeout: 10000 }
+    );
+    const rate = data.rates?.[info.code];
+    if (typeof rate === "number" && rate > 0) {
+      console.log(
+        `[Currency] Forex fallback rate USD → ${info.code}: ${rate.toFixed(4)}`
+      );
+      return rate;
+    }
+    return null;
+  } catch (err: any) {
+    console.error("[Currency] Forex API failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Get the exchange rate from USD to a Steam wallet currency.
+ * Returns cached value if fresh, otherwise fetches from Steam.
+ */
+export async function getExchangeRate(
+  targetCurrencyId: number
+): Promise<number | null> {
+  if (targetCurrencyId === 1) return 1;
+
+  const cached = rateCache.get(targetCurrencyId);
+  if (cached && Date.now() - cached.fetchedAt < RATE_TTL_MS) {
+    return cached.rate;
+  }
+
+  const rate = await fetchExchangeRate(targetCurrencyId);
+  if (rate !== null) {
+    rateCache.set(targetCurrencyId, { rate, fetchedAt: Date.now() });
+  }
+
+  // If fetch failed but we have a stale cache, use it
+  if (rate === null && cached) {
+    console.warn("[Currency] Using stale exchange rate");
+    return cached.rate;
+  }
+
+  return rate;
+}
+
+/**
+ * Convert USD cents to wallet currency smallest unit.
+ * Returns null if conversion is not possible.
+ */
+export async function convertUsdToWallet(
+  usdCents: number,
+  walletCurrencyId: number
+): Promise<number | null> {
+  if (walletCurrencyId === 1) return usdCents; // already USD
+
+  const rate = await getExchangeRate(walletCurrencyId);
+  if (rate === null) return null;
+
+  // Convert: walletSmallestUnit = usdCents * rate
+  // Both are in "cents" (smallest unit), so the rate maps directly
+  return Math.round(usdCents * rate);
+}
+
+// ─── Wallet currency detection ──────────────────────────────────────────
+
+/**
+ * Detect wallet currency from Steam community page HTML.
+ * Parses the g_rgWalletInfo JSON embedded in the page.
+ */
+// Country code → Steam currency ID mapping
+const COUNTRY_CURRENCY: Record<string, number> = {
+  US: 1, // USD
+  GB: 2, UK: 2, // GBP
+  // EUR countries
+  DE: 3, FR: 3, IT: 3, ES: 3, NL: 3, BE: 3, AT: 3, IE: 3, PT: 3, FI: 3,
+  GR: 3, SK: 3, SI: 3, LT: 3, LV: 3, EE: 3, LU: 3, MT: 3, CY: 3, HR: 3,
+  RU: 5, BY: 5, // RUB
+  PL: 6, // PLN
+  BR: 7, // BRL
+  JP: 8, // JPY
+  NO: 9, // NOK
+  ID: 10, // IDR
+  MY: 11, // MYR
+  PH: 12, // PHP
+  SG: 13, // SGD
+  TH: 14, // THB
+  VN: 15, // VND
+  KR: 16, // KRW
+  TR: 17, // TRY
+  UA: 18, // UAH
+  MX: 19, // MXN
+  CA: 20, // CAD
+  AU: 21, // AUD
+  NZ: 22, // NZD
+  CN: 23, // CNY
+  IN: 24, // INR
+  CL: 25, // CLP
+  PE: 26, // PEN
+  CO: 27, // COP
+  ZA: 28, // ZAR
+  HK: 29, // HKD
+  TW: 30, // TWD
+  SA: 31, // SAR
+  AE: 32, // AED
+  AR: 34, // ARS
+  IL: 35, // ILS
+  KZ: 37, // KZT
+};
+
+/**
+ * Detect wallet currency from Steam.
+ *
+ * Strategy:
+ * 1. Try to parse g_rgWalletInfo from a Steam page (market listing, etc.)
+ * 2. Fall back to steamCountry cookie → country-currency mapping
+ */
+export async function detectWalletCurrency(
+  steamLoginSecure: string
+): Promise<number | null> {
+  try {
+    // Make a request to Steam to get cookies and potentially wallet info
+    const response = await axios.get(
+      "https://steamcommunity.com/market/",
+      {
+        headers: {
+          Cookie: `steamLoginSecure=${steamLoginSecure}`,
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        },
+        maxRedirects: 0,
+        timeout: 15000,
+        validateStatus: () => true,
+      }
+    );
+
+    // Strategy 1: Try g_rgWalletInfo from response body (if 200)
+    if (response.status === 200) {
+      const html = response.data as string;
+      const match = html.match(/g_rgWalletInfo\s*=\s*(\{[^}]+\})/);
+      if (match) {
+        try {
+          const walletInfo = JSON.parse(match[1]);
+          const currencyId = walletInfo.wallet_currency;
+          if (typeof currencyId === "number" && currencyId > 0) {
+            const info = getCurrencyInfo(currencyId);
+            console.log(
+              `[Currency] Detected from walletInfo: ${info?.code ?? "unknown"} (ID: ${currencyId})`
+            );
+            return currencyId;
+          }
+        } catch { /* parse failed, fall through */ }
+      }
+    }
+
+    // Strategy 2: Parse steamCountry from Set-Cookie
+    const cookies = response.headers["set-cookie"];
+    if (cookies) {
+      for (const cookie of cookies) {
+        const countryMatch = cookie.match(/steamCountry=([A-Z]{2})/);
+        if (countryMatch) {
+          const countryCode = countryMatch[1];
+          const currencyId = COUNTRY_CURRENCY[countryCode];
+          if (currencyId) {
+            const info = getCurrencyInfo(currencyId);
+            console.log(
+              `[Currency] Detected from steamCountry=${countryCode}: ${info?.code ?? "unknown"} (ID: ${currencyId})`
+            );
+            return currencyId;
+          }
+        }
+      }
+    }
+
+    console.warn("[Currency] Could not detect wallet currency from Steam response");
+    return null;
+  } catch (err: any) {
+    console.error("[Currency] Failed to detect wallet currency:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Get and cache the wallet currency for an account.
+ * First checks DB, then detects from Steam if needed.
+ * @param accountId — steam_accounts.id
+ */
+export async function getWalletCurrency(
+  accountId: number,
+  steamLoginSecure?: string
+): Promise<number | null> {
+  // Check DB first (steam_accounts table)
+  const { rows } = await pool.query(
+    "SELECT wallet_currency FROM steam_accounts WHERE id = $1",
+    [accountId]
+  );
+  const stored = rows[0]?.wallet_currency;
+  if (stored) return stored;
+
+  // Need to detect — requires steamLoginSecure
+  if (!steamLoginSecure) return null;
+
+  const detected = await detectWalletCurrency(steamLoginSecure);
+  if (detected) {
+    await pool.query(
+      "UPDATE steam_accounts SET wallet_currency = $1 WHERE id = $2",
+      [detected, accountId]
+    );
+  }
+  return detected;
+}
+
+/**
+ * Get wallet info for API response.
+ * @param accountId — steam_accounts.id
+ */
+export async function getWalletInfo(
+  accountId: number
+): Promise<{
+  currencyId: number;
+  code: string;
+  symbol: string;
+  rate: number | null;
+} | null> {
+  const { rows } = await pool.query(
+    "SELECT wallet_currency FROM steam_accounts WHERE id = $1",
+    [accountId]
+  );
+  const currencyId = rows[0]?.wallet_currency;
+  if (!currencyId) return null;
+
+  const info = getCurrencyInfo(currencyId);
+  if (!info) return null;
+
+  const rate = await getExchangeRate(currencyId);
+
+  return {
+    currencyId,
+    code: info.code,
+    symbol: info.symbol,
+    rate,
+  };
+}
