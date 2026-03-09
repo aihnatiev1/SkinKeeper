@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: M3
 milestone_name: Post-Launch Features
 status: in-progress
-stopped_at: Completed 13-01-PLAN.md (native widget extensions)
-last_updated: "2026-03-09T22:00:00.000Z"
-last_activity: 2026-03-09 -- Phase 13 Plan 1 complete (iOS WidgetKit + Android AppWidget + home_widget bridge)
+stopped_at: Completed 13-02-PLAN.md (widget data provider + background refresh + deep links)
+last_updated: "2026-03-09T10:05:45.000Z"
+last_activity: 2026-03-09 -- Phase 13 Plan 2 complete (widget data pipeline, background refresh, deep links)
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 2
-  percent: 33
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State
@@ -26,18 +26,22 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 13 of 13 (Home Screen Widget)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-03-09 -- Phase 13 Plan 1 complete (native widget extensions + home_widget bridge)
+Plan: 2 of 2 complete
+Status: Phase 13 complete
+Last activity: 2026-03-09 -- Phase 13 Plan 2 complete (widget data pipeline, background refresh, deep links)
 
-Progress: [███░░░░░░░] 33%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity (from M1/M2):**
-- Total plans completed: 19
-- Average duration: ~3.5min
+- Total plans completed: 20
+- Average duration: ~3.4min
 - Total execution time: ~1.1 hours
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 13 | 02 | 169s | 5 | 5 |
 
 ## Accumulated Context
 
@@ -53,6 +57,8 @@ Progress: [███░░░░░░░] 33%
 - [13-01]: iOS containerBackground uses availability check for iOS 17+ with gradient fallback
 - [13-01]: project.pbxproj not auto-modified — Xcode manual setup needed for widget extension target
 - [13-01]: Android widget uses unicode arrows for change indicators
+- [13-02]: Background callback uses getPortfolioRaw() to ignore TTL for stale-but-present widget data
+- [13-02]: pushCachedToWidget() helper avoids duplication between foreground resume and background callback
 
 ### Pending Todos
 
@@ -65,5 +71,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-09
-Stopped at: Completed 13-01-PLAN.md (native widget extensions)
+Stopped at: Completed 13-02-PLAN.md (widget data provider + background refresh + deep links)
 Resume file: None
