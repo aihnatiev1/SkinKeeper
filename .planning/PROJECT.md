@@ -49,24 +49,26 @@ Users can track their CS2 inventory value and sell skins quickly — with real m
 - [x] Enhanced batch selling — progress feedback, sell all duplicates
 - [x] Security hardening — fix SQL injection, encrypt credentials, real sessionid
 
-### Active (Milestone 2 — Premium & Growth)
+### Complete (Milestone 2 — Premium & Growth)
 
-Free tier:
-- [ ] Multi-source pricing — CSFloat + Skinport + DMarket (free for all users)
-- [ ] Cross-market price comparison
-- [ ] P/L tracking (basic — total portfolio profit)
-- [ ] Float value + stickers (with wear) + charms display
-- [ ] Onboarding flow (3-4 screens)
+- [x] Multi-source pricing — CSFloat + Skinport + DMarket (free for all users)
+- [x] Cross-market price comparison
+- [x] P/L tracking (basic + detailed with premium gate)
+- [x] Float value + stickers (with wear) + charms display
+- [x] Onboarding flow
+- [x] In-app purchases — paywall, subscription management
+- [x] Push notifications + flexible alerts (price/% threshold, cross-market)
+- [x] CSV/Excel export (date range filter, buy/sell filter)
+- [x] ASO — app name, keywords, screenshots, localization, review prompts, privacy policy
 
-Premium tier ($4.99/mo or $29.99/yr):
-- [ ] In-app purchases — paywall, subscription management
-- [ ] Push notifications + flexible alerts (price/% threshold, cross-market)
-- [ ] P/L tracking (detailed — per-item, charts, history)
-- [ ] CSV/Excel export (date range filter, buy/sell filter)
-- [ ] Multi-account support
+### Active (Milestone 3 — Post-Launch Features)
 
-Cross-cutting:
-- [ ] ASO — app name, keywords, screenshots, localization, review prompts, privacy policy
+Premium tier:
+- [ ] Multi-account support — link multiple Steam accounts, switch between them, per-account selling
+
+All users:
+- [ ] Offline price cache — local DB for prices, show cached data when offline, background sync
+- [ ] Home screen widget — portfolio summary widget for iOS (WidgetKit) and Android (AppWidget)
 
 ### Out of Scope
 
@@ -82,7 +84,9 @@ The app already has a working foundation with inventory tracking, price collecti
 
 **Milestone 1 (complete)** — Steam session auth (3 methods), enhanced selling (quick sell, custom price, batch ops, duplicates), security hardening.
 
-**Milestone 2 (current)** — Freemium business model, multi-source pricing (CSFloat + Skinport + DMarket as free tier), push notifications, P/L tracking, float/stickers/charms, ASO, in-app purchases.
+**Milestone 2 (complete)** — Freemium business model, multi-source pricing (CSFloat + Skinport + DMarket as free tier), push notifications, P/L tracking, float/stickers/charms, ASO, in-app purchases.
+
+**Milestone 3 (current)** — Post-launch power features: multi-account support (premium), offline price cache, home screen widgets (iOS WidgetKit + Android AppWidget).
 
 **DMarket integration:** Existing DMarket bot project in adjacent directory provides API reference for price fetching.
 
@@ -108,5 +112,9 @@ The app already has a working foundation with inventory tracking, price collecti
 | Buff pricing deferred | Complex registration + geo-blocking, revisit when revenue covers effort | ✓ Deferred |
 | Basic P/L free, detailed P/L premium | Free hook: see total profit → premium: per-item breakdown | ✓ Confirmed |
 
+| Multi-account = premium only | DB schema ready, session cookies need migration to steam_accounts | ✓ Confirmed |
+| home_widget for cross-platform widgets | Single Flutter package handles iOS WidgetKit + Android AppWidget bridge | ✓ Confirmed |
+| Offline cache before widget | Widget needs cached data to display without network | ✓ Confirmed |
+
 ---
-*Last updated: 2026-03-08 after Milestone 1 completion, M2 planning*
+*Last updated: 2026-03-09 after M2 completion, M3 planning*

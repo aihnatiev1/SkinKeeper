@@ -1,83 +1,54 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: verifying
-stopped_at: Completed 04-02-PLAN.md (awaiting human verification checkpoint)
-last_updated: "2026-03-08T19:48:51.727Z"
-last_activity: 2026-03-08 -- Completed 04-02 (Cross-market price comparison UI)
+milestone: M3
+milestone_name: Post-Launch Features
+status: planned
+stopped_at: M3 roadmap created, ready for phase 11 planning
+last_updated: "2026-03-09T20:00:00.000Z"
+last_activity: 2026-03-09 -- M3 milestone created (multi-account, offline cache, home widget)
 progress:
-  total_phases: 7
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 47
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 6
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-08)
+See: .planning/PROJECT.md (updated 2026-03-09)
 
-**Core value:** Users can sell their CS2 skins quickly and profitably -- either at a custom price or with one-tap quick sell at market min - 1 kopek
-**Current focus:** Phase 4: Multi-Source Pricing
+**Core value:** Users can track their CS2 inventory value and sell skins quickly — with real market prices, instant price alerts, and one-tap quick sell.
+**Current focus:** Phase 11: Multi-Account Support
 
 ## Current Position
 
-Phase: 4 of 10 (Multi-Source Pricing)
-Plan: 2 of 2 in current phase (04-02 complete, awaiting human verification)
-Status: Phase 4 code complete, awaiting checkpoint verification
-Last activity: 2026-03-08 -- Completed 04-02 (Cross-market price comparison UI)
+Phase: 11 of 13 (Multi-Account Support)
+Plan: Not yet planned
+Status: Roadmap created, awaiting phase planning
+Last activity: 2026-03-09 -- M3 milestone initialized
 
-Progress: [█████░░░░░] 47%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 8
-- Average duration: 3.5min
-- Total execution time: 0.47 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-security | 2 | 7min | 3.5min |
-| 02-auth | 1 | 3min | 3min |
-| 04-pricing | 2 | 8min | 4min |
-
-**Recent Trend:**
-- Last 5 plans: 01-01 (3min), 01-02 (4min), 02-01 (3min), 04-01 (4min), 04-02 (4min)
-- Trend: stable
-
-*Updated after each plan completion*
+**Velocity (from M1/M2):**
+- Total plans completed: 19
+- Average duration: ~3.5min
+- Total execution time: ~1.1 hours
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Roadmap]: Coarse granularity -- 3 phases combining security+session foundation, all auth methods, and selling+lifecycle
-- [Roadmap]: QR code is primary auth, clientjstoken fallback, credentials+guard as third option (per research)
-- [Roadmap]: Session auto-refresh and rate limit tracking grouped with selling (both are "use the session" concerns)
-- [01-01]: Crypto packing format: iv(12) + authTag(16) + ciphertext as single base64 string
-- [01-01]: ENCRYPTION_KEY validated at call time (not module load) -- 64 hex char requirement
-- [01-02]: Dual-read strategy: try decrypt, fallback to plaintext for migration compatibility
-- [01-02]: Session validation at sell-time only (not every read) to avoid latency
-- [01-02]: exchangeTokenForSession returns null instead of fake sessionid when Steam extraction fails
-- [02-01]: Used submitSteamGuardCode method instead of steamGuard event callback (actual steam-session API differs from research assumptions)
-- [02-01]: Pending sessions stored in-memory with Map, cleaned up every 60s with 5-min TTL
-- [02-01]: Refresh token encrypted and stored alongside session method in DB
-- [02-01]: Session status uses 20-hour threshold for 'expiring' warning
-- [04-01]: Used native Node.js crypto.sign for Ed25519 instead of tweetnacl -- zero new dependencies
-- [04-01]: PKCS8 DER prefix constructed manually for Ed25519 private key from hex seed
-- [04-01]: Conservative 200ms delay between per-item API requests for rate limiting
-- [04-02]: Source colors: steam=blue, skinport=green, csfloat=orange, dmarket=purple -- shared across table, chart, card
-- [04-02]: Item tap navigates to detail screen; sell sheet moved to long-press selection flow
-- [04-02]: Price history fetched locally in ConsumerStatefulWidget initState (not provider)
+- [M3-Roadmap]: Multi-account is PREMIUM only (free = 1 account)
+- [M3-Roadmap]: Session cookies must migrate from users → steam_accounts table
+- [M3-Roadmap]: Offline cache before widget (widget reads from cache)
+- [M3-Roadmap]: home_widget package for cross-platform widget bridge
+- [M3-Roadmap]: Hive or Drift for local price cache (TBD during planning)
+- [M3-Roadmap]: Widget shows portfolio value + 24h change, P/L for premium
 
 ### Pending Todos
 
@@ -85,10 +56,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Research]: Currency detection for fee calculation needs investigation during Phase 3 planning
+None.
 
 ## Session Continuity
 
-Last session: 2026-03-08
-Stopped at: Completed 04-02-PLAN.md (awaiting human verification checkpoint)
+Last session: 2026-03-09
+Stopped at: M3 roadmap created, ready for phase 11 planning
 Resume file: None

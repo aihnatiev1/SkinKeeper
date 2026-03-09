@@ -1,99 +1,111 @@
 # Requirements: SkinTracker
 
-**Defined:** 2026-03-08
-**Core Value:** Users can sell their CS2 skins quickly and profitably -- either at a custom price or with one-tap quick sell at market min - 1 kopek
+**Defined:** 2026-03-08 (M1/M2), Updated: 2026-03-09 (M3)
+**Core Value:** Users can track their CS2 inventory value and sell skins quickly — with real market prices from multiple sources, instant price alerts, and one-tap quick sell.
 
-## v1 Requirements
+## Milestone 1 Requirements — COMPLETE
 
-Requirements for this milestone. Each maps to roadmap phases.
+- [x] **SEC-01**: Fix SQL injection vulnerability
+- [x] **SEC-02**: Encrypt stored session credentials (AES-256-GCM)
+- [x] **SEC-03**: Use real Steam CSRF sessionid
+- [x] **AUTH-01**: QR code Steam session auth
+- [x] **AUTH-02**: ClientJS token auth flow
+- [x] **AUTH-03**: Login + password + Steam Guard 2FA
+- [x] **AUTH-04**: Session validity status in UI
+- [x] **SELL-01**: Sell (custom price) + Quick Sell (market min - 1 kopek)
+- [x] **SELL-02**: Steam + Valve fee breakdown before confirming
+- [x] **SELL-03**: Per-item progress status during batch sell
+- [x] **SELL-04**: Sell all duplicates shortcut
+- [x] **SESS-01**: Validate session before sell operations
+- [x] **SESS-02**: Centralized SteamSessionService
+- [x] **SESS-03**: Auto-refresh session before expiry
+- [x] **SESS-04**: Daily sell volume tracking + rate limit warnings
 
-### Security
+## Milestone 2 Requirements — COMPLETE
 
-- [x] **SEC-01**: Fix SQL injection vulnerability in `getTransactionStats` query
-- [x] **SEC-02**: Encrypt stored session credentials in database (replace plaintext storage)
-- [x] **SEC-03**: Use real Steam CSRF sessionid from Steam's session state instead of fabricated random bytes
+- [x] **PRICE-01**: Multi-source prices (CSFloat + Skinport + DMarket + Steam)
+- [x] **PRICE-02**: Cross-market comparison table on item detail
+- [x] **PRICE-03**: Price history charts with per-source lines
+- [x] **ITEM-01**: Float value displayed with visual wear bar
+- [x] **ITEM-02**: Applied stickers with wear % and image
+- [x] **ITEM-03**: Charms displayed if present
+- [x] **PL-01**: Purchase price recording (manual + auto-detect)
+- [x] **PL-02**: Portfolio P/L summary (free tier)
+- [x] **PL-03**: Per-item P/L breakdown (premium)
+- [x] **IAP-01**: Paywall screen with free vs premium comparison
+- [x] **IAP-02**: Monthly ($4.99) and yearly ($29.99) subscriptions
+- [x] **IAP-03**: Backend receipt verification (Apple + Google)
+- [x] **ALERT-01**: Flexible alert creation (price/% threshold)
+- [x] **ALERT-02**: Cross-market alert monitoring
+- [x] **ALERT-03**: FCM push notifications for triggered alerts
+- [x] **EXP-01**: CSV export with date range + buy/sell filter
+- [x] **ONB-01**: Onboarding flow on first launch
+- [x] **ASO-01**: App name/keywords optimized, metadata localized (6 langs)
+- [x] **ASO-02**: Privacy policy + Terms of Service hosted
+- [x] **ASO-03**: In-app review prompt after positive actions
 
-### Authentication
+## Milestone 3 Requirements — ACTIVE
 
-- [ ] **AUTH-01**: User can authenticate Steam session via QR code scanned with Steam mobile app
-- [ ] **AUTH-02**: User can authenticate Steam session via ClientJS token flow (redirect to `/chat/clientjstoken`)
-- [ ] **AUTH-03**: User can authenticate Steam session via login + password + Steam Guard 2FA code
-- [ ] **AUTH-04**: User can see current session validity status in the app UI
+### Multi-Account Support (Premium)
 
-### Selling
+- [ ] **ACCT-01**: User can link additional Steam accounts from settings (QR or credentials auth)
+- [ ] **ACCT-02**: User can switch active account in inventory screen (account picker)
+- [ ] **ACCT-03**: Inventory shows items from all linked accounts with account badge/label
+- [ ] **ACCT-04**: User can sell items from any linked account (session cookies per account)
+- [ ] **ACCT-05**: Free tier limited to 1 account; premium unlocks unlimited accounts
+- [ ] **ACCT-06**: User can remove a linked account from settings
 
-- [ ] **SELL-01**: User sees two buttons per item: "Sell" (custom price input) and "Quick Sell" (market min - 1 kopek)
-- [ ] **SELL-02**: User sees Steam + Valve fee breakdown before confirming any sale
-- [ ] **SELL-03**: User sees per-item progress status (queued/listing/listed/failed) during batch sell operations
-- [ ] **SELL-04**: User can sell all duplicate items with one tap via "Sell all duplicates" shortcut
+### Offline Price Cache
 
-### Session Management
+- [ ] **CACHE-01**: Prices cached locally on device (persistent across app restarts)
+- [ ] **CACHE-02**: App shows cached inventory + prices when offline with "last updated" indicator
+- [ ] **CACHE-03**: Background sync fetches fresh prices when network available
+- [ ] **CACHE-04**: Cache TTL: 1 hour for prices, 24 hours for inventory structure
+- [ ] **CACHE-05**: Cache size managed with LRU eviction (max 50MB)
 
-- [x] **SESS-01**: App validates Steam session is active before attempting sell operations
-- [x] **SESS-02**: Centralized SteamSessionService replaces duplicated `getUserSession()` helpers
-- [ ] **SESS-03**: App auto-refreshes Steam session before expiry using stored refresh tokens
-- [ ] **SESS-04**: App tracks daily sell volume and warns user when approaching Steam rate limits
+### Home Screen Widget
 
-## v2 Requirements
+- [ ] **WIDGET-01**: iOS WidgetKit widget shows portfolio value + 24h change
+- [ ] **WIDGET-02**: Android AppWidget shows portfolio value + 24h change
+- [ ] **WIDGET-03**: Widget updates periodically via background refresh (every 30 min)
+- [ ] **WIDGET-04**: Tapping widget opens app to portfolio screen
+- [ ] **WIDGET-05**: Widget shows P/L summary if premium user
 
-Deferred to future milestone. Tracked but not in current roadmap.
-
-### Enhanced Trading
-
-- **TRADE-01**: Support third-party marketplaces (DMarket, Skinport)
-- **TRADE-02**: Price comparison across multiple marketplaces
-- **TRADE-03**: Auto-sell rules (sell when price reaches threshold)
-
-### Notifications
-
-- **NOTF-01**: Push notifications for price alerts
-- **NOTF-02**: Notification when sell completes on Steam Market
-- **NOTF-03**: Daily portfolio value summary notification
-
-### Analytics
-
-- **ANAL-01**: Profit/loss tracking per item sold
-- **ANAL-02**: Trading history analytics and charts
-- **ANAL-03**: Best time to sell recommendations
-
-## Out of Scope
+## Out of Scope (M3)
 
 | Feature | Reason |
 |---------|--------|
-| Third-party marketplace selling | Steam Community Market only for this milestone |
-| Desktop-specific UI | Mobile-first, Flutter can expand later |
-| Real-time price streaming | Polling/cron sufficient for now |
-| User-to-user trading | Only marketplace selling |
-| Payment processing | All transactions go through Steam |
-| Mobile confirmation automation | Requires identity_secret which adds major UX complexity |
+| Buff pricing | Complex registration + geo-blocking, revisit when revenue covers effort |
+| Apple Watch / WearOS app | Widget covers the quick-glance use case |
+| Real-time price streaming | Polling/cron + cache sufficient |
+| Widget configuration (choose items) | Keep widget simple — portfolio summary only |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | Phase 1 | Complete |
-| SEC-02 | Phase 1 | Complete |
-| SEC-03 | Phase 1 | Complete |
-| AUTH-01 | Phase 2 | In Progress (backend done) |
-| AUTH-02 | Phase 2 | In Progress (backend done) |
-| AUTH-03 | Phase 2 | In Progress (backend done) |
-| AUTH-04 | Phase 2 | In Progress (backend done) |
-| SELL-01 | Phase 3 | Pending |
-| SELL-02 | Phase 3 | Pending |
-| SELL-03 | Phase 3 | Pending |
-| SELL-04 | Phase 3 | Pending |
-| SESS-01 | Phase 1 | Complete |
-| SESS-02 | Phase 1 | Complete |
-| SESS-03 | Phase 3 | Pending |
-| SESS-04 | Phase 3 | Pending |
+| ACCT-01 | Phase 11 | Pending |
+| ACCT-02 | Phase 11 | Pending |
+| ACCT-03 | Phase 11 | Pending |
+| ACCT-04 | Phase 11 | Pending |
+| ACCT-05 | Phase 11 | Pending |
+| ACCT-06 | Phase 11 | Pending |
+| CACHE-01 | Phase 12 | Pending |
+| CACHE-02 | Phase 12 | Pending |
+| CACHE-03 | Phase 12 | Pending |
+| CACHE-04 | Phase 12 | Pending |
+| CACHE-05 | Phase 12 | Pending |
+| WIDGET-01 | Phase 13 | Pending |
+| WIDGET-02 | Phase 13 | Pending |
+| WIDGET-03 | Phase 13 | Pending |
+| WIDGET-04 | Phase 13 | Pending |
+| WIDGET-05 | Phase 13 | Pending |
 
 **Coverage:**
-- v1 requirements: 15 total
-- Mapped to phases: 15
+- M3 requirements: 17 total
+- Mapped to phases: 17
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-08*
-*Last updated: 2026-03-08 after 02-01 completion*
+*Requirements defined: 2026-03-08 (M1/M2)*
+*Last updated: 2026-03-09 (M3 added)*

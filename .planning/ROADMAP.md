@@ -2,7 +2,7 @@
 
 ## Overview
 
-Milestone 1 (Security + Auth + Selling) is complete. Milestone 2 focuses on turning SkinTracker into a competitive product: multi-source pricing as free tier hook, freemium monetization, push alerts, item details (float/stickers/charms), P/L tracking, and App Store optimization.
+Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3 adds post-launch power features: multi-account support, offline price cache, and home screen widgets.
 
 ## Milestones
 
@@ -11,7 +11,9 @@ Milestone 1 (Security + Auth + Selling) is complete. Milestone 2 focuses on turn
 - Phase 2: Steam Authentication (3 methods)
 - Phase 3: Enhanced Selling and Session Lifecycle
 
-### Milestone 2: Premium & Growth — ACTIVE
+### Milestone 2: Premium & Growth — COMPLETE
+
+### Milestone 3: Post-Launch Features — ACTIVE
 
 ## Phases
 
@@ -25,141 +27,92 @@ Milestone 1 (Security + Auth + Selling) is complete. Milestone 2 focuses on turn
 - [x] **Phase 2: Steam Authentication**
 - [x] **Phase 3: Enhanced Selling and Session Lifecycle**
 
-### Milestone 2 (Active)
+### Milestone 2 (Complete)
 
-- [x] **Phase 4: Multi-Source Pricing** — Add CSFloat + DMarket price sources, unified price aggregation, cross-market comparison UI (FREE tier) (completed 2026-03-08)
-- [ ] **Phase 5: Item Details — Float, Stickers, Charms** — Inspect link parsing, float value display, sticker/charm visualization on item cards (FREE tier)
-- [ ] **Phase 6: Profit/Loss Tracking** — Purchase price recording, per-item P/L, portfolio P/L summary (basic FREE, detailed PREMIUM)
-- [ ] **Phase 7: In-App Purchases** — Paywall screen, StoreKit/Google Play subscriptions, receipt verification, premium gating
-- [ ] **Phase 8: Push Notifications & Alerts** — FCM setup, flexible alerts (price/% threshold, cross-market), alert management UI (PREMIUM)
-- [ ] **Phase 9: Export & Onboarding** — CSV/Excel export with date range + buy/sell filter, onboarding flow (PREMIUM export, FREE onboarding)
-- [ ] **Phase 10: ASO** — App name/keywords, screenshots, localization (EN/UK/RU/DE/PT/ZH), privacy policy, review prompts
+- [x] **Phase 4: Multi-Source Pricing** — CSFloat + DMarket + Skinport + Steam pricing (completed 2026-03-08)
+- [x] **Phase 5: Item Details** — Float, stickers, charms display (completed 2026-03-08)
+- [x] **Phase 6: Profit/Loss Tracking** — Cost basis, portfolio P/L, premium gate (completed 2026-03-09)
+- [x] **Phase 7: In-App Purchases** — Paywall, subscriptions, receipt verification (completed 2026-03-09)
+- [x] **Phase 8: Push Notifications & Alerts** — FCM, alert engine, cross-market alerts (completed 2026-03-09)
+- [x] **Phase 9: Export & Onboarding** — CSV export, onboarding flow (completed 2026-03-09)
+- [x] **Phase 10: ASO** — i18n, review prompts, legal pages (completed 2026-03-09)
 
-## Phase Details
+### Milestone 3 (Active)
 
-### Phase 4: Multi-Source Pricing
-**Goal**: Users see real market prices from multiple sources, not just inflated Steam prices
-**Depends on**: Phase 3
-**Requirements**: PRICE-01, PRICE-02, PRICE-03
+- [ ] **Phase 11: Multi-Account Support** — Link multiple Steam accounts, account switching, per-account selling, premium gate (PREMIUM)
+- [ ] **Phase 12: Offline Price Cache** — Local price DB, offline inventory display, background sync, cache management
+- [ ] **Phase 13: Home Screen Widget** — iOS WidgetKit + Android AppWidget, portfolio summary, periodic refresh
+
+## Phase Details (M3)
+
+See `.planning/phases/` for archived M1/M2 phase details.
+
+### Phase 11: Multi-Account Support
+**Goal**: Premium users can link multiple Steam accounts and manage inventory/selling across all of them
+**Depends on**: Phase 10 (M2 complete, premium gating exists)
+**Requirements**: ACCT-01, ACCT-02, ACCT-03, ACCT-04, ACCT-05, ACCT-06
 **Success Criteria**:
-  1. Price cron fetches from CSFloat API and DMarket API in addition to existing Skinport + Steam
-  2. Inventory items show best price across all sources with source label
-  3. Price detail screen shows cross-market comparison table (Steam vs Skinport vs CSFloat vs DMarket)
-  4. Price history charts show lines per source
-  5. All pricing is free tier — no premium gate
+  1. User can link additional Steam accounts via QR or credentials from settings
+  2. Account picker in inventory screen lets user switch active account or view all
+  3. Inventory items show account badge when viewing "All accounts"
+  4. Session cookies stored per steam_account (not per user) — selling works for any linked account
+  5. Free tier enforces 1-account limit with premium upgrade CTA
+  6. User can unlink an account from settings (deletes session + inventory data for that account)
 **Plans**: 2 plans
 
 Plans:
-- [x] 04-01-PLAN.md — Backend: CSFloat + DMarket price fetchers, unified price aggregation, updated cron job
-- [ ] 04-02-PLAN.md — Flutter: cross-market comparison UI, multi-source price display on item cards, price detail screen
+- [ ] 11-01-PLAN.md — Backend: migrate session cookies to steam_accounts table, per-account session management, account CRUD endpoints, premium gate
+- [ ] 11-02-PLAN.md — Flutter: account linking flow, account picker UI, per-account inventory display, account management in settings
 
-### Phase 5: Item Details — Float, Stickers, Charms
-**Goal**: Users see float value, applied stickers (with wear %), and charms for each skin
-**Depends on**: Phase 4
-**Requirements**: ITEM-01, ITEM-02, ITEM-03
+### Phase 12: Offline Price Cache
+**Goal**: App shows inventory and prices instantly from local cache, even when offline
+**Depends on**: Phase 11
+**Requirements**: CACHE-01, CACHE-02, CACHE-03, CACHE-04, CACHE-05
 **Success Criteria**:
-  1. Float value displayed on item card (e.g., "0.0712") with visual wear bar
-  2. Applied stickers shown on item detail with sticker name, wear %, and image
-  3. Charms displayed if present
-  4. Data fetched via Steam inspect link or CSFloat API
+  1. Prices and inventory structure cached locally using Hive or Drift
+  2. App launches instantly with cached data — no loading spinner on repeat opens
+  3. "Last updated X min ago" indicator when showing cached data
+  4. Background sync fetches fresh data when network is available
+  5. Cache respects TTL (1h prices, 24h inventory) and LRU eviction (50MB max)
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Backend: inspect link parsing, float/sticker/charm data fetching and storage
-- [ ] 05-02-PLAN.md — Flutter: float bar widget, sticker/charm display on item cards and detail screen
+- [ ] 12-01-PLAN.md — Flutter: local database setup (Hive/Drift), cache service, TTL management, LRU eviction
+- [ ] 12-02-PLAN.md — Flutter: integrate cache with providers, offline indicator UI, background sync, instant app launch
 
-### Phase 6: Profit/Loss Tracking
-**Goal**: Users track profit and loss on their inventory — basic P/L free, detailed P/L premium
-**Depends on**: Phase 5
-**Requirements**: PL-01, PL-02, PL-03
+### Phase 13: Home Screen Widget
+**Goal**: Users see portfolio summary on their home screen without opening the app
+**Depends on**: Phase 12 (widget reads from local cache)
+**Requirements**: WIDGET-01, WIDGET-02, WIDGET-03, WIDGET-04, WIDGET-05
 **Success Criteria**:
-  1. User can record purchase price per item (manual entry or auto-detect from transaction history)
-  2. Portfolio screen shows total P/L: "Invested $500, Current $650, Profit +$150 (+30%)"
-  3. Free tier: total portfolio P/L visible
-  4. Premium tier: per-item P/L breakdown, P/L charts over time, P/L by category
+  1. iOS WidgetKit widget displays portfolio value + 24h change %
+  2. Android AppWidget displays portfolio value + 24h change %
+  3. Widget refreshes every 30 minutes via background task
+  4. Tapping widget deep-links to portfolio screen
+  5. Premium users see P/L summary in widget; free users see portfolio value only
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Backend: purchase price endpoints, P/L calculation service, auto-detect from transactions
-- [ ] 06-02-PLAN.md — Flutter: P/L widgets on portfolio and item cards, premium gate for detailed view
-
-### Phase 7: In-App Purchases
-**Goal**: Users can subscribe to premium with StoreKit / Google Play Billing
-**Depends on**: Phase 6 (so premium features exist to sell)
-**Requirements**: IAP-01, IAP-02, IAP-03
-**Success Criteria**:
-  1. Paywall screen shows free vs premium comparison
-  2. User can purchase monthly ($4.99) or yearly ($29.99) subscription
-  3. Backend verifies receipts from Apple/Google
-  4. Premium features gated: push alerts, detailed P/L, CSV export, multi-account
-  5. Subscription status synced and displayed in settings
-**Plans**: 2 plans
-
-Plans:
-- [ ] 07-01-PLAN.md — Backend: receipt verification for App Store + Google Play, subscription status management
-- [ ] 07-02-PLAN.md — Flutter: paywall screen, purchase flow, premium gate middleware, subscription management in settings
-
-### Phase 8: Push Notifications & Alerts
-**Goal**: Premium users get push notifications for price changes with flexible alert configuration
-**Depends on**: Phase 7 (premium gating)
-**Requirements**: ALERT-01, ALERT-02, ALERT-03
-**Success Criteria**:
-  1. User can create alert: "Item X above $Y" or "Item X changed >Z%"
-  2. User can choose which markets to monitor (Steam, Skinport, CSFloat, DMarket, or any)
-  3. Backend checks alerts on each price update cron and sends FCM push
-  4. Alert history shows triggered alerts with timestamps
-  5. Premium-only feature with clear upgrade CTA for free users
-**Plans**: 2 plans
-
-Plans:
-- [ ] 08-01-PLAN.md — Backend: FCM integration, alert evaluation engine, notification service
-- [ ] 08-02-PLAN.md — Flutter: alert creation UI (price/% threshold, market selector), alert list, notification handling
-
-### Phase 9: Export & Onboarding
-**Goal**: Premium users can export data, all users get onboarding
-**Depends on**: Phase 8
-**Requirements**: EXP-01, EXP-02, ONB-01
-**Success Criteria**:
-  1. CSV export with date range picker and buy/sell filter
-  2. Export includes: item name, prices from all sources, P/L, float, transaction history
-  3. Onboarding flow (3-4 screens) on first launch: what app does, Steam connection, premium teaser
-  4. Onboarding can be revisited from settings
-**Plans**: 2 plans
-
-Plans:
-- [ ] 09-01-PLAN.md — Backend: CSV generation endpoint with filters + Flutter: export UI
-- [ ] 09-02-PLAN.md — Flutter: onboarding PageView with animations
-
-### Phase 10: ASO
-**Goal**: App Store presence optimized for discoverability and conversion
-**Depends on**: Phase 9 (all features complete for screenshots)
-**Requirements**: ASO-01, ASO-02, ASO-03
-**Success Criteria**:
-  1. App name + subtitle with keywords: "CS2 Skin Tracker — Inventory & Price Alerts"
-  2. 6 screenshots with device mockups showing key screens
-  3. Metadata localized: EN, UK, RU, DE, PT, ZH
-  4. Privacy policy and Terms of Service pages hosted
-  5. In-app review prompt after positive actions (successful sell, first profit milestone)
-  6. App preview video (15-30s)
-**Plans**: 1 plan
-
-Plans:
-- [ ] 10-01-PLAN.md — ASO metadata, screenshots, localization, legal pages, review prompt implementation
+- [ ] 13-01-PLAN.md — Native: iOS WidgetKit extension (Swift) + Android AppWidgetProvider (Kotlin), App Groups data sharing, home_widget Flutter bridge
+- [ ] 13-02-PLAN.md — Flutter: widget data provider, background refresh scheduling, premium P/L in widget, deep link handling
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 5 → 6 → 7 → 8 → 9 → 10 (M2)
+Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 → 13 (M3)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Security Hardening | 2/2 | Complete | 2026-03-08 |
 | 2. Steam Authentication | 2/2 | Complete | 2026-03-08 |
 | 3. Enhanced Selling | 2/2 | Complete | 2026-03-08 |
-| 4. Multi-Source Pricing | 2/2 | Complete   | 2026-03-08 |
-| 5. Item Details (Float/Stickers) | 0/2 | Not started | - |
-| 6. Profit/Loss Tracking | 0/2 | Not started | - |
-| 7. In-App Purchases | 0/2 | Not started | - |
-| 8. Push Notifications | 0/2 | Not started | - |
-| 9. Export & Onboarding | 0/2 | Not started | - |
-| 10. ASO | 0/1 | Not started | - |
+| 4. Multi-Source Pricing | 2/2 | Complete | 2026-03-08 |
+| 5. Item Details | 2/2 | Complete | 2026-03-08 |
+| 6. Profit/Loss Tracking | 2/2 | Complete | 2026-03-09 |
+| 7. In-App Purchases | 2/2 | Complete | 2026-03-09 |
+| 8. Push Notifications | 2/2 | Complete | 2026-03-09 |
+| 9. Export & Onboarding | 2/2 | Complete | 2026-03-09 |
+| 10. ASO | 1/1 | Complete | 2026-03-09 |
+| 11. Multi-Account Support | 0/2 | Pending | — |
+| 12. Offline Price Cache | 0/2 | Pending | — |
+| 13. Home Screen Widget | 0/2 | Pending | — |
