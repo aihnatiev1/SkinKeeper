@@ -11,12 +11,14 @@ import 'core/api_client.dart';
 import 'core/cache_service.dart';
 import 'core/review_service.dart';
 import 'core/router.dart';
+import 'core/widget_service.dart';
 import 'core/theme.dart';
 import 'features/auth/steam_auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await CacheService.init();
+  await WidgetService.init();
   _trackAppOpen();
   runApp(const ProviderScope(child: SkinTrackerApp()));
 }
