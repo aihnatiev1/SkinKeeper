@@ -2,6 +2,8 @@ import 'dart:developer' as dev;
 
 import 'package:home_widget/home_widget.dart';
 
+import 'cache_service.dart';
+
 /// Cross-platform home screen widget bridge.
 ///
 /// Uses `home_widget` to push portfolio data to:
@@ -23,6 +25,73 @@ class WidgetService {
     } catch (e) {
       dev.log('WidgetService init error: $e', name: 'Widget');
     }
+  }
+
+  /// Register the background callback so the OS can request widget updates
+  /// even when the app is not running.
+  static Future<void> registerBackgroundCallback() async {
+    try {
+      await HomeWidget.registerInteractivityCallback(_backgroundCallback);
+      dev.log('Widget background callback registered', name: 'Widget');
+    } catch (e) {
+      dev.log('Widget background callback error: $e', name: 'Widget');
+    }
+  }
+
+  /// Called by the OS when the widget requests a data refresh.
+  ///
+  /// Runs in an isolate — must re-init Hive, read cached portfolio, and push
+  /// to the widget shared storage.
+  @pragma('vm:entry-point')
+  static Future<void> _backgroundCallback(Uri? uri) async {
+    try {
+      await CacheService.init();
+      final portfolio = CacheService.getPortfolioRaw();
+      if (portfolio == null) return;
+
+      final totalValue = (portfolio['total_value'] as num?)?.toDouble() ?? 0;
+      final change24h = (portfolio['change_24h'] as num?)?.toDouble() ?? 0;
+      final change24hPct =
+          (portfolio['change_24h_pct'] as num?)?.toDouble() ?? 0;
+      final itemCount = (portfolio['item_count'] as int?) ?? 0;
+
+      await updateWidget(
+        totalValue: '\$${totalValue.toStringAsFixed(2)}',
+        change24h:
+            '${change24h >= 0 ? "+" : ""}\$${change24h.toStringAsFixed(2)}',
+        change24hPct:
+            '${change24hPct >= 0 ? "+" : ""}${change24hPct.toStringAsFixed(1)}%',
+        isPositive: change24h >= 0,
+        itemCount: itemCount,
+      );
+    } catch (e) {
+      dev.log('Widget background refresh error: $e', name: 'Widget');
+    }
+  }
+
+  /// Push cached portfolio data to the widget without needing a Ref.
+  ///
+  /// Reads from CacheService (ignores TTL) and formats values. Useful for
+  /// app foreground resume and background refresh scenarios.
+  static Future<void> pushCachedToWidget() async {
+    final portfolio = CacheService.getPortfolioRaw();
+    if (portfolio == null) return;
+
+    final totalValue = (portfolio['total_value'] as num?)?.toDouble() ?? 0;
+    final change24h = (portfolio['change_24h'] as num?)?.toDouble() ?? 0;
+    final change24hPct =
+        (portfolio['change_24h_pct'] as num?)?.toDouble() ?? 0;
+    final itemCount = (portfolio['item_count'] as int?) ?? 0;
+
+    await updateWidget(
+      totalValue: '\$${totalValue.toStringAsFixed(2)}',
+      change24h:
+          '${change24h >= 0 ? "+" : ""}\$${change24h.toStringAsFixed(2)}',
+      change24hPct:
+          '${change24hPct >= 0 ? "+" : ""}${change24hPct.toStringAsFixed(1)}%',
+      isPositive: change24h >= 0,
+      itemCount: itemCount,
+    );
   }
 
   /// Push portfolio data to the native widget and trigger a refresh.

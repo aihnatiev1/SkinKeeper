@@ -19,6 +19,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await CacheService.init();
   await WidgetService.init();
+  await WidgetService.registerBackgroundCallback();
   _trackAppOpen();
   runApp(const ProviderScope(child: SkinTrackerApp()));
 }
@@ -39,15 +40,25 @@ class SkinTrackerApp extends ConsumerStatefulWidget {
   ConsumerState<SkinTrackerApp> createState() => _SkinTrackerAppState();
 }
 
-class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp> {
+class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp>
+    with WidgetsBindingObserver {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _appLinks = AppLinks();
     _initDeepLinks();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Push latest cached portfolio data to widget on foreground resume
+      WidgetService.pushCachedToWidget();
+    }
   }
 
   Future<void> _initDeepLinks() async {
@@ -65,6 +76,13 @@ class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp> {
 
   void _handleDeepLink(Uri uri) {
     dev.log('Deep link received: $uri', name: 'DeepLink');
+
+    // skintracker://portfolio (from home screen widget tap)
+    if (uri.host == 'portfolio') {
+      final router = ref.read(routerProvider);
+      router.go('/portfolio');
+      return;
+    }
 
     // skintracker://auth?token=XXX or skintracker://auth?error=XXX
     if (uri.host == 'auth') {
@@ -88,6 +106,7 @@ class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     super.dispose();
   }

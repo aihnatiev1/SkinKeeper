@@ -76,6 +76,14 @@ class CacheService {
     return Map<String, dynamic>.from(entry as Map);
   }
 
+  /// Returns the cached portfolio summary ignoring TTL (for widget background
+  /// refresh where stale data is better than no data).
+  static Map<String, dynamic>? getPortfolioRaw() {
+    final entry = _portfolioBox.get('summary');
+    if (entry == null) return null;
+    return Map<String, dynamic>.from(entry as Map);
+  }
+
   /// Persist the portfolio summary snapshot.
   static void putPortfolio(Map<String, dynamic> summary) {
     _portfolioBox.put('summary', summary);

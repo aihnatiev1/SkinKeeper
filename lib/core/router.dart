@@ -40,6 +40,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final uri = state.uri;
 
+      // Intercept deep link: skintracker://portfolio (from home screen widget)
+      if (uri.scheme == 'skintracker' && uri.host == 'portfolio') {
+        return '/portfolio';
+      }
+
       // Intercept deep link: skintracker://auth?token=XXX
       if (uri.scheme == 'skintracker' && uri.host == 'auth') {
         final token = uri.queryParameters['token'];

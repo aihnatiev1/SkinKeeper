@@ -1,7 +1,11 @@
+import 'dart:developer' as dev;
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
+import '../../core/widget_service.dart';
+import '../purchases/iap_service.dart';
 
 class PortfolioSummary {
   final double totalValue;
@@ -62,9 +66,11 @@ class PortfolioNotifier extends AsyncNotifier<PortfolioSummary> {
     // 1. Try cache first for instant display
     final cached = CacheService.getPortfolio();
     if (cached != null) {
+      final summary = PortfolioSummary.fromJson(cached);
+      _pushToWidget(summary);
       // Start background refresh (don't await)
       _refreshInBackground();
-      return PortfolioSummary.fromJson(cached);
+      return summary;
     }
 
     // 2. No cache — fetch from API
@@ -91,6 +97,38 @@ class PortfolioNotifier extends AsyncNotifier<PortfolioSummary> {
     // Cache the raw JSON for next launch
     CacheService.putPortfolio(json);
     CacheService.lastSync = DateTime.now();
-    return PortfolioSummary.fromJson(json);
+    final summary = PortfolioSummary.fromJson(json);
+    _pushToWidget(summary);
+    return summary;
+  }
+
+  /// Push current portfolio data to the home screen widget.
+  void _pushToWidget(PortfolioSummary summary) {
+    try {
+      final isPremium =
+          ref.read(premiumProvider).valueOrNull ?? false;
+
+      // Format P/L for premium users only
+      final cached = CacheService.getPortfolio();
+      final totalProfit = (cached?['total_profit'] as num?)?.toDouble();
+
+      WidgetService.updateWidget(
+        totalValue: '\$${summary.totalValue.toStringAsFixed(2)}',
+        change24h:
+            '${summary.change24h >= 0 ? "+" : ""}\$${summary.change24h.toStringAsFixed(2)}',
+        change24hPct:
+            '${summary.change24hPct >= 0 ? "+" : ""}${summary.change24hPct.toStringAsFixed(1)}%',
+        isPositive: summary.change24h >= 0,
+        itemCount: summary.itemCount,
+        totalProfit: isPremium && totalProfit != null
+            ? '${totalProfit >= 0 ? "+" : ""}\$${totalProfit.toStringAsFixed(2)}'
+            : null,
+        isProfitable: isPremium && totalProfit != null
+            ? totalProfit >= 0
+            : null,
+      );
+    } catch (e) {
+      dev.log('Failed to push to widget: $e', name: 'Portfolio');
+    }
   }
 }
