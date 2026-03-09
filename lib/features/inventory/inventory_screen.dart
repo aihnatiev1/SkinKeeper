@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/inventory_item.dart';
 import '../auth/widgets/session_status_widget.dart';
+import '../portfolio/portfolio_pl_provider.dart';
 import 'inventory_provider.dart';
-import 'sell_provider.dart';
+import '../../widgets/sync_indicator.dart';
 import 'widgets/item_card.dart';
 import 'widgets/sell_bottom_sheet.dart';
-import 'widgets/sell_progress_sheet.dart';
 
 final selectedItemsProvider = StateProvider<Set<String>>((ref) => {});
 
@@ -24,43 +25,6 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  void _showDuplicatesSheet(BuildContext context, WidgetRef ref) {
-    HapticFeedback.mediumImpact();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _DuplicatesSheet(
-        onSellItems: (items) {
-          Navigator.pop(context);
-          _showSellSheet(context, items);
-        },
-        onSellAllDuplicates: (allItems) {
-          Navigator.pop(context);
-          // Start batch sell operation directly
-          final sellItems = allItems
-              .map((item) => {
-                    'assetId': item.assetId,
-                    'marketHashName': item.marketHashName,
-                    'priceCents': 0, // will use quick price on backend
-                  })
-              .toList();
-          ref
-              .read(sellOperationProvider.notifier)
-              .startOperation(sellItems);
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            isDismissible: false,
-            enableDrag: false,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const SellProgressSheet(),
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inventory = ref.watch(filteredInventoryProvider);
@@ -73,7 +37,7 @@ class InventoryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: isSelecting
             ? Text('${selectedIds.length} selected')
-            : const Text('Inventory'),
+            : Text(AppLocalizations.of(context).inventoryTitle),
         leading: isSelecting
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -116,11 +80,14 @@ class InventoryScreen extends ConsumerWidget {
               },
             ),
           ] else ...[
-            // Sell duplicates
+            // Bulk sell
             IconButton(
-              icon: const Icon(Icons.copy_all, color: Colors.orangeAccent),
-              tooltip: 'Sell Duplicates',
-              onPressed: () => _showDuplicatesSheet(context, ref),
+              icon: const Icon(Icons.sell, color: Colors.orangeAccent),
+              tooltip: 'Bulk Sell',
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                context.push('/inventory/bulk-sell');
+              },
             ),
             IconButton(
               icon:
@@ -155,6 +122,14 @@ class InventoryScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
+          // Sync indicator
+          const Padding(
+            padding: EdgeInsets.only(left: 16, right: 16, top: 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SyncIndicator(),
+            ),
+          ),
           // Search bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -215,11 +190,13 @@ class InventoryScreen extends ConsumerWidget {
                     final item = items[index];
                     final isSelected =
                         selectedIds.contains(item.assetId);
+                    final plMap = ref.watch(itemPLMapProvider);
                     return Stack(
                       children: [
                         ItemCard(
                           item: item,
                           compact: columns >= 4,
+                          itemPL: plMap[item.marketHashName],
                           onTap: () {
                             if (isSelecting) {
                               _toggleSelection(ref, item.assetId);
@@ -300,274 +277,3 @@ class InventoryScreen extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Duplicates bottom sheet
-// ---------------------------------------------------------------------------
-
-class _DuplicatesSheet extends ConsumerWidget {
-  final void Function(List<InventoryItem> items) onSellItems;
-  final void Function(List<InventoryItem> allItems) onSellAllDuplicates;
-
-  const _DuplicatesSheet({
-    required this.onSellItems,
-    required this.onSellAllDuplicates,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final duplicatesAsync = ref.watch(duplicatesProvider);
-
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.7,
-      ),
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 12, bottom: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(color: Colors.white.withAlpha(15)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Title
-          const Row(
-            children: [
-              Icon(Icons.copy_all, color: Colors.orangeAccent, size: 22),
-              SizedBox(width: 10),
-              Text(
-                'Sell Duplicates',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Content
-          duplicatesAsync.when(
-            data: (groups) {
-              if (groups.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Icon(Icons.check_circle_outline,
-                          size: 48,
-                          color: Colors.white.withAlpha(60)),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No duplicate items found',
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(140),
-                          fontSize: 15,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              final totalItems =
-                  groups.fold<int>(0, (sum, g) => sum + g.count - 1);
-              final totalValueCents = groups.fold<int>(
-                  0, (sum, g) => sum + g.bestPriceCents * (g.count - 1));
-              final totalStr =
-                  '\$${(totalValueCents / 100).toStringAsFixed(2)}';
-
-              return Flexible(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Summary
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.orangeAccent.withAlpha(15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: Colors.orangeAccent.withAlpha(40)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '$totalItems duplicate items',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.orangeAccent,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            '~$totalStr',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.orangeAccent,
-                              fontWeight: FontWeight.bold,
-                              fontFeatures: [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Duplicate groups list
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: groups.length,
-                        itemBuilder: (_, index) =>
-                            _buildGroupRow(context, groups[index]),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Sell All Duplicates button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          HapticFeedback.heavyImpact();
-                          // Build InventoryItem list from duplicates
-                          // Keep count-1 of each (sell extras, keep one)
-                          final items = <InventoryItem>[];
-                          for (final group in groups) {
-                            // Sell all but one
-                            for (int i = 1; i < group.assetIds.length; i++) {
-                              items.add(InventoryItem(
-                                assetId: group.assetIds[i],
-                                marketHashName: group.marketHashName,
-                                iconUrl: group.iconUrl,
-                              ));
-                            }
-                          }
-                          onSellAllDuplicates(items);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orangeAccent,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          'Quick Sell All Duplicates ($totalStr)',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'Failed to load duplicates: $e',
-                style: const TextStyle(color: Colors.redAccent),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGroupRow(BuildContext context, DuplicateGroup group) {
-    final extras = group.count - 1; // keep one, sell extras
-    final valueStr =
-        '\$${(group.bestPriceCents * extras / 100).toStringAsFixed(2)}';
-    final parts = group.marketHashName.split(' | ');
-    final displayName =
-        parts.length > 1 ? parts[1].split(' (').first : group.marketHashName;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withAlpha(8)),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Icon
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: 40,
-              height: 40,
-              color: Colors.white.withAlpha(10),
-              child: Image.network(
-                group.fullIconUrl,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const Icon(
-                    Icons.image_not_supported,
-                    size: 18,
-                    color: Colors.white24),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  '${group.count} owned · sell $extras',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withAlpha(120),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Value
-          Text(
-            '~$valueStr',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF00D2D3),
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
