@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../models/user.dart';
 import 'accounts_provider.dart';
 import '../auth/steam_auth_service.dart';
@@ -23,7 +22,7 @@ class LinkedAccountsScreen extends ConsumerWidget {
         data: (accounts) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            ...accounts.map((a) => _AccountCard(account: a)),
+            ...accounts.map((a) => _AccountCard(account: a, totalAccounts: accounts.length)),
             const SizedBox(height: 16),
             _LinkAccountButton(isPremium: user?.isPremium ?? false, accountCount: accounts.length),
           ],
@@ -35,7 +34,8 @@ class LinkedAccountsScreen extends ConsumerWidget {
 
 class _AccountCard extends ConsumerWidget {
   final SteamAccount account;
-  const _AccountCard({required this.account});
+  final int totalAccounts;
+  const _AccountCard({required this.account, required this.totalAccounts});
 
   Color _statusColor() {
     switch (account.sessionStatus) {
@@ -152,7 +152,7 @@ class _AccountCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                  onPressed: () => _confirmRemove(context, ref),
+                  onPressed: () => _confirmRemove(context, ref, totalAccounts <= 1),
                 ),
               ],
             ),
@@ -162,12 +162,14 @@ class _AccountCard extends ConsumerWidget {
     );
   }
 
-  void _confirmRemove(BuildContext context, WidgetRef ref) {
+  void _confirmRemove(BuildContext context, WidgetRef ref, bool isLastAccount) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove Account?'),
-        content: Text('Remove ${account.displayName}? This will delete its inventory data.'),
+        content: Text(isLastAccount
+            ? 'This is your only account. Removing it will sign you out.'
+            : 'Remove ${account.displayName}? This will delete its inventory data.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
@@ -175,6 +177,10 @@ class _AccountCard extends ConsumerWidget {
               Navigator.pop(ctx);
               try {
                 await ref.read(accountsProvider.notifier).unlinkAccount(account.id);
+                if (isLastAccount && context.mounted) {
+                  // Last account removed — logout and redirect
+                  await ref.read(authStateProvider.notifier).logout();
+                }
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -198,36 +204,16 @@ class _LinkAccountButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final blocked = !isPremium && accountCount >= 1;
+    // TODO: re-enable premium gate after testing
+    // final blocked = !isPremium && accountCount >= 1;
 
     return FilledButton.icon(
-      icon: Icon(blocked ? Icons.workspace_premium : Icons.add),
-      label: Text(blocked ? 'Upgrade to Link More Accounts' : 'Link New Account'),
-      onPressed: () async {
-        if (blocked) {
-          context.push('/premium');
-          return;
-        }
-        try {
-          final data = await ref.read(accountsProvider.notifier).startLinkAccount();
-          final url = data['url'] as String?;
-          if (url != null) {
-            await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-          }
-        } catch (e) {
-          if (context.mounted) {
-            final msg = e.toString();
-            if (msg.contains('premium_required')) {
-              context.push('/premium');
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-            }
-          }
-        }
+      icon: const Icon(Icons.add),
+      label: const Text('Link New Account'),
+      onPressed: () {
+        context.push('/session?linkMode=true');
       },
       style: FilledButton.styleFrom(
-        backgroundColor: blocked ? Colors.amber.withAlpha(40) : null,
-        foregroundColor: blocked ? Colors.amber : null,
         minimumSize: const Size(double.infinity, 48),
       ),
     );

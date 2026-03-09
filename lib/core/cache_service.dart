@@ -32,7 +32,8 @@ class CacheService {
     final entry = _priceBox.get(marketHashName);
     if (entry == null) return null;
     if (_isExpired(entry['cachedAt'], const Duration(hours: 1))) return null;
-    return Map<String, double>.from(entry['prices'] as Map);
+    final prices = _deepCast(entry['prices']) as Map<String, dynamic>;
+    return prices.map((k, v) => MapEntry(k, (v as num).toDouble()));
   }
 
   /// Persist multi-source prices for a single item.
@@ -53,9 +54,9 @@ class CacheService {
     if (_isExpired(cachedAt as String, const Duration(hours: 24))) return null;
     final items = _inventoryBox.get('items');
     if (items == null) return null;
-    return List<Map<String, dynamic>>.from(
-      (items as List).map((e) => Map<String, dynamic>.from(e as Map)),
-    );
+    return (items as List)
+        .map((e) => _deepCast(e) as Map<String, dynamic>)
+        .toList();
   }
 
   /// Persist the full inventory snapshot.
@@ -73,7 +74,7 @@ class CacheService {
     if (entry == null) return null;
     final cachedAt = _portfolioBox.get('cachedAt');
     if (_isExpired(cachedAt as String?, const Duration(hours: 1))) return null;
-    return Map<String, dynamic>.from(entry as Map);
+    return _deepCast(entry) as Map<String, dynamic>;
   }
 
   /// Returns the cached portfolio summary ignoring TTL (for widget background
@@ -81,7 +82,7 @@ class CacheService {
   static Map<String, dynamic>? getPortfolioRaw() {
     final entry = _portfolioBox.get('summary');
     if (entry == null) return null;
-    return Map<String, dynamic>.from(entry as Map);
+    return _deepCast(entry) as Map<String, dynamic>;
   }
 
   /// Persist the portfolio summary snapshot.
@@ -139,5 +140,18 @@ class CacheService {
     if (cachedAt == null) return true;
     final cached = DateTime.parse(cachedAt);
     return DateTime.now().difference(cached) > ttl;
+  }
+
+  /// Deep-cast Hive's Map<dynamic, dynamic> → Map<String, dynamic> recursively.
+  static dynamic _deepCast(dynamic value) {
+    if (value is Map) {
+      return value.map<String, dynamic>(
+        (k, v) => MapEntry(k.toString(), _deepCast(v)),
+      );
+    }
+    if (value is List) {
+      return value.map(_deepCast).toList();
+    }
+    return value;
   }
 }

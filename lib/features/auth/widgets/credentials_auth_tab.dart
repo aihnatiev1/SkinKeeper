@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../session_provider.dart';
+import '../../settings/accounts_provider.dart';
 
 class CredentialsAuthTab extends ConsumerStatefulWidget {
   const CredentialsAuthTab({super.key});
@@ -60,11 +61,18 @@ class _CredentialsAuthTabState extends ConsumerState<CredentialsAuthTab> {
     // Listen for status changes
     ref.listen<CredentialAuthState>(credentialAuthProvider, (prev, next) {
       if (next.status == 'authenticated') {
-        ref.read(sessionStatusProvider.notifier).refresh();
+        final linkMode = ref.read(sessionLinkModeProvider);
+        if (linkMode) {
+          ref.invalidate(accountsProvider);
+        } else {
+          ref.read(sessionStatusProvider.notifier).refresh();
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Steam session connected via credentials'),
-            backgroundColor: Color(0xFF00E676),
+          SnackBar(
+            content: Text(linkMode
+                ? 'New account linked successfully!'
+                : 'Steam session connected via credentials'),
+            backgroundColor: const Color(0xFF00E676),
           ),
         );
         context.pop();

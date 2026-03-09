@@ -158,7 +158,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               final accountId = int.tryParse(
                 state.uri.queryParameters['accountId'] ?? '',
               );
-              return SteamSessionScreen(accountId: accountId);
+              final linkMode =
+                  state.uri.queryParameters['linkMode'] == 'true';
+              return SteamSessionScreen(
+                accountId: accountId,
+                linkMode: linkMode,
+              );
             },
           ),
           GoRoute(

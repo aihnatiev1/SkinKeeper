@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../session_provider.dart';
+import '../../settings/accounts_provider.dart';
 
 class QrAuthTab extends ConsumerStatefulWidget {
   const QrAuthTab({super.key});
@@ -29,17 +30,24 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       final status = await ref.read(qrAuthProvider.notifier).pollQR();
       if (!mounted) return;
       if (status == 'authenticated') {
         _pollTimer?.cancel();
-        await ref.read(sessionStatusProvider.notifier).refresh();
+        final linkMode = ref.read(sessionLinkModeProvider);
+        if (linkMode) {
+          ref.invalidate(accountsProvider);
+        } else {
+          await ref.read(sessionStatusProvider.notifier).refresh();
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Steam session connected via QR code'),
-              backgroundColor: Color(0xFF00E676),
+            SnackBar(
+              content: Text(linkMode
+                  ? 'New account linked successfully!'
+                  : 'Steam session connected via QR code'),
+              backgroundColor: const Color(0xFF00E676),
             ),
           );
           context.pop();

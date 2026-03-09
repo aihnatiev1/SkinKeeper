@@ -16,6 +16,8 @@ interface PendingSession {
   loginSession: LoginSession;
   createdAt: Date;
   accountId: number;
+  userId?: number;
+  linkMode?: boolean;
   status: "pending" | "guard_required" | "authenticated" | "expired";
   cookies?: SteamSession;
 }
@@ -521,6 +523,66 @@ export class SteamSessionService {
     const error = new Error("Steam session expired or not configured. Please re-authenticate.");
     (error as any).code = "SESSION_EXPIRED";
     throw error;
+  }
+
+  // ─── Link Mode Helpers ──────────────────────────────────────────────
+
+  /**
+   * Extract Steam ID from steamLoginSecure cookie value.
+   * Format: steamId%7C%7C...token... or steamId||...token...
+   */
+  static extractSteamIdFromCookie(steamLoginSecure: string): string | null {
+    // URL-decoded: steamId||token  or URL-encoded: steamId%7C%7Ctoken
+    const decoded = decodeURIComponent(steamLoginSecure);
+    const parts = decoded.split("||");
+    if (parts.length >= 2 && /^\d{17}$/.test(parts[0])) {
+      return parts[0];
+    }
+    return null;
+  }
+
+  /**
+   * Create a new steam_accounts entry for a linked account and save session.
+   * Returns the new account ID.
+   */
+  static async linkNewAccount(
+    userId: number,
+    cookies: SteamSession,
+    method: string,
+    refreshToken: string | null
+  ): Promise<{ accountId: number; steamId: string }> {
+    const steamId = this.extractSteamIdFromCookie(cookies.steamLoginSecure);
+    if (!steamId) {
+      throw new Error("Could not extract Steam ID from session cookies");
+    }
+
+    // Fetch Steam profile for display name + avatar
+    let displayName = steamId;
+    let avatarUrl = "";
+    try {
+      const { getSteamProfile } = await import("./steam.js");
+      const profile = await getSteamProfile(steamId);
+      displayName = profile.personaname || steamId;
+      avatarUrl = profile.avatarfull || "";
+    } catch {
+      // Non-fatal — use steamId as display name
+    }
+
+    // Upsert steam_accounts entry
+    const { rows } = await pool.query(
+      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4
+       RETURNING id`,
+      [userId, steamId, displayName, avatarUrl]
+    );
+    const accountId = rows[0].id;
+
+    // Save session credentials
+    await this.saveSession(accountId, cookies);
+    await this.saveSessionMeta(accountId, method, refreshToken);
+
+    return { accountId, steamId };
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────

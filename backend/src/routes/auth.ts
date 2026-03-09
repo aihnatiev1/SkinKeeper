@@ -208,26 +208,26 @@ router.get("/accounts", authMiddleware, async (req: AuthRequest, res: Response) 
 // POST /api/auth/accounts/link — Start linking a new Steam account
 router.post("/accounts/link", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    // Check premium gate
-    const { rows: userRow } = await pool.query(
-      `SELECT is_premium FROM users WHERE id = $1`,
-      [req.userId]
-    );
-    const isPremium = userRow[0]?.is_premium ?? false;
-
-    if (!isPremium) {
-      const { rows: countRow } = await pool.query(
-        `SELECT COUNT(*)::int as cnt FROM steam_accounts WHERE user_id = $1`,
-        [req.userId]
-      );
-      if (countRow[0].cnt >= 1) {
-        res.status(403).json({
-          error: "premium_required",
-          message: "Upgrade to Premium to link multiple Steam accounts",
-        });
-        return;
-      }
-    }
+    // TODO: re-enable premium gate after testing
+    // const { rows: userRow } = await pool.query(
+    //   `SELECT is_premium FROM users WHERE id = $1`,
+    //   [req.userId]
+    // );
+    // const isPremium = userRow[0]?.is_premium ?? false;
+    //
+    // if (!isPremium) {
+    //   const { rows: countRow } = await pool.query(
+    //     `SELECT COUNT(*)::int as cnt FROM steam_accounts WHERE user_id = $1`,
+    //     [req.userId]
+    //   );
+    //   if (countRow[0].cnt >= 1) {
+    //     res.status(403).json({
+    //       error: "premium_required",
+    //       message: "Upgrade to Premium to link multiple Steam accounts",
+    //     });
+    //     return;
+    //   }
+    // }
 
     // Build OpenID URL with state param to identify this as a link flow
     const returnUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api/auth/steam/callback`;
@@ -287,22 +287,29 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
       [req.userId]
     );
 
-    if (accounts.length <= 1) {
-      res.status(400).json({ error: "Cannot remove your only account" });
-      return;
-    }
-
     const target = accounts.find((a) => a.id === accountId);
     if (!target) {
       res.status(404).json({ error: "Account not found" });
       return;
     }
 
+    const isLastAccount = accounts.length <= 1;
+
     // Delete (CASCADE handles inventory_items)
     await pool.query(
       `DELETE FROM steam_accounts WHERE id = $1 AND user_id = $2`,
       [accountId, req.userId]
     );
+
+    if (isLastAccount) {
+      // Clear active account — frontend should redirect to login
+      await pool.query(
+        `UPDATE users SET active_account_id = NULL WHERE id = $1`,
+        [req.userId]
+      );
+      res.json({ success: true, lastAccountRemoved: true });
+      return;
+    }
 
     // If deleted account was active, switch to first remaining
     const { rows: userRow } = await pool.query(

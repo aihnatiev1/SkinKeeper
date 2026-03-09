@@ -76,6 +76,21 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
 }
 
 class SteamAuthService {
+  /// Open Steam login for linking a new account (uses backend link endpoint).
+  Future<void> openSteamLinkLogin(WidgetRef ref) async {
+    try {
+      final api = ref.read(apiClientProvider);
+      final response = await api.post('/auth/accounts/link');
+      final data = response.data as Map<String, dynamic>;
+      final url = data['url'] as String?;
+      if (url != null) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      dev.log('Link login failed: $e', name: 'SteamAuth');
+    }
+  }
+
   Future<void> openSteamLogin() async {
     // Steam OpenID requires http(s) return_to — use backend as intermediary
     final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback';

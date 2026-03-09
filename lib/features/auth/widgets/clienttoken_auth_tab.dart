@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../session_provider.dart';
+import '../../settings/accounts_provider.dart';
 
 class ClientTokenAuthTab extends ConsumerStatefulWidget {
   const ClientTokenAuthTab({super.key});
@@ -40,11 +43,18 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
 
     ref.listen<ClientTokenAuthState>(clientTokenAuthProvider, (prev, next) {
       if (next.status == 'authenticated') {
-        ref.read(sessionStatusProvider.notifier).refresh();
+        final linkMode = ref.read(sessionLinkModeProvider);
+        if (linkMode) {
+          ref.invalidate(accountsProvider);
+        } else {
+          ref.read(sessionStatusProvider.notifier).refresh();
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Steam session connected via client token'),
-            backgroundColor: Color(0xFF00E676),
+          SnackBar(
+            content: Text(linkMode
+                ? 'New account linked successfully!'
+                : 'Steam session connected via client token'),
+            backgroundColor: const Color(0xFF00E676),
           ),
         );
         context.pop();
@@ -80,19 +90,46 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
           // Instructions
           _buildInstructionStep(1, 'Open Steam in your browser'),
           _buildInstructionStep(2, 'Navigate to:'),
-          Container(
-            margin: const EdgeInsets.only(left: 36, bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(8),
-              borderRadius: BorderRadius.circular(8),
+          GestureDetector(
+            onTap: () => launchUrl(
+              Uri.parse('https://steamcommunity.com/chat/clientjstoken'),
+              mode: LaunchMode.externalApplication,
             ),
-            child: const SelectableText(
-              'steamcommunity.com/chat/clientjstoken',
-              style: TextStyle(
-                color: Color(0xFF00D2D3),
-                fontSize: 13,
-                fontFamily: 'monospace',
+            onLongPress: () {
+              Clipboard.setData(const ClipboardData(
+                text: 'https://steamcommunity.com/chat/clientjstoken',
+              ));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('URL copied'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            child: Container(
+              margin: const EdgeInsets.only(left: 36, bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(8),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.open_in_new, size: 14, color: Color(0xFF00D2D3)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'steamcommunity.com/chat/clientjstoken',
+                      style: TextStyle(
+                        color: Color(0xFF00D2D3),
+                        fontSize: 13,
+                        fontFamily: 'monospace',
+                        decoration: TextDecoration.underline,
+                        decorationColor: Color(0xFF00D2D3),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

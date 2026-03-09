@@ -16,16 +16,32 @@ async function resolveAccountId(req: AuthRequest): Promise<number> {
   return SteamSessionService.getActiveAccountId(req.userId!);
 }
 
+function isLinkMode(req: AuthRequest): boolean {
+  return req.query.linkMode === "true";
+}
+
 // ─── QR Code Flow ──────────────────────────────────────────────────────
 
 /**
- * POST /api/session/qr/start?accountId=X
- * Start a new QR login session for a specific account.
+ * POST /api/session/qr/start?accountId=X&linkMode=true
+ * Start a new QR login session. In linkMode, creates a new account on success.
  */
 router.post("/qr/start", async (req: AuthRequest, res: Response) => {
   try {
-    const accountId = await resolveAccountId(req);
+    const linkMode = isLinkMode(req);
+    // In link mode, use 0 as placeholder accountId (account created on poll success)
+    const accountId = linkMode ? 0 : await resolveAccountId(req);
     const result = await SteamSessionService.startQRSession(accountId);
+
+    // Tag pending session with link mode info
+    if (linkMode) {
+      const pending = (SteamSessionService as any).pendingSessions.get(result.nonce);
+      if (pending) {
+        pending.linkMode = true;
+        pending.userId = req.userId;
+      }
+    }
+
     res.json(result);
   } catch (err) {
     console.error("QR start error:", err);
@@ -34,13 +50,49 @@ router.post("/qr/start", async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /api/session/qr/poll/:nonce?accountId=X
+ * GET /api/session/qr/poll/:nonce?accountId=X&linkMode=true
  * Poll a QR login session for status.
  */
 router.get("/qr/poll/:nonce", async (req: AuthRequest, res: Response) => {
   try {
-    const accountId = await resolveAccountId(req);
     const nonce = req.params.nonce as string;
+    const pending = (SteamSessionService as any).pendingSessions.get(nonce);
+
+    if (!pending) {
+      res.json({ status: "expired" });
+      return;
+    }
+
+    // Link mode: handle account creation on auth success
+    if (pending.linkMode && pending.status === "authenticated" && pending.cookies) {
+      try {
+        const { accountId, steamId } = await SteamSessionService.linkNewAccount(
+          pending.userId!,
+          pending.cookies,
+          "qr",
+          pending.loginSession.refreshToken || null
+        );
+        (SteamSessionService as any).pendingSessions.delete(nonce);
+        res.json({ status: "authenticated", accountId, steamId });
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+      return;
+    }
+
+    if (pending.linkMode) {
+      // Still pending or expired — return status without accountId check
+      if (pending.status === "expired") {
+        (SteamSessionService as any).pendingSessions.delete(nonce);
+        res.json({ status: "expired" });
+        return;
+      }
+      res.json({ status: "pending" });
+      return;
+    }
+
+    // Normal mode
+    const accountId = await resolveAccountId(req);
     const result = await SteamSessionService.pollQRSession(nonce, accountId);
     res.json(result);
   } catch (err) {
@@ -52,7 +104,7 @@ router.get("/qr/poll/:nonce", async (req: AuthRequest, res: Response) => {
 // ─── Credential + Guard Flow ───────────────────────────────────────────
 
 /**
- * POST /api/session/login?accountId=X
+ * POST /api/session/login?accountId=X&linkMode=true
  * Start a credential login. Body: { username, password }
  */
 router.post("/login", async (req: AuthRequest, res: Response) => {
@@ -64,12 +116,23 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const accountId = await resolveAccountId(req);
+    const linkMode = isLinkMode(req);
+    const accountId = linkMode ? 0 : await resolveAccountId(req);
     const result = await SteamSessionService.startCredentialLogin(
       accountId,
       username,
       password
     );
+
+    // Tag pending session with link mode info
+    if (linkMode) {
+      const pending = (SteamSessionService as any).pendingSessions.get(result.nonce);
+      if (pending) {
+        pending.linkMode = true;
+        pending.userId = req.userId;
+      }
+    }
+
     res.json(result);
   } catch (err) {
     console.error("Login error:", err);
@@ -90,6 +153,33 @@ router.post("/guard", async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    const pending = (SteamSessionService as any).pendingSessions.get(nonce);
+
+    // Link mode guard: submit code, then link account on success
+    if (pending?.linkMode) {
+      const result = await SteamSessionService.submitGuardCode(nonce, code);
+      if (result) {
+        try {
+          const { accountId, steamId } = await SteamSessionService.linkNewAccount(
+            pending.userId!,
+            result,
+            "credentials",
+            pending.loginSession.refreshToken || null
+          );
+          res.json({ status: "authenticated", accountId, steamId });
+        } catch (err: any) {
+          res.status(400).json({ error: err.message });
+        }
+      } else {
+        res.json({
+          status: "pending",
+          message: "Code may be incorrect, try again",
+        });
+      }
+      return;
+    }
+
+    // Normal mode
     const result = await SteamSessionService.submitGuardCode(nonce, code);
 
     if (result) {
@@ -109,7 +199,7 @@ router.post("/guard", async (req: AuthRequest, res: Response) => {
 // ─── Client JS Token Flow ──────────────────────────────────────────────
 
 /**
- * POST /api/session/token?accountId=X
+ * POST /api/session/token?accountId=X&linkMode=true
  * Submit a clientjstoken. Body: { steamLoginSecure }
  */
 router.post("/token", async (req: AuthRequest, res: Response) => {
@@ -123,6 +213,31 @@ router.post("/token", async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    const linkMode = isLinkMode(req);
+
+    if (linkMode) {
+      // Extract sessionId first
+      const sessionId = await SteamSessionService.extractSessionId(steamLoginSecure);
+      if (!sessionId) {
+        res.status(400).json({ error: "Could not extract session from token" });
+        return;
+      }
+      const cookies = { sessionId, steamLoginSecure };
+      try {
+        const { accountId, steamId } = await SteamSessionService.linkNewAccount(
+          req.userId!,
+          cookies,
+          "clienttoken",
+          null
+        );
+        res.json({ status: "authenticated", accountId, steamId });
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+      return;
+    }
+
+    // Normal mode
     const accountId = await resolveAccountId(req);
     const result = await SteamSessionService.handleClientToken(accountId, {
       steamLoginSecure,

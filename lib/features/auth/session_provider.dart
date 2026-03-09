@@ -4,6 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 
 // ---------------------------------------------------------------------------
+// Link mode — shared between session screen and auth providers
+// ---------------------------------------------------------------------------
+
+final sessionLinkModeProvider = StateProvider<bool>((ref) => false);
+
+// ---------------------------------------------------------------------------
 // Session status
 // ---------------------------------------------------------------------------
 
@@ -86,7 +92,9 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
     state = state.copyWith(loading: true, status: 'loading', error: null);
     try {
       final api = _ref.read(apiClientProvider);
-      final response = await api.post('/session/qr/start');
+      final linkMode = _ref.read(sessionLinkModeProvider);
+      final query = linkMode ? '?linkMode=true' : '';
+      final response = await api.post('/session/qr/start$query');
       final data = response.data as Map<String, dynamic>;
       state = state.copyWith(
         qrImage: data['qrImage'] as String?,
@@ -109,7 +117,9 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
     if (nonce == null) return 'error';
     try {
       final api = _ref.read(apiClientProvider);
-      final response = await api.get('/session/qr/poll/$nonce');
+      final linkMode = _ref.read(sessionLinkModeProvider);
+      final query = linkMode ? '?linkMode=true' : '';
+      final response = await api.get('/session/qr/poll/$nonce$query');
       final data = response.data as Map<String, dynamic>;
       final pollStatus = data['status'] as String? ?? 'pending';
       state = state.copyWith(status: pollStatus);
@@ -175,7 +185,9 @@ class CredentialAuthNotifier extends StateNotifier<CredentialAuthState> {
     state = state.copyWith(loading: true, status: 'loading', error: null);
     try {
       final api = _ref.read(apiClientProvider);
-      final response = await api.post('/session/login', data: {
+      final linkMode = _ref.read(sessionLinkModeProvider);
+      final query = linkMode ? '?linkMode=true' : '';
+      final response = await api.post('/session/login$query', data: {
         'username': username,
         'password': password,
       });
@@ -268,7 +280,9 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
     state = state.copyWith(loading: true, status: 'loading', error: null);
     try {
       final api = _ref.read(apiClientProvider);
-      await api.post('/session/token', data: {
+      final linkMode = _ref.read(sessionLinkModeProvider);
+      final query = linkMode ? '?linkMode=true' : '';
+      await api.post('/session/token$query', data: {
         'steamLoginSecure': steamLoginSecure,
       });
       state = state.copyWith(

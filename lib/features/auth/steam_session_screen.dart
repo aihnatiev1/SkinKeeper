@@ -9,19 +9,26 @@ import 'widgets/session_status_widget.dart';
 
 class SteamSessionScreen extends ConsumerWidget {
   final int? accountId;
-  const SteamSessionScreen({super.key, this.accountId});
+  final bool linkMode;
+  const SteamSessionScreen({super.key, this.accountId, this.linkMode = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Set linkMode in provider so child tabs can access it
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(sessionLinkModeProvider.notifier).state = linkMode;
+    });
+
     final sessionStatus = ref.watch(sessionStatusProvider);
-    final isExpired = sessionStatus.valueOrNull == 'expired' ||
-        sessionStatus.valueOrNull == 'none';
+    final isExpired = !linkMode &&
+        (sessionStatus.valueOrNull == 'expired' ||
+            sessionStatus.valueOrNull == 'none');
 
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Steam Session'),
+          title: Text(linkMode ? 'Link New Account' : 'Steam Session'),
           bottom: TabBar(
             indicatorColor: Theme.of(context).colorScheme.primary,
             indicatorWeight: 3,
@@ -42,10 +49,34 @@ class SteamSessionScreen extends ConsumerWidget {
               ),
             ],
           ),
-          actions: const [SessionStatusWidget()],
+          actions: linkMode ? null : const [SessionStatusWidget()],
         ),
         body: Column(
           children: [
+            // Link mode info banner
+            if (linkMode)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                color: Colors.cyanAccent.withAlpha(20),
+                child: const Row(
+                  children: [
+                    Icon(Icons.person_add, color: Colors.cyanAccent, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Sign in with a different Steam account to link it.',
+                        style: TextStyle(
+                          color: Colors.cyanAccent,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Session expired banner
             if (isExpired)
               Container(
@@ -91,7 +122,11 @@ class SteamSessionScreen extends ConsumerWidget {
                   height: 48,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      ref.read(authServiceProvider).openSteamLogin();
+                      if (linkMode) {
+                        ref.read(authServiceProvider).openSteamLinkLogin(ref);
+                      } else {
+                        ref.read(authServiceProvider).openSteamLogin();
+                      }
                     },
                     icon: const Icon(Icons.open_in_browser, size: 20),
                     label: const Text('Sign in via Steam Browser'),
