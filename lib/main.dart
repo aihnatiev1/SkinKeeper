@@ -46,6 +46,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _sessionExpiredSub;
+  StreamSubscription<void>? _tokenExpiredSub;
 
   @override
   void initState() {
@@ -55,6 +56,9 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     _initDeepLinks();
     _sessionExpiredSub = sessionExpiredController.stream.listen((_) {
       _showSessionExpiredDialog();
+    });
+    _tokenExpiredSub = tokenExpiredController.stream.listen((_) {
+      _handleTokenExpired();
     });
   }
 
@@ -114,7 +118,16 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     _sessionExpiredSub?.cancel();
+    _tokenExpiredSub?.cancel();
     super.dispose();
+  }
+
+  void _handleTokenExpired() {
+    final auth = ref.read(authStateProvider);
+    if (auth.valueOrNull == null) return;
+
+    // Force logout — JWT is invalid, need full re-login
+    ref.read(authStateProvider.notifier).logout();
   }
 
   void _showSessionExpiredDialog() {

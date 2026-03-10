@@ -40,7 +40,7 @@ struct Provider: TimelineProvider {
     }
 
     private func readEntry() -> PortfolioEntry {
-        let defaults = UserDefaults(suiteName: "group.com.skintracker.widget")
+        let defaults = UserDefaults(suiteName: "group.com.skinkeeper.widget")
         let totalValue = defaults?.string(forKey: "totalValue") ?? "--"
         let change24h = defaults?.string(forKey: "change24h") ?? "--"
         let change24hPct = defaults?.string(forKey: "change24hPct") ?? "--"
@@ -64,7 +64,7 @@ struct Provider: TimelineProvider {
     }
 }
 
-struct SkinTrackerWidgetEntryView: View {
+struct SkinKeeperWidgetEntryView: View {
     var entry: PortfolioEntry
     @Environment(\.widgetFamily) var family
 
@@ -125,21 +125,21 @@ struct SkinTrackerWidgetEntryView: View {
                 .foregroundColor(Color.white.opacity(0.4))
         }
         .padding()
-        .widgetURL(URL(string: "skintracker://portfolio"))
+        .widgetURL(URL(string: "skinkeeper://portfolio"))
     }
 }
 
 @main
-struct SkinTrackerWidget: Widget {
-    let kind: String = "SkinTrackerPortfolio"
+struct SkinKeeperWidget: Widget {
+    let kind: String = "SkinKeeperPortfolio"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             if #available(iOSApplicationExtension 17.0, *) {
-                SkinTrackerWidgetEntryView(entry: entry)
+                SkinKeeperWidgetEntryView(entry: entry)
                     .containerBackground(.black.gradient, for: .widget)
             } else {
-                SkinTrackerWidgetEntryView(entry: entry)
+                SkinKeeperWidgetEntryView(entry: entry)
                     .background(
                         LinearGradient(
                             colors: [Color.black, Color(white: 0.12)],

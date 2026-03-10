@@ -10,11 +10,23 @@ final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 /// Stream that fires when any API call returns SESSION_EXPIRED.
 final sessionExpiredController = StreamController<void>.broadcast();
 
-/// Returns true if the error is a SESSION_EXPIRED 401.
+/// Stream that fires when any API call returns TOKEN_EXPIRED (JWT invalid).
+final tokenExpiredController = StreamController<void>.broadcast();
+
+/// Returns true if the error is a 401 requiring Steam session reauth.
 bool isSessionExpired(dynamic e) {
   if (e is DioException && e.response?.statusCode == 401) {
     final data = e.response?.data;
     if (data is Map && data['code'] == 'SESSION_EXPIRED') return true;
+  }
+  return false;
+}
+
+/// Returns true if the error is a 401 due to an expired/invalid JWT.
+bool isTokenExpired(dynamic e) {
+  if (e is DioException && e.response?.statusCode == 401) {
+    final data = e.response?.data;
+    if (data is Map && data['code'] == 'TOKEN_EXPIRED') return true;
   }
   return false;
 }
@@ -73,8 +85,12 @@ class ApiClient {
         handler.next(options);
       },
       onError: (error, handler) {
-        if (isSessionExpired(error)) {
-          final path = error.requestOptions.path;
+        final path = error.requestOptions.path;
+        if (isTokenExpired(error)) {
+          if (!path.startsWith('/auth')) {
+            tokenExpiredController.add(null);
+          }
+        } else if (isSessionExpired(error)) {
           // Don't fire for session/auth paths (already on reauth screen)
           if (!path.startsWith('/session') &&
               !path.startsWith('/auth')) {

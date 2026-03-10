@@ -2,8 +2,14 @@ import { pool } from "../db/pool.js";
 
 // ---- Cost Basis ----
 
-/** Recalculate cost basis for all items of a user from transactions */
-export async function recalculateCostBasis(userId: number): Promise<void> {
+/** Recalculate cost basis for all items of a user from transactions.
+ *  If accountId is provided, recalculates only for that steam_account. */
+export async function recalculateCostBasis(userId: number, accountId?: number): Promise<void> {
+  // Filter condition: either per-account or global (all user transactions)
+  const accountFilter = accountId
+    ? `AND steam_account_id = ${parseInt(String(accountId))}`
+    : "";
+
   await pool.query(
     `
     WITH buy_agg AS (
@@ -11,7 +17,7 @@ export async function recalculateCostBasis(userId: number): Promise<void> {
              COUNT(*)::int AS qty,
              SUM(price_cents)::int AS total
       FROM transactions
-      WHERE user_id = $1 AND type = 'buy'
+      WHERE user_id = $1 AND type = 'buy' ${accountFilter}
       GROUP BY market_hash_name
     ),
     sell_agg AS (
@@ -19,7 +25,7 @@ export async function recalculateCostBasis(userId: number): Promise<void> {
              COUNT(*)::int AS qty,
              SUM(price_cents)::int AS total
       FROM transactions
-      WHERE user_id = $1 AND type = 'sell'
+      WHERE user_id = $1 AND type = 'sell' ${accountFilter}
       GROUP BY market_hash_name
     ),
     combined AS (
@@ -76,7 +82,108 @@ export interface PortfolioPL {
   totalCurrentValueCents: number;
 }
 
-export async function getPortfolioPL(userId: number): Promise<PortfolioPL> {
+export async function getPortfolioPL(userId: number, accountId?: number): Promise<PortfolioPL> {
+  // If accountId is provided, compute P/L directly from transactions for that account
+  // Otherwise use the global item_cost_basis table
+  const accountFilter = accountId
+    ? `AND steam_account_id = ${parseInt(String(accountId))}`
+    : "";
+
+  // When filtering by account, we recompute from transactions directly
+  // (item_cost_basis is global; per-account P/L must aggregate transactions)
+  if (accountId) {
+    const txRes = await pool.query(
+      `
+      WITH buy_agg AS (
+        SELECT market_hash_name,
+               COUNT(*)::int AS qty,
+               SUM(price_cents)::int AS total
+        FROM transactions
+        WHERE user_id = $1 AND type = 'buy' AND steam_account_id = $2
+        GROUP BY market_hash_name
+      ),
+      sell_agg AS (
+        SELECT market_hash_name,
+               COUNT(*)::int AS qty,
+               SUM(price_cents)::int AS total
+        FROM transactions
+        WHERE user_id = $1 AND type = 'sell' AND steam_account_id = $2
+        GROUP BY market_hash_name
+      ),
+      combined AS (
+        SELECT
+          COALESCE(b.market_hash_name, s.market_hash_name) AS market_hash_name,
+          COALESCE(b.qty, 0) AS qty_bought,
+          COALESCE(b.total, 0) AS total_spent,
+          COALESCE(s.qty, 0) AS qty_sold,
+          COALESCE(s.total, 0) AS total_earned,
+          GREATEST(COALESCE(b.qty, 0) - COALESCE(s.qty, 0), 0) AS current_holding,
+          CASE WHEN COALESCE(b.qty, 0) > 0
+            THEN (COALESCE(b.total, 0) / COALESCE(b.qty, 1))
+            ELSE 0
+          END AS avg_buy_price,
+          COALESCE(s.total, 0) - (
+            CASE WHEN COALESCE(b.qty, 0) > 0
+              THEN (COALESCE(b.total, 0)::float / b.qty * COALESCE(s.qty, 0))::int
+              ELSE 0
+            END
+          ) AS realized_profit
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s USING (market_hash_name)
+      )
+      SELECT
+        COALESCE(SUM(total_spent), 0)::int AS total_invested,
+        COALESCE(SUM(total_earned), 0)::int AS total_earned,
+        COALESCE(SUM(realized_profit), 0)::int AS realized_profit,
+        COALESCE(SUM(CASE WHEN current_holding > 0 THEN avg_buy_price * current_holding ELSE 0 END), 0)::int AS holding_cost,
+        COUNT(CASE WHEN current_holding > 0 THEN 1 END)::int AS holding_count,
+        json_agg(json_build_object('name', market_hash_name, 'holding', current_holding)) FILTER (WHERE current_holding > 0) AS holdings
+      FROM combined
+      `,
+      [userId, accountId]
+    );
+
+    const basis = txRes.rows[0];
+    const holdings: Array<{ name: string; holding: number }> = basis.holdings || [];
+
+    // Get current value for holdings
+    let currentValue = 0;
+    if (holdings.length > 0) {
+      const names = holdings.map((h) => h.name);
+      const priceRes = await pool.query(
+        `
+        SELECT DISTINCT ON (market_hash_name) market_hash_name, price_usd
+        FROM price_history
+        WHERE market_hash_name = ANY($1) AND price_usd > 0
+        ORDER BY market_hash_name, recorded_at DESC
+        `,
+        [names]
+      );
+      const priceMap = new Map(priceRes.rows.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)]));
+      for (const h of holdings) {
+        const price = priceMap.get(h.name) || 0;
+        currentValue += Math.round(price * 100) * h.holding;
+      }
+    }
+
+    const holdingCost = basis.holding_cost || 0;
+    const unrealizedProfit = currentValue - holdingCost;
+    const totalProfit = (basis.realized_profit || 0) + unrealizedProfit;
+    const totalInvested = basis.total_invested || 0;
+
+    return {
+      totalInvestedCents: totalInvested,
+      totalEarnedCents: basis.total_earned || 0,
+      realizedProfitCents: basis.realized_profit || 0,
+      unrealizedProfitCents: unrealizedProfit,
+      totalProfitCents: totalProfit,
+      totalProfitPct: totalInvested > 0 ? Math.round((totalProfit / totalInvested) * 10000) / 100 : 0,
+      holdingCount: basis.holding_count || 0,
+      totalCurrentValueCents: currentValue,
+    };
+  }
+
+  // Global (all accounts) — use item_cost_basis
   const basisRes = await pool.query(
     `
     SELECT
@@ -133,6 +240,40 @@ export async function getPortfolioPL(userId: number): Promise<PortfolioPL> {
     holdingCount: basis.holding_count || 0,
     totalCurrentValueCents: currentValue,
   };
+}
+
+// ---- Per-Account P/L Breakdown (PREMIUM) ----
+
+export interface AccountPL {
+  accountId: number;
+  steamId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  pl: PortfolioPL;
+}
+
+export async function getPortfolioPLByAccount(userId: number): Promise<AccountPL[]> {
+  const { rows: accounts } = await pool.query(
+    `SELECT id, steam_id, display_name, avatar_url FROM steam_accounts WHERE user_id = $1 ORDER BY id`,
+    [userId]
+  );
+
+  const results: AccountPL[] = [];
+  for (const acc of accounts) {
+    const pl = await getPortfolioPL(userId, acc.id);
+    // Only include accounts that have transaction data
+    if (pl.totalInvestedCents > 0 || pl.totalEarnedCents > 0 || pl.holdingCount > 0) {
+      results.push({
+        accountId: acc.id,
+        steamId: acc.steam_id,
+        displayName: acc.display_name,
+        avatarUrl: acc.avatar_url,
+        pl,
+      });
+    }
+  }
+
+  return results;
 }
 
 // ---- Per-Item P/L (PREMIUM) ----

@@ -439,16 +439,27 @@ class _TradeOfferTile extends ConsumerWidget {
                 ],
               ),
 
-              if (offer.isQuickTransfer)
+              if (offer.isInternal || offer.isQuickTransfer)
                 Padding(
                   padding: const EdgeInsets.only(top: 4, left: 22),
-                  child: Text(
-                    'Quick Transfer',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textMuted,
-                      fontStyle: FontStyle.italic,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.swap_horiz_rounded,
+                        size: 13,
+                        color: Colors.amber.shade400,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        offer.isQuickTransfer ? 'Quick Transfer' : 'Internal Transfer',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.amber.shade400,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 

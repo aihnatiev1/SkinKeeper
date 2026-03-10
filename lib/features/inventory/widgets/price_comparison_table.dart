@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/settings_provider.dart';
+import '../../../core/theme.dart';
 
 const _sourceDisplayNames = <String, String>{
   'steam': 'Steam Market',
@@ -8,69 +10,59 @@ const _sourceDisplayNames = <String, String>{
 };
 
 const _sourceColors = <String, Color>{
-  'steam': Color(0xFF1B9FFF),
-  'skinport': Color(0xFF4CAF50),
-  'csfloat': Color(0xFFF57C00),
-  'dmarket': Color(0xFF9C27B0),
+  'steam': AppTheme.steamBlue,
+  'skinport': AppTheme.skinportGreen,
+  'csfloat': AppTheme.csfloatOrange,
+  'dmarket': AppTheme.dmarketPurple,
 };
 
 String sourceDisplayName(String source) =>
     _sourceDisplayNames[source] ?? source;
 
 Color sourceColor(String source) =>
-    _sourceColors[source] ?? Colors.grey;
+    _sourceColors[source] ?? AppTheme.textDisabled;
 
 class PriceComparisonTable extends StatelessWidget {
   final Map<String, double> prices;
+  final CurrencyInfo? currency;
 
-  const PriceComparisonTable({super.key, required this.prices});
+  const PriceComparisonTable({super.key, required this.prices, this.currency});
 
   @override
   Widget build(BuildContext context) {
     if (prices.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withAlpha(15)),
-        ),
+        padding: const EdgeInsets.all(AppTheme.s24),
+        decoration: AppTheme.glass(),
         child: Center(
-          child: Text(
-            'No prices available',
-            style: TextStyle(
-              color: Colors.white.withAlpha(120),
-              fontSize: 14,
-            ),
-          ),
+          child: Text('No prices available', style: AppTheme.bodySmall),
         ),
       );
     }
 
-    final sorted = prices.entries.toList()
-      ..sort((a, b) => a.value.compareTo(b.value));
+    // Steam price already shown on card — only show other sources
+    final sorted = prices.entries
+        .where((e) => e.key != 'steam')
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    if (sorted.isEmpty) return const SizedBox.shrink();
 
     final bestSource = sorted.first.key;
 
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withAlpha(15)),
-      ),
+      decoration: AppTheme.glass(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Text(
-              'Cross-Market Prices',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.white.withAlpha(220),
-              ),
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.s16,
+              AppTheme.s14,
+              AppTheme.s16,
+              AppTheme.s8,
             ),
+            child: Text('CROSS-MARKET PRICES', style: AppTheme.label),
           ),
           ...sorted.map((entry) {
             final isBest = entry.key == bestSource;
@@ -78,9 +70,10 @@ class PriceComparisonTable extends StatelessWidget {
               source: entry.key,
               price: entry.value,
               isBest: isBest,
+              currency: currency,
             );
           }),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppTheme.s8),
         ],
       ),
     );
@@ -91,11 +84,13 @@ class _PriceRow extends StatelessWidget {
   final String source;
   final double price;
   final bool isBest;
+  final CurrencyInfo? currency;
 
   const _PriceRow({
     required this.source,
     required this.price,
     required this.isBest,
+    this.currency,
   });
 
   @override
@@ -103,10 +98,13 @@ class _PriceRow extends StatelessWidget {
     final color = sourceColor(source);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.s16,
+        vertical: AppTheme.s10,
+      ),
       decoration: isBest
           ? BoxDecoration(
-              color: color.withAlpha(20),
+              color: color.withValues(alpha: 0.06),
               border: Border(
                 left: BorderSide(color: color, width: 3),
               ),
@@ -115,51 +113,53 @@ class _PriceRow extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 10,
-            height: 10,
+            width: 8,
+            height: 8,
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
+              boxShadow: isBest
+                  ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6)]
+                  : null,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppTheme.s12),
           Expanded(
             child: Text(
               sourceDisplayName(source),
               style: TextStyle(
                 fontSize: 14,
-                fontWeight: isBest ? FontWeight.w600 : FontWeight.normal,
-                color: Colors.white.withAlpha(isBest ? 240 : 180),
+                fontWeight: isBest ? FontWeight.w600 : FontWeight.w400,
+                color: isBest ? AppTheme.textPrimary : AppTheme.textSecondary,
               ),
             ),
           ),
           if (isBest)
             Container(
-              margin: const EdgeInsets.only(right: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              margin: const EdgeInsets.only(right: AppTheme.s10),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: color.withAlpha(40),
-                borderRadius: BorderRadius.circular(6),
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppTheme.r6),
+                border: Border.all(color: color.withValues(alpha: 0.2)),
               ),
               child: Text(
                 'BEST',
                 style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
                   color: color,
                   letterSpacing: 0.5,
                 ),
               ),
             ),
           Text(
-            '\$${price.toStringAsFixed(2)}',
+            currency?.format(price) ?? '\$${price.toStringAsFixed(2)}',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
               fontFeatures: const [FontFeature.tabularFigures()],
-              color: isBest
-                  ? const Color(0xFF00D2D3)
-                  : Colors.white.withAlpha(200),
+              color: isBest ? AppTheme.accent : AppTheme.textPrimary,
             ),
           ),
         ],

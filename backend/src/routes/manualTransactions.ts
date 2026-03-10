@@ -171,4 +171,112 @@ router.post(
   }
 );
 
+/**
+ * GET /api/transactions/search-items?q=ak-47 — Search item names for autocomplete
+ * Searches inventory items + price history for matching names
+ */
+router.get(
+  "/search-items",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const q = (req.query.q as string || "").trim();
+      if (q.length < 2) {
+        res.json({ items: [] });
+        return;
+      }
+
+      const pattern = `%${q}%`;
+
+      // Search user's inventory + their transaction history + cost basis (all small tables)
+      // Avoids full scan of price_history which can be huge
+      const { rows } = await pool.query(
+        `(
+          SELECT DISTINCT market_hash_name, icon_url
+          FROM inventory_items i
+          JOIN steam_accounts sa ON i.steam_account_id = sa.id
+          WHERE sa.user_id = $1 AND i.market_hash_name ILIKE $2
+          LIMIT 20
+        )
+        UNION
+        (
+          SELECT DISTINCT market_hash_name, icon_url
+          FROM transactions
+          WHERE user_id = $1 AND market_hash_name ILIKE $2
+          LIMIT 20
+        )
+        UNION
+        (
+          SELECT DISTINCT market_hash_name, NULL as icon_url
+          FROM item_cost_basis
+          WHERE user_id = $1 AND market_hash_name ILIKE $2
+          LIMIT 20
+        )
+        ORDER BY market_hash_name
+        LIMIT 30`,
+        [req.userId, pattern]
+      );
+
+      res.json({
+        items: rows.map((r) => ({
+          marketHashName: r.market_hash_name,
+          iconUrl: r.icon_url || null,
+        })),
+      });
+    } catch (err) {
+      console.error("[SearchItems] Error:", err);
+      res.status(500).json({ error: "Failed to search items" });
+    }
+  }
+);
+
+/**
+ * POST /api/transactions/manual/batch — Add multiple units of same item
+ * Body: { marketHashName, priceCentsPerUnit, quantity, type?, date?, source?, note?, iconUrl? }
+ */
+router.post(
+  "/manual/batch",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const {
+        marketHashName,
+        priceCentsPerUnit,
+        quantity = 1,
+        type = "buy",
+        date,
+        source = "manual",
+        note,
+        iconUrl,
+      } = req.body;
+
+      if (!marketHashName || !priceCentsPerUnit || priceCentsPerUnit <= 0) {
+        res.status(400).json({ error: "marketHashName and priceCentsPerUnit > 0 required" });
+        return;
+      }
+
+      const qty = Math.max(1, Math.min(quantity, 10000));
+      const txDate = date ? new Date(date).toISOString() : new Date().toISOString();
+      const txIds: string[] = [];
+
+      for (let i = 0; i < qty; i++) {
+        const txId = `manual_${randomUUID()}`;
+        await pool.query(
+          `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source, note, icon_url)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [req.userId, txId, type, marketHashName, priceCentsPerUnit, txDate, source, note || null, iconUrl || null]
+        );
+        txIds.push(txId);
+      }
+
+      await recalculateCostBasis(req.userId!);
+
+      res.json({ success: true, quantity: qty, txIds });
+    } catch (err) {
+      console.error("[ManualTx] Batch error:", err);
+      res.status(500).json({ error: "Failed to add transactions" });
+    }
+  }
+);
+
 export default router;

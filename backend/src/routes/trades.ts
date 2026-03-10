@@ -30,13 +30,14 @@ router.get(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      // Get user's steam_id
+      // Get steam_id from active account (respects account switch)
+      const accountId = await SteamSessionService.getActiveAccountId(req.userId!);
       const { rows } = await pool.query(
-        `SELECT steam_id FROM users WHERE id = $1`,
-        [req.userId!]
+        `SELECT steam_id FROM steam_accounts WHERE id = $1`,
+        [accountId]
       );
       if (rows.length === 0) {
-        res.status(404).json({ error: "User not found" });
+        res.status(404).json({ error: "No active account found" });
         return;
       }
 

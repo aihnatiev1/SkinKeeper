@@ -7,15 +7,15 @@ import 'cache_service.dart';
 /// Cross-platform home screen widget bridge.
 ///
 /// Uses `home_widget` to push portfolio data to:
-///   - iOS: UserDefaults via App Group `group.com.skintracker.widget`
-///   - Android: SharedPreferences read by [SkinTrackerWidget] AppWidgetProvider
+///   - iOS: UserDefaults via App Group `group.com.skinkeeper.widget`
+///   - Android: SharedPreferences read by [SkinKeeperWidget] AppWidgetProvider
 ///
 /// Data keys: totalValue, change24h, change24hPct, isPositive, itemCount,
 ///            lastUpdated, totalProfit (premium), isProfitable (premium).
 class WidgetService {
-  static const _appGroupId = 'group.com.skintracker.widget';
-  static const _iOSWidgetName = 'SkinTrackerWidget';
-  static const _androidWidgetName = 'SkinTrackerWidget';
+  static const _appGroupId = 'group.com.skinkeeper.widget';
+  static const _iOSWidgetName = 'SkinKeeperWidget';
+  static const _androidWidgetName = 'SkinKeeperWidget';
 
   /// Initialize the home_widget bridge. Call once before use.
   static Future<void> init() async {

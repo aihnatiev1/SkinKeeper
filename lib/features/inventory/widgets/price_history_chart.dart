@@ -1,7 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme.dart';
 import 'price_comparison_table.dart' show sourceColor, sourceDisplayName;
 
 class PricePoint {
@@ -24,10 +26,28 @@ class PricePoint {
   }
 }
 
+enum ChartPeriod {
+  day(label: '1D', days: 1),
+  week(label: '1W', days: 7),
+  month(label: '1M', days: 30),
+  year(label: '1Y', days: 365);
+
+  final String label;
+  final int days;
+  const ChartPeriod({required this.label, required this.days});
+}
+
 class PriceHistoryChart extends StatefulWidget {
   final List<PricePoint> history;
+  final ChartPeriod period;
+  final ValueChanged<ChartPeriod> onPeriodChanged;
 
-  const PriceHistoryChart({super.key, required this.history});
+  const PriceHistoryChart({
+    super.key,
+    required this.history,
+    this.period = ChartPeriod.month,
+    required this.onPeriodChanged,
+  });
 
   @override
   State<PriceHistoryChart> createState() => _PriceHistoryChartState();
@@ -41,13 +61,15 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
     if (widget.history.isEmpty) {
       return Container(
         height: 200,
-        padding: const EdgeInsets.all(24),
-        decoration: _boxDecoration(),
-        child: Center(
-          child: Text(
-            'No price history yet',
-            style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 14),
-          ),
+        padding: const EdgeInsets.all(AppTheme.s24),
+        decoration: AppTheme.glass(),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('No price history yet', style: AppTheme.bodySmall),
+            const SizedBox(height: AppTheme.s12),
+            _buildPeriodSelector(),
+          ],
         ),
       );
     }
@@ -65,7 +87,6 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
     final activeSources =
         _selectedSource != null ? [_selectedSource!] : sources;
 
-    // Compute bounds from active sources only
     final activePoints =
         activeSources.expand((s) => grouped[s] ?? <PricePoint>[]).toList();
     if (activePoints.isEmpty) return const SizedBox.shrink();
@@ -82,7 +103,6 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
     final minY = (rawMin - pad).clamp(0.0, double.infinity);
     final maxY = rawMax + pad;
 
-    // Build line bars
     final lineBars = <LineChartBarData>[];
     for (final source in sources) {
       final points = grouped[source]!;
@@ -99,7 +119,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
         isCurved: true,
         curveSmoothness: 0.3,
         preventCurveOverShooting: true,
-        color: isActive ? color : color.withAlpha(30),
+        color: isActive ? color : color.withValues(alpha: 0.12),
         barWidth: isActive ? 2.5 : 1,
         isStrokeCapRound: true,
         dotData: FlDotData(
@@ -115,59 +135,62 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [color.withAlpha(40), color.withAlpha(5)],
+            colors: [
+              color.withValues(alpha: 0.15),
+              color.withValues(alpha: 0.0),
+            ],
           ),
         ),
       ));
     }
 
-    // Latest prices per active source
-    final latestPrices = <String, double>{};
-    for (final source in activeSources) {
-      final points = grouped[source];
-      if (points != null && points.isNotEmpty) {
-        latestPrices[source] = points.last.priceUsd;
-      }
-    }
+    final priceChange = _computePriceChange(grouped, activeSources);
 
-    final dateFormat = DateFormat('d MMM');
+    final dateFormat = widget.period == ChartPeriod.day
+        ? DateFormat('HH:mm')
+        : DateFormat('d MMM');
 
     return Container(
-      decoration: _boxDecoration(),
+      decoration: AppTheme.glass(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with current prices
+          // Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.s16,
+              AppTheme.s14,
+              AppTheme.s16,
+              0,
+            ),
             child: Row(
               children: [
-                Text(
-                  'Price History',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withAlpha(220),
-                  ),
-                ),
+                Text('PRICE HISTORY', style: AppTheme.label),
                 const Spacer(),
-                if (_selectedSource != null && latestPrices.isNotEmpty)
-                  Text(
-                    '\$${latestPrices.values.first.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: sourceColor(_selectedSource!),
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
+                if (priceChange != null) _buildPriceChangeBadge(priceChange),
               ],
             ),
           ),
 
+          // Period selector
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.s12,
+              AppTheme.s10,
+              AppTheme.s12,
+              0,
+            ),
+            child: _buildPeriodSelector(),
+          ),
+
           // Source filter chips
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.s12,
+              AppTheme.s8,
+              AppTheme.s12,
+              AppTheme.s4,
+            ),
             child: Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -197,7 +220,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                     drawVerticalLine: false,
                     horizontalInterval: _interval(minY, maxY),
                     getDrawingHorizontalLine: (_) => FlLine(
-                      color: Colors.white.withAlpha(12),
+                      color: AppTheme.border,
                       strokeWidth: 0.5,
                     ),
                   ),
@@ -220,9 +243,8 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                             padding: const EdgeInsets.only(right: 6),
                             child: Text(
                               '\$${value.toStringAsFixed(value < 10 ? 2 : 0)}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white.withAlpha(90),
+                              style: AppTheme.captionSmall.copyWith(
+                                color: AppTheme.textDisabled,
                                 fontFeatures: const [FontFeature.tabularFigures()],
                               ),
                             ),
@@ -242,11 +264,11 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                           return Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              dateFormat.format(DateTime.fromMillisecondsSinceEpoch(
-                                  value.toInt())),
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white.withAlpha(90),
+                              dateFormat.format(
+                                  DateTime.fromMillisecondsSinceEpoch(
+                                      value.toInt())),
+                              style: AppTheme.captionSmall.copyWith(
+                                color: AppTheme.textDisabled,
                               ),
                             ),
                           );
@@ -259,11 +281,10 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                     touchTooltipData: LineTouchTooltipData(
                       fitInsideHorizontally: true,
                       fitInsideVertically: true,
-                      tooltipRoundedRadius: 10,
+                      tooltipRoundedRadius: AppTheme.r10,
                       tooltipPadding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
-                      getTooltipColor: (_) =>
-                          const Color(0xF01A1A2E),
+                      getTooltipColor: (_) => AppTheme.surfaceLight,
                       getTooltipItems: (spots) {
                         return spots.map((spot) {
                           final source = sources[spot.barIndex];
@@ -288,9 +309,104 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppTheme.s10),
         ],
       ),
+    );
+  }
+
+  double? _computePriceChange(
+      Map<String, List<PricePoint>> grouped, List<String> activeSources) {
+    final preferredSource = activeSources.contains('steam')
+        ? 'steam'
+        : activeSources.isNotEmpty
+            ? activeSources.first
+            : null;
+    if (preferredSource == null) return null;
+
+    final points = grouped[preferredSource];
+    if (points == null || points.length < 2) return null;
+
+    final first = points.first.priceUsd;
+    final last = points.last.priceUsd;
+    if (first <= 0) return null;
+
+    return ((last - first) / first) * 100;
+  }
+
+  Widget _buildPriceChangeBadge(double changePercent) {
+    final isPositive = changePercent >= 0;
+    final color = AppTheme.plColor(changePercent);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppTheme.r8),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            AppTheme.pctText(changePercent),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeriodSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: ChartPeriod.values.map((p) {
+        final isSelected = widget.period == p;
+        return Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              widget.onPeriodChanged(p);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppTheme.accent.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppTheme.r8),
+                border: Border.all(
+                  color: isSelected
+                      ? AppTheme.accent.withValues(alpha: 0.3)
+                      : AppTheme.border,
+                ),
+              ),
+              child: Text(
+                p.label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight:
+                      isSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: isSelected ? AppTheme.accent : AppTheme.textMuted,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -298,38 +414,34 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
     if (!showAll && source == null) return const SizedBox.shrink();
     final isSelected =
         (source == null && _selectedSource == null) || source == _selectedSource;
-    final color =
-        source != null ? sourceColor(source) : Colors.white.withAlpha(180);
+    final color = source != null ? sourceColor(source) : AppTheme.textSecondary;
 
     return GestureDetector(
-      onTap: () => setState(() => _selectedSource = source),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _selectedSource = source);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: isSelected ? color.withAlpha(25) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          color: isSelected ? color.withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppTheme.r8),
           border: Border.all(
-            color: isSelected ? color.withAlpha(100) : Colors.white.withAlpha(20),
+            color: isSelected ? color.withValues(alpha: 0.3) : AppTheme.border,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 11,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            color: isSelected ? color : Colors.white.withAlpha(100),
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: isSelected ? color : AppTheme.textMuted,
           ),
         ),
       ),
     );
   }
-
-  BoxDecoration _boxDecoration() => BoxDecoration(
-        color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withAlpha(15)),
-      );
 
   double _interval(double min, double max) {
     final range = max - min;

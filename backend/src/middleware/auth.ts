@@ -23,13 +23,13 @@ export function authMiddleware(
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as {
       userId: number;
-      steamId: string;
+      steamId?: string; // legacy — no longer included in new tokens
     };
     req.userId = payload.userId;
     req.steamId = payload.steamId;
     next();
   } catch {
-    res.status(401).json({ error: "Invalid token" });
+    res.status(401).json({ error: "Invalid token", code: "TOKEN_EXPIRED" });
   }
 }
 

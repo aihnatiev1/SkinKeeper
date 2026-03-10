@@ -184,13 +184,8 @@ async function processOperation(
             `UPDATE sell_operations SET succeeded = succeeded + 1 WHERE id = $1`,
             [operationId]
           );
-          // Record sell transaction
-          await pool.query(
-            `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date)
-             VALUES ($1, $2, 'sell', $3, $4, NOW())
-             ON CONFLICT (user_id, tx_id) DO NOTHING`,
-            [userId, `sell_op_${operationId}_${item.asset_id}`, item.market_hash_name, item.price_cents]
-          );
+          // Note: sell transaction is NOT created here — it will appear
+          // via /transactions/sync when the item is actually purchased on Steam Market.
           await incrementVolume(userId);
           consecutiveErrors = 0;
         } else {

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/theme.dart';
 import '../session_provider.dart';
 import '../../settings/accounts_provider.dart';
 
@@ -16,11 +17,11 @@ class QrAuthTab extends ConsumerStatefulWidget {
 
 class _QrAuthTabState extends ConsumerState<QrAuthTab> {
   Timer? _pollTimer;
+  String? _authedAccountName;
 
   @override
   void initState() {
     super.initState();
-    // Start QR generation after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(qrAuthProvider.notifier).startQR().then((_) {
         _startPolling();
@@ -36,25 +37,51 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
       if (status == 'authenticated') {
         _pollTimer?.cancel();
         final linkMode = ref.read(sessionLinkModeProvider);
+
         if (linkMode) {
           ref.invalidate(accountsProvider);
         } else {
           await ref.read(sessionStatusProvider.notifier).refresh();
         }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(linkMode
-                  ? 'New account linked successfully!'
-                  : 'Steam session connected via QR code'),
-              backgroundColor: const Color(0xFF00E676),
-            ),
-          );
-          context.pop();
-        }
+        if (!mounted) return;
+
+        // Get authenticated account name for confirmation
+        final sessionStatus = ref.read(sessionStatusProvider).valueOrNull;
+        final accountName = sessionStatus?.activeAccountName;
+        setState(() => _authedAccountName = accountName);
+
+        // Auto-navigate back after brief delay so user sees confirmation
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!mounted) return;
+          _navigateBack(linkMode);
+        });
       } else if (status == 'expired') {
         _pollTimer?.cancel();
       }
+    });
+  }
+
+  void _navigateBack(bool linkMode) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(linkMode
+            ? 'New account linked successfully!'
+            : 'Steam session connected'),
+        backgroundColor: const Color(0xFF00E676),
+      ),
+    );
+    if (GoRouter.of(context).canPop()) {
+      context.pop();
+    } else {
+      context.go('/portfolio');
+    }
+  }
+
+  void _rescan() {
+    setState(() => _authedAccountName = null);
+    ref.read(qrAuthProvider.notifier).reset();
+    ref.read(qrAuthProvider.notifier).startQR().then((_) {
+      _startPolling();
     });
   }
 
@@ -96,6 +123,17 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
 
           // Status text
           _buildStatusText(qrState),
+
+          // Wrong account — re-scan option
+          if (qrState.status == 'authenticated' && _authedAccountName != null) ...[
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _rescan,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Wrong account? Scan again'),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.textSecondary),
+            ),
+          ],
 
           if (qrState.status == 'expired') ...[
             const SizedBox(height: 16),
@@ -140,23 +178,34 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
 
     if (state.error != null) {
       return Container(
-        width: 240,
-        height: 240,
+        width: 280,
+        height: 280,
         decoration: BoxDecoration(
           color: Colors.white.withAlpha(10),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-              const SizedBox(height: 12),
-              Text(
-                'Failed to load QR code',
-                style: TextStyle(color: Colors.red[300], fontSize: 14),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  'Failed to load QR code',
+                  style: TextStyle(color: Colors.red[300], fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  state.error!,
+                  style: TextStyle(color: Colors.red[200], fontSize: 11),
+                  textAlign: TextAlign.center,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -200,10 +249,32 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
   }
 
   Widget _buildStatusText(QrAuthState state) {
+    if (state.status == 'authenticated') {
+      final name = _authedAccountName;
+      return Column(
+        children: [
+          const Icon(Icons.check_circle, color: Color(0xFF00E676), size: 28),
+          const SizedBox(height: 8),
+          Text(
+            name != null ? 'Authenticated as $name' : 'Authenticated!',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF00E676),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Redirecting...',
+            style: TextStyle(fontSize: 12, color: Colors.white38),
+          ),
+        ],
+      );
+    }
+
     final (String text, Color color) = switch (state.status) {
       'ready' || 'polling' => ('Waiting for scan...', Colors.white60),
       'pending' => ('Waiting for scan...', Colors.white60),
-      'authenticated' => ('Authenticated!', const Color(0xFF00E676)),
       'expired' => ('QR code expired', const Color(0xFFFF5252)),
       'error' => ('Something went wrong', const Color(0xFFFF5252)),
       _ => ('', Colors.transparent),

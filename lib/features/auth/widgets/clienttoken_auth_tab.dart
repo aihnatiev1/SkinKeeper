@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../core/api_client.dart';
+import '../../../core/theme.dart';
 import '../session_provider.dart';
 import '../../settings/accounts_provider.dart';
 
@@ -28,7 +30,7 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Paste the steamLoginSecure value'),
-          backgroundColor: Colors.orangeAccent,
+          backgroundColor: AppTheme.warning,
         ),
       );
       return;
@@ -43,6 +45,7 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
 
     ref.listen<ClientTokenAuthState>(clientTokenAuthProvider, (prev, next) {
       if (next.status == 'authenticated') {
+
         final linkMode = ref.read(sessionLinkModeProvider);
         if (linkMode) {
           ref.invalidate(accountsProvider);
@@ -53,16 +56,20 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
           SnackBar(
             content: Text(linkMode
                 ? 'New account linked successfully!'
-                : 'Steam session connected via client token'),
+                : 'Steam session connected'),
             backgroundColor: const Color(0xFF00E676),
           ),
         );
-        context.pop();
+        if (GoRouter.of(context).canPop()) {
+          context.pop();
+        } else {
+          context.go('/portfolio');
+        }
       } else if (next.status == 'error' && next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Token failed: ${next.error}'),
-            backgroundColor: Colors.redAccent,
+            content: Text('Token failed: ${friendlyError(next.error)}'),
+            backgroundColor: AppTheme.loss,
           ),
         );
       }
@@ -110,22 +117,22 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
               margin: const EdgeInsets.only(left: 36, bottom: 12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(8),
+                color: AppTheme.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.open_in_new, size: 14, color: Color(0xFF00D2D3)),
+                  Icon(Icons.open_in_new, size: 14, color: AppTheme.accent),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'steamcommunity.com/chat/clientjstoken',
                       style: TextStyle(
-                        color: Color(0xFF00D2D3),
+                        color: AppTheme.accent,
                         fontSize: 13,
                         fontFamily: 'monospace',
                         decoration: TextDecoration.underline,
-                        decorationColor: Color(0xFF00D2D3),
+                        decorationColor: AppTheme.accent,
                       ),
                     ),
                   ),
@@ -145,21 +152,21 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
             maxLines: 3,
             decoration: InputDecoration(
               hintText: 'Paste steamLoginSecure value here...',
-              hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+              hintStyle: const TextStyle(color: AppTheme.textDisabled, fontSize: 13),
               filled: true,
-              fillColor: Colors.white.withAlpha(10),
+              fillColor: AppTheme.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: Colors.white.withAlpha(30)),
+                borderSide: BorderSide(color: AppTheme.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: Colors.white.withAlpha(30)),
+                borderSide: BorderSide(color: AppTheme.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(
-                  color: Color(0xFF6C5CE7),
+                  color: AppTheme.primary,
                   width: 1.5,
                 ),
               ),
@@ -219,14 +226,14 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: const Color(0xFF6C5CE7).withAlpha(30),
+              color: AppTheme.primary.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
                 '$number',
                 style: const TextStyle(
-                  color: Color(0xFF6C5CE7),
+                  color: AppTheme.primary,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -240,7 +247,7 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
               child: Text(
                 text,
                 style: const TextStyle(
-                  color: Colors.white70,
+                  color: AppTheme.textSecondary,
                   fontSize: 14,
                 ),
               ),

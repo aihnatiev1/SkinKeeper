@@ -288,6 +288,25 @@ ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS web_api_key TEXT;
 -- Unique index on steam_offer_id to enable upsert during sync
 CREATE UNIQUE INDEX IF NOT EXISTS idx_trade_offers_steam_id
   ON trade_offers(user_id, steam_offer_id) WHERE steam_offer_id IS NOT NULL;
+
+-- 013: Per-account P/L — link transactions, cost basis and snapshots to steam_account
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS steam_account_id INTEGER REFERENCES steam_accounts(id) ON DELETE SET NULL;
+ALTER TABLE item_cost_basis ADD COLUMN IF NOT EXISTS steam_account_id INTEGER REFERENCES steam_accounts(id) ON DELETE SET NULL;
+ALTER TABLE daily_pl_snapshots ADD COLUMN IF NOT EXISTS steam_account_id INTEGER REFERENCES steam_accounts(id) ON DELETE SET NULL;
+
+-- Internal transfer detection on trade offers
+ALTER TABLE trade_offers ADD COLUMN IF NOT EXISTS account_id_from INTEGER REFERENCES steam_accounts(id) ON DELETE SET NULL;
+ALTER TABLE trade_offers ADD COLUMN IF NOT EXISTS account_id_to INTEGER REFERENCES steam_accounts(id) ON DELETE SET NULL;
+ALTER TABLE trade_offers ADD COLUMN IF NOT EXISTS is_internal BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Indexes for per-account queries
+CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(steam_account_id);
+CREATE INDEX IF NOT EXISTS idx_item_cost_basis_account ON item_cost_basis(steam_account_id);
+CREATE INDEX IF NOT EXISTS idx_daily_pl_account ON daily_pl_snapshots(steam_account_id);
+
+-- Update unique constraint on item_cost_basis to support per-account
+-- We keep the old (user_id, market_hash_name) unique for global rollup
+-- and allow per-account rows with steam_account_id set
 `;
 
 export async function migrate() {
@@ -326,6 +345,26 @@ export async function migrate() {
     FROM users u
     JOIN steam_accounts sa ON sa.user_id = u.id AND sa.steam_id = u.steam_id
     WHERE so.user_id = u.id AND so.steam_account_id IS NULL
+  `);
+
+  // Backfill transactions.steam_account_id from primary account
+  await pool.query(`
+    UPDATE transactions t
+    SET steam_account_id = sa.id
+    FROM users u
+    JOIN steam_accounts sa ON sa.user_id = u.id AND sa.steam_id = u.steam_id
+    WHERE t.user_id = u.id AND t.steam_account_id IS NULL
+  `);
+
+  // Mark existing trade offers as internal where partner_steam_id is one of user's accounts
+  await pool.query(`
+    UPDATE trade_offers to1
+    SET is_internal = TRUE,
+        account_id_to = partner_acc.id
+    FROM steam_accounts partner_acc
+    WHERE partner_acc.user_id = to1.user_id
+      AND partner_acc.steam_id = to1.partner_steam_id
+      AND to1.is_internal = FALSE
   `);
 
   console.log("Migrations complete.");

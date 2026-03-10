@@ -20,7 +20,8 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       console.log(`[Transactions] Sync requested for user ${req.userId}`);
-      const session = await SteamSessionService.getSession(req.userId!);
+      const accountId = await SteamSessionService.getActiveAccountId(req.userId!);
+      const session = await SteamSessionService.getSession(accountId);
       if (!session) {
         res.status(400).json({
           error: "Steam session not configured. Add your cookies first.",
@@ -30,13 +31,14 @@ router.post(
 
       // Get wallet currency for price conversion
       const { rows: accRows } = await pool.query(
-        "SELECT wallet_currency FROM steam_accounts WHERE user_id = $1 AND wallet_currency IS NOT NULL LIMIT 1",
-        [req.userId]
+        "SELECT id, wallet_currency FROM steam_accounts WHERE id = $1",
+        [accountId]
       );
+      const steamAccountId = accRows[0]?.id;
       const walletCurrencyId = accRows[0]?.wallet_currency
         ?? (await pool.query("SELECT wallet_currency FROM users WHERE id = $1", [req.userId])).rows[0]?.wallet_currency
         ?? 1;
-      console.log(`[Transactions] Wallet currency ID: ${walletCurrencyId}`);
+      console.log(`[Transactions] Wallet currency ID: ${walletCurrencyId}, accountId: ${steamAccountId}`);
 
       let totalFetched = 0;
       let start = 0;
@@ -68,7 +70,7 @@ router.post(
 
         if (transactions.length === 0) break;
 
-        await saveTransactions(req.userId!, transactions);
+        await saveTransactions(req.userId!, transactions, steamAccountId);
         totalFetched += transactions.length;
         start += batchSize;
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/api_client.dart';
 import '../session_provider.dart';
 import '../../settings/accounts_provider.dart';
 
@@ -61,6 +62,7 @@ class _CredentialsAuthTabState extends ConsumerState<CredentialsAuthTab> {
     // Listen for status changes
     ref.listen<CredentialAuthState>(credentialAuthProvider, (prev, next) {
       if (next.status == 'authenticated') {
+
         final linkMode = ref.read(sessionLinkModeProvider);
         if (linkMode) {
           ref.invalidate(accountsProvider);
@@ -71,15 +73,19 @@ class _CredentialsAuthTabState extends ConsumerState<CredentialsAuthTab> {
           SnackBar(
             content: Text(linkMode
                 ? 'New account linked successfully!'
-                : 'Steam session connected via credentials'),
+                : 'Steam session connected'),
             backgroundColor: const Color(0xFF00E676),
           ),
         );
-        context.pop();
+        if (GoRouter.of(context).canPop()) {
+          context.pop();
+        } else {
+          context.go('/portfolio');
+        }
       } else if (next.status == 'error' && next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Login failed: ${next.error}'),
+            content: Text('Login failed: ${friendlyError(next.error)}'),
             backgroundColor: Colors.redAccent,
           ),
         );

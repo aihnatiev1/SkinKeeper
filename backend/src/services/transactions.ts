@@ -189,15 +189,18 @@ export async function fetchSteamTransactions(
 // Save transactions to DB
 export async function saveTransactions(
   userId: number,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  steamAccountId?: number
 ): Promise<void> {
   if (transactions.length === 0) return;
 
   for (const tx of transactions) {
     await pool.query(
-      `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, partner_steam_id, icon_url, source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'steam')
-       ON CONFLICT (user_id, tx_id) DO UPDATE SET icon_url = COALESCE(transactions.icon_url, EXCLUDED.icon_url)`,
+      `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, partner_steam_id, icon_url, source, steam_account_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'steam', $9)
+       ON CONFLICT (user_id, tx_id) DO UPDATE SET
+         icon_url = COALESCE(transactions.icon_url, EXCLUDED.icon_url),
+         steam_account_id = COALESCE(transactions.steam_account_id, EXCLUDED.steam_account_id)`,
       [
         userId,
         tx.id,
@@ -207,6 +210,7 @@ export async function saveTransactions(
         tx.date,
         tx.partnerSteamId,
         tx.iconUrl ?? null,
+        steamAccountId ?? null,
       ]
     );
   }
@@ -279,7 +283,8 @@ export async function getTransactions(
       (SELECT COUNT(*) FROM trade_offer_items ti WHERE ti.offer_id = to2.id AND ti.side = 'receive')::int AS recv_count,
       (SELECT COALESCE(SUM(ti.price_cents), 0) FROM trade_offer_items ti WHERE ti.offer_id = to2.id AND ti.side = 'give')::int AS give_total,
       (SELECT COALESCE(SUM(ti.price_cents), 0) FROM trade_offer_items ti WHERE ti.offer_id = to2.id AND ti.side = 'receive')::int AS recv_total,
-      NULL::text AS icon_url
+      NULL::text AS icon_url,
+      to2.is_internal
     FROM trade_offers to2`;
 
   const marketSelect = `
@@ -288,7 +293,8 @@ export async function getTransactions(
       NULL::int AS value_give_cents, NULL::int AS value_recv_cents,
       NULL::int AS give_count, NULL::int AS recv_count,
       NULL::int AS give_total, NULL::int AS recv_total,
-      t.icon_url
+      t.icon_url,
+      FALSE AS is_internal
     FROM transactions t`;
 
   const onlyTrades = filters.type === "trade";
@@ -373,6 +379,7 @@ export async function getTransactions(
         recv_total: r.recv_total,
         icon_url: r.icon_url,
         current_price_cents: currentPriceCents,
+        is_internal: r.is_internal ?? false,
       };
     }),
     total: parseInt(countResult.rows[0].count),
@@ -434,8 +441,8 @@ export async function getTransactionStats(
   const buyRow = stats.find((s) => s.type === "buy");
   const sellRow = stats.find((s) => s.type === "sell");
 
-  // Trade stats
-  const tradeConditions = ["user_id = $1"];
+  // Trade stats (exclude internal transfers)
+  const tradeConditions = ["user_id = $1", "is_internal = FALSE"];
   const tradeParams: any[] = [userId];
   if (dateFrom) {
     tradeConditions.push(`created_at >= $2`);

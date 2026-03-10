@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="Skin Tracker"
+        android:label="SkinKeeper"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -29,12 +29,12 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="skintracker" android:host="auth"/>
+                <data android:scheme="skinkeeper" android:host="auth"/>
             </intent-filter>
         </activity>
         <!-- Home screen widget -->
         <receiver
-            android:name=".SkinTrackerWidget"
+            android:name=".SkinKeeperWidget"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

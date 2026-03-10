@@ -61,7 +61,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     );
 
     const token = jwt.sign(
-      { userId: user.id, steamId },
+      { userId: user.id },
       process.env.JWT_SECRET!,
       { expiresIn: "30d" }
     );
@@ -108,7 +108,7 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     );
 
     const token = jwt.sign(
-      { userId: user.id, steamId },
+      { userId: user.id },
       process.env.JWT_SECRET!,
       { expiresIn: "30d" }
     );
@@ -116,9 +116,9 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     res.json({
       token,
       user: {
-        steam_id: user.steam_id,
-        display_name: user.display_name,
-        avatar_url: user.avatar_url,
+        steam_id: steamId,
+        display_name: profile.personaname,
+        avatar_url: profile.avatarfull,
         is_premium: user.is_premium,
         premium_until: user.premium_until,
       },
@@ -133,10 +133,16 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
 router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.steam_id, u.display_name, u.avatar_url, u.is_premium, u.premium_until,
-              u.active_account_id,
-              (SELECT COUNT(*)::int FROM steam_accounts WHERE user_id = u.id) as account_count
-       FROM users u WHERE u.id = $1`,
+      `SELECT
+         COALESCE(sa.steam_id, u.steam_id) AS steam_id,
+         COALESCE(sa.display_name, u.display_name) AS display_name,
+         COALESCE(sa.avatar_url, u.avatar_url) AS avatar_url,
+         u.is_premium, u.premium_until,
+         u.active_account_id,
+         (SELECT COUNT(*)::int FROM steam_accounts WHERE user_id = u.id) AS account_count
+       FROM users u
+       LEFT JOIN steam_accounts sa ON sa.id = u.active_account_id
+       WHERE u.id = $1`,
       [req.userId]
     );
     if (rows.length === 0) {
@@ -446,7 +452,7 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
     (SteamSessionService as any).pendingSessions.delete(nonce);
 
     const token = jwt.sign(
-      { userId: user.id, steamId },
+      { userId: user.id },
       process.env.JWT_SECRET!,
       { expiresIn: "30d" }
     );
@@ -455,9 +461,9 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
       status: "authenticated",
       token,
       user: {
-        steam_id: user.steam_id,
-        display_name: user.display_name,
-        avatar_url: user.avatar_url,
+        steam_id: steamId,
+        display_name: profile.personaname,
+        avatar_url: profile.avatarfull,
         is_premium: user.is_premium,
         premium_until: user.premium_until,
       },

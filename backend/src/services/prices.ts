@@ -13,34 +13,70 @@ interface SkinportItem {
 // Skinport: free, no auth, 8 requests per 5 min
 let skinportCache: Map<string, number> = new Map();
 let skinportLastFetch = 0;
+let skinportBackoffUntil = 0; // pause fetches until this timestamp after 429
+
+const SKINPORT_MAX_RETRIES = 3;
+const SKINPORT_CACHE_MS = 5 * 60 * 1000;
 
 export async function fetchSkinportPrices(): Promise<Map<string, number>> {
   const now = Date.now();
+
+  // Respect backoff from previous 429
+  if (now < skinportBackoffUntil) {
+    console.log(`[Skinport] Rate limited, skipping until ${new Date(skinportBackoffUntil).toISOString()}`);
+    if (skinportCache.size > 0) return skinportCache;
+    return new Map();
+  }
+
   // Cache for 5 minutes (Skinport caches server-side anyway)
-  if (now - skinportLastFetch < 5 * 60 * 1000 && skinportCache.size > 0) {
+  if (now - skinportLastFetch < SKINPORT_CACHE_MS && skinportCache.size > 0) {
     return skinportCache;
   }
 
-  const { data } = await axios.get<SkinportItem[]>(
-    "https://api.skinport.com/v1/items",
-    {
-      params: { app_id: 730, currency: "USD" },
-      headers: { "Accept-Encoding": "br, gzip" },
-      timeout: 30000,
-    }
-  );
+  for (let attempt = 0; attempt < SKINPORT_MAX_RETRIES; attempt++) {
+    try {
+      const { data } = await axios.get<SkinportItem[]>(
+        "https://api.skinport.com/v1/items",
+        {
+          params: { app_id: 730, currency: "USD" },
+          headers: { "Accept-Encoding": "br, gzip" },
+          timeout: 30000,
+        }
+      );
 
-  const prices = new Map<string, number>();
-  for (const item of data) {
-    const price = item.suggested_price ?? item.min_price ?? item.median_price;
-    if (price !== null) {
-      prices.set(item.market_hash_name, price);
+      const prices = new Map<string, number>();
+      for (const item of data) {
+        const price = item.suggested_price ?? item.min_price ?? item.median_price;
+        if (price !== null) {
+          prices.set(item.market_hash_name, price);
+        }
+      }
+
+      skinportCache = prices;
+      skinportLastFetch = Date.now();
+      skinportBackoffUntil = 0;
+      return prices;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 429) {
+        const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
+        const waitSec = retryAfter > 0 ? retryAfter : (attempt + 1) * 60; // default: 60s, 120s, 180s
+        skinportBackoffUntil = Date.now() + waitSec * 1000;
+        console.warn(`[Skinport] 429 rate limited (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), waiting ${waitSec}s`);
+
+        if (attempt < SKINPORT_MAX_RETRIES - 1) {
+          await new Promise((r) => setTimeout(r, waitSec * 1000));
+        }
+      } else {
+        // Non-429 error — don't retry
+        throw err;
+      }
     }
   }
 
-  skinportCache = prices;
-  skinportLastFetch = now;
-  return prices;
+  console.error(`[Skinport] All ${SKINPORT_MAX_RETRIES} retries exhausted due to 429`);
+  if (skinportCache.size > 0) return skinportCache;
+  return new Map();
 }
 
 // ─── Adaptive Rate Limiter ───────────────────────────────────────────────

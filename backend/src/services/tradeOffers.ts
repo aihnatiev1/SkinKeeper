@@ -64,6 +64,7 @@ export interface TradeOffer {
   message: string | null;
   status: string;
   isQuickTransfer: boolean;
+  isInternal: boolean;
   valueGiveCents: number;
   valueRecvCents: number;
   createdAt: string;
@@ -1091,10 +1092,23 @@ function accountIdToSteamId64(accountId: number): string {
  * Fetches both sent and received active offers.
  */
 export async function syncTradeOffers(userId: number): Promise<{ synced: number }> {
-  const accountId = await SteamSessionService.getActiveAccountId(userId);
+  // Sync from ALL linked accounts, not just active — trades exist on both sides
+  const { rows: allAccounts } = await pool.query(
+    `SELECT id FROM steam_accounts WHERE user_id = $1`,
+    [userId]
+  );
+
+  let totalSynced = 0;
+  for (const acc of allAccounts) {
+    const result = await syncTradeOffersForAccount(userId, acc.id);
+    totalSynced += result.synced;
+  }
+  return { synced: totalSynced };
+}
+
+async function syncTradeOffersForAccount(userId: number, accountId: number): Promise<{ synced: number }> {
   const apiKey = await getWebApiKey(accountId);
   if (!apiKey) {
-    console.warn(`[Trade] No Web API key for user ${userId}, skipping sync`);
     return { synced: 0 };
   }
 
@@ -1148,6 +1162,13 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
   const sentOffers = (data.trade_offers_sent ?? []) as SteamTradeOfferRaw[];
   const recvOffers = (data.trade_offers_received ?? []) as SteamTradeOfferRaw[];
 
+  // Load user's linked accounts to detect internal transfers
+  const { rows: userAccounts } = await pool.query(
+    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`,
+    [userId]
+  );
+  const userSteamIds = new Map(userAccounts.map((a) => [a.steam_id, a.id]));
+
   let synced = 0;
   const client = await pool.connect();
   try {
@@ -1158,6 +1179,13 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
       const direction = isSent ? "outgoing" : "incoming";
       const partnerSteamId = accountIdToSteamId64(offer.accountid_other);
       const status = STEAM_OFFER_STATE[offer.trade_offer_state] ?? "pending";
+
+      // Internal transfer detection: partner is one of user's own accounts
+      const isInternal = userSteamIds.has(partnerSteamId);
+      // account_id_from = the account that SENT the offer (not who synced)
+      // account_id_to = the account that RECEIVES the offer
+      const realSenderId = isSent ? accountId : (isInternal ? userSteamIds.get(partnerSteamId)! : null);
+      const realReceiverId = isSent ? (isInternal ? userSteamIds.get(partnerSteamId)! : null) : accountId;
 
       // Resolve items
       const giveItems = (offer.items_to_give ?? []).map((a) => {
@@ -1200,15 +1228,20 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
         `INSERT INTO trade_offers
            (user_id, direction, steam_offer_id, partner_steam_id, message,
             status, is_quick_transfer, value_give_cents, value_recv_cents,
+            is_internal, account_id_from, account_id_to,
             created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, FALSE, $7, $8,
-                 to_timestamp($9), to_timestamp($10))
+                 $9, $10, $11,
+                 to_timestamp($12), to_timestamp($13))
          ON CONFLICT (user_id, steam_offer_id)
            WHERE steam_offer_id IS NOT NULL
          DO UPDATE SET
            status = EXCLUDED.status,
            value_give_cents = EXCLUDED.value_give_cents,
            value_recv_cents = EXCLUDED.value_recv_cents,
+           is_internal = EXCLUDED.is_internal,
+           account_id_from = COALESCE(trade_offers.account_id_from, EXCLUDED.account_id_from),
+           account_id_to = COALESCE(trade_offers.account_id_to, EXCLUDED.account_id_to),
            updated_at = EXCLUDED.updated_at
          RETURNING id, (xmax = 0) AS is_new`,
         [
@@ -1220,6 +1253,9 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
           status,
           giveValue,
           recvValue,
+          isInternal,
+          realSenderId,
+          realReceiverId,
           offer.time_created,
           offer.time_updated,
         ]
@@ -1242,8 +1278,9 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
       }
     }
 
-    // Also update non-active offers that are still "pending" in our DB
-    // but no longer returned by Steam (they were accepted/declined/expired externally)
+    // Expire pending offers that Steam no longer returns
+    // Only expire offers that THIS account would see (sent by or received by this account)
+    // Never expire internal offers from other account's perspective
     const activeSteamIds = [
       ...sentOffers.map((o) => o.tradeofferid),
       ...recvOffers.map((o) => o.tradeofferid),
@@ -1254,22 +1291,25 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
         `UPDATE trade_offers
          SET status = 'expired', updated_at = NOW()
          WHERE user_id = $1
+           AND (account_id_from = $3 OR account_id_to = $3)
+           AND is_internal = FALSE
            AND status = 'pending'
            AND steam_offer_id IS NOT NULL
            AND steam_offer_id != ALL($2::text[])
            AND created_at > NOW() - INTERVAL '14 days'`,
-        [userId, activeSteamIds]
+        [userId, activeSteamIds, accountId]
       );
     } else {
-      // No active offers at all — expire all pending ones
       await client.query(
         `UPDATE trade_offers
          SET status = 'expired', updated_at = NOW()
          WHERE user_id = $1
+           AND (account_id_from = $2 OR account_id_to = $2)
+           AND is_internal = FALSE
            AND status = 'pending'
            AND steam_offer_id IS NOT NULL
            AND created_at > NOW() - INTERVAL '14 days'`,
-        [userId]
+        [userId, accountId]
       );
     }
 
@@ -1309,6 +1349,7 @@ function mapOfferRow(row: any): TradeOffer {
     message: row.message,
     status: row.status,
     isQuickTransfer: row.is_quick_transfer,
+    isInternal: row.is_internal ?? false,
     valueGiveCents: parseInt(row.value_give_cents) || 0,
     valueRecvCents: parseInt(row.value_recv_cents) || 0,
     createdAt: row.created_at,
@@ -1327,6 +1368,7 @@ function mapOffer(row: any, items: any[]): TradeOffer {
     message: row.message,
     status: row.status,
     isQuickTransfer: row.is_quick_transfer,
+    isInternal: row.is_internal ?? false,
     valueGiveCents: parseInt(row.value_give_cents) || 0,
     valueRecvCents: parseInt(row.value_recv_cents) || 0,
     createdAt: row.created_at,

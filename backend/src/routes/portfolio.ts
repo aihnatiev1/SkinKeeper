@@ -4,6 +4,7 @@ import { authMiddleware, requirePremium, AuthRequest } from "../middleware/auth.
 import { getLatestPrices } from "../services/prices.js";
 import {
   getPortfolioPL,
+  getPortfolioPLByAccount,
   getItemsPL,
   getPLHistory,
   recalculateCostBasis,
@@ -117,15 +118,33 @@ router.get(
 );
 
 // GET /api/portfolio/pl — Portfolio P/L summary (FREE)
+// Optional ?accountId=X to filter by specific steam account
 router.get("/pl", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const pl = await getPortfolioPL(req.userId!);
+    const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : undefined;
+    const pl = await getPortfolioPL(req.userId!, accountId);
     res.json(pl);
   } catch (err) {
     console.error("Portfolio P/L error:", err);
     res.status(500).json({ error: "Failed to load P/L" });
   }
 });
+
+// GET /api/portfolio/pl/by-account — Per-account P/L breakdown (PREMIUM)
+router.get(
+  "/pl/by-account",
+  authMiddleware,
+  // requirePremium,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const accounts = await getPortfolioPLByAccount(req.userId!);
+      res.json({ accounts });
+    } catch (err) {
+      console.error("Per-account P/L error:", err);
+      res.status(500).json({ error: "Failed to load per-account P/L" });
+    }
+  }
+);
 
 // GET /api/portfolio/pl/items — Per-item P/L (PREMIUM)
 // TODO: re-enable requirePremium after testing

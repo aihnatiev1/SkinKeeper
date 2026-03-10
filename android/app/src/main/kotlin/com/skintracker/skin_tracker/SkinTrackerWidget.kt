@@ -1,4 +1,4 @@
-package com.skintracker.skin_tracker
+package com.skinkeeper.app
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -9,7 +9,7 @@ import android.net.Uri
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetPlugin
 
-class SkinTrackerWidget : AppWidgetProvider() {
+class SkinKeeperWidget : AppWidgetProvider() {
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -40,7 +40,7 @@ class SkinTrackerWidget : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_change_arrow, if (isPositive) "\u2197" else "\u2198")
 
             // Deep link: tap widget opens app to portfolio
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("skintracker://portfolio"))
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("skinkeeper://portfolio"))
             intent.setPackage(context.packageName)
             val pendingIntent = PendingIntent.getActivity(
                 context,

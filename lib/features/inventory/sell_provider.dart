@@ -183,10 +183,10 @@ class SellOperation {
 // ---------------------------------------------------------------------------
 
 final sellOperationProvider =
-    AutoDisposeAsyncNotifierProvider<SellOperationNotifier, SellOperation?>(
+    AsyncNotifierProvider<SellOperationNotifier, SellOperation?>(
         SellOperationNotifier.new);
 
-class SellOperationNotifier extends AutoDisposeAsyncNotifier<SellOperation?> {
+class SellOperationNotifier extends AsyncNotifier<SellOperation?> {
   Timer? _pollTimer;
 
   @override
@@ -341,7 +341,7 @@ class DuplicateGroup {
           .map((e) => e as String)
           .toList(),
       iconUrl: json['iconUrl'] as String? ?? '',
-      bestPriceCents: json['bestPrice'] as int? ?? 0,
+      bestPriceCents: (((json['bestPrice'] as num?)?.toDouble() ?? 0) * 100).round(),
     );
   }
 }
@@ -355,6 +355,70 @@ final duplicatesProvider =
   return list
       .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>))
       .toList();
+});
+
+// ---------------------------------------------------------------------------
+// Wallet info provider
+// ---------------------------------------------------------------------------
+
+class WalletInfo {
+  final bool detected;
+  final int currencyId;
+  final String code;
+  final String symbol;
+  final double? rate;
+
+  const WalletInfo({
+    required this.detected,
+    required this.currencyId,
+    required this.code,
+    required this.symbol,
+    this.rate,
+  });
+
+  bool get isUsd => currencyId == 1;
+
+  /// Format a USD cents amount in wallet currency
+  String formatWalletPrice(int usdCents) {
+    if (isUsd || rate == null) return '\$${(usdCents / 100).toStringAsFixed(2)}';
+    final walletAmount = (usdCents * rate!) / 100;
+    return '$symbol${walletAmount.toStringAsFixed(2)}';
+  }
+
+  /// Convert USD cents to wallet cents
+  int convertToWallet(int usdCents) {
+    if (isUsd || rate == null) return usdCents;
+    return (usdCents * rate!).round();
+  }
+
+  factory WalletInfo.fromJson(Map<String, dynamic> json) {
+    return WalletInfo(
+      detected: json['detected'] as bool? ?? false,
+      currencyId: json['currencyId'] as int? ?? 1,
+      code: json['code'] as String? ?? 'USD',
+      symbol: json['symbol'] as String? ?? '\$',
+      rate: (json['rate'] as num?)?.toDouble(),
+    );
+  }
+
+  static const usd = WalletInfo(
+    detected: false,
+    currencyId: 1,
+    code: 'USD',
+    symbol: '\$',
+    rate: 1,
+  );
+}
+
+final walletInfoProvider =
+    AutoDisposeFutureProvider<WalletInfo>((ref) async {
+  final api = ref.read(apiClientProvider);
+  try {
+    final response = await api.get('/market/wallet-info');
+    return WalletInfo.fromJson(response.data as Map<String, dynamic>);
+  } catch (_) {
+    return WalletInfo.usd;
+  }
 });
 
 // ---------------------------------------------------------------------------
