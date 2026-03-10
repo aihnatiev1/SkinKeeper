@@ -2,7 +2,7 @@ import axios from "axios";
 import crypto from "crypto";
 import { pool } from "../db/pool.js";
 import { getLatestPrices } from "./prices.js";
-import { SteamSessionService } from "./steamSession.js";
+import { SteamSessionService, type SteamSession } from "./steamSession.js";
 
 /**
  * Generate a random sessionid for Steam CSRF protection.
@@ -65,6 +65,8 @@ export interface TradeOffer {
   status: string;
   isQuickTransfer: boolean;
   isInternal: boolean;
+  accountIdFrom: number | null;
+  accountIdTo: number | null;
   valueGiveCents: number;
   valueRecvCents: number;
   createdAt: string;
@@ -85,6 +87,49 @@ export interface TradeOfferItem {
 // ─── Steam Trade Offer API ───────────────────────────────────────────────
 
 const STEAM_COMMUNITY = "https://steamcommunity.com";
+const STEAM_API = "https://api.steampowered.com";
+
+// Rate limit: trade history sync at most once per 10 min per user
+const tradeHistorySyncCache = new Map<string, number>();
+
+/**
+ * Get the webTradeEligibility cookie from Steam.
+ * Steam requires this cookie for all trade/market web pages since ~2024.
+ * Without it, requests get stuck in a redirect loop with /market/eligibilitycheck/.
+ */
+async function getEligibilityCookie(session: SteamSession): Promise<string | null> {
+  try {
+    const resp = await axios.get(
+      `${STEAM_COMMUNITY}/market/eligibilitycheck/?goto=%2F`,
+      {
+        headers: {
+          Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`,
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+        maxRedirects: 0,
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+    for (const c of resp.headers["set-cookie"] || []) {
+      const match = c.match(/webTradeEligibility=([^;]+)/);
+      if (match) return match[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the full cookie string for Steam web requests, including eligibility cookie.
+ */
+async function buildSteamCookies(session: SteamSession): Promise<string> {
+  const eligibility = await getEligibilityCookie(session);
+  let cookies = `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`;
+  if (eligibility) cookies += `; webTradeEligibility=${eligibility}`;
+  return cookies;
+}
 
 /**
  * Fetch trade token for an account using its session cookies.
@@ -129,7 +174,7 @@ function steamId64ToAccountId(steamId64: string): string {
  * Returns the Steam trade offer ID on success.
  */
 async function sendSteamTradeOffer(
-  steamLoginSecure: string,
+  session: SteamSession,
   partnerSteamId: string,
   tradeToken: string | undefined,
   itemsToGive: TradeItem[],
@@ -137,7 +182,7 @@ async function sendSteamTradeOffer(
   message?: string
 ): Promise<{ offerId: string }> {
   const partnerId32 = steamId64ToAccountId(partnerSteamId);
-  const sessionId = generateSessionId();
+  const sessionId = session.sessionId;
 
   // Build Steam's trade offer JSON format
   const tradeOfferJson = {
@@ -180,13 +225,15 @@ async function sendSteamTradeOffer(
     trade_offer_create_params: JSON.stringify(createParams),
   });
 
-  const { data } = await axios.post(
+  const cookies = await buildSteamCookies(session);
+
+  const resp = await axios.post(
     `${STEAM_COMMUNITY}/tradeoffer/new/send`,
     formData.toString(),
     {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Cookie: `steamLoginSecure=${steamLoginSecure}; sessionid=${sessionId}`,
+        Cookie: cookies,
         Referer: tradeToken
           ? `${STEAM_COMMUNITY}/tradeoffer/new/?partner=${partnerId32}&token=${tradeToken}`
           : `${STEAM_COMMUNITY}/tradeoffer/new/?partner=${partnerId32}`,
@@ -194,8 +241,17 @@ async function sendSteamTradeOffer(
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       },
       timeout: 20000,
+      validateStatus: () => true,
     }
   );
+  const data = resp.data;
+
+  console.log(`[Trade] Send response: status=${resp.status}, body=${JSON.stringify(data).substring(0, 500)}`);
+
+  if (resp.status !== 200) {
+    const msg = typeof data === "object" ? (data.strError || JSON.stringify(data)) : String(data).substring(0, 200);
+    throw new Error(`Steam returned ${resp.status}: ${msg}`);
+  }
 
   if (data.tradeofferid) {
     console.log(`[Trade] Sent offer ${data.tradeofferid} to ${partnerSteamId}`);
@@ -212,66 +268,96 @@ async function sendSteamTradeOffer(
  * Accept a trade offer via Steam's web API.
  */
 async function acceptSteamTradeOffer(
-  steamLoginSecure: string,
+  session: SteamSession,
   steamOfferId: string,
   partnerSteamId: string
 ): Promise<void> {
   const partnerId32 = steamId64ToAccountId(partnerSteamId);
-  const sessionId = generateSessionId();
-  console.log(`[Trade] Accepting offer ${steamOfferId} with partner64=${partnerSteamId} partner32=${partnerId32}`);
-  let data: any;
+  const sessionId = session.sessionId;
+  const cookies = await buildSteamCookies(session);
+  console.log(`[Trade] Accepting offer ${steamOfferId} partner64=${partnerSteamId} partner32=${partnerId32}`);
+
+  let resp: any;
   try {
-    const resp = await axios.post(
+    resp = await axios.post(
       `${STEAM_COMMUNITY}/tradeoffer/${steamOfferId}/accept`,
       new URLSearchParams({
         sessionid: sessionId,
         serverid: "1",
         tradeofferid: steamOfferId,
-        partner: partnerId32,
+        partner: partnerSteamId,
         captcha: "",
       }).toString(),
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Cookie: `steamLoginSecure=${steamLoginSecure}; sessionid=${sessionId}`,
+          Cookie: cookies,
           Referer: `${STEAM_COMMUNITY}/tradeoffer/${steamOfferId}/`,
           "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         },
         maxRedirects: 0,
         timeout: 15000,
-        validateStatus: (s: number) => s < 400,
+        validateStatus: () => true,
       }
     );
-    data = resp.data;
   } catch (err: any) {
-    const status = err.response?.status;
-    const respData = err.response?.data;
-    const strError = typeof respData === "object" ? respData?.strError : undefined;
-    console.error(`[Trade] Steam accept error: HTTP ${status}, strError=${strError}, raw=${typeof respData === 'string' ? respData.substring(0, 200) : JSON.stringify(respData)}`);
-
-    // HTTP 302 → Steam redirected to login = session expired
-    if (status === 302 || status === 403) {
-      const sessionErr = new Error("Steam session expired — please re-authenticate.");
-      (sessionErr as any).code = "SESSION_EXPIRED";
-      throw sessionErr;
-    }
-    // Steam error 42 = invalid session / not authenticated
-    if (strError?.includes("(42)")) {
-      const sessionErr = new Error("Steam session expired — please re-authenticate.");
-      (sessionErr as any).code = "SESSION_EXPIRED";
-      throw sessionErr;
-    }
-    // Steam error 25 = offer expired, not session issue
-    if (strError?.includes("(25)")) {
-      throw new Error("Trade offer has expired or is no longer valid on Steam.");
-    }
-    throw new Error(strError || `Steam accept failed (${status ?? "network"})`);
+    console.error(`[Trade] Steam accept network error:`, err.message);
+    throw new Error(`Steam accept failed (network: ${err.message})`);
   }
 
-  console.log(`[Trade] Accept response for ${steamOfferId}:`, JSON.stringify(data));
-  if (!data.tradeid && !data.needs_mobile_confirmation && !data.needs_email_confirmation) {
-    throw new Error(data.strError || "Failed to accept trade offer");
+  const status = resp.status;
+  const data = resp.data;
+  const location = (resp.headers?.["location"] || "") as string;
+  console.log(`[Trade] Accept response for ${steamOfferId}: HTTP ${status}, data=${typeof data === 'string' ? data.substring(0, 200) : JSON.stringify(data)}`);
+
+  // Detect session expiry: redirect to login or 403
+  if (status === 302 || status === 301) {
+    if (location.includes("/login")) {
+      const sessionErr = new Error("Steam session expired — please re-authenticate.");
+      (sessionErr as any).code = "SESSION_EXPIRED";
+      throw sessionErr;
+    }
+  }
+  if (status === 403) {
+    const sessionErr = new Error("Steam session expired — please re-authenticate.");
+    (sessionErr as any).code = "SESSION_EXPIRED";
+    throw sessionErr;
+  }
+
+  // Steam error codes in JSON response
+  const strError = typeof data === "object" ? data?.strError : undefined;
+  const steamCode = typeof data === "object" ? data?.success : undefined;
+
+  // success:8 = InvalidState — offer already accepted/declined/expired/countered
+  if (steamCode === 8) {
+    const err = new Error("Trade offer is no longer active on Steam (already accepted, declined, or expired).");
+    (err as any).code = "OFFER_INVALID_STATE";
+    throw err;
+  }
+
+  if (strError?.includes("(42)") || steamCode === 42) {
+    // Error 42 can mean expired session OR trade eligibility restriction.
+    // On first attempt we treat it as session issue (triggers refresh + retry).
+    // The caller handles retry logic — if retry also fails, it becomes a clear error.
+    const sessionErr = new Error("Steam rejected the request (42). This may be a session or trade eligibility issue.");
+    (sessionErr as any).code = "SESSION_EXPIRED";
+    throw sessionErr;
+  }
+  if (strError?.includes("(25)") || steamCode === 25) {
+    throw new Error("Trade offer has expired or is no longer valid on Steam.");
+  }
+  if (strError?.includes("(11)") || steamCode === 11) {
+    throw new Error("Trade offer is no longer valid (already accepted, declined, or expired).");
+  }
+
+  // Non-2xx = unexpected error
+  if (status >= 400) {
+    throw new Error(strError || `Steam accept failed (HTTP ${status})`);
+  }
+
+  if (!data?.tradeid && !data?.needs_mobile_confirmation && !data?.needs_email_confirmation) {
+    throw new Error(strError || "Failed to accept trade offer");
   }
 }
 
@@ -279,12 +365,16 @@ async function acceptSteamTradeOffer(
  * Decline a trade offer via Steam's web API.
  */
 async function declineSteamTradeOffer(
-  steamLoginSecure: string,
+  session: SteamSession,
   steamOfferId: string
 ): Promise<void> {
-  const sessionId = generateSessionId();
+  const sessionId = session.sessionId;
+  const cookies = await buildSteamCookies(session);
+  console.log(`[Trade] Declining offer ${steamOfferId}`);
+
+  let resp: any;
   try {
-    await axios.post(
+    resp = await axios.post(
       `${STEAM_COMMUNITY}/tradeoffer/${steamOfferId}/decline`,
       new URLSearchParams({
         sessionid: sessionId,
@@ -292,28 +382,61 @@ async function declineSteamTradeOffer(
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Cookie: `steamLoginSecure=${steamLoginSecure}; sessionid=${sessionId}`,
+          Cookie: cookies,
           Referer: `${STEAM_COMMUNITY}/tradeoffer/${steamOfferId}/`,
           "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         },
+        maxRedirects: 0,
         timeout: 15000,
+        validateStatus: () => true,
       }
     );
   } catch (err: any) {
-    const respData = err.response?.data;
-    const strError = typeof respData === "object" ? respData?.strError : undefined;
-    const steamCode = typeof respData === "object" ? respData?.success : undefined;
-    console.error(`[Trade] Steam decline error: HTTP ${err.response?.status}, strError=${strError}, steamCode=${steamCode}`);
-    if (strError?.includes("(42)") || steamCode === 42 || err.response?.status === 403) {
-      const sessionErr = new Error("Steam session expired — please re-authenticate.");
-      (sessionErr as any).code = "SESSION_EXPIRED";
-      throw sessionErr;
-    }
-    if (strError?.includes("(25)") || steamCode === 25) {
-      throw new Error("Trade offer has expired or is no longer valid on Steam.");
-    }
-    throw new Error(strError || `Steam decline failed (${err.response?.status ?? "network"})`);
+    console.error(`[Trade] Steam decline network error:`, err.message);
+    throw new Error(`Steam decline failed (network: ${err.message})`);
+  }
+
+  const status = resp.status;
+  const data = resp.data;
+  const location = (resp.headers?.["location"] || "") as string;
+  console.log(`[Trade] Decline response for ${steamOfferId}: HTTP ${status}, location=${location || 'none'}, data=${typeof data === 'string' ? data.substring(0, 300) : JSON.stringify(data)}`);
+
+  // Detect session expiry
+  if ((status === 302 || status === 301) && location.includes("/login")) {
+    const sessionErr = new Error("Steam session expired — please re-authenticate.");
+    (sessionErr as any).code = "SESSION_EXPIRED";
+    throw sessionErr;
+  }
+  if (status === 403) {
+    const sessionErr = new Error("Steam session expired — please re-authenticate.");
+    (sessionErr as any).code = "SESSION_EXPIRED";
+    throw sessionErr;
+  }
+
+  const strError = typeof data === "object" ? data?.strError : undefined;
+  const steamCode = typeof data === "object" ? data?.success : undefined;
+
+  // success:8 = InvalidState — offer already accepted/declined/expired/countered
+  if (steamCode === 8) {
+    const err = new Error("Trade offer is no longer active on Steam (already accepted, declined, or expired).");
+    (err as any).code = "OFFER_INVALID_STATE";
+    throw err;
+  }
+
+  if (strError?.includes("(42)") || steamCode === 42) {
+    const sessionErr = new Error("Steam session expired — please re-authenticate.");
+    (sessionErr as any).code = "SESSION_EXPIRED";
+    throw sessionErr;
+  }
+  if (strError?.includes("(25)") || steamCode === 25) {
+    throw new Error("Trade offer has expired or is no longer valid on Steam.");
+  }
+  if (strError?.includes("(11)") || steamCode === 11) {
+    throw new Error("Trade offer is no longer valid (already accepted, declined, or expired).");
+  }
+  if (status >= 400) {
+    throw new Error(strError || `Steam decline failed (HTTP ${status})`);
   }
 }
 
@@ -415,7 +538,7 @@ export async function createAndSendOffer(
   let steamOfferId: string;
   try {
     ({ offerId: steamOfferId } = await sendSteamTradeOffer(
-      session.steamLoginSecure,
+      session,
       input.partnerSteamId,
       input.tradeToken,
       input.itemsToGive,
@@ -427,7 +550,7 @@ export async function createAndSendOffer(
       console.log(`[Trade] Send failed with session error, retrying with refresh...`);
       session = await getValidSession(accountId, true);
       ({ offerId: steamOfferId } = await sendSteamTradeOffer(
-        session.steamLoginSecure,
+        session,
         input.partnerSteamId,
         input.tradeToken,
         input.itemsToGive,
@@ -550,6 +673,59 @@ async function resolvePartnerForSteamApi(
 }
 
 /**
+ * Resolve which steam_accounts.id should perform a trade action.
+ * Looks up linked accounts to detect internal trades and picks the right side:
+ *   accept/decline → receiver account
+ *   cancel         → sender account
+ *
+ * Also fixes is_internal / account_id_from / account_id_to in DB if missing.
+ */
+async function resolveAccountForTradeAction(
+  userId: number,
+  offer: { id: string; direction: string; partnerSteamId: string; isInternal: boolean; accountIdFrom: number | null; accountIdTo: number | null },
+  action: "accept" | "decline" | "cancel"
+): Promise<number> {
+  const activeAccountId = await SteamSessionService.getActiveAccountId(userId);
+
+  // If already correctly flagged AND from/to are different, use stored values
+  if (offer.isInternal && offer.accountIdFrom && offer.accountIdTo && offer.accountIdFrom !== offer.accountIdTo) {
+    if (action === "cancel") return offer.accountIdFrom;
+    if (action === "accept" || action === "decline") return offer.accountIdTo;
+  }
+
+  // Detect internal by checking partner against linked accounts
+  const { rows: linkedAccs } = await pool.query(
+    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+  );
+  const partnerAcc = linkedAccs.find((a: any) => a.steam_id === offer.partnerSteamId);
+
+  if (!partnerAcc) {
+    // External trade — active account handles everything
+    return activeAccountId;
+  }
+
+  // Internal trade: partner is one of our accounts.
+  // For outgoing: sender = the OTHER account (not partner), receiver = partner
+  // For incoming: sender = partner, receiver = the OTHER account (not partner)
+  const otherAcc = linkedAccs.find((a: any) => a.id !== partnerAcc.id);
+  const otherAccountId = otherAcc ? otherAcc.id : activeAccountId;
+  const senderAccountId = offer.direction === "outgoing" ? otherAccountId : partnerAcc.id;
+  const receiverAccountId = offer.direction === "outgoing" ? partnerAcc.id : otherAccountId;
+
+  // Fix DB
+  await pool.query(
+    `UPDATE trade_offers SET is_internal = true,
+       account_id_from = COALESCE(account_id_from, $1),
+       account_id_to = COALESCE(account_id_to, $2)
+     WHERE id = $3`,
+    [senderAccountId, receiverAccountId, offer.id]
+  );
+
+  if (action === "cancel") return senderAccountId;
+  return receiverAccountId; // accept & decline
+}
+
+/**
  * Fast accept a trade offer (no review).
  */
 export async function acceptOffer(
@@ -558,11 +734,11 @@ export async function acceptOffer(
 ): Promise<{ needsConfirmation: boolean }> {
   const offer = await getOfferRaw(offerId, userId);
   if (!offer) throw new Error("Trade offer not found");
-  if (offer.status !== "pending")
+  if (offer.status !== "pending" && offer.status !== "awaiting_confirmation")
     throw new Error(`Cannot accept offer with status: ${offer.status}`);
 
-  const accountId = await SteamSessionService.getActiveAccountId(userId);
-  console.log(`[Trade] acceptOffer: offerId=${offerId}, activeAccountId=${accountId}, steamOfferId=${offer.steamOfferId}, dbPartner=${offer.partnerSteamId}`);
+  const accountId = await resolveAccountForTradeAction(userId, offer, "accept");
+  console.log(`[Trade] acceptOffer: offerId=${offerId}, accountId=${accountId}, steamOfferId=${offer.steamOfferId}, dbPartner=${offer.partnerSteamId}`);
 
   if (offer.steamOfferId) {
     const partnerForApi = await resolvePartnerForSteamApi(
@@ -574,12 +750,38 @@ export async function acceptOffer(
     // Try with current session, retry once with forced refresh on session error
     let session = await getValidSession(accountId);
     try {
-      await acceptSteamTradeOffer(session.steamLoginSecure, offer.steamOfferId, partnerForApi);
+      await acceptSteamTradeOffer(session, offer.steamOfferId, partnerForApi);
     } catch (err: any) {
+      if (err.code === "OFFER_INVALID_STATE") {
+        console.log(`[Trade] Accept: offer ${offer.steamOfferId} is no longer active on Steam, marking expired`);
+        await pool.query(
+          `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+          [offerId, userId]
+        );
+        throw new Error("This trade offer is no longer active on Steam (expired, declined, or already accepted).");
+      }
       if (isSessionExpiredError(err)) {
         console.log(`[Trade] Accept failed with session error, retrying with refresh...`);
-        session = await getValidSession(accountId, true);
-        await acceptSteamTradeOffer(session.steamLoginSecure, offer.steamOfferId, partnerForApi);
+        try {
+          session = await getValidSession(accountId, true);
+          await acceptSteamTradeOffer(session, offer.steamOfferId, partnerForApi);
+        } catch (retryErr: any) {
+          if (retryErr.code === "OFFER_INVALID_STATE") {
+            console.log(`[Trade] Accept retry: offer ${offer.steamOfferId} is no longer active on Steam, marking expired`);
+            await pool.query(
+              `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+              [offerId, userId]
+            );
+            throw new Error("This trade offer is no longer active on Steam (expired, declined, or already accepted).");
+          }
+          if (isSessionExpiredError(retryErr)) {
+            console.error(`[Trade] Accept retry also failed — likely trade eligibility issue, not session`);
+            // (42) after fresh session = not a session issue.
+            // Could be: awaiting mobile confirmation, trade hold, or offer restriction.
+            throw new Error("This trade offer requires mobile confirmation from the sender, or has a trade restriction.");
+          }
+          throw retryErr;
+        }
       } else {
         throw err;
       }
@@ -592,7 +794,7 @@ export async function acceptOffer(
     [offerId, userId]
   );
 
-  return { needsConfirmation: true }; // Steam Guard confirmation typically required
+  return { needsConfirmation: false };
 }
 
 /**
@@ -604,20 +806,46 @@ export async function declineOffer(
 ): Promise<void> {
   const offer = await getOfferRaw(offerId, userId);
   if (!offer) throw new Error("Trade offer not found");
-  if (offer.status !== "pending")
+  if (offer.status !== "pending" && offer.status !== "awaiting_confirmation")
     throw new Error(`Cannot decline offer with status: ${offer.status}`);
 
-  const accountId = await SteamSessionService.getActiveAccountId(userId);
+  const accountId = await resolveAccountForTradeAction(userId, offer, "decline");
 
   if (offer.steamOfferId) {
     let session = await getValidSession(accountId);
     try {
-      await declineSteamTradeOffer(session.steamLoginSecure, offer.steamOfferId);
+      await declineSteamTradeOffer(session, offer.steamOfferId);
     } catch (err: any) {
+      if (err.code === "OFFER_INVALID_STATE") {
+        console.log(`[Trade] Decline: offer ${offer.steamOfferId} is no longer active on Steam, marking expired`);
+        await pool.query(
+          `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+          [offerId, userId]
+        );
+        throw new Error("This trade offer is no longer active on Steam (expired, accepted, or already declined).");
+      }
       if (isSessionExpiredError(err)) {
         console.log(`[Trade] Decline failed with session error, retrying with refresh...`);
-        session = await getValidSession(accountId, true);
-        await declineSteamTradeOffer(session.steamLoginSecure, offer.steamOfferId);
+        try {
+          session = await getValidSession(accountId, true);
+          await declineSteamTradeOffer(session, offer.steamOfferId);
+        } catch (retryErr: any) {
+          if (retryErr.code === "OFFER_INVALID_STATE") {
+            console.log(`[Trade] Decline retry: offer ${offer.steamOfferId} is no longer active on Steam, marking expired`);
+            await pool.query(
+              `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+              [offerId, userId]
+            );
+            throw new Error("This trade offer is no longer active on Steam (expired, accepted, or already declined).");
+          }
+          if (isSessionExpiredError(retryErr)) {
+            console.error(`[Trade] Decline retry also failed — likely trade eligibility issue`);
+            // (42) after fresh session = not a session issue.
+            // Could be: awaiting mobile confirmation, trade hold, or offer restriction.
+            throw new Error("This trade offer requires mobile confirmation from the sender, or has a trade restriction.");
+          }
+          throw retryErr;
+        }
       } else {
         throw err;
       }
@@ -643,52 +871,114 @@ export async function cancelOffer(
   if (offer.direction !== "outgoing")
     throw new Error("Can only cancel outgoing offers");
 
-  const accountId = await SteamSessionService.getActiveAccountId(userId);
+  const accountId = await resolveAccountForTradeAction(userId, offer, "cancel");
 
   // Steam uses /cancel for outgoing offers
   if (offer.steamOfferId) {
-    const doCancelWithSession = async (steamLoginSecure: string) => {
-      const cancelSessionId = generateSessionId();
+    const doCancelWithSession = async (sess: SteamSession) => {
+      const cancelSessionId = sess.sessionId;
+      const cookies = await buildSteamCookies(sess);
+      console.log(`[Trade] Cancelling offer ${offer.steamOfferId}`);
+
+      let resp: any;
       try {
-        await axios.post(
+        resp = await axios.post(
           `${STEAM_COMMUNITY}/tradeoffer/${offer.steamOfferId}/cancel`,
           new URLSearchParams({ sessionid: cancelSessionId }).toString(),
           {
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
-              Cookie: `steamLoginSecure=${steamLoginSecure}; sessionid=${cancelSessionId}`,
+              Cookie: cookies,
               Referer: `${STEAM_COMMUNITY}/tradeoffer/${offer.steamOfferId}/`,
               "User-Agent":
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
             },
+            maxRedirects: 0,
             timeout: 15000,
+            validateStatus: () => true,
           }
         );
       } catch (err: any) {
-        const respData = err.response?.data;
-        const strError = typeof respData === "object" ? respData?.strError : undefined;
-        const steamCode = typeof respData === "object" ? respData?.success : undefined;
-        console.error(`[Trade] Steam cancel error: HTTP ${err.response?.status}, strError=${strError}, steamCode=${steamCode}`);
-        if (strError?.includes("(42)") || steamCode === 42 || err.response?.status === 403) {
-          const sessionErr = new Error("Steam session expired — please re-authenticate.");
-          (sessionErr as any).code = "SESSION_EXPIRED";
-          throw sessionErr;
-        }
-        if (strError?.includes("(25)") || steamCode === 25) {
-          throw new Error("Trade offer has expired or is no longer valid on Steam.");
-        }
-        throw new Error(strError || `Steam cancel failed (${err.response?.status ?? "network"})`);
+        console.error(`[Trade] Steam cancel network error:`, err.message);
+        throw new Error(`Steam cancel failed (network: ${err.message})`);
+      }
+
+      const status = resp.status;
+      const data = resp.data;
+      const location = (resp.headers?.["location"] || "") as string;
+      console.log(`[Trade] Cancel response for ${offer.steamOfferId}: HTTP ${status}, data=${JSON.stringify(data)}, dataType=${typeof data}`);
+
+      if ((status === 302 || status === 301) && location.includes("/login")) {
+        const sessionErr = new Error("Steam session expired — please re-authenticate.");
+        (sessionErr as any).code = "SESSION_EXPIRED";
+        throw sessionErr;
+      }
+      if (status === 403) {
+        const sessionErr = new Error("Steam session expired — please re-authenticate.");
+        (sessionErr as any).code = "SESSION_EXPIRED";
+        throw sessionErr;
+      }
+
+      const strError = typeof data === "object" ? data?.strError : undefined;
+      const steamCode = typeof data === "object" ? data?.success : undefined;
+
+      // success:8 = InvalidState — offer already accepted/declined/expired/countered
+      if (steamCode === 8) {
+        const err = new Error("Trade offer is no longer active on Steam (already accepted, declined, or expired).");
+        (err as any).code = "OFFER_INVALID_STATE";
+        throw err;
+      }
+
+      if (strError?.includes("(42)") || steamCode === 42) {
+        const sessionErr = new Error("Steam session expired — please re-authenticate.");
+        (sessionErr as any).code = "SESSION_EXPIRED";
+        throw sessionErr;
+      }
+      if (strError?.includes("(25)") || steamCode === 25) {
+        throw new Error("Trade offer has expired or is no longer valid on Steam.");
+      }
+      if (strError?.includes("(11)") || steamCode === 11) {
+        throw new Error("Trade offer is no longer valid (already accepted, declined, or expired).");
+      }
+      if (status >= 400) {
+        throw new Error(strError || `Steam cancel failed (HTTP ${status})`);
       }
     };
 
     let session = await getValidSession(accountId);
     try {
-      await doCancelWithSession(session.steamLoginSecure);
+      await doCancelWithSession(session);
     } catch (err: any) {
+      if (err.code === "OFFER_INVALID_STATE") {
+        console.log(`[Trade] Cancel: offer ${offer.steamOfferId} is no longer active on Steam, marking expired`);
+        await pool.query(
+          `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+          [offerId, userId]
+        );
+        throw new Error("This trade offer is no longer active on Steam (expired, accepted, or already cancelled).");
+      }
       if (isSessionExpiredError(err)) {
         console.log(`[Trade] Cancel failed with session error, retrying with refresh...`);
-        session = await getValidSession(accountId, true);
-        await doCancelWithSession(session.steamLoginSecure);
+        try {
+          session = await getValidSession(accountId, true);
+          await doCancelWithSession(session);
+        } catch (retryErr: any) {
+          if (retryErr.code === "OFFER_INVALID_STATE") {
+            console.log(`[Trade] Cancel retry: offer ${offer.steamOfferId} is no longer active on Steam, marking expired`);
+            await pool.query(
+              `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+              [offerId, userId]
+            );
+            throw new Error("This trade offer is no longer active on Steam (expired, accepted, or already cancelled).");
+          }
+          if (isSessionExpiredError(retryErr)) {
+            console.error(`[Trade] Cancel retry also failed — likely trade eligibility issue`);
+            // (42) after fresh session = not a session issue.
+            // Could be: awaiting mobile confirmation, trade hold, or offer restriction.
+            throw new Error("This trade offer requires mobile confirmation from the sender, or has a trade restriction.");
+          }
+          throw retryErr;
+        }
       } else {
         throw err;
       }
@@ -948,8 +1238,6 @@ export async function analyzeTradeOffer(
 
 // ─── Steam Web API Key Management ────────────────────────────────────────
 
-const STEAM_API = "https://api.steampowered.com";
-
 /**
  * Get or register a Steam Web API key for an account.
  * Tries the stored key first, then auto-registers via steamcommunity.com.
@@ -1075,7 +1363,7 @@ const STEAM_OFFER_STATE: Record<number, string> = {
   6: "cancelled",
   7: "declined",
   8: "invalid",     // InvalidItems
-  9: "pending",     // CreatedNeedsConfirmation
+  9: "awaiting_confirmation", // CreatedNeedsConfirmation
   10: "pending",    // CanceledBySecondFactor
   11: "pending",    // InEscrow
 };
@@ -1103,7 +1391,256 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
     const result = await syncTradeOffersForAccount(userId, acc.id);
     totalSynced += result.synced;
   }
+
+  // Sync trade history less frequently (at most once per 10 minutes per user)
+  const historyKey = `trade_history_${userId}`;
+  const lastHistorySync = tradeHistorySyncCache.get(historyKey) ?? 0;
+  if (Date.now() - lastHistorySync > 10 * 60 * 1000) {
+    for (const acc of allAccounts) {
+      totalSynced += await syncTradeHistoryForAccount(userId, acc.id);
+    }
+    tradeHistorySyncCache.set(historyKey, Date.now());
+  }
+
   return { synced: totalSynced };
+}
+
+/**
+ * Parse trade offers from Steam HTML page.
+ * Each offer block: <div class="tradeoffer" id="tradeofferid_XXXXX">
+ * Contains: header (partner name), items (classinfo), banner (status), footer (actions).
+ */
+interface ScrapedOffer {
+  steamOfferId: string;
+  partnerSteamId: string | null;
+  partnerName: string;
+  message: string | null;
+  status: string;
+  itemClassIds: { side: "give" | "receive"; classid: string; instanceid: string; iconUrl: string }[];
+}
+
+function parseTradeOffersHtml(html: string, direction: "incoming" | "outgoing"): ScrapedOffer[] {
+  const offers: ScrapedOffer[] = [];
+
+  // Split HTML into offer blocks
+  const blocks = html.split(/<div class="tradeoffer" id="tradeofferid_/);
+  blocks.shift(); // first chunk is before any offer
+
+  for (const block of blocks) {
+    const idMatch = block.match(/^(\d+)"/);
+    if (!idMatch) continue;
+    const steamOfferId = idMatch[1];
+
+    // Partner steam64 from profile link in "secondary" section
+    const partnerMatch = block.match(/href="https:\/\/steamcommunity\.com\/profiles\/(\d{17})"/);
+    // Partner name from header: "You offered NAME a trade:" or "NAME offered you a trade:"
+    const headerMatch = block.match(/tradeoffer_header">\s*(.*?)\s*<\/div>/s);
+    let partnerName = "Unknown";
+    if (headerMatch) {
+      const h = headerMatch[1].trim();
+      // "You offered NAME a trade:" or "NAME offered you a trade:"
+      const nameMatch = h.match(/offered\s+(.+?)\s+a trade/) || h.match(/^(.+?)\s+offered you/);
+      if (nameMatch) partnerName = nameMatch[1].trim();
+    }
+
+    // Message (strip HTML tags and entities)
+    const msgMatch = block.match(/class="quote">\s*([\s\S]*?)\s*<\/div>/);
+    const rawMsg = msgMatch ? msgMatch[1].trim() : null;
+    const message = rawMsg
+      ? rawMsg.replace(/&nbsp;/g, " ").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() || null
+      : null;
+
+    // Status from banner
+    let status = "pending";
+    const bannerMatch = block.match(/tradeoffer_items_banner[^>]*">\s*([\s\S]*?)(?:<span|<div)/);
+    if (bannerMatch) {
+      const bannerText = bannerMatch[1].trim().toLowerCase();
+      if (bannerText.includes("awaiting mobile")) status = "awaiting_confirmation";
+      else if (bannerText.includes("accepted")) status = "accepted";
+      else if (bannerText.includes("expired")) status = "expired";
+      else if (bannerText.includes("canceled") || bannerText.includes("cancelled")) status = "cancelled";
+      else if (bannerText.includes("declined")) status = "declined";
+      else if (bannerText.includes("counter")) status = "countered";
+      else if (bannerText.includes("escrow") || bannerText.includes("hold")) status = "on_hold";
+    }
+    // "inactive" class on items_ctn means non-active
+    if (block.includes('tradeoffer_items_ctn  inactive') && status === "pending") {
+      status = "awaiting_confirmation";
+    }
+
+    // Items: split by primary (my items) and secondary (their items)
+    const itemClassIds: ScrapedOffer["itemClassIds"] = [];
+    const primaryMatch = block.match(/tradeoffer_items primary">([\s\S]*?)tradeoffer_items secondary/);
+    const secondaryMatch = block.match(/tradeoffer_items secondary">([\s\S]*?)(?:tradeoffer_footer|$)/);
+
+    const parseItems = (section: string, side: "give" | "receive") => {
+      const itemMatches = section.matchAll(/data-economy-item="classinfo\/\d+\/(\d+)\/(\d+)"/g);
+      for (const m of itemMatches) {
+        // Icon URL from nearby img
+        const imgMatch = section.match(new RegExp(`classinfo/\\d+/${m[1]}/${m[2]}"[\\s\\S]*?<img src="([^"]+)"`));
+        itemClassIds.push({
+          side,
+          classid: m[1],
+          instanceid: m[2],
+          iconUrl: imgMatch ? imgMatch[1] : "",
+        });
+      }
+    };
+
+    if (direction === "outgoing") {
+      // Sent page: primary = my items (give), secondary = their items (receive)
+      if (primaryMatch) parseItems(primaryMatch[1], "give");
+      if (secondaryMatch) parseItems(secondaryMatch[1], "receive");
+    } else {
+      // Received page: primary = their items (give to me = receive), secondary = my items (give)
+      if (primaryMatch) parseItems(primaryMatch[1], "receive");
+      if (secondaryMatch) parseItems(secondaryMatch[1], "give");
+    }
+
+    offers.push({
+      steamOfferId,
+      partnerSteamId: partnerMatch ? partnerMatch[1] : null,
+      partnerName,
+      message,
+      status,
+      itemClassIds,
+    });
+  }
+  return offers;
+}
+
+/**
+ * Scrape active trade offers from Steam HTML pages.
+ * Fallback for when GetTradeOffers API returns empty (known Steam bug since 2024).
+ */
+async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: number }> {
+  const session = await SteamSessionService.getSession(accountId);
+  if (!session) return { synced: 0 };
+
+  const cookies = await buildSteamCookies(session);
+  const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+  const { rows: accRows } = await pool.query(
+    `SELECT user_id, steam_id FROM steam_accounts WHERE id = $1`, [accountId]
+  );
+  if (!accRows.length) return { synced: 0 };
+  const userId = accRows[0].user_id;
+
+  // Load linked accounts for internal detection
+  const { rows: userAccounts } = await pool.query(
+    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+  );
+  const userSteamIds = new Map(userAccounts.map((a: any) => [a.steam_id, a.id]));
+
+  // Collect all scraped offer IDs to detect stale DB records
+  const allScrapedIds = new Set<string>();
+  let synced = 0;
+
+  for (const [direction, suffix] of [["incoming", ""], ["outgoing", "sent/"]] as const) {
+    try {
+      const resp = await axios.get(
+        `${STEAM_COMMUNITY}/my/tradeoffers/${suffix}`,
+        {
+          headers: { Cookie: cookies, "User-Agent": ua },
+          maxRedirects: 5,
+          timeout: 15000,
+          validateStatus: () => true,
+        }
+      );
+      if (resp.status !== 200) continue;
+      const html = typeof resp.data === "string" ? resp.data : "";
+      const offers = parseTradeOffersHtml(html, direction);
+
+      for (const offer of offers) {
+        allScrapedIds.add(offer.steamOfferId);
+        const isInternal = offer.partnerSteamId ? userSteamIds.has(offer.partnerSteamId) : false;
+        const partnerAccountId = offer.partnerSteamId ? userSteamIds.get(offer.partnerSteamId) ?? null : null;
+        if (!isInternal && offer.partnerSteamId) {
+          console.log(`[Trade] Scrape: offer ${offer.steamOfferId} partner=${offer.partnerSteamId} NOT internal. Known IDs: ${[...userSteamIds.keys()].join(', ')}`);
+        }
+
+        // Map scraped status to our status
+        let dbStatus = "pending";
+        if (offer.status === "accepted") dbStatus = "accepted";
+        else if (offer.status === "expired") dbStatus = "expired";
+        else if (offer.status === "cancelled") dbStatus = "cancelled";
+        else if (offer.status === "declined") dbStatus = "declined";
+        else if (offer.status === "awaiting_confirmation") dbStatus = "awaiting_confirmation";
+        else if (offer.status === "on_hold") dbStatus = "on_hold";
+
+        // Upsert: insert or update status
+        const { rows } = await pool.query(
+          `INSERT INTO trade_offers
+             (user_id, direction, steam_offer_id, partner_steam_id, message,
+              status, is_quick_transfer, value_give_cents, value_recv_cents,
+              is_internal, account_id_from, account_id_to,
+              created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, FALSE, 0, 0,
+                   $7, $8, $9, NOW(), NOW())
+           ON CONFLICT (user_id, steam_offer_id) WHERE steam_offer_id IS NOT NULL
+           DO UPDATE SET
+             status = CASE WHEN trade_offers.status IN ('cancelled','declined','accepted','expired') THEN trade_offers.status ELSE EXCLUDED.status END,
+             updated_at = NOW(),
+             is_internal = EXCLUDED.is_internal,
+             account_id_from = COALESCE(trade_offers.account_id_from, EXCLUDED.account_id_from),
+             account_id_to = COALESCE(trade_offers.account_id_to, EXCLUDED.account_id_to)
+           RETURNING id`,
+          [
+            userId, direction, offer.steamOfferId,
+            offer.partnerSteamId || offer.partnerName,
+            offer.message, dbStatus, isInternal,
+            direction === "outgoing" ? accountId : partnerAccountId,
+            direction === "incoming" ? accountId : partnerAccountId,
+          ]
+        );
+
+        if (rows.length > 0) {
+          const offerId = rows[0].id;
+          // Only insert items if none exist yet (don't overwrite API-synced items that have names)
+          const { rows: existingItems } = await pool.query(
+            `SELECT 1 FROM trade_offer_items WHERE offer_id = $1 AND market_hash_name IS NOT NULL LIMIT 1`,
+            [offerId]
+          );
+          if (existingItems.length === 0) {
+            await pool.query(`DELETE FROM trade_offer_items WHERE offer_id = $1`, [offerId]);
+            for (const item of offer.itemClassIds) {
+              await pool.query(
+                `INSERT INTO trade_offer_items
+                   (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
+                 VALUES ($1, $2, $3, NULL, $4, 0)`,
+                [offerId, item.side, `${item.classid}_${item.instanceid}`, item.iconUrl]
+              );
+            }
+          }
+          synced++;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[Trade] HTML scrape ${direction} failed for account ${accountId}:`, err.message);
+    }
+  }
+
+  // Mark stale pending offers as expired if not found on Steam
+  // Don't touch awaiting_confirmation or on_hold — they may not appear in scrape
+  if (allScrapedIds.size > 0) {
+    const { rows: pendingOffers } = await pool.query(
+      `SELECT id, steam_offer_id FROM trade_offers
+       WHERE user_id = $1 AND status = 'pending' AND steam_offer_id IS NOT NULL
+       AND created_at < NOW() - INTERVAL '30 minutes'`,
+      [userId]
+    );
+    for (const po of pendingOffers) {
+      if (!allScrapedIds.has(po.steam_offer_id)) {
+        await pool.query(
+          `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1`,
+          [po.id]
+        );
+        console.log(`[Trade] Marked stale offer ${po.steam_offer_id} as expired (not found on Steam)`);
+      }
+    }
+  }
+
+  return { synced };
 }
 
 async function syncTradeOffersForAccount(userId: number, accountId: number): Promise<{ synced: number }> {
@@ -1112,7 +1649,8 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
     return { synced: 0 };
   }
 
-  let data: any;
+  // Try Steam Web API first (may return empty due to known Steam API bug)
+  let activeData: any;
   try {
     const resp = await axios.get(
       `${STEAM_API}/IEconService/GetTradeOffers/v1/`,
@@ -1128,9 +1666,8 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
         timeout: 15000,
       }
     );
-    data = resp.data?.response;
+    activeData = resp.data?.response;
   } catch (err: any) {
-    // If API key is invalid (403), clear it so it gets re-registered next time
     if (err.response?.status === 403) {
       await pool.query(
         `UPDATE steam_accounts SET web_api_key = NULL WHERE id = $1`,
@@ -1138,11 +1675,74 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
       );
       console.warn(`[Trade] Web API key invalid for account ${accountId}, cleared`);
     }
-    console.error(`[Trade] Sync failed:`, err.message);
-    return { synced: 0 };
+    console.error(`[Trade] Sync active offers failed:`, err.message);
   }
 
-  if (!data) return { synced: 0 };
+  const apiHasOffers = (activeData?.trade_offers_sent?.length > 0 || activeData?.trade_offers_received?.length > 0);
+
+  // GetTradeOffers API is broken since ~2024 (returns empty).
+  // Fall back to HTML scraping with proper parsing.
+  if (!apiHasOffers) {
+    console.log(`[Trade] GetTradeOffers API returned empty for account ${accountId}, scraping HTML`);
+    const scraped = await scrapeTradeOffersHtml(accountId);
+    if (scraped.synced > 0) {
+      console.log(`[Trade] HTML scrape synced ${scraped.synced} offers for account ${accountId}`);
+      return scraped;
+    }
+  }
+
+  // Also fetch historical via API (may also be empty due to same bug)
+  let histData: any;
+  try {
+    const cutoff = Math.floor(Date.now() / 1000) - 14 * 24 * 3600;
+    const resp = await axios.get(
+      `${STEAM_API}/IEconService/GetTradeOffers/v1/`,
+      {
+        params: {
+          key: apiKey,
+          get_sent_offers: 1,
+          get_received_offers: 1,
+          get_descriptions: 1,
+          active_only: 0,
+          historical_only: 1,
+          time_historical_cutoff: cutoff,
+          language: "english",
+        },
+        timeout: 15000,
+      }
+    );
+    histData = resp.data?.response;
+  } catch (err: any) {
+    console.warn(`[Trade] Sync historical offers failed (non-fatal):`, err.message);
+  }
+
+  // Merge active + historical
+  const data = {
+    trade_offers_sent: [
+      ...(activeData?.trade_offers_sent ?? []),
+      ...(histData?.trade_offers_sent ?? []),
+    ],
+    trade_offers_received: [
+      ...(activeData?.trade_offers_received ?? []),
+      ...(histData?.trade_offers_received ?? []),
+    ],
+    descriptions: [
+      ...(activeData?.descriptions ?? []),
+      ...(histData?.descriptions ?? []),
+    ],
+  };
+
+  const seen = new Set<string>();
+  const dedup = (offers: any[]) => offers.filter(o => {
+    if (seen.has(o.tradeofferid)) return false;
+    seen.add(o.tradeofferid);
+    return true;
+  });
+  data.trade_offers_sent = dedup(data.trade_offers_sent);
+  seen.clear();
+  data.trade_offers_received = dedup(data.trade_offers_received);
+
+  if (!data.trade_offers_sent.length && !data.trade_offers_received.length) return { synced: 0 };
 
   // Build description map for item names/icons
   const descMap = new Map<string, SteamTradeOfferDesc>();
@@ -1236,7 +1836,7 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
          ON CONFLICT (user_id, steam_offer_id)
            WHERE steam_offer_id IS NOT NULL
          DO UPDATE SET
-           status = EXCLUDED.status,
+           status = CASE WHEN trade_offers.status IN ('cancelled','declined','accepted','expired') AND EXCLUDED.status IN ('pending','awaiting_confirmation') THEN trade_offers.status ELSE EXCLUDED.status END,
            value_give_cents = EXCLUDED.value_give_cents,
            value_recv_cents = EXCLUDED.value_recv_cents,
            is_internal = EXCLUDED.is_internal,
@@ -1278,12 +1878,11 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
       }
     }
 
-    // Expire pending offers that Steam no longer returns
-    // Only expire offers that THIS account would see (sent by or received by this account)
-    // Never expire internal offers from other account's perspective
+    // Expire pending offers that Steam no longer returns as active
+    // Only expire 'pending' — never touch 'awaiting_confirmation' or 'on_hold'
     const activeSteamIds = [
-      ...sentOffers.map((o) => o.tradeofferid),
-      ...recvOffers.map((o) => o.tradeofferid),
+      ...(activeData?.trade_offers_sent ?? []).map((o: any) => o.tradeofferid),
+      ...(activeData?.trade_offers_received ?? []).map((o: any) => o.tradeofferid),
     ];
 
     if (activeSteamIds.length > 0) {
@@ -1300,6 +1899,7 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
         [userId, activeSteamIds, accountId]
       );
     } else {
+      // API returned no active offers — only expire old pending, not awaiting_confirmation
       await client.query(
         `UPDATE trade_offers
          SET status = 'expired', updated_at = NOW()
@@ -1308,6 +1908,7 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
            AND is_internal = FALSE
            AND status = 'pending'
            AND steam_offer_id IS NOT NULL
+           AND created_at < NOW() - INTERVAL '30 minutes'
            AND created_at > NOW() - INTERVAL '14 days'`,
         [userId, accountId]
       );
@@ -1323,6 +1924,370 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
   } finally {
     client.release();
   }
+}
+
+// ─── Trade History HTML Scraper ──────────────────────────────────────────
+
+interface ScrapedHistoryTrade {
+  partnerSteamId: string | null;
+  partnerName: string;
+  dateText: string; // "10 Mar, 2026 2:24pm"
+  givenItems: { name: string; iconUrl: string }[];
+  receivedItems: { name: string; iconUrl: string }[];
+}
+
+function parseTradeHistoryHtml(html: string): { trades: ScrapedHistoryTrade[]; nextUrl: string | null } {
+  const trades: ScrapedHistoryTrade[] = [];
+
+  const blocks = html.split(/<div class="tradehistoryrow">/);
+  blocks.shift(); // before first trade
+
+  for (const block of blocks) {
+    // Date: "10 Mar, 2026" + timestamp "2:24pm"
+    const dateMatch = block.match(/tradehistory_date">\s*([\s\S]*?)<\/div>\s*<\/div>/);
+    let dateText = "";
+    if (dateMatch) {
+      const raw = dateMatch[1].replace(/<div class="tradehistory_timestamp">/g, " ").replace(/<\/div>/g, "").trim();
+      dateText = raw.replace(/\s+/g, " ");
+    }
+
+    // Partner Steam64
+    const partnerMatch = block.match(/href="https:\/\/steamcommunity\.com\/profiles\/(\d{17})"/);
+    // Partner name (inside <a> tag, may have quotes around the name)
+    const nameMatch = block.match(/data-miniprofile="\d+">"?([^"<]+)"?<\/a>/);
+    const partnerName = nameMatch ? nameMatch[1].trim() : "Unknown";
+
+    // Items: split by +/– groups
+    const givenItems: { name: string; iconUrl: string }[] = [];
+    const receivedItems: { name: string; iconUrl: string }[] = [];
+
+    // Each items group: <div class="tradehistory_items_plusminus">+</div> or –
+    const itemGroups = block.split(/tradehistory_items_plusminus">/);
+    for (let i = 1; i < itemGroups.length; i++) {
+      const group = itemGroups[i];
+      const isReceived = group.startsWith("+");
+      const isGiven = group.startsWith("–") || group.startsWith("-");
+
+      // Item names
+      const nameMatches = group.matchAll(/history_item_name"[^>]*>([^<]+)<\/span>/g);
+      const imgMatches = [...group.matchAll(/<img src="([^"]+)"/g)];
+      let imgIdx = 0;
+
+      for (const nm of nameMatches) {
+        const itemName = nm[1].trim();
+        const iconUrl = imgIdx < imgMatches.length ? imgMatches[imgIdx][1] : "";
+        imgIdx++;
+        const item = { name: itemName, iconUrl };
+        if (isReceived) receivedItems.push(item);
+        else if (isGiven) givenItems.push(item);
+      }
+    }
+
+    trades.push({
+      partnerSteamId: partnerMatch ? partnerMatch[1] : null,
+      partnerName,
+      dateText,
+      givenItems,
+      receivedItems,
+    });
+  }
+
+  // Pagination: <a class="pagebtn" href="?after_time=X&after_trade=Y">
+  const nextMatch = html.match(/<a class="pagebtn" href="\?([^"]+)">&gt;<\/a>/);
+  const nextUrl = nextMatch ? nextMatch[1] : null;
+
+  return { trades, nextUrl };
+}
+
+/**
+ * Scrape trade history from Steam HTML page.
+ * More reliable than GetTradeHistory API, shows all completed trades.
+ */
+async function scrapeTradeHistoryHtml(
+  userId: number,
+  accountId: number,
+  maxPages = 1
+): Promise<number> {
+  const session = await SteamSessionService.getSession(accountId);
+  if (!session) return 0;
+
+  const cookies = `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`;
+  const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+  const { rows: accRows } = await pool.query(
+    `SELECT steam_id FROM steam_accounts WHERE id = $1`, [accountId]
+  );
+  if (!accRows.length) return 0;
+
+  // Load linked accounts for internal detection
+  const { rows: userAccounts } = await pool.query(
+    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+  );
+  const userSteamIds = new Map(userAccounts.map((a: any) => [a.steam_id, a.id]));
+
+  // Get prices for all item names we find
+  const allItemNames = new Set<string>();
+  const allParsed: ScrapedHistoryTrade[] = [];
+
+  let nextParams: string | null = null;
+  let synced = 0;
+
+  for (let page = 0; page < maxPages; page++) {
+    try {
+      const url = nextParams
+        ? `${STEAM_COMMUNITY}/my/tradehistory/?${nextParams}`
+        : `${STEAM_COMMUNITY}/my/tradehistory/`;
+
+      const resp = await axios.get(url, {
+        headers: { Cookie: cookies, "User-Agent": ua },
+        maxRedirects: 5,
+        timeout: 15000,
+        validateStatus: () => true,
+      });
+      if (resp.status === 429) {
+        console.warn(`[Trade] History scrape got 429 on page ${page}, stopping`);
+        break;
+      }
+      if (resp.status !== 200) break;
+      const html = typeof resp.data === "string" ? resp.data : "";
+      const { trades, nextUrl } = parseTradeHistoryHtml(html);
+      if (trades.length === 0) break;
+
+      for (const t of trades) {
+        for (const item of [...t.givenItems, ...t.receivedItems]) {
+          allItemNames.add(item.name);
+        }
+      }
+      allParsed.push(...trades);
+      nextParams = nextUrl;
+      if (!nextUrl) break;
+    } catch (err: any) {
+      console.warn(`[Trade] History HTML scrape page ${page} failed:`, err.message);
+      break;
+    }
+  }
+
+  if (allParsed.length === 0) return 0;
+
+  // Batch price lookup
+  const priceMap = allItemNames.size > 0
+    ? await getLatestPrices([...allItemNames])
+    : new Map();
+
+  for (const trade of allParsed) {
+    // Parse date: "10 Mar, 2026 2:24pm" → Date
+    let tradeDate: Date | null = null;
+    if (trade.dateText) {
+      try {
+        // "10 Mar, 2026 2:24pm" → "10 Mar 2026 2:24 pm"
+        const normalized = trade.dateText
+          .replace(",", "")
+          .replace(/(\d{1,2}:\d{2})(am|pm)/i, "$1 $2");
+        tradeDate = new Date(normalized);
+        if (isNaN(tradeDate.getTime())) tradeDate = null;
+      } catch { tradeDate = null; }
+    }
+
+    // Determine direction: if we gave items it's outgoing
+    const direction = trade.givenItems.length > 0 ? "outgoing" : "incoming";
+    const isInternal = trade.partnerSteamId ? userSteamIds.has(trade.partnerSteamId) : false;
+    const partnerAccountId = trade.partnerSteamId ? userSteamIds.get(trade.partnerSteamId) ?? null : null;
+
+    // Calculate values
+    let giveValue = 0;
+    let recvValue = 0;
+    const giveItems = trade.givenItems.map(item => {
+      const prices = priceMap.get(item.name);
+      const priceCents = prices ? Math.round((prices.steam ?? prices.skinport ?? 0) * 100) : 0;
+      giveValue += priceCents;
+      return { side: "give" as const, name: item.name, iconUrl: item.iconUrl, priceCents };
+    });
+    const recvItems = trade.receivedItems.map(item => {
+      const prices = priceMap.get(item.name);
+      const priceCents = prices ? Math.round((prices.steam ?? prices.skinport ?? 0) * 100) : 0;
+      recvValue += priceCents;
+      return { side: "receive" as const, name: item.name, iconUrl: item.iconUrl, priceCents };
+    });
+
+    // Synthetic ID: combine partner + date epoch + item count for uniqueness
+    const dateEpoch = tradeDate ? Math.floor(tradeDate.getTime() / 1000) : 0;
+    const itemSig = [...trade.givenItems, ...trade.receivedItems].map(i => i.name).sort().join(",");
+    const sigHash = crypto.createHash("md5").update(`${trade.partnerSteamId}_${dateEpoch}_${itemSig}`).digest("hex").substring(0, 12);
+    const syntheticOfferId = `histhtml_${sigHash}`;
+
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO trade_offers
+           (user_id, direction, steam_offer_id, partner_steam_id, partner_name, message,
+            status, is_quick_transfer, value_give_cents, value_recv_cents,
+            is_internal, account_id_from, account_id_to,
+            created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NULL, 'accepted', FALSE, $6, $7,
+                 $8, $9, $10, $11, $11)
+         ON CONFLICT (user_id, steam_offer_id) WHERE steam_offer_id IS NOT NULL
+         DO NOTHING
+         RETURNING id`,
+        [
+          userId, direction, syntheticOfferId,
+          trade.partnerSteamId || trade.partnerName,
+          trade.partnerName,
+          giveValue, recvValue, isInternal,
+          direction === "outgoing" ? accountId : partnerAccountId,
+          direction === "incoming" ? accountId : partnerAccountId,
+          tradeDate || new Date(),
+        ]
+      );
+
+      if (rows.length > 0) {
+        const offerId = rows[0].id;
+        for (const item of [...giveItems, ...recvItems]) {
+          await pool.query(
+            `INSERT INTO trade_offer_items
+               (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [offerId, item.side, "0", item.name, item.iconUrl, item.priceCents]
+          );
+        }
+        synced++;
+      }
+    } catch (err: any) {
+      console.warn(`[Trade] History HTML upsert failed:`, err.message);
+    }
+  }
+
+  console.log(`[Trade] HTML history scrape synced ${synced} trades for account ${accountId} (${allParsed.length} parsed)`);
+  return synced;
+}
+
+// ─── Trade History Sync (completed trades from GetTradeHistory API) ──────
+
+/**
+ * Sync completed trade history from Steam's GetTradeHistory endpoint.
+ * This captures trades that GetTradeOffers doesn't return (completed, old).
+ */
+async function syncTradeHistoryForAccount(userId: number, accountId: number): Promise<number> {
+  // Try HTML scraper first (more reliable)
+  const htmlSynced = await scrapeTradeHistoryHtml(userId, accountId);
+  if (htmlSynced > 0) return htmlSynced;
+
+  // Fall back to API
+  const apiKey = await getWebApiKey(accountId);
+  if (!apiKey) return 0;
+
+  const { rows: accRows } = await pool.query(
+    `SELECT steam_id FROM steam_accounts WHERE id = $1`, [accountId]
+  );
+  const mySteamId = accRows[0]?.steam_id;
+  if (!mySteamId) return 0;
+
+  // Load user's linked accounts for internal detection
+  const { rows: userAccounts } = await pool.query(
+    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+  );
+  const userSteamIds = new Map(userAccounts.map((a) => [a.steam_id, a.id]));
+
+  let synced = 0;
+  try {
+    const resp = await axios.get(
+      `${STEAM_API}/IEconService/GetTradeHistory/v1/`,
+      {
+        params: {
+          key: apiKey,
+          max_trades: 50,
+          get_descriptions: 1,
+          include_total: 0,
+          navigating_back: 0,
+          include_failed: 0,
+        },
+        timeout: 15000,
+      }
+    );
+    const data = resp.data?.response;
+    if (!data?.trades?.length) return 0;
+
+    // Build description map
+    const descMap = new Map<string, any>();
+    for (const desc of (data.descriptions ?? [])) {
+      descMap.set(`${desc.classid}_${desc.instanceid}`, desc);
+    }
+
+    // Get prices for all item names
+    const allNames = new Set<string>();
+    for (const desc of descMap.values()) {
+      if (desc.market_hash_name) allNames.add(desc.market_hash_name);
+    }
+    const priceMap = allNames.size > 0 ? await getLatestPrices([...allNames]) : new Map();
+
+    for (const trade of data.trades) {
+      const partnerSteamId = trade.steamid_other;
+      if (!partnerSteamId) continue;
+
+      // Determine direction: did I give items or receive?
+      const giveAssets = trade.assets_given || [];
+      const recvAssets = trade.assets_received || [];
+
+      const direction = giveAssets.length > 0 ? "outgoing" as const : "incoming" as const;
+      const isInternal = userSteamIds.has(partnerSteamId);
+
+      const mapAssets = (assets: any[], side: "give" | "receive") =>
+        assets.map((a: any) => {
+          const desc = descMap.get(`${a.classid}_${a.instanceid}`);
+          const name = desc?.market_hash_name ?? null;
+          const prices = name ? priceMap.get(name) : null;
+          const priceCents = prices ? Math.round((prices.steam ?? prices.skinport ?? 0) * 100) : 0;
+          return { side, assetId: a.assetid || a.new_assetid || "0", marketHashName: name, iconUrl: desc?.icon_url ?? null, priceCents };
+        });
+
+      const giveItems = mapAssets(giveAssets, "give");
+      const recvItems = mapAssets(recvAssets, "receive");
+      const giveValue = giveItems.reduce((s: number, i: any) => s + i.priceCents, 0);
+      const recvValue = recvItems.reduce((s: number, i: any) => s + i.priceCents, 0);
+
+      // Use tradeid as a synthetic steam_offer_id (prefixed to avoid collision)
+      const syntheticOfferId = `hist_${trade.tradeid}`;
+
+      const { rows } = await pool.query(
+        `INSERT INTO trade_offers
+           (user_id, direction, steam_offer_id, partner_steam_id, message,
+            status, is_quick_transfer, value_give_cents, value_recv_cents,
+            is_internal, account_id_from, account_id_to,
+            created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NULL, 'accepted', FALSE, $5, $6,
+                 $7, $8, $9,
+                 to_timestamp($10), to_timestamp($10))
+         ON CONFLICT (user_id, steam_offer_id)
+           WHERE steam_offer_id IS NOT NULL
+         DO NOTHING
+         RETURNING id`,
+        [
+          userId, direction, syntheticOfferId, partnerSteamId,
+          giveValue, recvValue, isInternal,
+          direction === "outgoing" ? accountId : (isInternal ? userSteamIds.get(partnerSteamId)! : null),
+          direction === "incoming" ? accountId : (isInternal ? userSteamIds.get(partnerSteamId)! : null),
+          trade.time_init,
+        ]
+      );
+
+      if (rows.length > 0) {
+        const offerId = rows[0].id;
+        for (const item of [...giveItems, ...recvItems]) {
+          await pool.query(
+            `INSERT INTO trade_offer_items
+               (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [offerId, item.side, item.assetId, item.marketHashName, item.iconUrl, item.priceCents]
+          );
+        }
+        synced++;
+      }
+    }
+
+    console.log(`[Trade] Synced ${synced} historical trades for account ${accountId}`);
+  } catch (err: any) {
+    console.warn(`[Trade] Trade history sync failed for account ${accountId}:`, err.message);
+  }
+
+  return synced;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -1350,6 +2315,8 @@ function mapOfferRow(row: any): TradeOffer {
     status: row.status,
     isQuickTransfer: row.is_quick_transfer,
     isInternal: row.is_internal ?? false,
+    accountIdFrom: row.account_id_from ?? null,
+    accountIdTo: row.account_id_to ?? null,
     valueGiveCents: parseInt(row.value_give_cents) || 0,
     valueRecvCents: parseInt(row.value_recv_cents) || 0,
     createdAt: row.created_at,
@@ -1369,6 +2336,8 @@ function mapOffer(row: any, items: any[]): TradeOffer {
     status: row.status,
     isQuickTransfer: row.is_quick_transfer,
     isInternal: row.is_internal ?? false,
+    accountIdFrom: row.account_id_from ?? null,
+    accountIdTo: row.account_id_to ?? null,
     valueGiveCents: parseInt(row.value_give_cents) || 0,
     valueRecvCents: parseInt(row.value_recv_cents) || 0,
     createdAt: row.created_at,

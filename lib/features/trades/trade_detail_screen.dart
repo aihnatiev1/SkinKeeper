@@ -280,7 +280,28 @@ class _TradeDetailBody extends ConsumerWidget {
             ),
 
           // Actions
-          if (offer.isPending) ...[
+          if (offer.status == 'awaiting_confirmation') ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppTheme.r12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone_android_rounded, color: Colors.orange, size: 22),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Open Steam mobile app to confirm or revoke this trade offer',
+                      style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (offer.isPending) ...[
             const SizedBox(height: 24),
             _buildActions(context, ref),
           ],
@@ -294,6 +315,8 @@ class _TradeDetailBody extends ConsumerWidget {
   Widget _buildStatusBadge(String status) {
     final (Color color, String label) = switch (status) {
       'pending' => (AppTheme.warning, 'Pending'),
+      'awaiting_confirmation' => (Colors.orange, 'Awaiting Confirmation'),
+      'on_hold' => (AppTheme.warning, 'On Hold'),
       'accepted' => (AppTheme.profit, 'Accepted'),
       'declined' => (AppTheme.loss, 'Declined'),
       'cancelled' => (AppTheme.textMuted, 'Cancelled'),

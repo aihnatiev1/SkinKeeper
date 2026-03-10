@@ -39,34 +39,41 @@ router.get(
         }
       }
 
-      // Get value from 24h ago and 7d ago
-      const { rows: hist24h } = await pool.query(
-        `SELECT DISTINCT ON (market_hash_name)
-           market_hash_name, price_usd
-         FROM price_history
-         WHERE market_hash_name = ANY($1)
-           AND source = 'skinport'
-           AND recorded_at < NOW() - INTERVAL '24 hours'
-         ORDER BY market_hash_name, recorded_at DESC`,
-        [names]
-      );
-
-      const { rows: hist7d } = await pool.query(
-        `SELECT DISTINCT ON (market_hash_name)
-           market_hash_name, price_usd
-         FROM price_history
-         WHERE market_hash_name = ANY($1)
-           AND source = 'skinport'
-           AND recorded_at < NOW() - INTERVAL '7 days'
-         ORDER BY market_hash_name, recorded_at DESC`,
-        [names]
-      );
+      // Get value from 24h ago and 7d ago using LATERAL for fast index lookups
+      const [{ rows: hist24h }, { rows: hist7d }] = await Promise.all([
+        pool.query(
+          `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name)
+           SELECT n.market_hash_name, lp.price_usd
+           FROM names n
+           JOIN LATERAL (
+             SELECT price_usd FROM price_history ph
+             WHERE ph.market_hash_name = n.market_hash_name
+               AND ph.source = 'skinport'
+               AND ph.recorded_at < NOW() - INTERVAL '24 hours'
+             ORDER BY ph.recorded_at DESC LIMIT 1
+           ) lp ON true`,
+          [names]
+        ),
+        pool.query(
+          `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name)
+           SELECT n.market_hash_name, lp.price_usd
+           FROM names n
+           JOIN LATERAL (
+             SELECT price_usd FROM price_history ph
+             WHERE ph.market_hash_name = n.market_hash_name
+               AND ph.source = 'skinport'
+               AND ph.recorded_at < NOW() - INTERVAL '7 days'
+             ORDER BY ph.recorded_at DESC LIMIT 1
+           ) lp ON true`,
+          [names]
+        ),
+      ]);
 
       const oldPrices24h = new Map(
-        hist24h.map((r) => [r.market_hash_name, parseFloat(r.price_usd)])
+        hist24h.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)])
       );
       const oldPrices7d = new Map(
-        hist7d.map((r) => [r.market_hash_name, parseFloat(r.price_usd)])
+        hist7d.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)])
       );
 
       let totalValue24hAgo = 0;
@@ -79,17 +86,15 @@ router.get(
       const change24h = totalValue - totalValue24hAgo;
       const change7d = totalValue - totalValue7dAgo;
 
-      // Get portfolio history (daily snapshots)
+      // Get portfolio history using daily_pl_snapshots (pre-aggregated) instead of scanning price_history
       const { rows: history } = await pool.query(
-        `SELECT date_trunc('day', ph.recorded_at) AS date,
-                SUM(ph.price_usd) AS value
-         FROM price_history ph
-         WHERE ph.market_hash_name = ANY($1)
-           AND ph.source = 'skinport'
-           AND ph.recorded_at > NOW() - INTERVAL '30 days'
-         GROUP BY date
-         ORDER BY date`,
-        [names]
+        `SELECT snapshot_date AS date,
+                total_current_value_cents / 100.0 AS value
+         FROM daily_pl_snapshots
+         WHERE user_id = $1
+           AND snapshot_date > CURRENT_DATE - 30
+         ORDER BY snapshot_date`,
+        [req.userId]
       );
 
       res.json({

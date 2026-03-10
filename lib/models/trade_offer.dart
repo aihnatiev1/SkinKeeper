@@ -43,6 +43,15 @@ class TradeOfferItem {
   }
 }
 
+/// Strip HTML tags from a string.
+String _stripHtml(String html) {
+  return html
+      .replaceAll(RegExp(r'&nbsp;'), ' ')
+      .replaceAll(RegExp(r'<[^>]*>'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
 class TradeOffer {
   final String id;
   final String direction; // 'incoming' | 'outgoing'
@@ -77,7 +86,7 @@ class TradeOffer {
   });
 
   bool get isIncoming => direction == 'incoming';
-  bool get isPending => status == 'pending';
+  bool get isPending => status == 'pending' || status == 'awaiting_confirmation' || status == 'on_hold';
 
   List<TradeOfferItem> get giveItems =>
       items.where((i) => i.side == 'give').toList();
@@ -98,7 +107,7 @@ class TradeOffer {
       steamOfferId: json['steamOfferId']?.toString(),
       partnerSteamId: json['partnerSteamId'].toString(),
       partnerName: json['partnerName']?.toString(),
-      message: json['message']?.toString(),
+      message: json['message'] != null ? _stripHtml(json['message'].toString()) : null,
       status: json['status'].toString(),
       isQuickTransfer: json['isQuickTransfer'] as bool? ?? false,
       isInternal: json['isInternal'] as bool? ?? false,

@@ -190,7 +190,8 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           // Content
           Flexible(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
+              padding: EdgeInsets.fromLTRB(
+                  20, 0, 20, MediaQuery.of(context).padding.bottom + 20 + bottomInset),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

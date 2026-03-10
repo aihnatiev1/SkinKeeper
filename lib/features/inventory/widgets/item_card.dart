@@ -369,13 +369,7 @@ class _FooterSection extends StatelessWidget {
                   child: _CharmThumb(charm: item.charms.first),
                 ),
               if (!item.tradable)
-                _TradeBanBadge(item: item, compact: compact)
-              else
-                Icon(
-                  Icons.lock_open_rounded,
-                  size: compact ? 11 : 13,
-                  color: Colors.white.withValues(alpha: 0.12),
-                ),
+                _TradeBanBadge(item: item, compact: compact),
             ],
           ),
         ],

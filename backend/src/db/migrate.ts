@@ -307,6 +307,17 @@ CREATE INDEX IF NOT EXISTS idx_daily_pl_account ON daily_pl_snapshots(steam_acco
 -- Update unique constraint on item_cost_basis to support per-account
 -- We keep the old (user_id, market_hash_name) unique for global rollup
 -- and allow per-account rows with steam_account_id set
+
+-- 014: Widen steam_offer_id for trade history synthetic IDs (hist_XXXXX)
+ALTER TABLE trade_offers ALTER COLUMN steam_offer_id TYPE VARCHAR(40);
+
+-- 015: Widen status column for awaiting_confirmation (23 chars > 20)
+ALTER TABLE trade_offers ALTER COLUMN status TYPE VARCHAR(30);
+
+-- 016: Allow new trade statuses (awaiting_confirmation, on_hold)
+ALTER TABLE trade_offers DROP CONSTRAINT IF EXISTS chk_trade_status;
+ALTER TABLE trade_offers ADD CONSTRAINT chk_trade_status
+  CHECK (status IN ('pending','accepted','declined','expired','cancelled','countered','error','awaiting_confirmation','on_hold'));
 `;
 
 export async function migrate() {

@@ -151,12 +151,14 @@ export async function getPortfolioPL(userId: number, accountId?: number): Promis
     if (holdings.length > 0) {
       const names = holdings.map((h) => h.name);
       const priceRes = await pool.query(
-        `
-        SELECT DISTINCT ON (market_hash_name) market_hash_name, price_usd
-        FROM price_history
-        WHERE market_hash_name = ANY($1) AND price_usd > 0
-        ORDER BY market_hash_name, recorded_at DESC
-        `,
+        `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name)
+         SELECT n.market_hash_name, lp.price_usd
+         FROM names n
+         JOIN LATERAL (
+           SELECT price_usd FROM price_history ph
+           WHERE ph.market_hash_name = n.market_hash_name AND ph.price_usd > 0
+           ORDER BY ph.recorded_at DESC LIMIT 1
+         ) lp ON true`,
         [names]
       );
       const priceMap = new Map(priceRes.rows.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)]));
@@ -200,26 +202,22 @@ export async function getPortfolioPL(userId: number, accountId?: number): Promis
 
   const basis = basisRes.rows[0];
 
-  // Get current value of holdings using best available price
+  // Get current value of holdings using LATERAL for fast index lookups
   const holdingsRes = await pool.query(
     `
     WITH holdings AS (
       SELECT market_hash_name, current_holding, avg_buy_price_cents
       FROM item_cost_basis
       WHERE user_id = $1 AND current_holding > 0
-    ),
-    latest_prices AS (
-      SELECT DISTINCT ON (ph.market_hash_name)
-        ph.market_hash_name, ph.price_usd
-      FROM price_history ph
-      INNER JOIN holdings h ON h.market_hash_name = ph.market_hash_name
-      WHERE ph.price_usd > 0
-      ORDER BY ph.market_hash_name, ph.recorded_at DESC
     )
     SELECT
       COALESCE(SUM((lp.price_usd * 100)::int * h.current_holding), 0)::int AS current_value
     FROM holdings h
-    LEFT JOIN latest_prices lp USING (market_hash_name)
+    LEFT JOIN LATERAL (
+      SELECT price_usd FROM price_history ph
+      WHERE ph.market_hash_name = h.market_hash_name AND ph.price_usd > 0
+      ORDER BY ph.recorded_at DESC LIMIT 1
+    ) lp ON true
     `,
     [userId]
   );
@@ -298,14 +296,6 @@ export async function getItemsPL(userId: number): Promise<ItemPL[]> {
     `
     WITH holdings AS (
       SELECT * FROM item_cost_basis WHERE user_id = $1
-    ),
-    latest_prices AS (
-      SELECT DISTINCT ON (ph.market_hash_name)
-        ph.market_hash_name, (ph.price_usd * 100)::int AS price_cents
-      FROM price_history ph
-      INNER JOIN holdings h ON h.market_hash_name = ph.market_hash_name
-      WHERE ph.price_usd > 0
-      ORDER BY ph.market_hash_name, ph.recorded_at DESC
     )
     SELECT
       h.market_hash_name,
@@ -316,11 +306,15 @@ export async function getItemsPL(userId: number): Promise<ItemPL[]> {
       h.total_earned_cents,
       h.current_holding,
       h.realized_profit_cents,
-      COALESCE(lp.price_cents, 0) AS current_price_cents,
-      COALESCE(lp.price_cents * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding) AS unrealized_profit_cents
+      COALESCE((lp.price_usd * 100)::int, 0) AS current_price_cents,
+      COALESCE((lp.price_usd * 100)::int * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding) AS unrealized_profit_cents
     FROM holdings h
-    LEFT JOIN latest_prices lp USING (market_hash_name)
-    ORDER BY ABS(h.realized_profit_cents + COALESCE(lp.price_cents * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding)) DESC
+    LEFT JOIN LATERAL (
+      SELECT price_usd FROM price_history ph
+      WHERE ph.market_hash_name = h.market_hash_name AND ph.price_usd > 0
+      ORDER BY ph.recorded_at DESC LIMIT 1
+    ) lp ON true
+    ORDER BY ABS(h.realized_profit_cents + COALESCE((lp.price_usd * 100)::int * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding)) DESC
     `,
     [userId]
   );

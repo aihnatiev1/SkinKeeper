@@ -29,6 +29,7 @@ class PortfolioScreen extends ConsumerWidget {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const AddTransactionSheet(),
@@ -187,6 +188,7 @@ class _PLQuickSummary extends ConsumerWidget {
               HapticFeedback.mediumImpact();
               showModalBottomSheet(
                 context: context,
+                useRootNavigator: true,
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
                 builder: (_) => const AddTransactionSheet(),
@@ -771,7 +773,8 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
 
     final minY = widget.history.map((e) => e.value).reduce((a, b) => a < b ? a : b);
     final maxY = widget.history.map((e) => e.value).reduce((a, b) => a > b ? a : b);
-    final pad = (maxY - minY) * 0.12;
+    final range = maxY - minY > 0 ? maxY - minY : maxY.abs() * 0.1 + 1;
+    final pad = range * 0.12;
     final isUp = widget.history.last.value >= widget.history.first.value;
     final lineColor = isUp ? AppTheme.profit : AppTheme.loss;
 
@@ -836,7 +839,7 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  horizontalInterval: (maxY - minY) / 3,
+                  horizontalInterval: range / 3,
                   getDrawingHorizontalLine: (_) => FlLine(
                     color: Colors.white.withValues(alpha: 0.04),
                     strokeWidth: 1,

@@ -18,6 +18,7 @@ import purchasesRoutes from "./routes/purchases.js";
 import exportRoutes from "./routes/export.js";
 import manualTxRoutes from "./routes/manualTransactions.js";
 import legalRoutes from "./routes/legal.js";
+import adminRoutes from "./routes/admin.js";
 
 dotenv.config();
 
@@ -50,6 +51,7 @@ app.use("/api/trades", tradesRoutes);
 app.use("/api/purchases", purchasesRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/transactions", manualTxRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

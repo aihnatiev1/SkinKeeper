@@ -175,6 +175,19 @@ export class SteamSessionService {
     accountId: number,
     session: SteamSession
   ): Promise<void> {
+    // Validate: session's steam_id must match the account's steam_id
+    const sessionSteamId = this.extractSteamIdFromCookie(session.steamLoginSecure);
+    if (sessionSteamId) {
+      const { rows } = await pool.query(
+        `SELECT steam_id FROM steam_accounts WHERE id = $1`,
+        [accountId]
+      );
+      if (rows[0]?.steam_id && rows[0].steam_id !== sessionSteamId) {
+        console.error(`[Session] MISMATCH: account ${accountId} has steam_id ${rows[0].steam_id} but session belongs to ${sessionSteamId}. Rejecting save.`);
+        throw new Error(`Session steam_id mismatch: expected ${rows[0].steam_id}, got ${sessionSteamId}`);
+      }
+    }
+
     await pool.query(
       `UPDATE steam_accounts
        SET steam_session_id = $1,
@@ -362,6 +375,19 @@ export class SteamSessionService {
     if (pending.status === "authenticated" && pending.cookies) {
       await this.saveSession(accountId, pending.cookies);
       const refreshToken = pending.loginSession.refreshToken;
+      const accessToken = pending.loginSession.accessToken;
+      console.log(`[Session] QR auth complete for account ${accountId}:`);
+      console.log(`[Session]   refreshToken: ${refreshToken ? refreshToken.substring(0, 30) + '... (' + refreshToken.length + ' chars)' : 'NULL'}`);
+      console.log(`[Session]   accessToken: ${accessToken ? accessToken.substring(0, 30) + '... (' + accessToken.length + ' chars)' : 'NULL'}`);
+      if (refreshToken) {
+        try {
+          const parts = refreshToken.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+            console.log(`[Session]   refreshToken exp: ${new Date(payload.exp * 1000).toISOString()}, sub: ${payload.sub}`);
+          }
+        } catch { /* ignore */ }
+      }
       await this.saveSessionMeta(accountId, "qr", refreshToken || null);
       this.pendingSessions.delete(nonce);
       return { status: "authenticated" };
@@ -547,11 +573,12 @@ export class SteamSessionService {
     const refreshToken = this.safeDecrypt(row.steam_refresh_token);
 
     try {
+      // Use WebBrowser + getWebCookies() which does finalizelogin with refresh token as nonce.
+      // refreshAccessToken() fails with AccessDenied for WebBrowser since 2025-04.
       const loginSession = new LoginSession(EAuthTokenPlatformType.WebBrowser);
       loginSession.refreshToken = refreshToken;
 
-      await loginSession.refreshAccessToken();
-
+      // getWebCookies() for WebBrowser uses finalizelogin (not refreshAccessToken)
       const cookieStrings = await loginSession.getWebCookies();
       const session = this.parseCookies(cookieStrings);
 

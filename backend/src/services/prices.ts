@@ -1,6 +1,7 @@
 import axios from "axios";
 import { pool } from "../db/pool.js";
 import { evaluateAlerts } from "./alertEngine.js";
+import { recordFetchStart, recordSuccess, recordFailure, record429, updateCrawlerState } from "./priceStats.js";
 
 interface SkinportItem {
   market_hash_name: string;
@@ -34,6 +35,7 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
   }
 
   for (let attempt = 0; attempt < SKINPORT_MAX_RETRIES; attempt++) {
+    const endLatency = recordFetchStart("skinport");
     try {
       const { data } = await axios.get<SkinportItem[]>(
         "https://api.skinport.com/v1/items",
@@ -43,6 +45,7 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
           timeout: 30000,
         }
       );
+      endLatency();
 
       const prices = new Map<string, number>();
       for (const item of data) {
@@ -55,25 +58,29 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
       skinportCache = prices;
       skinportLastFetch = Date.now();
       skinportBackoffUntil = 0;
+      recordSuccess("skinport", prices.size);
       return prices;
     } catch (err: any) {
+      endLatency();
       const status = err?.response?.status;
       if (status === 429) {
+        record429("skinport");
         const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
         const waitSec = retryAfter > 0 ? retryAfter : (attempt + 1) * 60; // default: 60s, 120s, 180s
         skinportBackoffUntil = Date.now() + waitSec * 1000;
-        console.warn(`[Skinport] 429 rate limited (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), waiting ${waitSec}s`);
+        console.warn(`[Skinport] 429 rate limited (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), retry-after=${retryAfter}s, waiting ${waitSec}s`);
 
         if (attempt < SKINPORT_MAX_RETRIES - 1) {
           await new Promise((r) => setTimeout(r, waitSec * 1000));
         }
       } else {
-        // Non-429 error — don't retry
+        recordFailure("skinport", err.message || String(err));
         throw err;
       }
     }
   }
 
+  recordFailure("skinport", `All ${SKINPORT_MAX_RETRIES} retries exhausted (429)`);
   console.error(`[Skinport] All ${SKINPORT_MAX_RETRIES} retries exhausted due to 429`);
   if (skinportCache.size > 0) return skinportCache;
   return new Map();
@@ -155,22 +162,29 @@ class AdaptiveCrawler {
       return;
     }
 
+    const endLatency = recordFetchStart(this.source);
     try {
       const itemName = await this.getNextItem();
       if (!itemName) {
+        endLatency();
+        updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
         this.timer = setTimeout(() => this.tick(), 60_000);
         return;
       }
 
       const price = await this.fetchFn(itemName);
+      endLatency();
+
       if (price !== null) {
         await savePrices(new Map([[itemName, price]]), this.source);
-        console.log(`[${this.config.name}] ${itemName}: $${price}`);
+        console.log(`[${this.config.name}] ${itemName}: $${price} (${(this.currentInterval / 1000).toFixed(1)}s interval)`);
       } else {
         // Mark as fetched so we don't loop on non-marketable items
         await savePrices(new Map([[itemName, 0]]), this.source);
         console.log(`[${this.config.name}] ${itemName}: no price`);
       }
+
+      recordSuccess(this.source, 1);
 
       // Success — track and maybe speed up
       this.consecutiveSuccesses++;
@@ -182,8 +196,10 @@ class AdaptiveCrawler {
         this.consecutiveSuccesses = 0;
       }
     } catch (err: any) {
+      endLatency();
       const status = err?.response?.status ?? err?.status;
       if (status === 429 || err?.retryAfter) {
+        record429(this.source);
         const retryAfter = err.retryAfter
           ?? parseInt(err.response?.headers?.["retry-after"] || "0", 10);
 
@@ -198,15 +214,18 @@ class AdaptiveCrawler {
           this.pausedUntil = Date.now() + retryAfter * 1000;
           console.log(`[${this.config.name}] 429 — pausing ${retryAfter}s, interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
           this.timer = setTimeout(() => this.tick(), retryAfter * 1000 + 1000);
+          updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
           return;
         }
 
         console.log(`[${this.config.name}] 429 — interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
       } else {
+        recordFailure(this.source, err.message || String(err));
         console.error(`[${this.config.name}] Error:`, err.message || err);
       }
     }
 
+    updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
     this.timer = setTimeout(() => this.tick(), this.currentInterval);
   }
 
@@ -309,15 +328,22 @@ export async function getLatestPrices(
 ): Promise<Map<string, Record<string, number>>> {
   if (marketHashNames.length === 0) return new Map();
 
-  const placeholders = marketHashNames.map((_, i) => `$${i + 1}`).join(",");
-
+  // Use LATERAL join to do one fast index-only lookup per item×source
+  // instead of scanning millions of rows with DISTINCT ON
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (market_hash_name, source)
-       market_hash_name, source, price_usd
-     FROM price_history
-     WHERE market_hash_name IN (${placeholders})
-     ORDER BY market_hash_name, source, recorded_at DESC`,
-    marketHashNames
+    `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name),
+          sources AS (SELECT unnest(ARRAY['skinport','steam','csfloat','dmarket']) AS source)
+     SELECT n.market_hash_name, s.source, lp.price_usd
+     FROM names n
+     CROSS JOIN sources s
+     JOIN LATERAL (
+       SELECT price_usd FROM price_history ph
+       WHERE ph.market_hash_name = n.market_hash_name
+         AND ph.source = s.source
+       ORDER BY ph.recorded_at DESC
+       LIMIT 1
+     ) lp ON true`,
+    [marketHashNames]
   );
 
   const result = new Map<string, Record<string, number>>();

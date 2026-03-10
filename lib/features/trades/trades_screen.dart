@@ -66,21 +66,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
                           ),
                         ),
                       ),
-                      GlassIconButton(
-                        icon: Icons.sync_rounded,
-                        onTap: () async {
-                          HapticFeedback.mediumImpact();
-                          try {
-                            await ref.read(tradesProvider.notifier).syncFromSteam();
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Sync failed: ${friendlyError(e)}')),
-                              );
-                            }
-                          }
-                        },
-                      ),
+                      _SyncButton(ref: ref),
                     ],
                   ),
                 ),
@@ -562,8 +548,31 @@ class _TradeOfferTile extends ConsumerWidget {
                 ),
               ],
 
-              // Fast actions
-              if (showActions && offer.isPending) ...[
+              // Awaiting mobile confirmation hint (outgoing only — sender must confirm)
+              if (offer.status == 'awaiting_confirmation') ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppTheme.r8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.phone_android_rounded, color: Colors.orange, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Confirm or revoke in Steam mobile app',
+                          style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ]
+              // Fast actions for pending
+              else if (showActions && offer.isPending) ...[
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -822,6 +831,8 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (Color color, String label) = switch (status) {
       'pending' => (AppTheme.warning, 'Pending'),
+      'awaiting_confirmation' => (Colors.orange, 'Awaiting Confirmation'),
+      'on_hold' => (AppTheme.warning, 'On Hold'),
       'accepted' => (AppTheme.profit, 'Accepted'),
       'declined' => (AppTheme.loss, 'Declined'),
       'cancelled' => (AppTheme.textMuted, 'Cancelled'),
@@ -845,6 +856,58 @@ class _StatusBadge extends StatelessWidget {
           color: color,
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sync button with loading spinner
+// ---------------------------------------------------------------------------
+
+class _SyncButton extends StatefulWidget {
+  final WidgetRef ref;
+  const _SyncButton({required this.ref});
+
+  @override
+  State<_SyncButton> createState() => _SyncButtonState();
+}
+
+class _SyncButtonState extends State<_SyncButton> {
+  bool _syncing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_syncing) {
+      return const SizedBox(
+        width: 40, height: 40,
+        child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent))),
+      );
+    }
+    return GlassIconButton(
+      icon: Icons.sync_rounded,
+      onTap: () async {
+              HapticFeedback.mediumImpact();
+              setState(() => _syncing = true);
+              try {
+                await widget.ref.read(tradesProvider.notifier).syncFromSteam();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Synced from Steam'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Sync failed: ${friendlyError(e)}')),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _syncing = false);
+              }
+            },
     );
   }
 }

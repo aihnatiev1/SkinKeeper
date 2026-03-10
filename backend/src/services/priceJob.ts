@@ -4,26 +4,38 @@ import { startCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
 import { runDailyPLSnapshot } from "./profitLoss.js";
 import { checkExpiredSubscriptions } from "./purchases.js";
+import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js";
 
 async function fetchAndSaveSkinport(): Promise<void> {
   console.log("[CRON] Fetching Skinport prices...");
   const prices = await fetchSkinportPrices();
+  // savePrices only for new data (fetchSkinportPrices already records stats internally)
   await savePrices(prices, "skinport");
   console.log(`[CRON] Saved ${prices.size} Skinport prices`);
 }
 
 async function fetchAndSaveDMarket(): Promise<void> {
   console.log("[CRON] Fetching DMarket prices...");
+  const endLatency = recordFetchStart("dmarket");
   const names = await getUniqueInventoryNames();
   if (names.length === 0) {
+    endLatency();
     console.log("[CRON] No inventory items, skipping DMarket fetch");
     return;
   }
-  const prices = await fetchDMarketPrices(names);
-  if (prices.size > 0) {
-    await savePrices(prices, "dmarket");
+  try {
+    const prices = await fetchDMarketPrices(names);
+    endLatency();
+    if (prices.size > 0) {
+      await savePrices(prices, "dmarket");
+    }
+    recordSuccess("dmarket", prices.size);
+    console.log(`[CRON] Saved ${prices.size}/${names.length} DMarket prices`);
+  } catch (err: any) {
+    endLatency();
+    recordFailure("dmarket", err.message || String(err));
+    throw err;
   }
-  console.log(`[CRON] Saved ${prices.size} DMarket prices`);
 }
 
 export function startPriceJobs() {

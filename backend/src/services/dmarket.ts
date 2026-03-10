@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import axios from "axios";
+import { record429, recordFailure } from "./priceStats.js";
 
 interface DMarketItem {
   title: string;
@@ -88,7 +89,14 @@ export async function fetchDMarketItemPrice(
       return parseInt(data.objects[0].price.USD, 10) / 100;
     }
     return null;
-  } catch {
+  } catch (err: any) {
+    const status = err?.response?.status;
+    if (status === 429) {
+      record429("dmarket");
+      console.warn(`[DMarket] 429 for ${marketHashName}`);
+    } else {
+      recordFailure("dmarket", err.message || String(err));
+    }
     return null;
   }
 }

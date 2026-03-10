@@ -180,10 +180,23 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
         );
       }).where((i) {
         if (i.marketHashName == null) return false;
-        // Filter out non-tradable junk by name
         if (_kExcludedNames.contains(i.marketHashName)) return false;
-        // Filter out graffiti patterns
         if (i.marketHashName!.startsWith('Sealed Graffiti |')) return false;
+        return true;
+      }).toList();
+
+      // Remove items with active trade protection
+      _myItems = _myItems.where((i) {
+        final raw = myList.firstWhere(
+          (e) => (e as Map<String, dynamic>)['asset_id'] == i.assetId,
+          orElse: () => <String, dynamic>{},
+        ) as Map<String, dynamic>;
+        if (raw['tradable'] == false) return false;
+        final ban = raw['trade_ban_until'];
+        if (ban != null) {
+          final banDate = DateTime.tryParse(ban.toString());
+          if (banDate != null && banDate.isAfter(DateTime.now())) return false;
+        }
         return true;
       }).toList();
 

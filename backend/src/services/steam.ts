@@ -182,6 +182,10 @@ export async function fetchSteamInventory(
   const items: ParsedInventoryItem[] = [];
   let lastAssetId: string | undefined;
 
+  let totalExpected = 0;
+  let totalAssetsReceived = 0;
+  let totalFiltered = 0;
+
   // Paginate through inventory
   for (let page = 0; page < 20; page++) {
     const url = `https://steamcommunity.com/inventory/${steamId}/730/2`;
@@ -220,8 +224,13 @@ export async function fetchSteamInventory(
 
     if (!data?.success || !data?.assets) break;
 
+    if (page === 0) totalExpected = data.total_inventory_count ?? 0;
+
     const assets = data.assets as SteamInventoryAsset[];
     const descriptions = data.descriptions as SteamInventoryDescription[];
+    totalAssetsReceived += assets.length;
+
+    console.log(`[Steam] Inventory page ${page}: ${assets.length} assets, more_items=${data.more_items}, last_assetid=${data.last_assetid}, total=${totalAssetsReceived}/${totalExpected}`);
 
     // Build lookup map: classid_instanceid -> description
     const descMap = new Map<string, SteamInventoryDescription>();
@@ -240,8 +249,9 @@ export async function fetchSteamInventory(
       let tradeBanUntil: string | null = null;
       if (desc.tradable === 0 && desc.owner_descriptions) {
         for (const od of desc.owner_descriptions) {
-          // Match both "Tradable After" and "Marketable After" date formats
-          const match = od.value.match(/(?:Tradable|Marketable) After (.+?)(?:\s*\(|$)/i);
+          // Match "Tradable After", "Marketable After" date formats (may be inside HTML)
+          const cleaned = od.value.replace(/<[^>]+>/g, '');
+          const match = cleaned.match(/(?:Tradable|Marketable) After (.+?)(?:\s*\(|$)/i);
           if (match) {
             const parsed = new Date(match[1]);
             if (!isNaN(parsed.getTime())) {
@@ -253,7 +263,14 @@ export async function fetchSteamInventory(
 
       // Skip permanently non-marketable items (used graffiti, default items, etc.)
       // but KEEP items that are only temporarily non-marketable (trade ban)
-      if (desc.marketable === 0 && !tradeBanUntil) continue;
+      if (desc.marketable === 0 && !tradeBanUntil) {
+        totalFiltered++;
+        // Log valuable items being filtered — helps catch bugs
+        if (/knife|karambit|bayonet|ursus|talon|navaja|stiletto|nomad|skeleton|paracord|survival|classic|butterfly|bowie|falchion|shadow|huntsman|gut|flip|gloves|wraps/i.test(desc.market_hash_name)) {
+          console.warn(`[Steam] WARN: Filtering valuable item "${desc.market_hash_name}" (marketable=0, tradable=${desc.tradable}, owner_desc=${JSON.stringify(desc.owner_descriptions?.map(o => o.value))})`);
+        }
+        continue;
+      }
 
       // Extract wear from market_hash_name: "AK-47 | Redline (Field-Tested)"
       const wearMatch = desc.market_hash_name.match(
@@ -287,13 +304,14 @@ export async function fetchSteamInventory(
       });
     }
 
-    // Check if more pages
+    // Check if more pages — use Steam's cursor, not our last asset
     if (!data.more_items) break;
-    lastAssetId = assets[assets.length - 1].assetid;
+    lastAssetId = data.last_assetid ?? assets[assets.length - 1].assetid;
 
     // Respect rate limits
     await new Promise((r) => setTimeout(r, 1000));
   }
 
+  console.log(`[Steam] Inventory done: ${items.length} items kept, ${totalFiltered} filtered, ${totalAssetsReceived} assets received, ${totalExpected} expected`);
   return items;
 }
