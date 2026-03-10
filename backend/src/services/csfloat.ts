@@ -1,4 +1,5 @@
 import axios from "axios";
+import { AdaptiveCrawler, savePrices } from "./prices.js";
 
 interface CSFloatListing {
   id: string;
@@ -13,64 +14,64 @@ interface CSFloatListing {
  * Fetch the lowest listing price for a single item on CSFloat.
  * Returns price in USD (cents / 100) or null if unavailable.
  */
-export async function fetchCSFloatItemPrice(
-  marketHashName: string,
-  apiKey: string
+async function fetchCSFloatItemPrice(
+  marketHashName: string
 ): Promise<number | null> {
-  try {
-    const { data } = await axios.get<CSFloatListing[]>(
-      "https://csfloat.com/api/v1/listings",
-      {
-        params: {
-          market_hash_name: marketHashName,
-          sort_by: "lowest_price",
-          limit: 1,
-        },
-        headers: { Authorization: apiKey },
-        timeout: 10000,
-      }
-    );
+  const apiKey = process.env.CSFLOAT_API_KEY;
+  if (!apiKey) return null;
 
-    if (data.length > 0) {
-      return data[0].price / 100;
+  const { data } = await axios.get<{ data: CSFloatListing[] }>(
+    "https://csfloat.com/api/v1/listings",
+    {
+      params: {
+        market_hash_name: marketHashName,
+        sort_by: "lowest_price",
+        limit: 1,
+      },
+      headers: { Authorization: apiKey },
+      timeout: 10000,
     }
-    return null;
-  } catch {
-    return null;
+  );
+
+  const listings = data.data;
+  if (listings && listings.length > 0) {
+    return listings[0].price / 100;
   }
+  return null;
 }
 
-/**
- * Fetch prices for multiple items from CSFloat.
- * Deduplicates names, adds 200ms delay between requests for rate limiting.
- * Returns Map<market_hash_name, price_usd>.
- */
-export async function fetchCSFloatPrices(
-  marketHashNames: string[]
-): Promise<Map<string, number>> {
-  const prices = new Map<string, number>();
+// CSFloat has strict rate limits — start slow, adapt
+const csfloatCrawler = new AdaptiveCrawler(
+  {
+    name: "CSFloat",
+    minIntervalMs: 3000,         // fastest: 1 req / 3s
+    maxIntervalMs: 120_000,      // slowest: 1 req / 2min
+    startIntervalMs: 5000,       // start: 1 req / 5s
+    backoffFactor: 2.5,          // aggressive backoff
+    cooldownFactor: 0.9,         // 10% faster after streak
+    successesBeforeSpeedup: 8,   // 8 successes to speed up
+    refreshAgeMs: 60 * 60_000,   // refresh after 1 hour
+  },
+  "csfloat",
+  fetchCSFloatItemPrice
+);
 
+export function startCSFloatCrawler(): void {
   const apiKey = process.env.CSFLOAT_API_KEY;
   if (!apiKey) {
-    console.warn("[CSFloat] CSFLOAT_API_KEY not set, skipping price fetch");
-    return prices;
+    console.warn("[CSFloat] CSFLOAT_API_KEY not set, crawler disabled");
+    return;
   }
+  csfloatCrawler.start(8000);
+}
 
-  const uniqueNames = [...new Set(marketHashNames)];
+export function stopCSFloatCrawler(): void {
+  csfloatCrawler.stop();
+}
 
-  for (let i = 0; i < uniqueNames.length; i++) {
-    const name = uniqueNames[i];
-    const price = await fetchCSFloatItemPrice(name, apiKey);
-    if (price !== null) {
-      prices.set(name, price);
-    }
-
-    // Rate limiting: 200ms delay between requests (skip after last)
-    if (i < uniqueNames.length - 1) {
-      await new Promise((r) => setTimeout(r, 200));
-    }
-  }
-
-  console.log(`[CSFloat] Fetched ${prices.size}/${uniqueNames.length} prices`);
-  return prices;
+// Keep for backward compat (no longer used in cron)
+export async function fetchCSFloatPrices(
+  _marketHashNames: string[]
+): Promise<Map<string, number>> {
+  return new Map();
 }

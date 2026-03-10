@@ -13,26 +13,64 @@ final sessionLinkModeProvider = StateProvider<bool>((ref) => false);
 // Session status
 // ---------------------------------------------------------------------------
 
+class SessionStatus {
+  final String status;
+  final String? activeAccountName;
+  final bool needsReauth;
+  final bool refreshTokenExpired;
+  final String? refreshTokenExpiresAt;
+
+  const SessionStatus({
+    this.status = 'none',
+    this.activeAccountName,
+    this.needsReauth = false,
+    this.refreshTokenExpired = false,
+    this.refreshTokenExpiresAt,
+  });
+}
+
 final sessionStatusProvider =
-    AsyncNotifierProvider<SessionStatusNotifier, String>(
+    AsyncNotifierProvider<SessionStatusNotifier, SessionStatus>(
   SessionStatusNotifier.new,
 );
 
-class SessionStatusNotifier extends AsyncNotifier<String> {
+class SessionStatusNotifier extends AsyncNotifier<SessionStatus> {
   @override
-  Future<String> build() async {
+  Future<SessionStatus> build() async {
     return _fetchStatus();
   }
 
-  Future<String> _fetchStatus() async {
+  Future<SessionStatus> _fetchStatus() async {
     try {
       final api = ref.read(apiClientProvider);
       final response = await api.get('/session/status');
       final data = response.data as Map<String, dynamic>;
-      return data['status'] as String? ?? 'none';
+      final status = data['status'] as String? ?? 'none';
+      final needsReauth = data['needsReauth'] as bool? ?? false;
+      final refreshTokenExpired = data['refreshTokenExpired'] as bool? ?? false;
+      final refreshTokenExpiresAt = data['refreshTokenExpiresAt'] as String?;
+      // Find active account name from the accounts list
+      String? activeAccountName;
+      final accounts = data['accounts'] as List<dynamic>?;
+      if (accounts != null) {
+        for (final acc in accounts) {
+          final a = acc as Map<String, dynamic>;
+          if (a['isActive'] == true) {
+            activeAccountName = a['displayName'] as String?;
+            break;
+          }
+        }
+      }
+      return SessionStatus(
+        status: status,
+        activeAccountName: activeAccountName,
+        needsReauth: needsReauth,
+        refreshTokenExpired: refreshTokenExpired,
+        refreshTokenExpiresAt: refreshTokenExpiresAt,
+      );
     } catch (e) {
       dev.log('Session status fetch failed: $e', name: 'Session');
-      return 'none';
+      return const SessionStatus();
     }
   }
 
@@ -122,6 +160,7 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
       final response = await api.get('/session/qr/poll/$nonce$query');
       final data = response.data as Map<String, dynamic>;
       final pollStatus = data['status'] as String? ?? 'pending';
+
       state = state.copyWith(status: pollStatus);
       return pollStatus;
     } catch (e) {
@@ -193,6 +232,7 @@ class CredentialAuthNotifier extends StateNotifier<CredentialAuthState> {
       });
       final data = response.data as Map<String, dynamic>;
       final guardRequired = data['guardRequired'] as bool? ?? false;
+
       state = state.copyWith(
         nonce: data['nonce'] as String?,
         guardRequired: guardRequired,
@@ -219,6 +259,7 @@ class CredentialAuthNotifier extends StateNotifier<CredentialAuthState> {
       });
       final data = response.data as Map<String, dynamic>;
       final status = data['status'] as String? ?? 'pending';
+
       state = state.copyWith(
         status: status,
         loading: false,
@@ -285,6 +326,7 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
       await api.post('/session/token$query', data: {
         'steamLoginSecure': steamLoginSecure,
       });
+
       state = state.copyWith(
         status: 'authenticated',
         loading: false,

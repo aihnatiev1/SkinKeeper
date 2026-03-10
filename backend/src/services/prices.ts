@@ -1,5 +1,6 @@
 import axios from "axios";
 import { pool } from "../db/pool.js";
+import { evaluateAlerts } from "./alertEngine.js";
 
 interface SkinportItem {
   market_hash_name: string;
@@ -42,31 +43,191 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
   return prices;
 }
 
-// Steam Market price (limited, one item at a time)
+// ─── Adaptive Rate Limiter ───────────────────────────────────────────────
+
+interface AdaptiveLimiterConfig {
+  name: string;
+  minIntervalMs: number;   // fastest we'll ever go
+  maxIntervalMs: number;   // slowest before giving up
+  startIntervalMs: number; // initial interval
+  backoffFactor: number;   // multiply interval on 429
+  cooldownFactor: number;  // multiply interval on success (< 1 to speed up)
+  successesBeforeSpeedup: number; // consecutive successes needed to speed up
+  refreshAgeMs: number;    // skip items priced more recently than this
+}
+
+class AdaptiveCrawler {
+  private config: AdaptiveLimiterConfig;
+  private currentInterval: number;
+  private consecutiveSuccesses = 0;
+  private pausedUntil = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private source: string;
+  private fetchFn: (name: string) => Promise<number | null>;
+
+  constructor(
+    config: AdaptiveLimiterConfig,
+    source: string,
+    fetchFn: (name: string) => Promise<number | null>
+  ) {
+    this.config = config;
+    this.source = source;
+    this.fetchFn = fetchFn;
+    this.currentInterval = config.startIntervalMs;
+  }
+
+  async getNextItem(): Promise<string | null> {
+    // Items without any price for this source (only tradable items have market prices)
+    const { rows: noPriceRows } = await pool.query(
+      `SELECT DISTINCT ii.market_hash_name
+       FROM inventory_items ii
+       WHERE ii.tradable = true
+         AND NOT EXISTS (
+           SELECT 1 FROM price_history ph
+           WHERE ph.market_hash_name = ii.market_hash_name
+             AND ph.source = $1
+         )
+       LIMIT 1`,
+      [this.source]
+    );
+    if (noPriceRows.length > 0) return noPriceRows[0].market_hash_name;
+
+    // Item with oldest price (older than refreshAgeMs)
+    const ageSec = Math.floor(this.config.refreshAgeMs / 1000);
+    const { rows: oldestRows } = await pool.query(
+      `SELECT ph.market_hash_name, MAX(ph.recorded_at) AS last_at
+       FROM price_history ph
+       INNER JOIN inventory_items ii ON ii.market_hash_name = ph.market_hash_name
+       WHERE ph.source = $1 AND ii.tradable = true
+       GROUP BY ph.market_hash_name
+       HAVING MAX(ph.recorded_at) < NOW() - INTERVAL '1 second' * $2
+       ORDER BY last_at ASC
+       LIMIT 1`,
+      [this.source, ageSec]
+    );
+    if (oldestRows.length > 0) return oldestRows[0].market_hash_name;
+
+    return null;
+  }
+
+  private async tick(): Promise<void> {
+    // If rate limited, wait
+    if (Date.now() < this.pausedUntil) {
+      const waitMs = this.pausedUntil - Date.now();
+      console.log(`[${this.config.name}] Rate limited, resuming in ${Math.ceil(waitMs / 1000)}s`);
+      this.timer = setTimeout(() => this.tick(), waitMs + 1000);
+      return;
+    }
+
+    try {
+      const itemName = await this.getNextItem();
+      if (!itemName) {
+        this.timer = setTimeout(() => this.tick(), 60_000);
+        return;
+      }
+
+      const price = await this.fetchFn(itemName);
+      if (price !== null) {
+        await savePrices(new Map([[itemName, price]]), this.source);
+        console.log(`[${this.config.name}] ${itemName}: $${price}`);
+      } else {
+        // Mark as fetched so we don't loop on non-marketable items
+        await savePrices(new Map([[itemName, 0]]), this.source);
+        console.log(`[${this.config.name}] ${itemName}: no price`);
+      }
+
+      // Success — track and maybe speed up
+      this.consecutiveSuccesses++;
+      if (this.consecutiveSuccesses >= this.config.successesBeforeSpeedup) {
+        this.currentInterval = Math.max(
+          this.config.minIntervalMs,
+          Math.floor(this.currentInterval * this.config.cooldownFactor)
+        );
+        this.consecutiveSuccesses = 0;
+      }
+    } catch (err: any) {
+      const status = err?.response?.status ?? err?.status;
+      if (status === 429 || err?.retryAfter) {
+        const retryAfter = err.retryAfter
+          ?? parseInt(err.response?.headers?.["retry-after"] || "0", 10);
+
+        // Exponential backoff on interval
+        this.currentInterval = Math.min(
+          this.config.maxIntervalMs,
+          Math.floor(this.currentInterval * this.config.backoffFactor)
+        );
+        this.consecutiveSuccesses = 0;
+
+        if (retryAfter > 0) {
+          this.pausedUntil = Date.now() + retryAfter * 1000;
+          console.log(`[${this.config.name}] 429 — pausing ${retryAfter}s, interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
+          this.timer = setTimeout(() => this.tick(), retryAfter * 1000 + 1000);
+          return;
+        }
+
+        console.log(`[${this.config.name}] 429 — interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
+      } else {
+        console.error(`[${this.config.name}] Error:`, err.message || err);
+      }
+    }
+
+    this.timer = setTimeout(() => this.tick(), this.currentInterval);
+  }
+
+  start(delayMs = 5000): void {
+    console.log(`[${this.config.name}] Starting crawler (interval: ${(this.currentInterval / 1000).toFixed(1)}s)`);
+    this.timer = setTimeout(() => this.tick(), delayMs);
+  }
+
+  stop(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+}
+
+// ─── Steam Market ────────────────────────────────────────────────────────
+
 export async function fetchSteamMarketPrice(
   marketHashName: string
 ): Promise<number | null> {
-  try {
-    const { data } = await axios.get(
-      "https://steamcommunity.com/market/priceoverview/",
-      {
-        params: {
-          appid: 730,
-          currency: 1, // USD
-          market_hash_name: marketHashName,
-        },
-        timeout: 10000,
-      }
-    );
-    if (data.success && data.lowest_price) {
-      // Parse "$12.34" -> 12.34
-      return parseFloat(data.lowest_price.replace(/[^0-9.]/g, ""));
+  const { data } = await axios.get(
+    "https://steamcommunity.com/market/priceoverview/",
+    {
+      params: {
+        appid: 730,
+        currency: 1, // USD
+        market_hash_name: marketHashName,
+      },
+      timeout: 10000,
     }
-    return null;
-  } catch {
-    return null;
+  );
+  if (data.success && data.lowest_price) {
+    return parseFloat(data.lowest_price.replace(/[^0-9.]/g, ""));
   }
+  return null;
 }
+
+const steamCrawler = new AdaptiveCrawler(
+  {
+    name: "Steam",
+    minIntervalMs: 3000,        // fastest: 1 req / 3s
+    maxIntervalMs: 60_000,      // slowest: 1 req / 60s
+    startIntervalMs: 3500,      // start: 1 req / 3.5s
+    backoffFactor: 2,           // double interval on 429
+    cooldownFactor: 0.85,       // 15% faster after streak
+    successesBeforeSpeedup: 5,  // 5 successes to speed up
+    refreshAgeMs: 30 * 60_000,  // refresh after 30 min
+  },
+  "steam",
+  fetchSteamMarketPrice
+);
+
+export function startSteamCrawler(): void { steamCrawler.start(5000); }
+export function stopSteamCrawler(): void { steamCrawler.stop(); }
+
+// ─── Shared Utilities ────────────────────────────────────────────────────
 
 // Store prices in DB for history
 export async function savePrices(
@@ -97,6 +258,13 @@ export async function savePrices(
       params
     );
   }
+
+  // Evaluate alerts after saving prices
+  try {
+    await evaluateAlerts(prices, source);
+  } catch (err) {
+    console.error("[Alerts] Evaluation failed:", err);
+  }
 }
 
 // Get latest prices for a list of items
@@ -118,8 +286,10 @@ export async function getLatestPrices(
 
   const result = new Map<string, Record<string, number>>();
   for (const row of rows) {
+    const price = parseFloat(row.price_usd);
+    if (price <= 0) continue; // skip placeholder 0-prices
     const existing = result.get(row.market_hash_name) ?? {};
-    existing[row.source] = parseFloat(row.price_usd);
+    existing[row.source] = price;
     result.set(row.market_hash_name, existing);
   }
   return result;
@@ -143,6 +313,7 @@ export async function getPriceHistory(
      FROM price_history
      WHERE market_hash_name = $1
        AND recorded_at > NOW() - INTERVAL '1 day' * $2
+       AND price_usd > 0
      ORDER BY recorded_at ASC`,
     [marketHashName, days]
   );
@@ -152,3 +323,7 @@ export async function getPriceHistory(
     recorded_at: r.recorded_at,
   }));
 }
+
+// Export the AdaptiveCrawler class for use by CSFloat
+export { AdaptiveCrawler };
+export type { AdaptiveLimiterConfig };

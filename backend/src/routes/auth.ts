@@ -27,7 +27,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
            ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4`,
           [userId, steamId, profile.personaname, profile.avatarfull]
         );
-        res.redirect(`skintracker://account-linked?steamId=${steamId}`);
+        res.redirect(`skinkeeper://account-linked?steamId=${steamId}`);
         return;
       }
     }
@@ -66,11 +66,11 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       { expiresIn: "30d" }
     );
 
-    const deepLink = `skintracker://auth?token=${encodeURIComponent(token)}`;
+    const deepLink = `skinkeeper://auth?token=${encodeURIComponent(token)}`;
     res.redirect(deepLink);
   } catch (err) {
     console.error("Steam callback error:", err);
-    res.redirect("skintracker://auth?error=auth_failed");
+    res.redirect("skinkeeper://auth?error=auth_failed");
   }
 });
 
@@ -356,6 +356,115 @@ router.get("/accounts/:accountId/session/status", authMiddleware, async (req: Au
   } catch (err) {
     console.error("Account session status error:", err);
     res.status(500).json({ error: "Failed to check session status" });
+  }
+});
+
+// ─── QR Login (Unauthenticated) ─────────────────────────────────────────
+// Allow initial app login via QR code — no JWT required.
+// On success: upserts user + steam_account, saves session cookies, returns JWT.
+
+router.post("/qr/start", async (req: Request, res: Response) => {
+  try {
+    const result = await SteamSessionService.startQRSession(0);
+    const pending = (SteamSessionService as any).pendingSessions.get(result.nonce);
+    if (pending) {
+      pending.initialLogin = true;
+    }
+    res.json(result);
+  } catch (err) {
+    console.error("QR start (login) error:", err);
+    res.status(500).json({ error: "Failed to start QR session" });
+  }
+});
+
+router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
+  try {
+    const nonce = req.params.nonce as string;
+    const pending = (SteamSessionService as any).pendingSessions.get(nonce);
+
+    if (!pending) {
+      res.json({ status: "expired" });
+      return;
+    }
+
+    if (pending.status === "expired") {
+      (SteamSessionService as any).pendingSessions.delete(nonce);
+      res.json({ status: "expired" });
+      return;
+    }
+
+    if (pending.status !== "authenticated" || !pending.cookies) {
+      res.json({ status: "pending" });
+      return;
+    }
+
+    // Authenticated — extract steamId, upsert user, save session, return JWT
+    const steamId = SteamSessionService.extractSteamIdFromCookie(
+      pending.cookies.steamLoginSecure
+    );
+    if (!steamId) {
+      res.status(400).json({ error: "Could not extract Steam ID from session" });
+      return;
+    }
+
+    const profile = await getSteamProfile(steamId);
+
+    const { rows } = await pool.query(
+      `INSERT INTO users (steam_id, display_name, avatar_url)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (steam_id)
+       DO UPDATE SET display_name = $2, avatar_url = $3
+       RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
+      [steamId, profile.personaname, profile.avatarfull]
+    );
+    const user = rows[0];
+
+    const { rows: saRows } = await pool.query(
+      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4
+       RETURNING id`,
+      [user.id, steamId, profile.personaname, profile.avatarfull]
+    );
+    const accountId = saRows[0].id;
+
+    await pool.query(
+      `UPDATE users SET active_account_id = sa.id
+       FROM steam_accounts sa
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2
+         AND users.active_account_id IS NULL`,
+      [user.id, steamId]
+    );
+
+    await SteamSessionService.saveSession(accountId, pending.cookies);
+    const refreshToken = pending.loginSession.refreshToken;
+    await pool.query(
+      `UPDATE steam_accounts SET session_method = 'qr', steam_refresh_token = $1 WHERE id = $2`,
+      [refreshToken || null, accountId]
+    );
+
+    (SteamSessionService as any).pendingSessions.delete(nonce);
+
+    const token = jwt.sign(
+      { userId: user.id, steamId },
+      process.env.JWT_SECRET!,
+      { expiresIn: "30d" }
+    );
+
+    res.json({
+      status: "authenticated",
+      token,
+      user: {
+        steam_id: user.steam_id,
+        display_name: user.display_name,
+        avatar_url: user.avatar_url,
+        is_premium: user.is_premium,
+        premium_until: user.premium_until,
+      },
+    });
+  } catch (err) {
+    console.error("QR poll (login) error:", err);
+    res.status(500).json({ error: "Failed to poll QR session" });
   }
 });
 

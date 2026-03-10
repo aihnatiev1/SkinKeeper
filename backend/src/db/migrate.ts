@@ -276,6 +276,18 @@ ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS wallet_currency INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS active_account_id INTEGER REFERENCES steam_accounts(id);
 
 ALTER TABLE sell_operations ADD COLUMN IF NOT EXISTS steam_account_id INTEGER REFERENCES steam_accounts(id);
+
+-- 011: Manual transactions — source tracking + icon_url
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source VARCHAR(20) DEFAULT 'steam';
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS icon_url TEXT;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS note TEXT;
+
+-- 012: Steam Web API key for trade offer sync
+ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS web_api_key TEXT;
+
+-- Unique index on steam_offer_id to enable upsert during sync
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trade_offers_steam_id
+  ON trade_offers(user_id, steam_offer_id) WHERE steam_offer_id IS NOT NULL;
 `;
 
 export async function migrate() {

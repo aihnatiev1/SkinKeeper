@@ -25,6 +25,7 @@ import '../features/settings/linked_accounts_screen.dart';
 import '../models/inventory_item.dart';
 import '../widgets/app_shell.dart';
 
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final onboardingCompleteProvider = FutureProvider<bool>((ref) async {
@@ -35,18 +36,19 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = _AuthChangeNotifier(ref);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/portfolio',
     refreshListenable: authNotifier,
     redirect: (context, state) {
       final uri = state.uri;
 
-      // Intercept deep link: skintracker://portfolio (from home screen widget)
-      if (uri.scheme == 'skintracker' && uri.host == 'portfolio') {
+      // Intercept deep link: skinkeeper://portfolio (from home screen widget)
+      if (uri.scheme == 'skinkeeper' && uri.host == 'portfolio') {
         return '/portfolio';
       }
 
-      // Intercept deep link: skintracker://auth?token=XXX
-      if (uri.scheme == 'skintracker' && uri.host == 'auth') {
+      // Intercept deep link: skinkeeper://auth?token=XXX
+      if (uri.scheme == 'skinkeeper' && uri.host == 'auth') {
         final token = uri.queryParameters['token'];
         if (token != null) {
           dev.log('Auth deep link intercepted, saving token', name: 'Router');
@@ -63,6 +65,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoading = auth.isLoading;
       final isOnLogin = state.matchedLocation == '/login';
       final isOnOnboarding = state.matchedLocation == '/onboarding';
+      final isOnSession = state.matchedLocation == '/session';
 
       if (isLoading) return null;
       if (!isLoggedIn && !isOnLogin) return '/login';
@@ -76,11 +79,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isLoggedIn && isOnLogin) return '/portfolio';
 
-      // Auto-redirect to session screen when session expired
-      if (isLoggedIn && state.matchedLocation != '/session') {
-        final sessionStatus = ref.read(sessionStatusProvider);
-        final status = sessionStatus.valueOrNull;
-        if (status == 'expired') return '/session';
+      // Force to session screen when Steam session needs reauth
+      if (isLoggedIn && !isOnSession && !isOnLogin && !isOnOnboarding) {
+        final session = ref.read(sessionStatusProvider);
+        final needsReauth = session.valueOrNull?.needsReauth ?? false;
+        if (needsReauth) return '/session';
       }
 
       return null;
@@ -191,5 +194,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(Ref ref) {
     ref.listen(authStateProvider, (_, _) => notifyListeners());
+    ref.listen(sessionStatusProvider, (_, _) => notifyListeners());
   }
 }

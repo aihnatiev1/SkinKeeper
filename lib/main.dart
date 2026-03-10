@@ -12,6 +12,7 @@ import 'core/cache_service.dart';
 import 'core/review_service.dart';
 import 'core/router.dart';
 import 'core/widget_service.dart';
+import 'core/settings_provider.dart';
 import 'core/theme.dart';
 import 'features/auth/steam_auth_service.dart';
 
@@ -21,7 +22,7 @@ void main() async {
   await WidgetService.init();
   await WidgetService.registerBackgroundCallback();
   _trackAppOpen();
-  runApp(const ProviderScope(child: SkinTrackerApp()));
+  runApp(const ProviderScope(child: SkinKeeperApp()));
 }
 
 Future<void> _trackAppOpen() async {
@@ -33,17 +34,18 @@ Future<void> _trackAppOpen() async {
   }
 }
 
-class SkinTrackerApp extends ConsumerStatefulWidget {
-  const SkinTrackerApp({super.key});
+class SkinKeeperApp extends ConsumerStatefulWidget {
+  const SkinKeeperApp({super.key});
 
   @override
-  ConsumerState<SkinTrackerApp> createState() => _SkinTrackerAppState();
+  ConsumerState<SkinKeeperApp> createState() => _SkinKeeperAppState();
 }
 
-class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp>
+class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     with WidgetsBindingObserver {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
+  StreamSubscription<void>? _sessionExpiredSub;
 
   @override
   void initState() {
@@ -51,6 +53,9 @@ class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp>
     WidgetsBinding.instance.addObserver(this);
     _appLinks = AppLinks();
     _initDeepLinks();
+    _sessionExpiredSub = sessionExpiredController.stream.listen((_) {
+      _showSessionExpiredDialog();
+    });
   }
 
   @override
@@ -77,14 +82,14 @@ class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp>
   void _handleDeepLink(Uri uri) {
     dev.log('Deep link received: $uri', name: 'DeepLink');
 
-    // skintracker://portfolio (from home screen widget tap)
+    // skinkeeper://portfolio (from home screen widget tap)
     if (uri.host == 'portfolio') {
       final router = ref.read(routerProvider);
       router.go('/portfolio');
       return;
     }
 
-    // skintracker://auth?token=XXX or skintracker://auth?error=XXX
+    // skinkeeper://auth?token=XXX or skinkeeper://auth?error=XXX
     if (uri.host == 'auth') {
       final token = uri.queryParameters['token'];
       final error = uri.queryParameters['error'];
@@ -108,20 +113,35 @@ class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
+    _sessionExpiredSub?.cancel();
     super.dispose();
+  }
+
+  void _showSessionExpiredDialog() {
+    // Don't show if not logged in
+    final auth = ref.read(authStateProvider);
+    if (auth.valueOrNull == null) return;
+
+    final router = ref.read(routerProvider);
+
+    // Navigate directly to session screen — no optional "Later" dialog
+    router.push('/session');
   }
 
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    ref.watch(themeModeProvider);
+    final locale = ref.watch(localeProvider);
 
     return MaterialApp.router(
-      title: 'SkinTracker',
+      title: 'SkinKeeper',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
+      theme: AppTheme.darkTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
       routerConfig: router,
+      locale: locale,
       localizationsDelegates: [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
@@ -132,3 +152,4 @@ class _SkinTrackerAppState extends ConsumerState<SkinTrackerApp>
     );
   }
 }
+

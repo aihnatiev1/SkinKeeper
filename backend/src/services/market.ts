@@ -218,26 +218,36 @@ export async function sellItem(
   }
 }
 
-// Quick sell: lowest cached price - 1 cent
-// Uses DB-cached prices from all sources; falls back to Steam API
+// Quick sell: Steam price - 1 cent (since we sell on Steam Market)
+// Uses cached Steam price; falls back to direct Steam API
 export async function quickSellPrice(
   marketHashName: string
 ): Promise<number | null> {
-  // Try cached prices first (much more reliable, no rate limits)
+  // Try cached Steam price first (no rate limits)
   const priceMap = await getLatestPrices([marketHashName]);
   const sources = priceMap.get(marketHashName);
 
   if (sources) {
-    // Find the lowest price across all sources (in USD)
-    // Steam price is buyer-pays, others are also in USD
+    // Prefer Steam price since we're listing on Steam Market
+    const steamPrice = sources["steam"];
+    if (steamPrice && steamPrice > 0) {
+      const steamCents = Math.round(steamPrice * 100);
+      const valveFee = Math.max(1, Math.floor(steamCents * 0.05));
+      const cs2Fee = Math.max(1, Math.floor(steamCents * 0.10));
+      const sellerReceives = steamCents - valveFee - cs2Fee;
+      return Math.max(1, sellerReceives - 1);
+    }
+
+    // Fallback to any available price if Steam not yet crawled
     const prices = Object.values(sources).filter((p) => p > 0);
     if (prices.length > 0) {
-      const lowestUsd = Math.min(...prices);
-      const lowestCents = Math.round(lowestUsd * 100);
-      // These are buyer-pays prices, convert to seller receives
-      const valveFee = Math.max(1, Math.floor(lowestCents * 0.05));
-      const cs2Fee = Math.max(1, Math.floor(lowestCents * 0.10));
-      const sellerReceives = lowestCents - valveFee - cs2Fee;
+      // Use median to avoid outliers from a single bad source
+      prices.sort((a, b) => a - b);
+      const medianUsd = prices[Math.floor(prices.length / 2)];
+      const medianCents = Math.round(medianUsd * 100);
+      const valveFee = Math.max(1, Math.floor(medianCents * 0.05));
+      const cs2Fee = Math.max(1, Math.floor(medianCents * 0.10));
+      const sellerReceives = medianCents - valveFee - cs2Fee;
       return Math.max(1, sellerReceives - 1);
     }
   }

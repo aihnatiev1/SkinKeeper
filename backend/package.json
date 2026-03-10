@@ -1,7 +1,7 @@
 {
-  "name": "skintracker-backend",
+  "name": "skinkeeper-backend",
   "version": "1.0.0",
-  "description": "SkinTracker API server",
+  "description": "SkinKeeper API server",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -15,6 +15,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "firebase-admin": "^13.7.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",

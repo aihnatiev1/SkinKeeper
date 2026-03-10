@@ -114,6 +114,14 @@ class CacheService {
     return '${diff.inDays}d ago';
   }
 
+  // ─── Flags ──────────────────────────────────────────────────────
+
+  static bool get sessionInfoDismissed =>
+      _metaBox.get('sessionInfoDismissed', defaultValue: false) as bool;
+
+  static void setSessionInfoDismissed(bool v) =>
+      _metaBox.put('sessionInfoDismissed', v);
+
   // ─── Eviction / Maintenance ───────────────────────────────────────
 
   /// Compact all boxes to reclaim disk space (call periodically, e.g. on

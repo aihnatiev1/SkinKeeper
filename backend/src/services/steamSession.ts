@@ -54,6 +54,66 @@ export class SteamSessionService {
     }
   }
 
+  /**
+   * Decode a JWT refresh token and return its expiry timestamp (seconds).
+   * Returns null if the token is not a valid JWT.
+   */
+  private static getRefreshTokenExpiry(token: string): number | null {
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(
+        Buffer.from(parts[1], "base64url").toString("utf8")
+      );
+      return typeof payload.exp === "number" ? payload.exp : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get detailed session info for an account, including refresh token expiry.
+   */
+  static async getSessionDetails(accountId: number): Promise<{
+    status: "valid" | "expiring" | "expired" | "none";
+    refreshTokenExpiresAt: string | null;
+    refreshTokenExpired: boolean;
+    sessionUpdatedAt: string | null;
+  }> {
+    const status = await this.getSessionStatus(accountId);
+
+    const { rows } = await pool.query(
+      `SELECT steam_refresh_token, session_updated_at
+       FROM steam_accounts WHERE id = $1`,
+      [accountId]
+    );
+    const row = rows[0];
+
+    let refreshTokenExpiresAt: string | null = null;
+    let refreshTokenExpired = false;
+
+    if (row?.steam_refresh_token) {
+      const decrypted = this.safeDecrypt(row.steam_refresh_token);
+      const exp = this.getRefreshTokenExpiry(decrypted);
+      if (exp) {
+        refreshTokenExpiresAt = new Date(exp * 1000).toISOString();
+        refreshTokenExpired = Date.now() > exp * 1000;
+      }
+    } else {
+      // No refresh token at all — effectively expired
+      refreshTokenExpired = true;
+    }
+
+    return {
+      status,
+      refreshTokenExpiresAt,
+      refreshTokenExpired,
+      sessionUpdatedAt: row?.session_updated_at
+        ? new Date(row.session_updated_at).toISOString()
+        : null,
+    };
+  }
+
   // ─── Active Account Resolution ────────────────────────────────────────
 
   /**
@@ -142,6 +202,22 @@ export class SteamSessionService {
       })
       .catch((err) => {
         console.warn("[Session] Wallet currency detection failed:", err.message);
+      });
+
+    // Auto-fetch trade token in the background (non-blocking)
+    import("./tradeOffers.js")
+      .then(({ fetchTradeToken }) => fetchTradeToken(session))
+      .then(async (token) => {
+        if (token) {
+          await pool.query(
+            "UPDATE steam_accounts SET trade_token = $1 WHERE id = $2",
+            [token, accountId]
+          );
+          console.log(`[Session] Auto-fetched trade token for account ${accountId}`);
+        }
+      })
+      .catch((err) => {
+        console.warn("[Session] Trade token fetch failed:", err.message);
       });
   }
 
@@ -438,6 +514,9 @@ export class SteamSessionService {
       const updatedAt = new Date(row.session_updated_at).getTime();
       const hoursSinceUpdate = (Date.now() - updatedAt) / (1000 * 60 * 60);
       if (hoursSinceUpdate > 20) return "expiring";
+      // Trust sessions updated within the last 2 hours — skip live validation
+      // to avoid false negatives from Steam rate-limits / timeouts
+      if (hoursSinceUpdate < 2) return "valid";
     }
 
     const session = await this.getSession(accountId);
@@ -498,6 +577,7 @@ export class SteamSessionService {
    */
   static async ensureValidSession(accountId: number): Promise<SteamSession> {
     const status = await this.getSessionStatus(accountId);
+    console.log(`[Session] ensureValidSession: accountId=${accountId}, status=${status}`);
 
     if (status === "valid") {
       const session = await this.getSession(accountId);
@@ -506,20 +586,14 @@ export class SteamSessionService {
 
     if (status === "expiring" || status === "expired") {
       const result = await this.refreshSession(accountId);
+      console.log(`[Session] Refresh result for accountId=${accountId}:`, result);
       if (result.refreshed) {
         const session = await this.getSession(accountId);
         if (session) return session;
       }
     }
 
-    if (status !== "none") {
-      const session = await this.getSession(accountId);
-      if (session) {
-        const isValid = await this.validateSession(session);
-        if (isValid) return session;
-      }
-    }
-
+    console.error(`[Session] ensureValidSession FAILED for accountId=${accountId}, status=${status}`);
     const error = new Error("Steam session expired or not configured. Please re-authenticate.");
     (error as any).code = "SESSION_EXPIRED";
     throw error;

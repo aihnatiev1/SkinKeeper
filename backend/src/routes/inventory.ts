@@ -2,8 +2,9 @@ import { Router, Response } from "express";
 import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { fetchSteamInventory } from "../services/steam.js";
-import { getLatestPrices } from "../services/prices.js";
+import { getLatestPrices, fetchSkinportPrices, savePrices } from "../services/prices.js";
 import { inspectItem, batchInspect } from "../services/inspect.js";
+import { SteamSessionService } from "../services/steamSession.js";
 
 const router = Router();
 
@@ -22,7 +23,8 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     const { rows: items } = await pool.query(
       `SELECT i.asset_id, i.market_hash_name, i.icon_url, i.wear,
               i.float_value, i.rarity, i.rarity_color, i.tradable,
-              i.inspect_link, i.paint_seed, i.stickers, i.charms,
+              i.trade_ban_until,
+              i.inspect_link, i.paint_seed, i.paint_index, i.stickers, i.charms,
               sa.steam_id as account_steam_id,
               sa.id as account_id,
               sa.display_name as account_name
@@ -125,18 +127,23 @@ router.post(
       let totalItems = 0;
 
       for (const account of accounts) {
-        const items = await fetchSteamInventory(account.steam_id);
+        // Use session cookies to see trade-banned items not visible publicly
+        const session = await SteamSessionService.getSession(account.id);
+        const items = await fetchSteamInventory(
+          account.steam_id,
+          session?.steamLoginSecure
+        );
 
         // Upsert items
         for (const item of items) {
           await pool.query(
             `INSERT INTO inventory_items
-               (steam_account_id, asset_id, market_hash_name, icon_url, wear, rarity, rarity_color, tradable, inspect_link, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+               (steam_account_id, asset_id, market_hash_name, icon_url, wear, rarity, rarity_color, tradable, trade_ban_until, inspect_link, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
              ON CONFLICT (steam_account_id, asset_id)
              DO UPDATE SET market_hash_name = $3, icon_url = $4, wear = $5,
                            rarity = $6, rarity_color = $7, tradable = $8,
-                           inspect_link = $9, updated_at = NOW()`,
+                           trade_ban_until = $9, inspect_link = $10, updated_at = NOW()`,
             [
               account.id,
               item.asset_id,
@@ -146,6 +153,7 @@ router.post(
               item.rarity,
               item.rarity_color,
               item.tradable,
+              item.trade_ban_until,
               item.inspect_link,
             ]
           );
@@ -168,6 +176,28 @@ router.post(
       }
 
       res.json({ success: true, total_items: totalItems });
+
+      // Background: fetch latest Skinport prices so new items have prices immediately
+      fetchSkinportPrices()
+        .then((prices) => savePrices(prices, "skinport"))
+        .catch((err) => console.error("Background Skinport refresh error:", err));
+
+      // Background: inspect items missing float values (only skins with wear)
+      const { rows: uninspected } = await pool.query(
+        `SELECT i.asset_id FROM inventory_items i
+         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         WHERE sa.user_id = $1 AND i.float_value IS NULL
+           AND i.inspect_link IS NOT NULL AND i.wear IS NOT NULL
+         ORDER BY i.updated_at DESC
+         LIMIT 100`,
+        [req.userId]
+      );
+      if (uninspected.length > 0) {
+        const ids = uninspected.map((r: any) => r.asset_id);
+        batchInspect(req.userId!, ids).catch((err) =>
+          console.error("Background inspect error:", err)
+        );
+      }
     } catch (err) {
       console.error("Inventory refresh error:", err);
       res.status(500).json({ error: "Failed to refresh inventory" });

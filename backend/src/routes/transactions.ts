@@ -8,6 +8,8 @@ import {
   getTransactionStats,
 } from "../services/transactions.js";
 import { SteamSessionService } from "../services/steamSession.js";
+import { recalculateCostBasis } from "../services/profitLoss.js";
+import { pool } from "../db/pool.js";
 
 const router = Router();
 
@@ -17,6 +19,7 @@ router.post(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
+      console.log(`[Transactions] Sync requested for user ${req.userId}`);
       const session = await SteamSessionService.getSession(req.userId!);
       if (!session) {
         res.status(400).json({
@@ -25,17 +28,43 @@ router.post(
         return;
       }
 
+      // Get wallet currency for price conversion
+      const { rows: accRows } = await pool.query(
+        "SELECT wallet_currency FROM steam_accounts WHERE user_id = $1 AND wallet_currency IS NOT NULL LIMIT 1",
+        [req.userId]
+      );
+      const walletCurrencyId = accRows[0]?.wallet_currency
+        ?? (await pool.query("SELECT wallet_currency FROM users WHERE id = $1", [req.userId])).rows[0]?.wallet_currency
+        ?? 1;
+      console.log(`[Transactions] Wallet currency ID: ${walletCurrencyId}`);
+
       let totalFetched = 0;
       let start = 0;
       const batchSize = 100;
 
-      // Fetch all pages
+      // Fetch all pages with retry on 429
       for (let page = 0; page < 50; page++) {
-        const { transactions, totalCount } = await fetchSteamTransactions(
-          session,
-          start,
-          batchSize
-        );
+        let transactions: Awaited<ReturnType<typeof fetchSteamTransactions>>["transactions"];
+        let totalCount: number;
+        let retries = 0;
+
+        while (true) {
+          try {
+            const result = await fetchSteamTransactions(session, start, batchSize, walletCurrencyId);
+            transactions = result.transactions;
+            totalCount = result.totalCount;
+            break;
+          } catch (err: any) {
+            if (err?.response?.status === 429 && retries < 3) {
+              retries++;
+              const delay = retries * 10000; // 10s, 20s, 30s
+              console.log(`[Transactions] 429 rate limit, retry ${retries}/3 in ${delay / 1000}s`);
+              await new Promise((r) => setTimeout(r, delay));
+            } else {
+              throw err;
+            }
+          }
+        }
 
         if (transactions.length === 0) break;
 
@@ -49,13 +78,23 @@ router.post(
 
         if (start >= totalCount) break;
 
-        // Rate limit pause
-        await new Promise((r) => setTimeout(r, 2000));
+        // Rate limit pause (3s between pages)
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+
+      // Auto-recalculate cost basis after sync
+      if (totalFetched > 0) {
+        try {
+          await recalculateCostBasis(req.userId!);
+          console.log(`[Transactions] Cost basis recalculated for user ${req.userId}`);
+        } catch (plErr) {
+          console.error("[Transactions] Cost basis recalculation failed:", plErr);
+        }
       }
 
       res.json({ success: true, fetched: totalFetched });
-    } catch (err) {
-      console.error("Transaction sync error:", err);
+    } catch (err: any) {
+      console.error("[Transactions] Sync error:", err?.response?.status ?? err?.message ?? err);
       res.status(500).json({ error: "Failed to sync transactions" });
     }
   }

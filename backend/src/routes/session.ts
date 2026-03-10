@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { SteamSessionService } from "../services/steamSession.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { pool } from "../db/pool.js";
 
 const router = Router();
 
@@ -277,12 +278,61 @@ router.post("/refresh", async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/session/status?accountId=X
+ * Returns active account status + per-account breakdown.
  */
 router.get("/status", async (req: AuthRequest, res: Response) => {
   try {
     const accountId = await resolveAccountId(req);
-    const status = await SteamSessionService.getSessionStatus(accountId);
-    res.json({ status });
+    const details = await SteamSessionService.getSessionDetails(accountId);
+
+    // Fetch all accounts with their session details
+    const { rows: accounts } = await pool.query(
+      `SELECT id, steam_id, display_name, session_updated_at,
+              steam_login_secure IS NOT NULL AS has_session
+       FROM steam_accounts WHERE user_id = $1 ORDER BY id`,
+      [req.userId!]
+    );
+
+    const accountStatuses: Array<{
+      id: number;
+      displayName: string;
+      status: string;
+      isActive: boolean;
+      refreshTokenExpiresAt: string | null;
+      refreshTokenExpired: boolean;
+    }> = [];
+
+    for (const acc of accounts) {
+      const accDetails = await SteamSessionService.getSessionDetails(acc.id);
+      accountStatuses.push({
+        id: acc.id,
+        displayName: acc.display_name || acc.steam_id,
+        status: accDetails.status,
+        isActive: acc.id === accountId,
+        refreshTokenExpiresAt: accDetails.refreshTokenExpiresAt,
+        refreshTokenExpired: accDetails.refreshTokenExpired,
+      });
+    }
+
+    // If access token is expired but refresh token is still alive, try auto-refresh
+    if ((details.status === "expired" || details.status === "expiring") && !details.refreshTokenExpired) {
+      const refreshResult = await SteamSessionService.refreshSession(accountId);
+      if (refreshResult.refreshed) {
+        const newDetails = await SteamSessionService.getSessionDetails(accountId);
+        details.status = newDetails.status;
+        // Update active account in the list too
+        const activeAcc = accountStatuses.find(a => a.isActive);
+        if (activeAcc) activeAcc.status = newDetails.status;
+      }
+    }
+
+    res.json({
+      status: details.status,
+      refreshTokenExpiresAt: details.refreshTokenExpiresAt,
+      refreshTokenExpired: details.refreshTokenExpired,
+      needsReauth: details.refreshTokenExpired && details.status !== "valid",
+      accounts: accountStatuses,
+    });
   } catch (err) {
     console.error("Session status error:", err);
     res.status(500).json({ error: "Failed to check session status" });
