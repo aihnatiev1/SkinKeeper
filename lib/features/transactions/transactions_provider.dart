@@ -198,12 +198,16 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionItem>> {
     }
   }
 
-  Future<void> sync() async {
+  /// Sync transactions from Steam. Pass fullSync: true to force re-fetch all pages.
+  Future<void> sync({bool fullSync = false}) async {
     state = const AsyncLoading();
     try {
       final api = ref.read(apiClientProvider);
-      await api.post('/transactions/sync',
-          receiveTimeout: const Duration(minutes: 5));
+      await api.post(
+        '/transactions/sync',
+        queryParameters: fullSync ? {'full': '1'} : null,
+        receiveTimeout: const Duration(minutes: 5),
+      );
       _total = 0;
       state = AsyncData(await _fetch(0));
     } catch (e, st) {

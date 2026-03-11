@@ -84,14 +84,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
                       .animate()
                       .fadeIn(duration: 400.ms)
                       .slideY(begin: 0.1, duration: 400.ms, curve: Curves.easeOutCubic),
-                  loading: () => Row(
-                    children: List.generate(3, (i) => Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(left: i > 0 ? 8 : 0),
-                        child: const ShimmerBox(height: 80),
-                      ),
-                    )),
-                  ),
+                  loading: () => const SkeletonStatCards(),
                   error: (_, _) => const SizedBox.shrink(),
                 ),
               ),

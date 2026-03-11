@@ -134,6 +134,14 @@ class CacheService {
     await _portfolioBox.compact();
   }
 
+  /// Wipe account-specific caches (call on account switch).
+  /// Prices are shared across accounts, so they stay.
+  static Future<void> clearAccountData() async {
+    await _inventoryBox.clear();
+    await _portfolioBox.clear();
+    _metaBox.delete('lastSync');
+  }
+
   /// Wipe every cache box (call on logout).
   static Future<void> clearAll() async {
     await _priceBox.clear();

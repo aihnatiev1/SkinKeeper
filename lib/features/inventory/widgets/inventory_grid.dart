@@ -66,10 +66,7 @@ class InventoryGrid extends ConsumerWidget {
             mainAxisSpacing: AppTheme.s6,
           ),
           itemCount: 12,
-          itemBuilder: (_, i) => ShimmerBox(
-            height: 200,
-            radius: AppTheme.r12,
-          ),
+          itemBuilder: (_, i) => const SkeletonItemCard(),
         ),
         error: (e, _) => EmptyState(
           icon: Icons.error_outline_rounded,

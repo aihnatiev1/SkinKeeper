@@ -13,6 +13,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/api_client.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../../widgets/shared_ui.dart';
 import '../auth/session_provider.dart';
 import 'transactions_provider.dart';
 
@@ -253,9 +254,27 @@ class TransactionsScreen extends ConsumerWidget {
                     ),
                   );
                 },
-                loading: () =>
-                    const Center(child: CircularProgressIndicator(color: AppTheme.primary)),
-                error: (_, _) => Center(child: Text('Failed to load', style: TextStyle(color: AppTheme.textSecondary))),
+                loading: () => ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: List.generate(
+                    6,
+                    (i) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: ShimmerCard(height: 70),
+                    ),
+                  ),
+                ),
+                error: (_, _) => EmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Failed to load transactions',
+                  subtitle: 'Check your connection and try again',
+                  action: GradientButton(
+                    label: 'Retry',
+                    icon: Icons.refresh_rounded,
+                    expanded: false,
+                    onPressed: () => ref.read(transactionsProvider.notifier).refresh(),
+                  ),
+                ),
               ),
             ),
           ],

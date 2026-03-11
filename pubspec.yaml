@@ -30,6 +30,8 @@ dependencies:
   hive_flutter: ^1.1.0
   home_widget: ^0.7.0
   flutter_animate: ^4.5.2
+  firebase_core: ^4.5.0
+  firebase_messaging: ^16.1.2
 
 dev_dependencies:
   flutter_test:

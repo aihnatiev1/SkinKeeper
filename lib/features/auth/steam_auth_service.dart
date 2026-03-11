@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../core/constants.dart';
+import '../../core/push_service.dart';
 import '../../models/user.dart';
 
 final authServiceProvider = Provider<SteamAuthService>((ref) {
@@ -69,6 +70,7 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
 
   Future<void> logout() async {
     final api = ref.read(apiClientProvider);
+    await PushService.unregister(api);
     await api.clearToken();
     await CacheService.clearAll();
     state = const AsyncData(null);

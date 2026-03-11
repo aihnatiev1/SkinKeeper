@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer' as dev;
 
 import 'package:app_links/app_links.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
@@ -9,15 +10,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/api_client.dart';
 import 'core/cache_service.dart';
+import 'core/push_service.dart';
 import 'core/review_service.dart';
 import 'core/router.dart';
 import 'core/widget_service.dart';
 import 'core/settings_provider.dart';
 import 'core/theme.dart';
 import 'features/auth/steam_auth_service.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  dev.log('Firebase initialized, apps: ${Firebase.apps.length}', name: 'Firebase');
   await CacheService.init();
   await WidgetService.init();
   await WidgetService.registerBackgroundCallback();
@@ -47,6 +54,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _sessionExpiredSub;
   StreamSubscription<void>? _tokenExpiredSub;
+  bool _pushInitialized = false;
 
   @override
   void initState() {
@@ -59,6 +67,15 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     });
     _tokenExpiredSub = tokenExpiredController.stream.listen((_) {
       _handleTokenExpired();
+    });
+    // Init push when user becomes authenticated
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listenManual(authStateProvider, (prev, next) {
+        if (!_pushInitialized && next.valueOrNull != null) {
+          _pushInitialized = true;
+          PushService.init(ref.read(apiClientProvider));
+        }
+      }, fireImmediately: true);
     });
   }
 
