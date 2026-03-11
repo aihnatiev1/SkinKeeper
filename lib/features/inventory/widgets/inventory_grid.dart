@@ -9,7 +9,7 @@ import '../../../core/theme.dart';
 import '../../../widgets/shared_ui.dart';
 import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
-import '../../portfolio/portfolio_pl_provider.dart';
+import '../../portfolio/portfolio_pl_provider.dart' show itemPLFamilyProvider;
 import 'glass_bottom_sheet.dart';
 import 'group_expand_sheet.dart';
 import 'item_card.dart';
@@ -107,12 +107,12 @@ class _GridItem extends ConsumerWidget {
     final isSelected = ref.watch(
       selectionProvider.select((s) => s.contains(item.assetId)),
     );
-    final plMap = ref.watch(itemPLMapProvider);
+    final itemPL = ref.watch(itemPLFamilyProvider(item.marketHashName));
 
     return ItemCard(
       item: item,
       compact: columns >= 4,
-      itemPL: plMap[item.marketHashName],
+      itemPL: itemPL,
       currency: currency,
       groupCount: group.isGroup ? group.count : null,
       isSelected: isSelected,

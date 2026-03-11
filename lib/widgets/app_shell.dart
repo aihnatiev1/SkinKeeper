@@ -29,10 +29,11 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       body: child,
       extendBody: true,
-      bottomNavigationBar: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: Container(
+      bottomNavigationBar: RepaintBoundary(
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
             decoration: BoxDecoration(
               color: AppTheme.bg.withValues(alpha: 0.88),
               border: Border(
@@ -90,6 +91,7 @@ class AppShell extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
           ),
         ),
       ),

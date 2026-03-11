@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -22,6 +20,7 @@ class ItemCard extends StatelessWidget {
   final InventoryItem item;
   final bool compact;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final VoidCallback? onInfoTap;
   final ItemPL? itemPL;
   final CurrencyInfo? currency;
@@ -33,6 +32,7 @@ class ItemCard extends StatelessWidget {
     required this.item,
     this.compact = false,
     this.onTap,
+    this.onLongPress,
     this.onInfoTap,
     this.itemPL,
     this.currency,
@@ -46,16 +46,11 @@ class ItemCard extends StatelessWidget {
         ? Color(int.parse('FF${item.rarityColor}', radix: 16))
         : AppTheme.textDisabled;
 
-    // Price tier: expensive items get stronger visual treatment
-    final price = item.steamPrice ?? item.bestPrice ?? 0;
-    final isExpensive = price >= 100;
-    final isUltra = price >= 500;
-    final glowAlpha = isUltra ? 0.25 : isExpensive ? 0.15 : 0.08;
-    final borderAlpha = isUltra ? 0.6 : isExpensive ? 0.35 : 0.15;
-    final borderWidth = isSelected ? 1.5 : (isUltra ? 1.2 : isExpensive ? 0.8 : 0.5);
+    final borderWidth = isSelected ? 1.5 : 0.5;
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
@@ -71,15 +66,15 @@ class ItemCard extends StatelessWidget {
           border: Border.all(
             color: isSelected
                 ? AppTheme.primary
-                : rarityColor.withValues(alpha: borderAlpha),
+                : rarityColor.withValues(alpha: 0.15),
             width: borderWidth,
           ),
           boxShadow: [
-            // Rarity glow — stronger on expensive items
+            // Rarity glow
             BoxShadow(
-              color: rarityColor.withValues(alpha: glowAlpha),
-              blurRadius: isUltra ? 20 : isExpensive ? 16 : 12,
-              spreadRadius: isUltra ? 0 : -2,
+              color: rarityColor.withValues(alpha: 0.08),
+              blurRadius: 12,
+              spreadRadius: -2,
             ),
             // Depth shadow
             BoxShadow(
@@ -146,7 +141,8 @@ class ItemCard extends StatelessWidget {
                       // P/L badge
                       if (!compact &&
                           itemPL != null &&
-                          itemPL!.totalProfitCents != 0)
+                          itemPL!.totalProfitCents != 0 &&
+                          itemPL!.profitPct.abs() >= 0.5)
                         Container(
                           margin: const EdgeInsets.only(right: 4),
                           padding: const EdgeInsets.symmetric(
@@ -221,30 +217,33 @@ class ItemCard extends StatelessWidget {
                           vertical: compact ? 4 : 6,
                         ),
                         child: Center(
-                          child: item.fullIconUrl.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: item.fullIconUrl,
-                                  fit: BoxFit.contain,
-                                  placeholder: (_, _) => SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.5,
-                                      color: rarityColor
-                                          .withValues(alpha: 0.3),
+                          child: Hero(
+                            tag: 'item_image_${item.assetId}',
+                            child: item.fullIconUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: item.fullIconUrl,
+                                    fit: BoxFit.contain,
+                                    placeholder: (_, _) => SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: rarityColor
+                                            .withValues(alpha: 0.3),
+                                      ),
                                     ),
-                                  ),
-                                  errorWidget: (_, _, _) => const Icon(
+                                    errorWidget: (_, _, _) => const Icon(
+                                      Icons.image_not_supported_rounded,
+                                      size: 22,
+                                      color: AppTheme.textDisabled,
+                                    ),
+                                  )
+                                : const Icon(
                                     Icons.image_not_supported_rounded,
                                     size: 22,
                                     color: AppTheme.textDisabled,
                                   ),
-                                )
-                              : const Icon(
-                                  Icons.image_not_supported_rounded,
-                                  size: 22,
-                                  color: AppTheme.textDisabled,
-                                ),
+                          ),
                         ),
                       ),
                       // Group count badge (top-right of image area)
@@ -273,10 +272,12 @@ class ItemCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      // Stickers (only for weapons, not for sticker items themselves)
-                      if (!compact && !item.isNonWeapon && item.stickers.isNotEmpty)
+                      // Stickers + charm row (only for weapons)
+                      if (!compact && !item.isNonWeapon &&
+                          (item.stickers.isNotEmpty || item.charms.isNotEmpty))
                         Positioned(
                           left: 6,
+                          right: 6,
                           bottom: 2,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -289,6 +290,21 @@ class ItemCard extends StatelessWidget {
                                   child: _StickerThumb(
                                       sticker: item.stickers[i]),
                                 ),
+                              if (item.charms.isNotEmpty) ...[
+                                if (item.stickers.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                                    child: Text(
+                                      '+',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white.withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                  ),
+                                _CharmThumb(charm: item.charms.first),
+                              ],
                             ],
                           ),
                         ),
@@ -357,19 +373,9 @@ class _FooterSection extends StatelessWidget {
           Expanded(
             child: compact ? _buildCompactInfo() : _buildFullInfo(),
           ),
-          // Right: charm + lock
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!compact && item.charms.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: _CharmThumb(charm: item.charms.first),
-                ),
-              if (!item.tradable)
-                _TradeBanBadge(item: item, compact: compact),
-            ],
-          ),
+          // Right: lock
+          if (!item.tradable)
+            _TradeBanBadge(item: item, compact: compact),
         ],
       ),
     );
@@ -425,20 +431,19 @@ class _FooterSection extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Wear row
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          spacing: 4,
+          runSpacing: 3,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (item.isRareDoppler) ...[
+            if (item.isRareDoppler)
               DopplerPhaseGem(
                 phase: item.dopplerPhase!,
                 color: item.dopplerColor!,
                 size: 12,
-              ),
-              const SizedBox(width: 4),
-            ] else if (item.isRareItem) ...[
-              const RarityGem(size: 12),
-              const SizedBox(width: 4),
-            ],
+              )
+            else if (item.isRareItem)
+              _RareBadge(reason: item.rareReason!),
             if (item.isSouvenir)
               const Text(
                 'SV',
@@ -457,21 +462,8 @@ class _FooterSection extends StatelessWidget {
                   color: AppTheme.warning,
                 ),
               ),
-            if ((item.isStatTrak || item.isSouvenir) && item.wearShort != null)
-              const SizedBox(width: 4),
             if (item.wearShort != null)
               _WearPill(wear: item.wearShort!),
-            if (item.isDoppler && item.dopplerPhase != null) ...[
-              const SizedBox(width: 4),
-              Text(
-                item.dopplerPhase!,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  color: item.dopplerColor ?? AppTheme.textMuted,
-                ),
-              ),
-            ],
           ],
         ),
         // Float value + mini bar
@@ -675,6 +667,45 @@ class _CharmThumb extends StatelessWidget {
               size: 12,
               color: AppTheme.primaryLight,
             ),
+    );
+  }
+}
+
+// ─── Rare Badge ─────────────────────────────────────────────────────
+class _RareBadge extends StatelessWidget {
+  final String reason;
+
+  const _RareBadge({required this.reason});
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFFF59E0B); // amber
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: color.withValues(alpha: 0.4),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const RarityGem(size: 9, glow: false),
+          const SizedBox(width: 3),
+          Text(
+            reason,
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: color,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

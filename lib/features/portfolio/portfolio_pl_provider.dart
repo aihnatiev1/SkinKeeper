@@ -99,6 +99,11 @@ final itemPLMapProvider = Provider<Map<String, ItemPL>>((ref) {
       {};
 });
 
+/// Family provider: each card watches only its own P/L, avoiding full-map rebuild.
+final itemPLFamilyProvider = Provider.family<ItemPL?, String>((ref, marketHashName) {
+  return ref.watch(itemPLMapProvider.select((map) => map[marketHashName]));
+});
+
 // ──── MOCK DATA ────────────────────────────────────────────────
 
 const _mockPL = PortfolioPL(
