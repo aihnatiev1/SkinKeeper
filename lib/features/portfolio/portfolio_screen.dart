@@ -23,8 +23,17 @@ import 'widgets/pl_history_chart.dart';
 
 final _tabProvider = StateProvider<int>((ref) => 0);
 
-class PortfolioScreen extends ConsumerWidget {
+class PortfolioScreen extends ConsumerStatefulWidget {
   const PortfolioScreen({super.key});
+
+  @override
+  ConsumerState<PortfolioScreen> createState() => _PortfolioScreenState();
+}
+
+class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
 
   void _showAddTransaction(BuildContext context) {
     HapticFeedback.mediumImpact();
@@ -32,7 +41,9 @@ class PortfolioScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    super.build(context);
+    final ref = this.ref;
     final portfolio = ref.watch(portfolioProvider);
     final tab = ref.watch(_tabProvider);
     final l10n = AppLocalizations.of(context);
@@ -101,30 +112,17 @@ class PortfolioScreen extends ConsumerWidget {
               ),
             ),
 
-            // ── Tab content ──
+            // ── Tab content (IndexedStack keeps all tabs mounted) ──
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
               sliver: SliverToBoxAdapter(
-                child: AnimatedSwitcher(
-                  duration: 300.ms,
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: anim,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.03),
-                        end: Offset.zero,
-                      ).animate(anim),
-                      child: child,
-                    ),
-                  ),
-                  child: switch (tab) {
-                    0 => _ValueTab(key: const ValueKey('value')),
-                    1 => _PLChartTab(key: const ValueKey('pl')),
-                    2 => _ItemsTab(key: const ValueKey('items')),
-                    _ => const SizedBox.shrink(),
-                  },
+                child: IndexedStack(
+                  index: tab,
+                  children: [
+                    _ValueTab(key: const ValueKey('value')),
+                    _PLChartTab(key: const ValueKey('pl')),
+                    _ItemsTab(key: const ValueKey('items')),
+                  ],
                 ),
               ),
             ),

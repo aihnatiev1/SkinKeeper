@@ -9,7 +9,16 @@ final inventoryProvider =
     AsyncNotifierProvider<InventoryNotifier, List<InventoryItem>>(
         InventoryNotifier.new);
 
-enum SortOption { priceDesc, priceAsc, nameAsc, rarity, floatAsc, floatDesc }
+enum SortOption {
+  dateDesc,   // Date: newest first
+  dateAsc,    // Date: oldest first
+  priceDesc,  // Price: high → low
+  priceAsc,   // Price: low → high
+  floatAsc,   // Float: low → high
+  floatDesc,  // Float: high → low
+  nameAsc,    // Name A→Z (kept but not in menu)
+  rarity,     // Rarity (kept but not in menu)
+}
 
 final sortOptionProvider = StateProvider<SortOption>((ref) => SortOption.priceDesc);
 final searchQueryProvider = StateProvider<String>((ref) => '');
@@ -70,7 +79,18 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
       return item.marketHashName.toLowerCase().contains(query);
     }).toList();
 
+    // Sort: assetId is roughly chronological (higher = newer)
+    int compareAssetId(InventoryItem a, InventoryItem b) {
+      final aId = int.tryParse(a.assetId) ?? 0;
+      final bId = int.tryParse(b.assetId) ?? 0;
+      return aId.compareTo(bId);
+    }
+
     switch (sort) {
+      case SortOption.dateDesc:
+        filtered.sort((a, b) => compareAssetId(b, a)); // newest first
+      case SortOption.dateAsc:
+        filtered.sort((a, b) => compareAssetId(a, b)); // oldest first
       case SortOption.priceDesc:
         filtered.sort((a, b) => (b.bestPrice ?? 0).compareTo(a.bestPrice ?? 0));
       case SortOption.priceAsc:
