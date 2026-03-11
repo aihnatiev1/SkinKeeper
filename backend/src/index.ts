@@ -3,7 +3,8 @@ import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
 import { migrate } from "./db/migrate.js";
-import { startPriceJobs } from "./services/priceJob.js";
+import { pool, checkPoolHealth } from "./db/pool.js";
+import { startPriceJobs, stopAllJobs } from "./services/priceJob.js";
 import { initFirebase } from "./services/firebase.js";
 import authRoutes from "./routes/auth.js";
 import inventoryRoutes from "./routes/inventory.js";
@@ -19,6 +20,7 @@ import exportRoutes from "./routes/export.js";
 import manualTxRoutes from "./routes/manualTransactions.js";
 import legalRoutes from "./routes/legal.js";
 import adminRoutes from "./routes/admin.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 
 dotenv.config();
 
@@ -53,6 +55,9 @@ app.use("/api/export", exportRoutes);
 app.use("/api/transactions", manualTxRoutes);
 app.use("/api/admin", adminRoutes);
 
+// Global error handler (must be after all routes)
+app.use(errorHandler);
+
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -67,6 +72,9 @@ async function start() {
       process.exit(1);
     }
   }
+
+  // Verify database connectivity
+  await checkPoolHealth();
 
   // Run migrations
   await migrate();
@@ -86,3 +94,41 @@ start().catch((err) => {
   console.error("Failed to start server:", err);
   process.exit(1);
 });
+
+// Graceful shutdown
+let isShuttingDown = false;
+async function shutdown(signal: string) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n[${signal}] Shutting down gracefully...`);
+
+  // Stop background jobs first (crawlers, cron)
+  try {
+    stopAllJobs();
+    console.log("[Shutdown] Background jobs stopped");
+  } catch (err) {
+    console.error("[Shutdown] Error stopping jobs:", err);
+  }
+
+  // Close DB pool (waits for in-flight queries)
+  try {
+    await pool.end();
+    console.log("[Shutdown] Pool connections closed");
+  } catch (err) {
+    console.error("[Shutdown] Error closing pool:", err);
+  }
+
+  process.exit(0);
+}
+
+// Force exit after 10s if graceful shutdown hangs
+function forceExit(signal: string) {
+  shutdown(signal);
+  setTimeout(() => {
+    console.error("[Shutdown] Forced exit after timeout");
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on("SIGTERM", () => forceExit("SIGTERM"));
+process.on("SIGINT", () => forceExit("SIGINT"));
