@@ -109,13 +109,21 @@ class _GridItem extends ConsumerWidget {
     );
     final itemPL = ref.watch(itemPLFamilyProvider(item.marketHashName));
 
+    // Count how many items from this group are selected
+    final selectedCount = group.isGroup
+        ? ref.watch(selectionProvider.select(
+            (s) => group.items.where((i) => s.contains(i.assetId)).length,
+          ))
+        : (isSelected ? 1 : 0);
+
     return ItemCard(
       item: item,
       compact: columns >= 4,
       itemPL: itemPL,
       currency: currency,
       groupCount: group.isGroup ? group.count : null,
-      isSelected: isSelected,
+      selectedCount: group.isGroup && selectedCount > 0 ? selectedCount : null,
+      isSelected: isSelected || selectedCount > 0,
       onTap: () {
         HapticFeedback.selectionClick();
         if (group.isGroup) {

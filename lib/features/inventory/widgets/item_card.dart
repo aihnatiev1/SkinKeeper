@@ -25,6 +25,7 @@ class ItemCard extends StatelessWidget {
   final ItemPL? itemPL;
   final CurrencyInfo? currency;
   final int? groupCount;
+  final int? selectedCount;
   final bool isSelected;
 
   const ItemCard({
@@ -37,6 +38,7 @@ class ItemCard extends StatelessWidget {
     this.itemPL,
     this.currency,
     this.groupCount,
+    this.selectedCount,
     this.isSelected = false,
   });
 
@@ -255,19 +257,27 @@ class ItemCard extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppTheme.primary.withValues(alpha: 0.25),
+                              color: selectedCount != null
+                                  ? AppTheme.profit.withValues(alpha: 0.25)
+                                  : AppTheme.primary.withValues(alpha: 0.25),
                               borderRadius: BorderRadius.circular(5),
                               border: Border.all(
-                                color: AppTheme.primary.withValues(alpha: 0.4),
+                                color: selectedCount != null
+                                    ? AppTheme.profit.withValues(alpha: 0.5)
+                                    : AppTheme.primary.withValues(alpha: 0.4),
                                 width: 0.5,
                               ),
                             ),
                             child: Text(
-                              'x$groupCount',
-                              style: const TextStyle(
+                              selectedCount != null
+                                  ? '$selectedCount/$groupCount'
+                                  : 'x$groupCount',
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: AppTheme.primaryLight,
+                                color: selectedCount != null
+                                    ? AppTheme.profitLight
+                                    : AppTheme.primaryLight,
                               ),
                             ),
                           ),

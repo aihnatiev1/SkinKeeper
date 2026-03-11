@@ -25,6 +25,8 @@ final searchQueryProvider = StateProvider<String>((ref) => '');
 final gridColumnsProvider = StateProvider<int>((ref) => 2);
 final hideNoPriceProvider = StateProvider<bool>((ref) => false);
 final groupingEnabledProvider = StateProvider<bool>((ref) => true);
+final wearFilterProvider = StateProvider<String?>((ref) => null);
+final tradableOnlyProvider = StateProvider<bool>((ref) => false);
 
 /// A group of identical items (same marketHashName)
 class ItemGroup {
@@ -71,10 +73,14 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
   final sort = ref.watch(sortOptionProvider);
   final query = ref.watch(searchQueryProvider).toLowerCase();
   final hideNoPrice = ref.watch(hideNoPriceProvider);
+  final wearFilter = ref.watch(wearFilterProvider);
+  final tradableOnly = ref.watch(tradableOnlyProvider);
 
   return inventory.whenData((items) {
     var filtered = items.where((item) {
       if (hideNoPrice && item.prices.isEmpty) return false;
+      if (wearFilter != null && item.wearShort != wearFilter) return false;
+      if (tradableOnly && !item.tradable) return false;
       if (query.isEmpty) return true;
       return item.marketHashName.toLowerCase().contains(query);
     }).toList();
