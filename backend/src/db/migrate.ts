@@ -318,6 +318,11 @@ ALTER TABLE trade_offers ALTER COLUMN status TYPE VARCHAR(30);
 ALTER TABLE trade_offers DROP CONSTRAINT IF EXISTS chk_trade_status;
 ALTER TABLE trade_offers ADD CONSTRAINT chk_trade_status
   CHECK (status IN ('pending','accepted','declined','expired','cancelled','countered','error','awaiting_confirmation','on_hold'));
+
+-- 017: Performance indexes for refactoring phase
+CREATE INDEX IF NOT EXISTS idx_inventory_items_name ON inventory_items(market_hash_name);
+CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(steam_account_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_price_history_name ON price_history(market_hash_name);
 `;
 
 export async function migrate() {
