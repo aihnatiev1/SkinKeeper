@@ -765,7 +765,7 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
   @override
   Widget build(BuildContext context) {
     final currency = ref.watch(currencyProvider);
-    if (widget.history.isEmpty) return const SizedBox.shrink();
+    if (widget.history.length < 2) return const SizedBox.shrink();
 
     final spots = widget.history.asMap().entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.value))
@@ -852,7 +852,7 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      interval: (widget.history.length / 4).ceilToDouble(),
+                      interval: (widget.history.length / 4).ceilToDouble().clamp(1.0, double.infinity),
                       getTitlesWidget: (value, _) {
                         final idx = value.toInt();
                         if (idx < 0 || idx >= widget.history.length) return const SizedBox.shrink();

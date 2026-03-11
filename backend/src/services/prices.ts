@@ -120,12 +120,11 @@ class AdaptiveCrawler {
   }
 
   async getNextItem(): Promise<string | null> {
-    // Items without any price for this source (only tradable items have market prices)
+    // Items without any price for this source (all marketable items, including trade-banned)
     const { rows: noPriceRows } = await pool.query(
       `SELECT DISTINCT ii.market_hash_name
        FROM inventory_items ii
-       WHERE ii.tradable = true
-         AND NOT EXISTS (
+       WHERE NOT EXISTS (
            SELECT 1 FROM price_history ph
            WHERE ph.market_hash_name = ii.market_hash_name
              AND ph.source = $1
@@ -141,7 +140,7 @@ class AdaptiveCrawler {
       `SELECT ph.market_hash_name, MAX(ph.recorded_at) AS last_at
        FROM price_history ph
        INNER JOIN inventory_items ii ON ii.market_hash_name = ph.market_hash_name
-       WHERE ph.source = $1 AND ii.tradable = true
+       WHERE ph.source = $1
        GROUP BY ph.market_hash_name
        HAVING MAX(ph.recorded_at) < NOW() - INTERVAL '1 second' * $2
        ORDER BY last_at ASC

@@ -64,21 +64,21 @@ class PortfolioNotifier extends AsyncNotifier<PortfolioSummary> {
   @override
   Future<PortfolioSummary> build() async {
     // 1. Try cache first for instant display
-    final cached = CacheService.getPortfolio();
-    if (cached != null) {
-      final summary = PortfolioSummary.fromJson(cached);
-      _pushToWidget(summary);
-      // Start background refresh (don't await)
-      _refreshInBackground();
-      return summary;
+    try {
+      final cached = CacheService.getPortfolio();
+      if (cached != null) {
+        final summary = PortfolioSummary.fromJson(cached);
+        _pushToWidget(summary);
+        // Start background refresh (don't await)
+        _refreshInBackground();
+        return summary;
+      }
+    } catch (_) {
+      // Cache corrupt/stale — ignore and fetch from API
     }
 
     // 2. No cache — fetch from API
-    try {
-      return await _fetchFromApi();
-    } on DioException {
-      rethrow;
-    }
+    return await _fetchFromApi();
   }
 
   Future<void> _refreshInBackground() async {

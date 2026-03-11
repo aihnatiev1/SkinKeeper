@@ -3,6 +3,7 @@ import axios from "axios";
 import { getAllStats } from "../services/priceStats.js";
 import { pool } from "../db/pool.js";
 import { SteamSessionService } from "../services/steamSession.js";
+import { fetchSteamInventory } from "../services/steam.js";
 
 const router = Router();
 
@@ -410,6 +411,123 @@ router.get("/trade-history-html/:accountId", requireAdminSecret, async (req: Req
       sampleTradeRows: tradeRows.slice(0, 3).map((r: string) => r.substring(0, 2000)),
       hasMoreButton: html.includes("tradehistory_content_more"),
       totalRowsFound: tradeRows.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/inventory-debug/:accountId — test fetchSteamInventory with both contexts
+router.get("/inventory-debug/:accountId", requireAdminSecret, async (req: Request, res: Response) => {
+  const accountId = parseInt(req.params.accountId as string);
+  if (!accountId) { res.status(400).json({ error: "Invalid accountId" }); return; }
+
+  const { rows: accRows } = await pool.query(
+    `SELECT steam_id FROM steam_accounts WHERE id = $1`, [accountId]
+  );
+  if (accRows.length === 0) { res.status(404).json({ error: "Account not found" }); return; }
+
+  const steamId = accRows[0].steam_id;
+  const session = await SteamSessionService.getSession(accountId);
+  const searchName = (req.query.search as string || "").toLowerCase();
+
+  try {
+    const items = await fetchSteamInventory(
+      steamId,
+      session ? { steamLoginSecure: session.steamLoginSecure, sessionId: session.sessionId } : undefined
+    );
+
+    const tradeBanned = items.filter(i => !i.tradable);
+    const searchResults = searchName
+      ? items.filter(i => i.market_hash_name.toLowerCase().includes(searchName))
+      : [];
+
+    res.json({
+      steamId,
+      hasSession: !!session,
+      totalItems: items.length,
+      tradeBannedCount: tradeBanned.length,
+      tradeBannedItems: tradeBanned.map(i => ({
+        name: i.market_hash_name,
+        assetId: i.asset_id,
+        tradeBanUntil: i.trade_ban_until,
+      })),
+      ...(searchName ? { searchResults } : {}),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/inventory-ctx16/:accountId — fetch context_type 16 (trade-banned items)
+router.get("/inventory-ctx16/:accountId", requireAdminSecret, async (req: Request, res: Response) => {
+  const accountId = parseInt(req.params.accountId as string);
+  if (!accountId) { res.status(400).json({ error: "Invalid accountId" }); return; }
+
+  const { rows: accRows } = await pool.query(
+    `SELECT steam_id FROM steam_accounts WHERE id = $1`, [accountId]
+  );
+  if (accRows.length === 0) { res.status(404).json({ error: "Account not found" }); return; }
+
+  const steamId = accRows[0].steam_id;
+  const session = await SteamSessionService.getSession(accountId);
+  if (!session) { res.status(400).json({ error: "No session" }); return; }
+
+  const searchName = (req.query.search as string || "").toLowerCase();
+
+  try {
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`,
+    };
+
+    const allAssets: any[] = [];
+    const allDescs: any[] = [];
+    let lastAssetId: string | undefined;
+    let steamTotal = 0;
+
+    for (let page = 0; page < 20; page++) {
+      const params: Record<string, string> = { l: "english", count: "2000", raw_asset_properties: "1", preserve_bbcode: "1" };
+      if (lastAssetId) params.start_assetid = lastAssetId;
+
+      const resp = await axios.get(
+        `https://steamcommunity.com/inventory/${steamId}/730/16`,
+        { params, headers, timeout: 15000 }
+      );
+      const data = resp.data;
+      if (!data?.success || !data?.assets) break;
+
+      if (page === 0) steamTotal = data.total_inventory_count ?? 0;
+      allAssets.push(...data.assets);
+      allDescs.push(...data.descriptions);
+
+      if (!data.more_items) break;
+      lastAssetId = data.last_assetid ?? data.assets[data.assets.length - 1].assetid;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    const descMap = new Map<string, any>();
+    for (const d of allDescs) descMap.set(`${d.classid}_${d.instanceid}`, d);
+
+    const items = allAssets.map(a => {
+      const d = descMap.get(`${a.classid}_${a.instanceid}`);
+      return {
+        assetId: a.assetid,
+        name: d?.market_hash_name ?? "unknown",
+        tradable: d?.tradable,
+        marketable: d?.marketable,
+        ownerDescriptions: d?.owner_descriptions?.map((o: any) => o.value),
+        tags: d?.tags,
+        descriptions: d?.descriptions?.map((dd: any) => dd.value),
+      };
+    });
+
+    const filtered = searchName ? items.filter(i => i.name.toLowerCase().includes(searchName)) : items.slice(0, 50);
+
+    res.json({
+      steamTotal,
+      assetCount: allAssets.length,
+      items: filtered,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

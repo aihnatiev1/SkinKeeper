@@ -77,6 +77,7 @@ interface SteamInventoryDescription {
 /** Items to skip — non-sellable junk or tools with no trading value */
 const EXCLUDED_NAMES = [
   'Charm Remover',
+  'Charm Detachment Pack',
   'Storage Unit',
 ];
 
@@ -177,62 +178,77 @@ export async function fetchSteamFriends(
 
 export async function fetchSteamInventory(
   steamId: string,
-  steamLoginSecure?: string
+  cookies?: { steamLoginSecure: string; sessionId: string }
+): Promise<ParsedInventoryItem[]> {
+  const headers: Record<string, string> = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+  };
+  if (cookies) {
+    headers.Cookie = `steamLoginSecure=${cookies.steamLoginSecure}; sessionid=${cookies.sessionId}`;
+  }
+
+  // Fetch both context types:
+  // - context 2: regular inventory items
+  // - context 16: trade-banned/cooldown items (only visible with session cookies)
+  const contexts = cookies ? ["2", "16"] : ["2"];
+  const allItems: ParsedInventoryItem[] = [];
+  const seenAssetIds = new Set<string>();
+
+  for (const ctx of contexts) {
+    const ctxItems = await fetchInventoryContext(steamId, ctx, headers);
+    for (const item of ctxItems) {
+      if (!seenAssetIds.has(item.asset_id)) {
+        seenAssetIds.add(item.asset_id);
+        allItems.push(item);
+      }
+    }
+  }
+
+  console.log(`[Steam] Inventory total: ${allItems.length} items (${allItems.filter(i => !i.tradable).length} trade-banned)`);
+  return allItems;
+}
+
+/** Fetch and parse a single inventory context (paginated). */
+async function fetchInventoryContext(
+  steamId: string,
+  contextId: string,
+  headers: Record<string, string>
 ): Promise<ParsedInventoryItem[]> {
   const items: ParsedInventoryItem[] = [];
   let lastAssetId: string | undefined;
-
-  let totalExpected = 0;
-  let totalAssetsReceived = 0;
   let totalFiltered = 0;
 
-  // Paginate through inventory
   for (let page = 0; page < 20; page++) {
-    const url = `https://steamcommunity.com/inventory/${steamId}/730/2`;
     const params: Record<string, string> = { l: "english", count: "500" };
     if (lastAssetId) params.start_assetid = lastAssetId;
-
-    const headers: Record<string, string> = {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-    };
-    // Use session cookies to see trade-banned / private items
-    if (steamLoginSecure) {
-      headers.Cookie = `steamLoginSecure=${steamLoginSecure}`;
-    }
 
     let data: any;
     for (let retry = 0; retry < 3; retry++) {
       try {
-        const resp = await axios.get(url, {
-          params,
-          timeout: 15000,
-          headers,
-        });
+        const resp = await axios.get(
+          `https://steamcommunity.com/inventory/${steamId}/730/${contextId}`,
+          { params, timeout: 15000, headers }
+        );
         data = resp.data;
         break;
       } catch (err: any) {
         if (err.response?.status === 429 && retry < 2) {
-          console.log(`[Steam] Rate limited, waiting ${(retry + 1) * 10}s...`);
+          console.log(`[Steam] Rate limited ctx${contextId}, waiting ${(retry + 1) * 10}s...`);
           await new Promise((r) => setTimeout(r, (retry + 1) * 10000));
           continue;
         }
-        // Return what we have so far on error
-        console.log(`[Steam] Error on page ${page}, returning ${items.length} items`);
+        console.log(`[Steam] Error ctx${contextId} page ${page}, returning ${items.length} items`);
         return items;
       }
     }
 
     if (!data?.success || !data?.assets) break;
 
-    if (page === 0) totalExpected = data.total_inventory_count ?? 0;
-
     const assets = data.assets as SteamInventoryAsset[];
     const descriptions = data.descriptions as SteamInventoryDescription[];
-    totalAssetsReceived += assets.length;
 
-    console.log(`[Steam] Inventory page ${page}: ${assets.length} assets, more_items=${data.more_items}, last_assetid=${data.last_assetid}, total=${totalAssetsReceived}/${totalExpected}`);
+    console.log(`[Steam] ctx${contextId} page ${page}: ${assets.length} assets, more=${data.more_items}`);
 
-    // Build lookup map: classid_instanceid -> description
     const descMap = new Map<string, SteamInventoryDescription>();
     for (const desc of descriptions) {
       descMap.set(`${desc.classid}_${desc.instanceid}`, desc);
@@ -242,16 +258,16 @@ export async function fetchSteamInventory(
       const desc = descMap.get(`${asset.classid}_${asset.instanceid}`);
       if (!desc) continue;
 
-      // Skip known junk items by name
       if (EXCLUDED_NAMES.includes(desc.market_hash_name)) continue;
 
       // Parse trade ban date from owner_descriptions
       let tradeBanUntil: string | null = null;
       if (desc.tradable === 0 && desc.owner_descriptions) {
         for (const od of desc.owner_descriptions) {
-          // Match "Tradable After", "Marketable After" date formats (may be inside HTML)
           const cleaned = od.value.replace(/<[^>]+>/g, '');
-          const match = cleaned.match(/(?:Tradable|Marketable) After (.+?)(?:\s*\(|$)/i);
+          // "Tradable After ...", "Marketable After ...", or "until Mar 18, 2026 (7:00:00) GMT"
+          const match = cleaned.match(/(?:Tradable|Marketable) After (.+?)(?:\s*\(|$)/i)
+            || cleaned.match(/until ([A-Z][a-z]{2} \d{1,2}, \d{4})/i);
           if (match) {
             const parsed = new Date(match[1]);
             if (!isNaN(parsed.getTime())) {
@@ -261,26 +277,36 @@ export async function fetchSteamInventory(
         }
       }
 
-      // Skip permanently non-marketable items (used graffiti, default items, etc.)
-      // but KEEP items that are only temporarily non-marketable (trade ban)
+      // Context 16 items are always trade-banned — if we couldn't parse date, still keep them
+      if (contextId === "16" && desc.tradable === 0 && !tradeBanUntil) {
+        // Try to extract any date-like pattern as fallback
+        for (const od of desc.owner_descriptions ?? []) {
+          const dateMatch = od.value.match(/([A-Z][a-z]{2} \d{1,2}, \d{4})/);
+          if (dateMatch) {
+            const parsed = new Date(dateMatch[1]);
+            if (!isNaN(parsed.getTime())) {
+              tradeBanUntil = parsed.toISOString();
+              break;
+            }
+          }
+        }
+        // Even without a date, keep ctx16 items — they're real items with temp ban
+        if (!tradeBanUntil) {
+          tradeBanUntil = "unknown";
+        }
+      }
+
+      // Skip permanently non-marketable items (graffiti, medals, coins, etc.)
+      // but KEEP items that are temporarily non-marketable (trade ban)
       if (desc.marketable === 0 && !tradeBanUntil) {
         totalFiltered++;
-        // Log valuable items being filtered — helps catch bugs
-        if (/knife|karambit|bayonet|ursus|talon|navaja|stiletto|nomad|skeleton|paracord|survival|classic|butterfly|bowie|falchion|shadow|huntsman|gut|flip|gloves|wraps/i.test(desc.market_hash_name)) {
-          console.warn(`[Steam] WARN: Filtering valuable item "${desc.market_hash_name}" (marketable=0, tradable=${desc.tradable}, owner_desc=${JSON.stringify(desc.owner_descriptions?.map(o => o.value))})`);
-        }
         continue;
       }
 
-      // Extract wear from market_hash_name: "AK-47 | Redline (Field-Tested)"
       const wearMatch = desc.market_hash_name.match(
         /\((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)/
       );
-
-      // Extract rarity from tags
       const rarityTag = desc.tags?.find((t) => t.category === "Rarity");
-
-      // Build inspect link from actions
       const inspectAction = desc.actions?.find((a) =>
         a.link.includes("csgo_econ_action_preview")
       );
@@ -299,19 +325,16 @@ export async function fetchSteamInventory(
         rarity: rarityTag?.localized_tag_name ?? null,
         rarity_color: rarityTag?.color ?? null,
         tradable: desc.tradable === 1,
-        trade_ban_until: tradeBanUntil,
+        trade_ban_until: tradeBanUntil !== "unknown" ? tradeBanUntil : null,
         inspect_link: inspectLink,
       });
     }
 
-    // Check if more pages — use Steam's cursor, not our last asset
     if (!data.more_items) break;
     lastAssetId = data.last_assetid ?? assets[assets.length - 1].assetid;
-
-    // Respect rate limits
     await new Promise((r) => setTimeout(r, 1000));
   }
 
-  console.log(`[Steam] Inventory done: ${items.length} items kept, ${totalFiltered} filtered, ${totalAssetsReceived} assets received, ${totalExpected} expected`);
+  console.log(`[Steam] ctx${contextId} done: ${items.length} kept, ${totalFiltered} filtered`);
   return items;
 }

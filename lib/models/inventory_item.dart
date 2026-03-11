@@ -118,11 +118,10 @@ class InventoryItem {
       415 => 'Ruby',
       416 => 'Sapphire',
       417 => 'Black Pearl',
-      418 => 'Emerald',
-      419 => 'Phase 1',
-      420 => 'Phase 2',
-      421 => 'Phase 3',
-      422 => 'Phase 4',
+      418 => 'Phase 1',
+      419 => 'Phase 2',
+      420 => 'Phase 3',
+      421 => 'Phase 4',
       568 => 'Phase 1', // Gamma Doppler
       569 => 'Phase 2',
       570 => 'Phase 3',
@@ -138,11 +137,10 @@ class InventoryItem {
       415 => const Color(0xFFE74C3C), // Ruby
       416 => const Color(0xFF3498DB), // Sapphire
       417 => const Color(0xFF9B59B6), // Black Pearl
-      418 => const Color(0xFF2ECC71), // Emerald
-      419 || 568 => const Color(0xFFE67E22), // Phase 1
-      420 || 569 => const Color(0xFF1ABC9C), // Phase 2
-      421 || 570 => const Color(0xFF27AE60), // Phase 3
-      422 || 571 => const Color(0xFF2980B9), // Phase 4
+      418 || 568 => const Color(0xFFE67E22), // Phase 1
+      419 || 569 => const Color(0xFF1ABC9C), // Phase 2
+      420 || 570 => const Color(0xFF27AE60), // Phase 3
+      421 || 571 => const Color(0xFF2980B9), // Phase 4
       618 => const Color(0xFF2ECC71), // Gamma Emerald
       _ => null,
     };
@@ -211,7 +209,7 @@ class InventoryItem {
   /// Whether this is a rare/special Doppler (Ruby, Sapphire, Black Pearl, Emerald)
   bool get isRareDoppler {
     if (paintIndex == null) return false;
-    return const {415, 416, 417, 418, 618}.contains(paintIndex);
+    return const {415, 416, 417, 618}.contains(paintIndex);
   }
 
   /// Whether this item has rare properties worth highlighting with a gem icon:

@@ -131,44 +131,51 @@ router.post(
         const session = await SteamSessionService.getSession(account.id);
         const items = await fetchSteamInventory(
           account.steam_id,
-          session?.steamLoginSecure
+          session ? { steamLoginSecure: session.steamLoginSecure, sessionId: session.sessionId } : undefined
         );
 
-        // Upsert items
-        for (const item of items) {
+        // Batch upsert items using unnest for performance (~1 query instead of ~800)
+        if (items.length > 0) {
+          const accountIds = items.map(() => account.id);
+          const assetIds = items.map(i => i.asset_id);
+          const names = items.map(i => i.market_hash_name);
+          const icons = items.map(i => i.icon_url);
+          const wears = items.map(i => i.wear);
+          const rarities = items.map(i => i.rarity);
+          const rarityColors = items.map(i => i.rarity_color);
+          const tradables = items.map(i => i.tradable);
+          const tradeBans = items.map(i => i.trade_ban_until);
+          const inspectLinks = items.map(i => i.inspect_link);
+
           await pool.query(
             `INSERT INTO inventory_items
                (steam_account_id, asset_id, market_hash_name, icon_url, wear, rarity, rarity_color, tradable, trade_ban_until, inspect_link, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+             SELECT * FROM unnest(
+               $1::int[], $2::text[], $3::text[], $4::text[], $5::text[],
+               $6::text[], $7::text[], $8::boolean[], $9::timestamptz[], $10::text[]
+             ), NOW()
              ON CONFLICT (steam_account_id, asset_id)
-             DO UPDATE SET market_hash_name = $3, icon_url = $4, wear = $5,
-                           rarity = $6, rarity_color = $7, tradable = $8,
-                           trade_ban_until = $9, inspect_link = $10, updated_at = NOW()`,
-            [
-              account.id,
-              item.asset_id,
-              item.market_hash_name,
-              item.icon_url,
-              item.wear,
-              item.rarity,
-              item.rarity_color,
-              item.tradable,
-              item.trade_ban_until,
-              item.inspect_link,
-            ]
+             DO UPDATE SET market_hash_name = EXCLUDED.market_hash_name,
+                           icon_url = EXCLUDED.icon_url,
+                           wear = EXCLUDED.wear,
+                           rarity = EXCLUDED.rarity,
+                           rarity_color = EXCLUDED.rarity_color,
+                           tradable = EXCLUDED.tradable,
+                           trade_ban_until = EXCLUDED.trade_ban_until,
+                           inspect_link = EXCLUDED.inspect_link,
+                           updated_at = NOW()`,
+            [accountIds, assetIds, names, icons, wears, rarities, rarityColors, tradables, tradeBans, inspectLinks]
           );
         }
 
         // Remove items that no longer exist in inventory
         const currentAssetIds = items.map((i) => i.asset_id);
         if (currentAssetIds.length > 0) {
-          const placeholders = currentAssetIds
-            .map((_, i) => `$${i + 2}`)
-            .join(",");
           await pool.query(
             `DELETE FROM inventory_items
-             WHERE steam_account_id = $1 AND asset_id NOT IN (${placeholders})`,
-            [account.id, ...currentAssetIds]
+             WHERE steam_account_id = $1
+               AND asset_id != ALL($2::text[])`,
+            [account.id, currentAssetIds]
           );
         }
 

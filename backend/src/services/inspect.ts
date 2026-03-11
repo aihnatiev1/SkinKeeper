@@ -86,7 +86,7 @@ export async function inspectItem(
 ): Promise<InspectResult | null> {
   // Get item with inspect link, verify ownership
   const { rows } = await pool.query(
-    `SELECT i.id, i.inspect_link, i.float_value, i.paint_seed, i.stickers, i.charms, i.inspected_at
+    `SELECT i.id, i.inspect_link, i.float_value, i.paint_seed, i.paint_index, i.stickers, i.charms, i.inspected_at
      FROM inventory_items i
      JOIN steam_accounts sa ON i.steam_account_id = sa.id
      WHERE sa.user_id = $1 AND i.asset_id = $2`,
@@ -104,7 +104,7 @@ export async function inspectItem(
       return {
         floatValue: parseFloat(item.float_value),
         paintSeed: item.paint_seed ?? 0,
-        paintIndex: 0,
+        paintIndex: item.paint_index ?? 0,
         stickers: item.stickers ?? [],
         charms: item.charms ?? [],
       };

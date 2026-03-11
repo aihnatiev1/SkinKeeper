@@ -29,6 +29,9 @@ class InventoryScreen extends ConsumerStatefulWidget {
 
 class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   bool _trayExpanded = false;
+  bool _searchOpen = false;
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
 
   void _showSellSheet(List<InventoryItem> items) {
     showModalBottomSheet(
@@ -193,6 +196,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         },
                       ),
                       _GlassIconBtn(
+                        icon: Icons.search_rounded,
+                        isActive: _searchOpen,
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _searchOpen = !_searchOpen);
+                          if (_searchOpen) {
+                            Future.delayed(const Duration(milliseconds: 250), () {
+                              _searchFocus.requestFocus();
+                            });
+                          } else {
+                            _searchController.clear();
+                            ref.read(searchQueryProvider.notifier).state = '';
+                            _searchFocus.unfocus();
+                          }
+                        },
+                      ),
+                      _GlassIconBtn(
                         icon: Icons.sort_rounded,
                         onTap: () {
                           HapticFeedback.selectionClick();
@@ -254,24 +274,41 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
               ),
             ),
           ),
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTheme.s16, AppTheme.s8, AppTheme.s16, AppTheme.s4,
-            ),
-            child: TextField(
-              onChanged: (v) =>
-                  ref.read(searchQueryProvider.notifier).state = v,
-              style: AppTheme.body,
-              decoration: InputDecoration(
-                hintText: 'Search items...',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.s16,
-                  vertical: AppTheme.s12,
-                ),
-              ),
-            ),
+          // Collapsible search bar
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: _searchOpen
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppTheme.s16, AppTheme.s8, AppTheme.s16, AppTheme.s4,
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      onChanged: (v) =>
+                          ref.read(searchQueryProvider.notifier).state = v,
+                      style: AppTheme.body,
+                      decoration: InputDecoration(
+                        hintText: 'Search items...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        suffixIcon: GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            ref.read(searchQueryProvider.notifier).state = '';
+                            _searchFocus.unfocus();
+                            setState(() => _searchOpen = false);
+                          },
+                          child: const Icon(Icons.close_rounded, size: 18),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppTheme.s16,
+                          vertical: AppTheme.s12,
+                        ),
+                      ),
+                    ),
+                  )
+                : const SizedBox(height: 4),
           ),
           // Grid
           Expanded(

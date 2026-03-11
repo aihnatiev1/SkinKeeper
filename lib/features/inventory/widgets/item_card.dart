@@ -46,32 +46,40 @@ class ItemCard extends StatelessWidget {
         ? Color(int.parse('FF${item.rarityColor}', radix: 16))
         : AppTheme.textDisabled;
 
+    // Price tier: expensive items get stronger visual treatment
+    final price = item.steamPrice ?? item.bestPrice ?? 0;
+    final isExpensive = price >= 100;
+    final isUltra = price >= 500;
+    final glowAlpha = isUltra ? 0.25 : isExpensive ? 0.15 : 0.08;
+    final borderAlpha = isUltra ? 0.6 : isExpensive ? 0.35 : 0.15;
+    final borderWidth = isSelected ? 1.5 : (isUltra ? 1.2 : isExpensive ? 0.8 : 0.5);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          // Glass card background
+          // Lighter card background for contrast
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF1A2540),
-              const Color(0xFF131C35),
+              const Color(0xFF1E2A48),
+              const Color(0xFF161F3A),
             ],
           ),
           border: Border.all(
             color: isSelected
                 ? AppTheme.primary
-                : rarityColor.withValues(alpha: 0.2),
-            width: isSelected ? 1.5 : 0.5,
+                : rarityColor.withValues(alpha: borderAlpha),
+            width: borderWidth,
           ),
           boxShadow: [
-            // Subtle rarity glow
+            // Rarity glow — stronger on expensive items
             BoxShadow(
-              color: rarityColor.withValues(alpha: 0.08),
-              blurRadius: 12,
-              spreadRadius: -2,
+              color: rarityColor.withValues(alpha: glowAlpha),
+              blurRadius: isUltra ? 20 : isExpensive ? 16 : 12,
+              spreadRadius: isUltra ? 0 : -2,
             ),
             // Depth shadow
             BoxShadow(
@@ -118,30 +126,20 @@ class ItemCard extends StatelessWidget {
                       // Price
                       Expanded(
                         child: item.steamPrice != null
-                            ? FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  currency?.format(item.steamPrice!) ??
-                                      '\$${item.steamPrice!.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: compact ? 11 : 17,
-                                    fontWeight: FontWeight.w900,
-                                    color: Colors.white,
-                                    letterSpacing: compact ? -0.3 : -0.5,
-                                    shadows: [
-                                      Shadow(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.25),
-                                        blurRadius: 12,
-                                      ),
-                                    ],
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
-                                    ],
-                                  ),
-                                  maxLines: 1,
+                            ? Text(
+                                currency?.format(item.steamPrice!) ??
+                                    '\$${item.steamPrice!.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: compact ? 10 : 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  letterSpacing: compact ? -0.3 : -0.3,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               )
                             : const SizedBox.shrink(),
                       ),
@@ -412,16 +410,7 @@ class _FooterSection extends StatelessWidget {
         if (item.floatValue != null)
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              item.floatValue!.toStringAsFixed(5),
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'monospace',
-                color: Colors.white.withValues(alpha: 0.55),
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
+            child: _MiniFloatBar(floatValue: item.floatValue!),
           ),
       ],
     );
@@ -485,20 +474,27 @@ class _FooterSection extends StatelessWidget {
             ],
           ],
         ),
-        // Float value
+        // Float value + mini bar
         if (item.floatValue != null)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              item.floatValue!.toStringAsFixed(7),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'monospace',
-                letterSpacing: 0.3,
-                color: Colors.white.withValues(alpha: 0.6),
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+            padding: const EdgeInsets.only(top: 3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.floatValue!.toStringAsFixed(7),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                    letterSpacing: 0.3,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(height: 3),
+                _MiniFloatBar(floatValue: item.floatValue!),
+              ],
             ),
           ),
       ],
@@ -537,6 +533,73 @@ class _WearPill extends StatelessWidget {
           color: color,
           letterSpacing: 0.5,
         ),
+      ),
+    );
+  }
+}
+
+// ─── Mini Float Bar (inline on card) ─────────────────────────────────
+class _MiniFloatBar extends StatelessWidget {
+  final double floatValue;
+
+  const _MiniFloatBar({required this.floatValue});
+
+  static const _segments = [
+    (end: 0.07, color: Color(0xFF10B981)),  // FN
+    (end: 0.15, color: Color(0xFF34D399)),  // MW
+    (end: 0.38, color: Color(0xFFF59E0B)),  // FT
+    (end: 0.45, color: Color(0xFFF97316)),  // WW
+    (end: 1.00, color: Color(0xFFEF4444)),  // BS
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = floatValue.clamp(0.0, 1.0);
+    return SizedBox(
+      height: 4,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final w = constraints.maxWidth;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: Stack(
+              children: [
+                // Segment backgrounds
+                Row(
+                  children: _segments.map((seg) {
+                    final idx = _segments.indexOf(seg);
+                    final prevEnd = idx > 0 ? _segments[idx - 1].end : 0.0;
+                    return Expanded(
+                      flex: ((seg.end - prevEnd) * 1000).round(),
+                      child: Container(
+                        color: seg.color.withValues(alpha: 0.2),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                // Position indicator
+                Positioned(
+                  left: (clamped * w) - 1,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 2,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          blurRadius: 3,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

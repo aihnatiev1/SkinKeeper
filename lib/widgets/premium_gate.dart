@@ -24,12 +24,16 @@ class PremiumGate extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 280),
       child: Stack(
+        clipBehavior: Clip.hardEdge,
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(AppTheme.r16),
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: IgnorePointer(child: child),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: IgnorePointer(child: child),
+              ),
             ),
           ),
           Positioned.fill(
@@ -39,15 +43,16 @@ class PremiumGate extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppTheme.r16),
             ),
             child: Center(
-              child: Container(
-                margin: const EdgeInsets.all(AppTheme.s16),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.s24,
-                  vertical: AppTheme.s16,
-                ),
-                decoration: AppTheme.glassElevated(glowColor: AppTheme.primary),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+              child: SingleChildScrollView(
+                child: Container(
+                  margin: const EdgeInsets.all(AppTheme.s16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.s24,
+                    vertical: AppTheme.s16,
+                  ),
+                  decoration: AppTheme.glassElevated(glowColor: AppTheme.primary),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                   children: [
                     // Animated lock icon
                     Container(
@@ -125,6 +130,7 @@ class PremiumGate extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
               ),
             ),
           ),
