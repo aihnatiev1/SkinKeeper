@@ -28,9 +28,13 @@ class InventoryScreen extends ConsumerStatefulWidget {
   ConsumerState<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends ConsumerState<InventoryScreen> {
+class _InventoryScreenState extends ConsumerState<InventoryScreen>
+    with AutomaticKeepAliveClientMixin {
   bool _trayExpanded = false;
   bool _searchOpen = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   void _showSellSheet(List<InventoryItem> items) {
     showGlassSheet(context, SellBottomSheet(items: items));
@@ -71,6 +75,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final selection = ref.watch(selectionProvider);
     final isSelecting = selection.isNotEmpty;
     final selectedItems = ref.watch(selectedItemsListProvider);

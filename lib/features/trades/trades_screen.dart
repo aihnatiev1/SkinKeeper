@@ -20,9 +20,13 @@ class TradesScreen extends ConsumerStatefulWidget {
   ConsumerState<TradesScreen> createState() => _TradesScreenState();
 }
 
-class _TradesScreenState extends ConsumerState<TradesScreen> {
+class _TradesScreenState extends ConsumerState<TradesScreen>
+    with AutomaticKeepAliveClientMixin {
   int _selectedTab = 0;
   late final PageController _pageCtrl;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -38,6 +42,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final l10n = AppLocalizations.of(context);
     final sessionAsync = ref.watch(sessionStatusProvider);
     final needsReauth = sessionAsync.valueOrNull?.needsReauth ?? false;
