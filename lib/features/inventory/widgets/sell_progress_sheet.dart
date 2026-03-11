@@ -6,7 +6,7 @@ import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../sell_provider.dart';
 import '../../inventory/inventory_provider.dart';
-import '../../inventory/inventory_screen.dart';
+import '../../inventory/inventory_selection_provider.dart';
 
 class SellProgressSheet extends ConsumerStatefulWidget {
   const SellProgressSheet({super.key});
@@ -457,7 +457,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
                 HapticFeedback.lightImpact();
                 // Refresh inventory and clear selection after selling
                 ref.read(inventoryProvider.notifier).refresh();
-                ref.read(selectedItemsProvider.notifier).state = {};
+                ref.read(selectionProvider.notifier).clear();
                 ref.read(sellOperationProvider.notifier).reset();
                 Navigator.pop(context);
                 // Prompt for review after successful sell
