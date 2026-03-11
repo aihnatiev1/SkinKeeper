@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: M3
 milestone_name: Post-Launch Features
 status: in-progress
-stopped_at: Completed 14-01-PLAN.md (backend refactoring — DB, validation, caches, errors, scrapers)
+stopped_at: Completed 14-02-PLAN.md (Flutter UX/UI refactoring — decompose, performance, design system)
 last_updated: "2026-03-12T00:00:00.000Z"
-last_activity: 2026-03-12 -- Phase 14 Plan 1 complete (backend refactoring — pool, zod, SteamClient, TTLCache, errors, cheerio)
+last_activity: 2026-03-12 -- Phase 14 Plan 2 complete (Flutter refactoring — god widget decompose, IndexedStack, filter chips, skeletons)
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -21,28 +21,29 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Users can track their CS2 inventory value and sell skins quickly — with real market prices, instant price alerts, and one-tap quick sell.
-**Current focus:** Phase 13: Home Screen Widget
+**Current focus:** Phase 14: Grand Refactoring (complete)
 
 ## Current Position
 
 Phase: 14 of 15 (Grand Refactoring)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-03-12 -- Phase 14 Plan 1 complete (backend refactoring)
+Plan: 2 of 2 complete
+Status: Phase 14 complete
+Last activity: 2026-03-12 -- Phase 14 Plan 2 complete (Flutter refactoring)
 
-Progress: [██████░░░░] 67%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity (from M1/M2):**
-- Total plans completed: 20
-- Average duration: ~3.4min
-- Total execution time: ~1.1 hours
+- Total plans completed: 21
+- Average duration: ~3.5min
+- Total execution time: ~1.3 hours
 
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 13 | 02 | 169s | 5 | 5 |
 | 14 | 01 | 970s | 8 | 35 |
+| 14 | 02 | 2175s | 8 | 30 |
 
 ## Accumulated Context
 
@@ -65,6 +66,10 @@ Progress: [██████░░░░] 67%
 - [14-01]: TTLCache as shared utility with cache registry for centralized monitoring
 - [14-01]: Cheerio-first with regex fallback for all Steam HTML scrapers
 - [14-01]: SteamClient as utility module with retry/backoff, not class instance
+- [14-02]: IndexedStack for portfolio tabs instead of StatefulShellRoute migration
+- [14-02]: Settings bottom sheets kept Material-themed (solid bg, not glass)
+- [14-02]: GlassCard.interactive uses AnimatedScale for press feedback
+- [14-02]: StatusChip.fromTradeStatus replaces all inline status badge implementations
 
 ### Pending Todos
 
@@ -77,5 +82,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-12
-Stopped at: Completed 14-01-PLAN.md (backend refactoring — DB, validation, caches, errors, scrapers)
+Stopped at: Completed 14-02-PLAN.md (Flutter UX/UI refactoring — decompose, performance, design system)
 Resume file: None

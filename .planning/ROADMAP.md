@@ -121,8 +121,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — Backend: DB pool, indexes, zod validation, SteamClient, TTL caches, typed errors, background task reliability, cheerio scrapers
-- [ ] 14-02-PLAN.md — Flutter: widget decomposition, state rebuild optimization, sell dedup, nav perf, design polish, inventory grid UX, screen polish, loading transitions
+- [x] 14-01-PLAN.md — Backend: DB pool, indexes, zod validation, SteamClient, TTL caches, typed errors, background task reliability, cheerio scrapers
+- [x] 14-02-PLAN.md — Flutter: widget decomposition, state rebuild optimization, sell dedup, nav perf, design polish, inventory grid UX, screen polish, loading transitions
 
 ### Phase 15: Testing
 **Goal**: Comprehensive test coverage for both backend and Flutter app
@@ -162,5 +162,5 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 11. Multi-Account Support | 0/2 | Pending | — |
 | 12. Offline Price Cache | 0/2 | Pending | — |
 | 13. Home Screen Widget | 1/2 | In Progress | — |
-| 14. Grand Refactoring | 1/2 | In Progress | — |
+| 14. Grand Refactoring | 2/2 | Complete | 2026-03-12 |
 | 15. Testing | 0/2 | Pending | — |
