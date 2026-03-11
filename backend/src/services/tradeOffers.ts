@@ -3,6 +3,87 @@ import crypto from "crypto";
 import { pool } from "../db/pool.js";
 import { getLatestPrices } from "./prices.js";
 import { SteamSessionService, type SteamSession } from "./steamSession.js";
+import { sendPush, isFirebaseReady } from "./firebase.js";
+import { TTLCache } from "../utils/TTLCache.js";
+import { registerCache } from "../utils/cacheRegistry.js";
+
+// ─── Trade Push Notifications ───────────────────────────────────────────
+
+/** Map trade status to push_prefs key */
+function tradePrefKey(status: string, direction: string): string | null {
+  if (status === "pending" && direction === "incoming") return "tradeIncoming";
+  if (status === "accepted") return "tradeAccepted";
+  if (status === "declined") return "tradeDeclined";
+  if (status === "cancelled") return "tradeCancelled";
+  return null;
+}
+
+async function notifyTradeStatusChange(
+  userId: number,
+  partnerName: string | null,
+  status: string,
+  direction: "incoming" | "outgoing",
+  itemCount?: number,
+): Promise<void> {
+  if (!isFirebaseReady()) return;
+
+  const prefKey = tradePrefKey(status, direction);
+  if (!prefKey) return;
+
+  const { rows: devices } = await pool.query(
+    `SELECT fcm_token, push_prefs FROM user_devices WHERE user_id = $1`,
+    [userId]
+  );
+  // Filter devices that have this notification enabled (default: true for incoming/accepted)
+  const defaultOn = ["tradeIncoming", "tradeAccepted", "priceAlerts"];
+  const tokens = devices
+    .filter((d: any) => {
+      const prefs = d.push_prefs || {};
+      return prefs[prefKey] ?? defaultOn.includes(prefKey);
+    })
+    .map((d: any) => d.fcm_token as string);
+  if (tokens.length === 0) return;
+
+  const partner = partnerName || "Someone";
+  const items = itemCount ? ` (${itemCount} items)` : "";
+  let title = "Trade Update";
+  let body = "";
+
+  switch (status) {
+    case "accepted":
+      title = "Trade Accepted";
+      body = direction === "incoming"
+        ? `You accepted a trade from ${partner}${items}`
+        : `${partner} accepted your trade${items}`;
+      break;
+    case "declined":
+      title = "Trade Declined";
+      body = direction === "incoming"
+        ? `You declined a trade from ${partner}`
+        : `${partner} declined your trade`;
+      break;
+    case "cancelled":
+      title = "Trade Cancelled";
+      body = `Trade with ${partner} was cancelled`;
+      break;
+    case "pending":
+      if (direction === "incoming") {
+        title = "New Trade Offer";
+        body = `${partner} sent you a trade offer${items}`;
+      }
+      break;
+    default:
+      return;
+  }
+
+  if (!body) return;
+
+  try {
+    await sendPush(tokens, title, body, { type: "trade", status });
+  } catch (err) {
+    console.error(`[Trade] Push notification failed:`, err);
+  }
+}
 
 /**
  * Generate a random sessionid for Steam CSRF protection.
@@ -90,7 +171,8 @@ const STEAM_COMMUNITY = "https://steamcommunity.com";
 const STEAM_API = "https://api.steampowered.com";
 
 // Rate limit: trade history sync at most once per 10 min per user
-const tradeHistorySyncCache = new Map<string, number>();
+const tradeHistorySyncCache = new TTLCache<string, number>(10 * 60 * 1000, 500);
+registerCache("tradeHistorySync", tradeHistorySyncCache as unknown as TTLCache<unknown, unknown>);
 
 /**
  * Get the webTradeEligibility cookie from Steam.
@@ -794,6 +876,8 @@ export async function acceptOffer(
     [offerId, userId]
   );
 
+  notifyTradeStatusChange(userId, offer.partnerSteamId, "accepted", offer.direction as any);
+
   return { needsConfirmation: false };
 }
 
@@ -857,6 +941,8 @@ export async function declineOffer(
      WHERE id = $1 AND user_id = $2`,
     [offerId, userId]
   );
+
+  notifyTradeStatusChange(userId, offer.partnerSteamId, "declined", offer.direction as any);
 }
 
 /**
@@ -990,6 +1076,8 @@ export async function cancelOffer(
      WHERE id = $1 AND user_id = $2`,
     [offerId, userId]
   );
+
+  notifyTradeStatusChange(userId, offer.partnerSteamId, "cancelled", offer.direction as any);
 }
 
 /**
@@ -1568,7 +1656,7 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
         else if (offer.status === "awaiting_confirmation") dbStatus = "awaiting_confirmation";
         else if (offer.status === "on_hold") dbStatus = "on_hold";
 
-        // Upsert: insert or update status
+        // Upsert: insert or update status, return old status to detect changes
         const { rows } = await pool.query(
           `INSERT INTO trade_offers
              (user_id, direction, steam_offer_id, partner_steam_id, message,
@@ -1584,7 +1672,9 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
              is_internal = EXCLUDED.is_internal,
              account_id_from = COALESCE(trade_offers.account_id_from, EXCLUDED.account_id_from),
              account_id_to = COALESCE(trade_offers.account_id_to, EXCLUDED.account_id_to)
-           RETURNING id`,
+           RETURNING id,
+             (SELECT status FROM trade_offers t2 WHERE t2.id = trade_offers.id) AS new_status,
+             CASE WHEN xmax = 0 THEN NULL ELSE $6 END AS was_insert`,
           [
             userId, direction, offer.steamOfferId,
             offer.partnerSteamId || offer.partnerName,
@@ -1596,21 +1686,31 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
 
         if (rows.length > 0) {
           const offerId = rows[0].id;
+          const wasInsert = rows[0].was_insert === null;
+
+          // Notify on new incoming pending offers or status changes detected by sync
+          if (wasInsert && direction === "incoming" && dbStatus === "pending") {
+            notifyTradeStatusChange(userId, offer.partnerName, "pending", "incoming", offer.itemClassIds.length || undefined);
+          }
           // Only insert items if none exist yet (don't overwrite API-synced items that have names)
           const { rows: existingItems } = await pool.query(
             `SELECT 1 FROM trade_offer_items WHERE offer_id = $1 AND market_hash_name IS NOT NULL LIMIT 1`,
             [offerId]
           );
-          if (existingItems.length === 0) {
+          if (existingItems.length === 0 && offer.itemClassIds.length > 0) {
             await pool.query(`DELETE FROM trade_offer_items WHERE offer_id = $1`, [offerId]);
-            for (const item of offer.itemClassIds) {
-              await pool.query(
-                `INSERT INTO trade_offer_items
-                   (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
-                 VALUES ($1, $2, $3, NULL, $4, 0)`,
-                [offerId, item.side, `${item.classid}_${item.instanceid}`, item.iconUrl]
-              );
-            }
+            const items = offer.itemClassIds;
+            const oIds = items.map(() => offerId);
+            const sSides = items.map(i => i.side);
+            const aIds = items.map(i => `${i.classid}_${i.instanceid}`);
+            const iUrls = items.map(i => i.iconUrl);
+            await pool.query(
+              `INSERT INTO trade_offer_items
+                 (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
+               SELECT unnest($1::uuid[]), unnest($2::text[]), unnest($3::text[]),
+                      NULL, unnest($4::text[]), 0`,
+              [oIds, sSides, aIds, iUrls]
+            );
           }
           synced++;
         }
@@ -1624,9 +1724,13 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
   // Don't touch awaiting_confirmation or on_hold — they may not appear in scrape
   if (allScrapedIds.size > 0) {
     const { rows: pendingOffers } = await pool.query(
-      `SELECT id, steam_offer_id FROM trade_offers
-       WHERE user_id = $1 AND status = 'pending' AND steam_offer_id IS NOT NULL
-       AND created_at < NOW() - INTERVAL '30 minutes'`,
+      `SELECT id, steam_offer_id, status FROM trade_offers
+       WHERE user_id = $1 AND status IN ('pending', 'awaiting_confirmation')
+       AND steam_offer_id IS NOT NULL
+       AND (
+         (status = 'pending' AND created_at < NOW() - INTERVAL '30 minutes')
+         OR (status = 'awaiting_confirmation' AND created_at < NOW() - INTERVAL '2 hours')
+       )`,
       [userId]
     );
     for (const po of pendingOffers) {
@@ -1635,7 +1739,7 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
           `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1`,
           [po.id]
         );
-        console.log(`[Trade] Marked stale offer ${po.steam_offer_id} as expired (not found on Steam)`);
+        console.log(`[Trade] Marked stale ${po.status} offer ${po.steam_offer_id} as expired (not found on Steam)`);
       }
     }
   }
@@ -1866,12 +1970,20 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
 
       // Only insert items for new offers (avoid duplicates)
       if (isNew) {
-        for (const item of [...giveItems, ...recvItems]) {
+        const allItems = [...giveItems, ...recvItems];
+        if (allItems.length > 0) {
+          const offerIds = allItems.map(() => offerId);
+          const sides = allItems.map(i => i.side);
+          const assetIds = allItems.map(i => i.assetId);
+          const marketNames = allItems.map(i => i.marketHashName);
+          const iconUrls = allItems.map(i => i.iconUrl);
+          const priceCents = allItems.map(i => i.priceCents);
           await client.query(
             `INSERT INTO trade_offer_items
                (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [offerId, item.side, item.assetId, item.marketHashName, item.iconUrl, item.priceCents]
+             SELECT unnest($1::uuid[]), unnest($2::text[]), unnest($3::text[]),
+                    unnest($4::text[]), unnest($5::text[]), unnest($6::int[])`,
+            [offerIds, sides, assetIds, marketNames, iconUrls, priceCents]
           );
         }
         synced++;
@@ -1886,30 +1998,33 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
     ];
 
     if (activeSteamIds.length > 0) {
+      // Expire pending offers not found on Steam
       await client.query(
         `UPDATE trade_offers
          SET status = 'expired', updated_at = NOW()
          WHERE user_id = $1
            AND (account_id_from = $3 OR account_id_to = $3)
            AND is_internal = FALSE
-           AND status = 'pending'
+           AND status IN ('pending', 'awaiting_confirmation')
            AND steam_offer_id IS NOT NULL
            AND steam_offer_id != ALL($2::text[])
            AND created_at > NOW() - INTERVAL '14 days'`,
         [userId, activeSteamIds, accountId]
       );
     } else {
-      // API returned no active offers — only expire old pending, not awaiting_confirmation
+      // API returned no active offers — expire pending (30min+) and awaiting_confirmation (2h+)
       await client.query(
         `UPDATE trade_offers
          SET status = 'expired', updated_at = NOW()
          WHERE user_id = $1
            AND (account_id_from = $2 OR account_id_to = $2)
            AND is_internal = FALSE
-           AND status = 'pending'
            AND steam_offer_id IS NOT NULL
-           AND created_at < NOW() - INTERVAL '30 minutes'
-           AND created_at > NOW() - INTERVAL '14 days'`,
+           AND created_at > NOW() - INTERVAL '14 days'
+           AND (
+             (status = 'pending' AND created_at < NOW() - INTERVAL '30 minutes')
+             OR (status = 'awaiting_confirmation' AND created_at < NOW() - INTERVAL '2 hours')
+           )`,
         [userId, accountId]
       );
     }
@@ -2140,12 +2255,20 @@ async function scrapeTradeHistoryHtml(
 
       if (rows.length > 0) {
         const offerId = rows[0].id;
-        for (const item of [...giveItems, ...recvItems]) {
+        const allItems = [...giveItems, ...recvItems];
+        if (allItems.length > 0) {
+          const offerIds = allItems.map(() => offerId);
+          const sides = allItems.map(i => i.side);
+          const assetIds = allItems.map(() => "0");
+          const marketNames = allItems.map(i => i.name);
+          const iconUrls = allItems.map(i => i.iconUrl);
+          const priceCentsList = allItems.map(i => i.priceCents);
           await pool.query(
             `INSERT INTO trade_offer_items
                (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [offerId, item.side, "0", item.name, item.iconUrl, item.priceCents]
+             SELECT unnest($1::uuid[]), unnest($2::text[]), unnest($3::text[]),
+                    unnest($4::text[]), unnest($5::text[]), unnest($6::int[])`,
+            [offerIds, sides, assetIds, marketNames, iconUrls, priceCentsList]
           );
         }
         synced++;
@@ -2270,12 +2393,20 @@ async function syncTradeHistoryForAccount(userId: number, accountId: number): Pr
 
       if (rows.length > 0) {
         const offerId = rows[0].id;
-        for (const item of [...giveItems, ...recvItems]) {
+        const allItems = [...giveItems, ...recvItems];
+        if (allItems.length > 0) {
+          const offerIds = allItems.map(() => offerId);
+          const sides = allItems.map((i: any) => i.side);
+          const assetIdsList = allItems.map((i: any) => i.assetId);
+          const marketNames = allItems.map((i: any) => i.marketHashName);
+          const iconUrls = allItems.map((i: any) => i.iconUrl);
+          const priceCentsList = allItems.map((i: any) => i.priceCents);
           await pool.query(
             `INSERT INTO trade_offer_items
                (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [offerId, item.side, item.assetId, item.marketHashName, item.iconUrl, item.priceCents]
+             SELECT unnest($1::uuid[]), unnest($2::text[]), unnest($3::text[]),
+                    unnest($4::text[]), unnest($5::text[]), unnest($6::int[])`,
+            [offerIds, sides, assetIdsList, marketNames, iconUrls, priceCentsList]
           );
         }
         synced++;

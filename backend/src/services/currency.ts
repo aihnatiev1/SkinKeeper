@@ -10,6 +10,8 @@
 
 import axios from "axios";
 import { pool } from "../db/pool.js";
+import { TTLCache } from "../utils/TTLCache.js";
+import { registerCache } from "../utils/cacheRegistry.js";
 
 // ─── Steam currency ID → metadata ──────────────────────────────────────
 
@@ -63,13 +65,9 @@ export function getCurrencyInfo(steamCurrencyId: number): CurrencyInfo | null {
 
 // ─── Exchange rate cache ────────────────────────────────────────────────
 
-interface CachedRate {
-  rate: number; // multiplier: walletCents = usdCents * rate
-  fetchedAt: number;
-}
-
 const RATE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const rateCache = new Map<number, CachedRate>();
+const rateCache = new TTLCache<number, number>(RATE_TTL_MS, 50);
+registerCache("exchangeRate", rateCache as unknown as TTLCache<unknown, unknown>);
 
 // Multiple probe items for resilience against rate limits
 const RATE_PROBE_ITEMS = [
@@ -206,19 +204,13 @@ export async function getExchangeRate(
   if (targetCurrencyId === 1) return 1;
 
   const cached = rateCache.get(targetCurrencyId);
-  if (cached && Date.now() - cached.fetchedAt < RATE_TTL_MS) {
-    return cached.rate;
+  if (cached !== undefined) {
+    return cached;
   }
 
   const rate = await fetchExchangeRate(targetCurrencyId);
   if (rate !== null) {
-    rateCache.set(targetCurrencyId, { rate, fetchedAt: Date.now() });
-  }
-
-  // If fetch failed but we have a stale cache, use it
-  if (rate === null && cached) {
-    console.warn("[Currency] Using stale exchange rate");
-    return cached.rate;
+    rateCache.set(targetCurrencyId, rate);
   }
 
   return rate;

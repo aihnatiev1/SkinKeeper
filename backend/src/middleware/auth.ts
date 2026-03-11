@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { pool } from "../db/pool.js";
+import { TTLCache } from "../utils/TTLCache.js";
+import { registerCache } from "../utils/cacheRegistry.js";
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -34,8 +36,9 @@ export function authMiddleware(
 }
 
 // TTL cache for premium status (5 min) to avoid DB hit on every request
-const premiumCache = new Map<number, { isPremium: boolean; expires: number }>();
 const PREMIUM_CACHE_TTL = 5 * 60 * 1000;
+const premiumCache = new TTLCache<number, boolean>(PREMIUM_CACHE_TTL, 500);
+registerCache("premiumStatus", premiumCache as unknown as TTLCache<unknown, unknown>);
 
 export async function requirePremium(
   req: AuthRequest,
@@ -49,8 +52,8 @@ export async function requirePremium(
 
   // Check cache first
   const cached = premiumCache.get(req.userId);
-  if (cached && Date.now() < cached.expires) {
-    if (cached.isPremium) {
+  if (cached !== undefined) {
+    if (cached) {
       req.isPremium = true;
       next();
       return;
@@ -67,10 +70,7 @@ export async function requirePremium(
     const isPremium = rows[0]?.is_premium ?? false;
 
     // Cache the result
-    premiumCache.set(req.userId, {
-      isPremium,
-      expires: Date.now() + PREMIUM_CACHE_TTL,
-    });
+    premiumCache.set(req.userId, isPremium);
 
     if (isPremium) {
       req.isPremium = true;
