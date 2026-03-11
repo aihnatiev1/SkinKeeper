@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants.dart';
+import '../../core/push_preferences.dart';
+import '../../core/push_service.dart';
+import '../../core/api_client.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../auth/steam_auth_service.dart';
@@ -144,6 +147,10 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
           ).animate().fadeIn(duration: 300.ms, delay: 100.ms).slideY(begin: 0.05, end: 0),
+          const SizedBox(height: 16),
+
+          // Push Notification Preferences
+          _PushPrefsSection(),
           const SizedBox(height: 16),
 
           // Appearance & Preferences
@@ -383,6 +390,61 @@ class SettingsScreen extends ConsumerWidget {
         );
       },
     );
+  }
+}
+
+class _PushPrefsSection extends ConsumerWidget {
+  static const _items = <(PushPref, String, IconData)>[
+    (PushPref.tradeIncoming, 'New incoming trades', Icons.call_received_rounded),
+    (PushPref.tradeAccepted, 'Trade accepted', Icons.check_circle_outline),
+    (PushPref.priceAlerts, 'Price alerts', Icons.trending_up_rounded),
+    (PushPref.tradeDeclined, 'Trade declined', Icons.cancel_outlined),
+    (PushPref.tradeCancelled, 'Trade cancelled', Icons.block_rounded),
+    (PushPref.tradeBanExpired, 'Trade ban expired', Icons.lock_open_rounded),
+    (PushPref.sessionExpired, 'Session expired', Icons.vpn_key_off_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(pushPrefsProvider);
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: AppTheme.glass(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(
+              'Push Notifications',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textMuted,
+              ),
+            ),
+          ),
+          for (var i = 0; i < _items.length; i++) ...[
+            if (i > 0) const Divider(height: 1),
+            SwitchListTile.adaptive(
+              secondary: Icon(_items[i].$3, color: AppTheme.textSecondary, size: 20),
+              title: Text(_items[i].$2, style: const TextStyle(fontSize: 14)),
+              value: prefs.get(_items[i].$1),
+              activeColor: AppTheme.primary,
+              onChanged: (_) {
+                ref.read(pushPrefsProvider.notifier).toggle(_items[i].$1);
+                // Sync to backend
+                PushService.syncPreferences(
+                  ref.read(apiClientProvider),
+                  ref.read(pushPrefsProvider),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(duration: 300.ms, delay: 120.ms).slideY(begin: 0.05, end: 0);
   }
 }
 

@@ -28,10 +28,8 @@ class AccountsNotifier extends AsyncNotifier<List<SteamAccount>> {
   Future<void> setActive(int accountId) async {
     final api = ref.read(apiClientProvider);
     await api.put('/auth/accounts/$accountId/active');
-    // Clear all account-specific caches
-    CacheService.putInventory([]);
-    CacheService.putPortfolio({});
-    CacheService.lastSync = null;
+    // Wipe all account-specific caches so no stale data from previous account
+    await CacheService.clearAccountData();
     ref.invalidateSelf();
     // Refresh auth state so activeAccountId updates
     ref.invalidate(authStateProvider);

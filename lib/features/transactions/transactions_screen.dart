@@ -207,6 +207,36 @@ class TransactionsScreen extends ConsumerWidget {
                   }
                   final notifier = ref.read(transactionsProvider.notifier);
                   final hasMore = notifier.hasMore;
+                  // Build items with date headers
+                  final items = <Widget>[];
+                  String? lastDate;
+                  for (var i = 0; i < list.length; i++) {
+                    final tx = list[i];
+                    final dateStr = DateFormat('MMMM d, yyyy').format(tx.date.toLocal());
+                    if (dateStr != lastDate) {
+                      lastDate = dateStr;
+                      items.add(_DateHeader(label: dateStr));
+                    }
+                    items.add(_TransactionTile(tx: tx));
+                  }
+                  if (hasMore) {
+                    items.add(
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
                   return NotificationListener<ScrollNotification>(
                     onNotification: (scroll) {
                       if (scroll.metrics.pixels >=
@@ -217,27 +247,9 @@ class TransactionsScreen extends ConsumerWidget {
                       }
                       return false;
                     },
-                    child: ListView.builder(
+                    child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: list.length + (hasMore ? 1 : 0),
-                      itemBuilder: (_, i) {
-                        if (i >= list.length) {
-                          return const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.primary,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        return _TransactionTile(tx: list[i]);
-                      },
+                      children: items,
                     ),
                   );
                 },
@@ -516,6 +528,28 @@ class _IconFilterButton extends StatelessWidget {
   }
 }
 
+// ─── Date Header (sticky-style group separator) ────────────────────
+class _DateHeader extends StatelessWidget {
+  final String label;
+  const _DateHeader({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.textMuted,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
 class _TransactionTile extends ConsumerWidget {
   final TransactionItem tx;
 
@@ -716,7 +750,6 @@ class _TransactionTile extends ConsumerWidget {
   Widget _buildTradeTile(BuildContext context, CurrencyInfo currency) {
     final diff = tx.tradeDiffCents;
     final pct = tx.tradeDiffPct;
-    final isGood = diff >= 0;
     final diffColor = diff > 0
         ? AppTheme.profit
         : diff < 0
@@ -733,124 +766,170 @@ class _TransactionTile extends ConsumerWidget {
     final giveVal = (tx.giveTotal ?? 0) / 100;
     final recvVal = (tx.recvTotal ?? 0) / 100;
 
-    // Fun verdict
-    final verdict = _getTradeVerdict(pct);
+    return StatefulBuilder(
+      builder: (context, setState) {
+        // Track expanded state via a static set to survive rebuilds
+        final expanded = _expandedTrades.contains(tx.id);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: AppTheme.glass(radius: AppTheme.r12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row
-            Row(
-              children: [
-                const Icon(Icons.swap_horiz, color: AppTheme.warning, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tx.marketHashName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.body.copyWith(fontWeight: FontWeight.w500),
+        return GestureDetector(
+          onTap: () => setState(() {
+            if (expanded) {
+              _expandedTrades.remove(tx.id);
+            } else {
+              _expandedTrades.add(tx.id);
+            }
+          }),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: AppTheme.glass(radius: AppTheme.r12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Compact row (always visible) ──
+                  Row(
+                    children: [
+                      const Icon(Icons.swap_horiz, color: AppTheme.warning, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              tx.marketHashName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.bodySmall.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: AppTheme.textPrimary),
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Text(
+                                  '${tx.giveCount ?? 0}→${tx.recvCount ?? 0}',
+                                  style: AppTheme.captionSmall.copyWith(
+                                      color: AppTheme.textMuted),
+                                ),
+                                const SizedBox(width: 8),
+                                Icon(
+                                  diff >= 0 ? Icons.trending_up : Icons.trending_down,
+                                  size: 12,
+                                  color: diffColor,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '${currency.formatWithSign(diff / 100)} (${pct.toStringAsFixed(1)}%)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: diffColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      _TypeBadge(label: tx.tradeStatus ?? 'trade', color: statusColor),
+                      const SizedBox(width: 6),
+                      Icon(
+                        expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                        color: AppTheme.textDisabled,
+                      ),
+                    ],
                   ),
-                ),
-                _TypeBadge(
-                  label: tx.tradeStatus ?? 'trade',
-                  color: statusColor,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
 
-            // Give / Receive summary
-            Row(
-              children: [
-                Expanded(
-                  child: _TradeValueBox(
-                    label: 'GAVE',
-                    count: tx.giveCount ?? 0,
-                    value: giveVal,
-                    color: AppTheme.loss,
-                    currency: currency,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Icon(Icons.arrow_forward, size: 16, color: AppTheme.textDisabled),
-                ),
-                Expanded(
-                  child: _TradeValueBox(
-                    label: 'GOT',
-                    count: tx.recvCount ?? 0,
-                    value: recvVal,
-                    color: AppTheme.profit,
-                    currency: currency,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Diff + verdict
-            Row(
-              children: [
-                Icon(
-                  isGood ? Icons.trending_up : Icons.trending_down,
-                  size: 16,
-                  color: diffColor,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${currency.formatWithSign(diff / 100)} (${pct.toStringAsFixed(1)}%)',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: diffColor,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  DateFormat('dd.MM.yyyy HH:mm').format(tx.date.toLocal()),
-                  style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
-                ),
-              ],
-            ),
-
-            // Verdict message
-            if (verdict != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                verdict,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: diffColor.withValues(alpha: 0.7),
-                ),
+                  // ── Expanded details ──
+                  if (expanded) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TradeValueBox(
+                            label: 'GAVE',
+                            count: tx.giveCount ?? 0,
+                            value: giveVal,
+                            color: AppTheme.loss,
+                            currency: currency,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Icon(Icons.arrow_forward, size: 16, color: AppTheme.textDisabled),
+                        ),
+                        Expanded(
+                          child: _TradeValueBox(
+                            label: 'GOT',
+                            count: tx.recvCount ?? 0,
+                            value: recvVal,
+                            color: AppTheme.profit,
+                            currency: currency,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text(
+                          _getTradeVerdict(pct) ?? '',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: diffColor.withValues(alpha: 0.7),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          DateFormat('dd.MM.yyyy HH:mm').format(tx.date.toLocal()),
+                          style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    // Date in compact mode (right-aligned under row)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          DateFormat('dd.MM.yyyy HH:mm').format(tx.date.toLocal()),
+                          style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  String? _getTradeVerdict(double pct) {
+  static String? _getTradeVerdict(double pct) {
+    // Use hashCode-based selection but make it static
+    final hash = pct.hashCode.abs();
     if (pct >= 15) {
-      return const ['Bro, you absolutely cooked here', 'Free money glitch activated', 'W trade. Hall of fame material.'][tx.id.hashCode.abs() % 3];
+      return const ['Bro, you absolutely cooked here', 'Free money glitch activated', 'W trade. Hall of fame material.'][hash % 3];
     } else if (pct >= 3) {
-      return const ['Nice one! You came out on top', 'Solid trade, clean profit', 'GG, you won this round'][tx.id.hashCode.abs() % 3];
+      return const ['Nice one! You came out on top', 'Solid trade, clean profit', 'GG, you won this round'][hash % 3];
     } else if (pct >= -3) {
-      return const ['Fair trade. Both happy, nobody scammed', 'Perfectly balanced, as all things should be', "A gentleman's agreement"][tx.id.hashCode.abs() % 3];
+      return const ['Fair trade. Both happy, nobody scammed', 'Perfectly balanced, as all things should be', "A gentleman's agreement"][hash % 3];
     } else if (pct >= -15) {
-      return const ["I'd think twice about this one...", 'Not your best trade, chief', 'You might be leaving money on the table'][tx.id.hashCode.abs() % 3];
+      return const ["I'd think twice about this one...", 'Not your best trade, chief', 'You might be leaving money on the table'][hash % 3];
     } else {
-      return const ['Bro... who hurt you?', "I'm calling the trade police on this one", 'My brother in Christ, what are you doing?'][tx.id.hashCode.abs() % 3];
+      return const ['Bro... who hurt you?', "I'm calling the trade police on this one", 'My brother in Christ, what are you doing?'][hash % 3];
     }
   }
 }
+
+// Track which trades are expanded (persists across rebuilds within session)
+final _expandedTrades = <String>{};
 
 class _TypeBadge extends StatelessWidget {
   final String label;

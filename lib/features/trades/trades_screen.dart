@@ -246,8 +246,9 @@ class _PendingTab extends ConsumerWidget {
           ),
         );
       },
-      loading: () => Center(
-        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+      loading: () => ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: List.generate(4, (_) => const SkeletonTradeTile()),
       ),
       error: (_, _) => EmptyState(
         icon: Icons.cloud_off_rounded,
@@ -348,8 +349,9 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
           ),
         );
       },
-      loading: () => Center(
-        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+      loading: () => ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: List.generate(4, (_) => const SkeletonTradeTile()),
       ),
       error: (_, _) => EmptyState(
         icon: Icons.cloud_off_rounded,
@@ -426,7 +428,7 @@ class _TradeOfferTile extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  _StatusBadge(status: offer.status),
+                  StatusChip.fromTradeStatus(offer.status),
                 ],
               ),
 
@@ -823,47 +825,7 @@ class _ItemsPreview extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Status badge
-// ---------------------------------------------------------------------------
-
-class _StatusBadge extends StatelessWidget {
-  final String status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (Color color, String label) = switch (status) {
-      'pending' => (AppTheme.warning, 'Pending'),
-      'awaiting_confirmation' => (Colors.orange, 'Awaiting Confirmation'),
-      'on_hold' => (AppTheme.warning, 'On Hold'),
-      'accepted' => (AppTheme.profit, 'Accepted'),
-      'declined' => (AppTheme.loss, 'Declined'),
-      'cancelled' => (AppTheme.textMuted, 'Cancelled'),
-      'expired' => (AppTheme.textMuted, 'Expired'),
-      'countered' => (AppTheme.steamBlue, 'Countered'),
-      'error' => (AppTheme.loss, 'Error'),
-      _ => (AppTheme.textMuted, status),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppTheme.r8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
+// StatusBadge replaced by shared StatusChip widget from shared_ui.dart
 
 // ---------------------------------------------------------------------------
 // Sync button with loading spinner
