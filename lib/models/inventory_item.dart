@@ -212,18 +212,35 @@ class InventoryItem {
     return const {415, 416, 417, 618}.contains(paintIndex);
   }
 
-  /// Whether this item has rare properties worth highlighting with a gem icon:
-  /// - Rare Doppler phases (Ruby/Sapphire/Black Pearl/Emerald)
-  /// - Extremely low float (< 0.001)
-  /// - Extremely high float (> 0.999)
-  /// Non-weapon items (stickers, patches, etc.) are never considered rare.
+  /// Whether this item has rare properties worth highlighting.
   bool get isRareItem {
     if (isNonWeapon) return false;
-    if (isRareDoppler) return true;
-    if (floatValue != null && (floatValue! < 0.001 || floatValue! > 0.999)) {
-      return true;
+    return rareReason != null;
+  }
+
+  /// Human-readable reason why item is rare, or null if not rare.
+  String? get rareReason {
+    if (isNonWeapon) return null;
+    if (isRareDoppler) return dopplerPhase; // "Ruby", "Sapphire", etc.
+    if (isDoppler && dopplerPhase != null) return dopplerPhase;
+    // Extreme floats
+    if (floatValue != null) {
+      if (floatValue! < 0.001) return 'Low Float';
+      if (floatValue! > 0.999) return 'High Float';
+      // Near-perfect FN
+      if (floatValue! < 0.01 && wear == 'Factory New') return 'Clean FN';
     }
-    return false;
+    // Fade — all Fades with high paint_seed are "full fade"
+    if (marketHashName.contains('Fade') && paintSeed != null && paintSeed! >= 990) {
+      return 'Full Fade';
+    }
+    // Case Hardened blue gem patterns (most famous seeds)
+    if (marketHashName.contains('Case Hardened') && paintSeed != null) {
+      if (const {661, 670, 387, 321, 955, 592, 868, 179}.contains(paintSeed)) {
+        return 'Blue Gem';
+      }
+    }
+    return null;
   }
 
   double? get steamPrice => prices['steam'];
