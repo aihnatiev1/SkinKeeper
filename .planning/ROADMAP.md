@@ -2,7 +2,7 @@
 
 ## Overview
 
-Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3 adds post-launch power features: multi-account support, offline price cache, and home screen widgets.
+Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3 adds post-launch power features: multi-account support, offline price cache, and home screen widgets. Milestone 4 focuses on quality: full-stack refactoring and comprehensive test coverage.
 
 ## Milestones
 
@@ -14,6 +14,8 @@ Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3
 ### Milestone 2: Premium & Growth — COMPLETE
 
 ### Milestone 3: Post-Launch Features — ACTIVE
+
+### Milestone 4: Quality & Stability — PLANNED
 
 ## Phases
 
@@ -42,6 +44,11 @@ Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3
 - [ ] **Phase 11: Multi-Account Support** — Link multiple Steam accounts, account switching, per-account selling, premium gate (PREMIUM)
 - [ ] **Phase 12: Offline Price Cache** — Local price DB, offline inventory display, background sync, cache management
 - [ ] **Phase 13: Home Screen Widget** — iOS WidgetKit + Android AppWidget, portfolio summary, periodic refresh
+
+### Milestone 4 (Planned)
+
+- [ ] **Phase 14: Grand Refactoring** — Backend perf (DB pool, caches, validation, SteamClient), Flutter UX/UI overhaul (widget decomposition, state optimization, design polish)
+- [ ] **Phase 15: Testing** — Backend unit + integration tests, Flutter unit + widget + E2E tests, coverage targets
 
 ## Phase Details (M3)
 
@@ -96,10 +103,49 @@ Plans:
 - [ ] 13-01-PLAN.md — Native: iOS WidgetKit extension (Swift) + Android AppWidgetProvider (Kotlin), App Groups data sharing, home_widget Flutter bridge
 - [ ] 13-02-PLAN.md — Flutter: widget data provider, background refresh scheduling, premium P/L in widget, deep link handling
 
+## Phase Details (M4)
+
+### Phase 14: Grand Refactoring
+**Goal**: Production-grade backend + polished, fast Flutter frontend
+**Depends on**: Phase 13 (all features built, now refactor)
+**Requirements**: REFAC-01 (DB hardening), REFAC-02 (input validation), REFAC-03 (SteamClient), REFAC-04 (memory management), REFAC-05 (TypeScript strictness), REFAC-06 (widget decomposition), REFAC-07 (state optimization), REFAC-08 (UX polish)
+**Success Criteria**:
+  1. Connection pool configured with explicit limits, health check on startup
+  2. All API routes validated with zod schemas
+  3. Centralized SteamClient with retry, rate limiting, metrics
+  4. No unbounded caches — all use TTL + maxSize
+  5. Zero TypeScript `any` in non-vendor code, strict mode enabled
+  6. inventory_screen.dart under 200 lines (decomposed into components)
+  7. No provider watched from GridView.builder — all use `.family` or `.select()`
+  8. Glassmorphic design polished: micro-interactions, hero transitions, skeleton screens
+**Plans**: 2 plans
+
+Plans:
+- [ ] 14-01-PLAN.md — Backend: DB pool, indexes, zod validation, SteamClient, TTL caches, typed errors, background task reliability, cheerio scrapers
+- [ ] 14-02-PLAN.md — Flutter: widget decomposition, state rebuild optimization, sell dedup, nav perf, design polish, inventory grid UX, screen polish, loading transitions
+
+### Phase 15: Testing
+**Goal**: Comprehensive test coverage for both backend and Flutter app
+**Depends on**: Phase 14 (refactored code is testable)
+**Requirements**: TEST-01 (backend unit), TEST-02 (backend integration), TEST-03 (Flutter unit), TEST-04 (Flutter widget), TEST-05 (E2E flows)
+**Success Criteria**:
+  1. Backend: jest + ts-jest + supertest configured, test DB auto-setup
+  2. Backend: ≥70% statement coverage, all 11 route files have integration tests
+  3. Backend: Steam HTML fixtures cover all scraper functions
+  4. Flutter: mocktail + integration_test configured
+  5. Flutter: all providers have unit tests, key widgets have widget tests
+  6. Flutter: 5 critical E2E flows pass (auth, inventory, sell, trades, portfolio)
+  7. All tests run without network (API calls mocked)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 15-01-PLAN.md — Backend: jest setup, test DB, utility tests, service tests, Steam client/scraper tests, route integration tests, coverage
+- [ ] 15-02-PLAN.md — Flutter: test infra, provider unit tests, widget tests, screen tests, E2E integration tests, coverage
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 → 13 (M3)
+Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 → 13 (M3) → 14 → 15 (M4)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -116,3 +162,5 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 11. Multi-Account Support | 0/2 | Pending | — |
 | 12. Offline Price Cache | 0/2 | Pending | — |
 | 13. Home Screen Widget | 1/2 | In Progress | — |
+| 14. Grand Refactoring | 1/2 | In Progress | — |
+| 15. Testing | 0/2 | Pending | — |

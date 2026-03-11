@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: M3
 milestone_name: Post-Launch Features
 status: in-progress
-stopped_at: Completed 13-02-PLAN.md (widget data provider + background refresh + deep links)
-last_updated: "2026-03-09T10:05:45.000Z"
-last_activity: 2026-03-09 -- Phase 13 Plan 2 complete (widget data pipeline, background refresh, deep links)
+stopped_at: Completed 14-01-PLAN.md (backend refactoring — DB, validation, caches, errors, scrapers)
+last_updated: "2026-03-12T00:00:00.000Z"
+last_activity: 2026-03-12 -- Phase 14 Plan 1 complete (backend refactoring — pool, zod, SteamClient, TTLCache, errors, cheerio)
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 6
-  completed_plans: 3
-  percent: 50
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 13 of 13 (Home Screen Widget)
-Plan: 2 of 2 complete
-Status: Phase 13 complete
-Last activity: 2026-03-09 -- Phase 13 Plan 2 complete (widget data pipeline, background refresh, deep links)
+Phase: 14 of 15 (Grand Refactoring)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-03-12 -- Phase 14 Plan 1 complete (backend refactoring)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 67%
 
 ## Performance Metrics
 
@@ -42,6 +42,7 @@ Progress: [█████░░░░░] 50%
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 13 | 02 | 169s | 5 | 5 |
+| 14 | 01 | 970s | 8 | 35 |
 
 ## Accumulated Context
 
@@ -59,6 +60,11 @@ Progress: [█████░░░░░] 50%
 - [13-01]: Android widget uses unicode arrows for change indicators
 - [13-02]: Background callback uses getPortfolioRaw() to ignore TTL for stale-but-present widget data
 - [13-02]: pushCachedToWidget() helper avoids duplication between foreground resume and background callback
+- [14-01]: Zod v4 API requires z.record(key, value) not z.record(value)
+- [14-01]: Express 5 req.params typed as string|string[] — use `as string` casts
+- [14-01]: TTLCache as shared utility with cache registry for centralized monitoring
+- [14-01]: Cheerio-first with regex fallback for all Steam HTML scrapers
+- [14-01]: SteamClient as utility module with retry/backoff, not class instance
 
 ### Pending Todos
 
@@ -70,6 +76,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-09
-Stopped at: Completed 13-02-PLAN.md (widget data provider + background refresh + deep links)
+Last session: 2026-03-12
+Stopped at: Completed 14-01-PLAN.md (backend refactoring — DB, validation, caches, errors, scrapers)
 Resume file: None
