@@ -5,6 +5,8 @@ import {
   requirePremium,
   AuthRequest,
 } from "../middleware/auth.js";
+import { validateBody } from "../middleware/validate.js";
+import { createAlertSchema, toggleAlertSchema, registerDeviceSchema } from "../middleware/schemas.js";
 
 const router = Router();
 
@@ -38,25 +40,14 @@ router.post(
   "/",
   authMiddleware,
   // requirePremium,
+  validateBody(createAlertSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const { market_hash_name, condition, threshold, source, cooldown_minutes } =
         req.body;
 
-      if (!market_hash_name || !condition || threshold == null) {
-        res.status(400).json({ error: "Missing required fields" });
-        return;
-      }
-
-      const validConditions = ["above", "below", "changePct"];
-      if (!validConditions.includes(condition)) {
-        res.status(400).json({ error: "Invalid condition" });
-        return;
-      }
-
-      const validSources = ["steam", "skinport", "csfloat", "dmarket", "any"];
-      const alertSource = validSources.includes(source) ? source : "any";
-      const cooldown = cooldown_minutes ?? 60;
+      const alertSource = source;
+      const cooldown = cooldown_minutes;
 
       // Limit: max 20 alerts per user
       const { rows: countRows } = await pool.query(
@@ -114,20 +105,17 @@ router.get(
 router.post(
   "/device",
   authMiddleware,
+  validateBody(registerDeviceSchema),
   async (req: AuthRequest, res: Response) => {
     try {
-      const { fcm_token, platform } = req.body;
-      if (!fcm_token || !platform) {
-        res.status(400).json({ error: "Missing fcm_token or platform" });
-        return;
-      }
+      const { fcm_token, platform, push_prefs } = req.body;
 
       await pool.query(
-        `INSERT INTO user_devices (user_id, fcm_token, platform)
-         VALUES ($1, $2, $3)
+        `INSERT INTO user_devices (user_id, fcm_token, platform, push_prefs)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (user_id, fcm_token)
-         DO UPDATE SET updated_at = NOW()`,
-        [req.userId, fcm_token, platform]
+         DO UPDATE SET updated_at = NOW(), push_prefs = COALESCE($4, user_devices.push_prefs)`,
+        [req.userId, fcm_token, platform, push_prefs ? JSON.stringify(push_prefs) : null]
       );
 
       res.json({ success: true });
@@ -163,6 +151,7 @@ router.patch(
   "/:id",
   authMiddleware,
   // requirePremium,
+  validateBody(toggleAlertSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const { is_active } = req.body;

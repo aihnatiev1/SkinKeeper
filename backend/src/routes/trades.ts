@@ -1,5 +1,7 @@
 import { Router, Response } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { validateBody, validateQuery } from "../middleware/validate.js";
+import { sendTradeSchema, quickTransferSchema, tradeTokenSchema, tradesListQuerySchema } from "../middleware/schemas.js";
 import {
   createAndSendOffer,
   acceptOffer,
@@ -91,18 +93,15 @@ router.get(
 router.put(
   "/accounts/:id/trade-token",
   authMiddleware,
+  validateBody(tradeTokenSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const { tradeToken } = req.body;
-      if (!tradeToken) {
-        res.status(400).json({ error: "tradeToken required" });
-        return;
-      }
 
       const { rowCount } = await pool.query(
         `UPDATE steam_accounts SET trade_token = $1
          WHERE id = $2 AND user_id = $3`,
-        [tradeToken, req.params.id, req.userId!]
+        [tradeToken, req.params.id as string, req.userId!]
       );
 
       if (!rowCount || rowCount === 0) {
@@ -129,7 +128,7 @@ router.get(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const items = await fetchPartnerInventory(req.params.steamId);
+      const items = await fetchPartnerInventory(req.params.steamId as string);
       res.json({ items, count: items.length });
     } catch (err: any) {
       console.error("Partner inventory error:", err.message);
@@ -166,11 +165,11 @@ router.post(
  * List trade offers. Optional ?status=pending filter.
  * Auto-syncs from Steam on first page load (offset=0).
  */
-router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get("/", authMiddleware, validateQuery(tradesListQuerySchema), async (req: AuthRequest, res: Response) => {
   try {
     const status = req.query.status as string | undefined;
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
-    const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+    const limit = req.query.limit as unknown as number;
+    const offset = req.query.offset as unknown as number;
 
     // Auto-sync on first page load (fire and forget to avoid slowing response)
     if (offset === 0) {
@@ -196,7 +195,7 @@ router.get(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const analysis = await analyzeTradeOffer(req.params.id, req.userId!);
+      const analysis = await analyzeTradeOffer(req.params.id as string, req.userId!);
       if (!analysis) {
         res.status(404).json({ error: "Trade offer not found" });
         return;
@@ -215,7 +214,7 @@ router.get(
  */
 router.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const offer = await getOffer(req.params.id, req.userId!);
+    const offer = await getOffer(req.params.id as string, req.userId!);
     if (!offer) {
       res.status(404).json({ error: "Trade offer not found" });
       return;
@@ -235,23 +234,13 @@ router.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.post(
   "/send",
   authMiddleware,
+  validateBody(sendTradeSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const input = req.body as CreateTradeInput;
 
-      if (!input.partnerSteamId) {
-        res
-          .status(400)
-          .json({ error: "partnerSteamId is required" });
-        return;
-      }
-      if (
-        (!input.itemsToGive || input.itemsToGive.length === 0) &&
-        (!input.itemsToReceive || input.itemsToReceive.length === 0)
-      ) {
-        res
-          .status(400)
-          .json({ error: "At least one side must have items" });
+      if (input.itemsToGive.length === 0 && input.itemsToReceive.length === 0) {
+        res.status(400).json({ error: "At least one side must have items" });
         return;
       }
 
@@ -282,7 +271,7 @@ router.post(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const result = await acceptOffer(req.userId!, req.params.id);
+      const result = await acceptOffer(req.userId!, req.params.id as string);
       res.json({
         status: "accepted",
         needsConfirmation: result.needsConfirmation,
@@ -306,7 +295,7 @@ router.post(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      await declineOffer(req.userId!, req.params.id);
+      await declineOffer(req.userId!, req.params.id as string);
       res.json({ status: "declined" });
     } catch (err: any) {
       if (err?.code === "SESSION_EXPIRED") {
@@ -328,7 +317,7 @@ router.post(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      await cancelOffer(req.userId!, req.params.id);
+      await cancelOffer(req.userId!, req.params.id as string);
       res.json({ status: "cancelled" });
     } catch (err: any) {
       if (err?.code === "SESSION_EXPIRED") {
@@ -351,24 +340,10 @@ router.post(
 router.post(
   "/quick-transfer",
   authMiddleware,
+  validateBody(quickTransferSchema),
   async (req: AuthRequest, res: Response) => {
     try {
-      const { fromAccountId, toAccountId, items } = req.body as {
-        fromAccountId: number;
-        toAccountId: number;
-        items: Array<{
-          assetId: string;
-          marketHashName?: string;
-          priceCents?: number;
-        }>;
-      };
-
-      if (!fromAccountId || !toAccountId || !items?.length) {
-        res
-          .status(400)
-          .json({ error: "fromAccountId, toAccountId, and items required" });
-        return;
-      }
+      const { fromAccountId, toAccountId, items } = req.body;
 
       // Verify both accounts belong to this user
       const { rows: accounts } = await pool.query(
@@ -408,7 +383,7 @@ router.post(
       const offer = await createAndSendOffer(req.userId!, {
         partnerSteamId: toAccount.steam_id,
         tradeToken: tradeToken || undefined,
-        itemsToGive: items.map((i) => ({
+        itemsToGive: items.map((i: { assetId: string; marketHashName?: string; priceCents?: number }) => ({
           assetId: i.assetId,
           marketHashName: i.marketHashName,
           priceCents: i.priceCents,

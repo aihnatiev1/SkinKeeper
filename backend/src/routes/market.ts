@@ -2,6 +2,8 @@ import { Router, Response } from "express";
 import axios from "axios";
 import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { validateBody } from "../middleware/validate.js";
+import { sellOperationSchema, sellItemSchema, sessionCookiesSchema, clientTokenSchema } from "../middleware/schemas.js";
 import {
   sellItem,
   quickSellPrice,
@@ -31,13 +33,10 @@ const router = Router();
 router.post(
   "/session",
   authMiddleware,
+  validateBody(sessionCookiesSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const { sessionId, steamLoginSecure, accountId } = req.body;
-      if (!sessionId || !steamLoginSecure) {
-        res.status(400).json({ error: "sessionId and steamLoginSecure required" });
-        return;
-      }
 
       const resolvedAccountId = accountId
         ? parseInt(accountId)
@@ -61,13 +60,10 @@ router.post(
 router.post(
   "/clienttoken",
   authMiddleware,
+  validateBody(clientTokenSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const { steamid, token, accountId } = req.body;
-      if (!steamid || !token) {
-        res.status(400).json({ error: "Invalid clientjstoken data. Must contain steamid and token." });
-        return;
-      }
 
       const resolvedAccountId = accountId
         ? parseInt(accountId)
@@ -227,35 +223,10 @@ router.get(
 router.post(
   "/sell-operation",
   authMiddleware,
+  validateBody(sellOperationSchema),
   async (req: AuthRequest, res: Response) => {
     try {
-      const { items, accountId } = req.body as {
-        items: Array<{
-          assetId: string;
-          marketHashName: string;
-          priceCents: number;
-        }>;
-        accountId?: number;
-      };
-
-      if (!items || !Array.isArray(items) || items.length === 0) {
-        res.status(400).json({ error: "Items array is required and must not be empty" });
-        return;
-      }
-
-      if (items.length > 50) {
-        res.status(400).json({ error: "Maximum 50 items per sell operation" });
-        return;
-      }
-
-      for (const item of items) {
-        if (!item.assetId || !item.priceCents || item.priceCents <= 0) {
-          res.status(400).json({
-            error: "Each item must have assetId and priceCents > 0",
-          });
-          return;
-        }
-      }
+      const { items, accountId } = req.body;
 
       // Resolve account
       const resolvedAccountId = accountId

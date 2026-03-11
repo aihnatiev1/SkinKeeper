@@ -1,5 +1,7 @@
 import { Router, Response } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { validateBody } from "../middleware/validate.js";
+import { manualTransactionSchema, batchManualSchema, csvImportSchema } from "../middleware/schemas.js";
 import { pool } from "../db/pool.js";
 import { recalculateCostBasis } from "../services/profitLoss.js";
 import { randomUUID } from "crypto";
@@ -13,27 +15,18 @@ const router = Router();
 router.post(
   "/manual",
   authMiddleware,
+  validateBody(manualTransactionSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const {
         marketHashName,
         priceCents,
-        type = "buy",
+        type,
         date,
-        source = "manual",
+        source,
         note,
         iconUrl,
       } = req.body;
-
-      if (!marketHashName || !priceCents || priceCents <= 0) {
-        res.status(400).json({ error: "marketHashName and priceCents > 0 are required" });
-        return;
-      }
-
-      if (type !== "buy" && type !== "sell") {
-        res.status(400).json({ error: "type must be 'buy' or 'sell'" });
-        return;
-      }
 
       const txId = `manual_${randomUUID()}`;
       const txDate = date ? new Date(date).toISOString() : new Date().toISOString();
@@ -124,19 +117,10 @@ router.get(
 router.post(
   "/import-csv",
   authMiddleware,
+  validateBody(csvImportSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const { rows: csvRows } = req.body;
-
-      if (!Array.isArray(csvRows) || csvRows.length === 0) {
-        res.status(400).json({ error: "rows array is required" });
-        return;
-      }
-
-      if (csvRows.length > 500) {
-        res.status(400).json({ error: "Maximum 500 rows per import" });
-        return;
-      }
 
       let imported = 0;
       let skipped = 0;
@@ -237,25 +221,21 @@ router.get(
 router.post(
   "/manual/batch",
   authMiddleware,
+  validateBody(batchManualSchema),
   async (req: AuthRequest, res: Response) => {
     try {
       const {
         marketHashName,
         priceCentsPerUnit,
-        quantity = 1,
-        type = "buy",
+        quantity,
+        type,
         date,
-        source = "manual",
+        source,
         note,
         iconUrl,
       } = req.body;
 
-      if (!marketHashName || !priceCentsPerUnit || priceCentsPerUnit <= 0) {
-        res.status(400).json({ error: "marketHashName and priceCentsPerUnit > 0 required" });
-        return;
-      }
-
-      const qty = Math.max(1, Math.min(quantity, 10000));
+      const qty = quantity;
       const txDate = date ? new Date(date).toISOString() : new Date().toISOString();
       const txIds: string[] = [];
 

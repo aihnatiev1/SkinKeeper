@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
 import { getLatestPrices, getPriceHistory } from "../services/prices.js";
+import { validateBody, validateQuery } from "../middleware/validate.js";
+import { batchPricesSchema, priceHistoryQuerySchema } from "../middleware/schemas.js";
 
 const router = Router();
 
@@ -29,9 +31,9 @@ async function fetchSteamMarketPrice(name: string): Promise<number | null> {
 
 // POST /api/prices/batch — batch price lookup with Steam Market fallback
 // Body: { names: ["AK-47 | Redline", ...] }
-router.post("/batch", async (req: Request, res: Response) => {
+router.post("/batch", validateBody(batchPricesSchema), async (req: Request, res: Response) => {
   try {
-    const names: string[] = req.body?.names ?? [];
+    const names: string[] = req.body.names;
     if (names.length === 0) { res.json({ prices: {} }); return; }
     const uniqueNames = [...new Set(names)].slice(0, 500);
     const priceMap = await getLatestPrices(uniqueNames);
@@ -75,10 +77,11 @@ router.get("/:marketHashName", async (req: Request, res: Response) => {
 // GET /api/prices/:marketHashName/history?days=30
 router.get(
   "/:marketHashName/history",
+  validateQuery(priceHistoryQuerySchema),
   async (req: Request, res: Response) => {
     try {
       const marketHashName = req.params.marketHashName as string;
-      const days = parseInt(req.query.days as string) || 30;
+      const days = req.query.days as unknown as number;
       const history = await getPriceHistory(marketHashName, days);
       res.json({ market_hash_name: marketHashName, history });
     } catch (err) {
