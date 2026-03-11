@@ -57,15 +57,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       await ref.read(sellOperationProvider.notifier).startOperation(sellItems);
 
       if (!mounted) return;
-      showModalBottomSheet(
-        context: context,
-        useRootNavigator: true,
-        isScrollControlled: true,
-        isDismissible: false,
-        enableDrag: false,
-        backgroundColor: Colors.transparent,
-        builder: (_) => const SellProgressSheet(),
-      );
+      showGlassSheetLocked(context, const SellProgressSheet());
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

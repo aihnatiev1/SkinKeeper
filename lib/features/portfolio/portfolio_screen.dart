@@ -16,6 +16,7 @@ import '../auth/widgets/session_status_widget.dart';
 import '../purchases/iap_service.dart';
 import 'portfolio_pl_provider.dart';
 import 'portfolio_provider.dart';
+import '../../widgets/glass_sheet.dart';
 import 'widgets/add_transaction_sheet.dart';
 import 'widgets/item_pl_list.dart';
 import 'widgets/pl_history_chart.dart';
@@ -27,13 +28,7 @@ class PortfolioScreen extends ConsumerWidget {
 
   void _showAddTransaction(BuildContext context) {
     HapticFeedback.mediumImpact();
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const AddTransactionSheet(),
-    );
+    showGlassSheet(context, const AddTransactionSheet());
   }
 
   @override
@@ -186,13 +181,7 @@ class _PLQuickSummary extends ConsumerWidget {
             onTap: () {
               // Show add transaction sheet
               HapticFeedback.mediumImpact();
-              showModalBottomSheet(
-                context: context,
-                useRootNavigator: true,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => const AddTransactionSheet(),
-              );
+              showGlassSheet(context, const AddTransactionSheet());
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

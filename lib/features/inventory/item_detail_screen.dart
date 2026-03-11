@@ -16,6 +16,7 @@ import '../../models/inventory_item.dart';
 import '../../widgets/shared_ui.dart';
 import '../portfolio/portfolio_pl_provider.dart';
 import 'sell_provider.dart';
+import '../../widgets/glass_sheet.dart';
 import 'widgets/fee_breakdown.dart';
 import 'widgets/price_comparison_table.dart';
 import 'widgets/price_history_chart.dart';
@@ -193,30 +194,33 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
           children: [
             // ── Hero image ──
             Center(
-              child: Container(
-                width: 220,
-                height: 220,
-                child: item.fullIconUrl.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: item.fullIconUrl,
-                              fit: BoxFit.contain,
-                              placeholder: (_, _) => const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+              child: Hero(
+                tag: 'item_image_${item.assetId}',
+                child: SizedBox(
+                  width: 220,
+                  height: 220,
+                  child: item.fullIconUrl.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: item.fullIconUrl,
+                                fit: BoxFit.contain,
+                                placeholder: (_, _) => const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.textDisabled,
+                                  ),
+                                ),
+                                errorWidget: (_, _, _) => const Icon(
+                                  Icons.image_not_supported_rounded,
+                                  size: 48,
                                   color: AppTheme.textDisabled,
                                 ),
-                              ),
-                              errorWidget: (_, _, _) => const Icon(
+                              )
+                            : const Icon(
                                 Icons.image_not_supported_rounded,
                                 size: 48,
                                 color: AppTheme.textDisabled,
                               ),
-                            )
-                          : const Icon(
-                              Icons.image_not_supported_rounded,
-                              size: 48,
-                              color: AppTheme.textDisabled,
-                            ),
+                ),
               ),
             )
                 .animate()
@@ -323,26 +327,18 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     color: AppTheme.primary.withValues(alpha: 0.1),
                   ),
 
-            // ── Stickers ──
-            if (item.stickers.isNotEmpty) ...[
+            // ── Stickers & Charms ──
+            if (item.stickers.isNotEmpty || item.charms.isNotEmpty) ...[
               GlassCard(
                 padding: const EdgeInsets.all(AppTheme.s14),
                 margin: const EdgeInsets.only(bottom: AppTheme.s12),
-                child: StickerDisplay(stickers: item.stickers),
+                child: StickersAndCharmsDisplay(
+                  stickers: item.stickers,
+                  charms: item.charms,
+                ),
               )
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 300.ms),
-            ],
-
-            // ── Charms ──
-            if (item.charms.isNotEmpty) ...[
-              GlassCard(
-                padding: const EdgeInsets.all(AppTheme.s14),
-                margin: const EdgeInsets.only(bottom: AppTheme.s12),
-                child: CharmDisplay(charms: item.charms),
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 350.ms),
             ],
 
             // ── Steam price ──
@@ -495,12 +491,9 @@ class _PLSection extends ConsumerWidget {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  showModalBottomSheet(
-                    context: context,
-                    useRootNavigator: true,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => _AddPurchaseSheet(
+                  showGlassSheet(
+                    context,
+                    _AddPurchaseSheet(
                       marketHashName: marketHashName,
                       iconUrl: iconUrl,
                       ref: ref,
@@ -985,15 +978,8 @@ class _SellActions extends ConsumerWidget {
                                 .read(sellOperationProvider.notifier)
                                 .startOperation(items);
                             if (context.mounted) {
-                              showModalBottomSheet(
-                                context: context,
-                                useRootNavigator: true,
-                                isScrollControlled: true,
-                                isDismissible: false,
-                                enableDrag: false,
-                                backgroundColor: Colors.transparent,
-                                builder: (_) => const SellProgressSheet(),
-                              );
+                              showGlassSheetLocked(
+                                  context, const SellProgressSheet());
                             }
                           },
                           child: Container(
@@ -1040,14 +1026,8 @@ class _SellActions extends ConsumerWidget {
                         child: GestureDetector(
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            showModalBottomSheet(
-                              context: context,
-                              useRootNavigator: true,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (_) =>
-                                  SellBottomSheet(items: [item]),
-                            );
+                            showGlassSheet(
+                                context, SellBottomSheet(items: [item]));
                           },
                           child: Container(
                             height: 48,
@@ -1079,13 +1059,7 @@ class _SellActions extends ConsumerWidget {
               label: 'Sell Item',
               icon: Icons.sell_rounded,
               onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  useRootNavigator: true,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => SellBottomSheet(items: [item]),
-                );
+                showGlassSheet(context, SellBottomSheet(items: [item]));
               },
             ),
           ),
@@ -1106,12 +1080,9 @@ class _LogPurchaseButton extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        showModalBottomSheet(
-          context: context,
-          useRootNavigator: true,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => AddTransactionSheet(
+        showGlassSheet(
+          context,
+          AddTransactionSheet(
             initialItemName: item.marketHashName,
             initialIconUrl: item.iconUrl,
           ),
