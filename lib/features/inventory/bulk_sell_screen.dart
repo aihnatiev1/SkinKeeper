@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
+import '../../widgets/glass_sheet.dart';
 import 'inventory_provider.dart';
 import 'sell_provider.dart';
 import 'widgets/sell_progress_sheet.dart';
@@ -45,26 +46,19 @@ class _ItemGroup {
 // ---------------------------------------------------------------------------
 
 class _GroupSel {
-  bool selected;
-  int sellCount;
-  bool expanded;
-  Set<String> pickedIds; // individual picks (overrides sellCount when non-empty)
+  Set<String> selectedIds;
 
-  _GroupSel({
-    this.sellCount = 0,
-    Set<String>? pickedIds,
-  })  : selected = false,
-        expanded = false,
-        pickedIds = pickedIds ?? {};
+  _GroupSel() : selectedIds = {};
 
-  bool get isIndividualMode => pickedIds.isNotEmpty;
+  bool get selected => selectedIds.isNotEmpty;
+  int get count => selectedIds.length;
 }
 
 // ---------------------------------------------------------------------------
 // Sort
 // ---------------------------------------------------------------------------
 
-enum _Sort { countDesc, priceDesc, nameAsc, valueDesc }
+enum _Sort { priceDesc, priceAsc, countDesc, nameAsc, valueDesc }
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -80,7 +74,7 @@ class BulkSellScreen extends ConsumerStatefulWidget {
 class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
   List<_ItemGroup> _groups = [];
   final Map<String, _GroupSel> _sel = {};
-  _Sort _sort = _Sort.countDesc;
+  _Sort _sort = _Sort.priceDesc;
   String _search = '';
   bool _built = false;
 
@@ -107,10 +101,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
     }).toList();
 
     for (final g in _groups) {
-      _sel.putIfAbsent(
-        g.marketHashName,
-        () => _GroupSel(sellCount: g.count > 1 ? g.count - 1 : 1),
-      );
+      _sel.putIfAbsent(g.marketHashName, () => _GroupSel());
     }
 
     _applySorting();
@@ -118,11 +109,14 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
 
   void _applySorting() {
     switch (_sort) {
-      case _Sort.countDesc:
-        _groups.sort((a, b) => b.count.compareTo(a.count));
       case _Sort.priceDesc:
         _groups.sort(
             (a, b) => (b.estimatedPrice ?? 0).compareTo(a.estimatedPrice ?? 0));
+      case _Sort.priceAsc:
+        _groups.sort(
+            (a, b) => (a.estimatedPrice ?? 0).compareTo(b.estimatedPrice ?? 0));
+      case _Sort.countDesc:
+        _groups.sort((a, b) => b.count.compareTo(a.count));
       case _Sort.nameAsc:
         _groups.sort((a, b) => a.displayName.compareTo(b.displayName));
       case _Sort.valueDesc:
@@ -148,9 +142,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
     int n = 0;
     for (final g in _groups) {
       final s = _sel[g.marketHashName];
-      if (s != null && s.selected) {
-        n += s.isIndividualMode ? s.pickedIds.length : s.sellCount;
-      }
+      if (s != null) n += s.count;
     }
     return n;
   }
@@ -160,17 +152,13 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
     for (final g in _groups) {
       final s = _sel[g.marketHashName];
       if (s != null && s.selected) {
-        final cnt = s.isIndividualMode ? s.pickedIds.length : s.sellCount;
-        v += (g.estimatedPrice ?? 0) * cnt;
+        v += (g.estimatedPrice ?? 0) * s.count;
       }
     }
     return v;
   }
 
-  bool get _hasSelection => _sel.values.any((s) => s.selected && _effectiveCount(s) > 0);
-
-  int _effectiveCount(_GroupSel s) =>
-      s.isIndividualMode ? s.pickedIds.length : s.sellCount;
+  bool get _hasSelection => _sel.values.any((s) => s.selected);
 
   bool get _allSelected =>
       _groups.isNotEmpty &&
@@ -183,62 +171,46 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
     setState(() {
       for (final g in _groups) {
         final s = _sel[g.marketHashName]!;
-        s.selected = target;
-        if (target && s.sellCount == 0) {
-          s.sellCount = g.count > 1 ? g.count - 1 : 1;
+        if (target) {
+          // Select all items (up to 1000 per group)
+          final take = g.count > 1000 ? 1000 : g.count;
+          s.selectedIds = g.items.take(take).map((i) => i.assetId).toSet();
+        } else {
+          s.selectedIds.clear();
         }
       }
     });
     HapticFeedback.selectionClick();
   }
 
-  void _toggleGroup(String name, int count) {
-    setState(() {
-      final s = _sel[name]!;
-      s.selected = !s.selected;
-      if (s.selected && s.sellCount == 0 && s.pickedIds.isEmpty) {
-        s.sellCount = count > 1 ? count - 1 : 1;
-      }
-    });
-    HapticFeedback.selectionClick();
-  }
+  void _openQuantitySheet(_ItemGroup group) {
+    final s = _sel[group.marketHashName]!;
 
-  void _setCount(String name, int val, int max) {
-    setState(() {
-      final s = _sel[name]!;
-      s.sellCount = val.clamp(1, max > 1000 ? 1000 : max);
-      s.pickedIds.clear(); // back to quantity mode
-    });
-  }
+    // Single item — just toggle selection, no popup needed
+    if (group.count == 1) {
+      setState(() {
+        if (s.selected) {
+          s.selectedIds.clear();
+        } else {
+          s.selectedIds = {group.items.first.assetId};
+        }
+      });
+      HapticFeedback.selectionClick();
+      return;
+    }
 
-  void _sellAllGroup(String name, int count) {
-    setState(() {
-      final s = _sel[name]!;
-      s.selected = true;
-      s.sellCount = count > 1000 ? 1000 : count;
-      s.pickedIds.clear();
-    });
-    HapticFeedback.selectionClick();
-  }
-
-  void _toggleItem(String groupName, String assetId, _ItemGroup group) {
-    setState(() {
-      final s = _sel[groupName]!;
-      if (s.pickedIds.contains(assetId)) {
-        s.pickedIds.remove(assetId);
-      } else {
-        s.pickedIds.add(assetId);
-      }
-      s.sellCount = s.pickedIds.isEmpty
-          ? (group.count > 1 ? group.count - 1 : 1)
-          : s.pickedIds.length;
-      s.selected = s.pickedIds.isNotEmpty || s.sellCount > 0;
-    });
-    HapticFeedback.selectionClick();
-  }
-
-  void _toggleExpand(String name) {
-    setState(() => _sel[name]!.expanded = !_sel[name]!.expanded);
+    showGlassSheet(
+      context,
+      _BulkSellQuantitySheet(
+        group: group,
+        preSelectedIds: Set<String>.from(s.selectedIds),
+        onConfirm: (chosenIds) {
+          setState(() {
+            s.selectedIds = chosenIds.toSet();
+          });
+        },
+      ),
+    );
   }
 
   // --- Sell ----------------------------------------------------------------
@@ -248,13 +220,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
     for (final g in _groups) {
       final s = _sel[g.marketHashName];
       if (s == null || !s.selected) continue;
-
-      if (s.isIndividualMode) {
-        result.addAll(
-            g.items.where((i) => s.pickedIds.contains(i.assetId)));
-      } else if (s.sellCount > 0) {
-        result.addAll(g.items.take(s.sellCount));
-      }
+      result.addAll(g.items.where((i) => s.selectedIds.contains(i.assetId)));
     }
     return result;
   }
@@ -275,15 +241,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
 
     ref.read(sellOperationProvider.notifier).startOperation(payload);
 
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const SellProgressSheet(),
-    );
+    showGlassSheetLocked(context, const SellProgressSheet());
   }
 
   // --- Build ---------------------------------------------------------------
@@ -327,7 +285,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                   ),
                   const Expanded(
                     child: Text(
-                      'Bulk Sell',
+                      'Bulk Quick Sale',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -336,17 +294,45 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.sort_rounded, size: 20, color: AppTheme.textSecondary),
-                    onPressed: () {
+                  PopupMenuButton<_Sort>(
+                    onSelected: (s) {
                       HapticFeedback.selectionClick();
-                      const cycle = _Sort.values;
-                      final idx = cycle.indexOf(_sort);
-                      setState(() {
-                        _sort = cycle[(idx + 1) % cycle.length];
-                        _applySorting();
-                      });
+                      setState(() { _sort = s; _applySorting(); });
                     },
+                    offset: const Offset(0, 42),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    color: const Color(0xFF1E2A48),
+                    elevation: 12,
+                    itemBuilder: (_) => {
+                      _Sort.priceDesc: (Icons.arrow_downward_rounded, 'Price: high \u2192 low'),
+                      _Sort.priceAsc:  (Icons.arrow_upward_rounded,   'Price: low \u2192 high'),
+                      _Sort.countDesc: (Icons.stacked_bar_chart_rounded, 'Quantity: most first'),
+                      _Sort.valueDesc: (Icons.account_balance_wallet_rounded, 'Total value: high \u2192 low'),
+                      _Sort.nameAsc:   (Icons.sort_by_alpha_rounded, 'Name: A \u2192 Z'),
+                    }.entries.map((e) {
+                      final selected = e.key == _sort;
+                      return PopupMenuItem<_Sort>(
+                        value: e.key,
+                        height: 44,
+                        child: Row(
+                          children: [
+                            Icon(e.value.$1, size: 16,
+                              color: selected ? AppTheme.primary : AppTheme.textMuted),
+                            const SizedBox(width: 10),
+                            Text(e.value.$2, style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                              color: selected ? AppTheme.primary : Colors.white.withValues(alpha: 0.85),
+                            )),
+                            if (selected) ...[
+                              const Spacer(),
+                              Icon(Icons.check_rounded, size: 16, color: AppTheme.primary),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    icon: const Icon(Icons.sort_rounded, size: 20, color: AppTheme.textSecondary),
                   ),
                 ],
               ),
@@ -387,9 +373,9 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
           if (_hasSelection) _buildBottomBar(),
         ],
       )),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -435,21 +421,36 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
 
     return Column(
       children: [
-        // Main row
         InkWell(
-          onTap: () => _toggleGroup(group.marketHashName, group.count),
+          onTap: () => _openQuantitySheet(group),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
             child: Row(
               children: [
-                // Checkbox
-                Checkbox(
-                  value: s.selected,
-                  onChanged: (_) =>
-                      _toggleGroup(group.marketHashName, group.count),
-                  activeColor: AppTheme.warning,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
+                // Selection indicator
+                SizedBox(
+                  width: 44,
+                  child: s.selected
+                      ? Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warning.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${s.count}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.warning,
+                            ),
+                          ),
+                        )
+                      : const Icon(Icons.add_circle_outline_rounded,
+                          size: 22, color: AppTheme.textDisabled),
                 ),
 
                 // Image
@@ -483,7 +484,9 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                         group.displayName,
                         style: AppTheme.bodySmall.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
+                          color: s.selected
+                              ? Colors.white
+                              : AppTheme.textPrimary,
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
@@ -547,153 +550,43 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                   ),
                 ),
 
-                // Expand (only multi-item groups)
-                if (group.count > 1)
-                  IconButton(
-                    icon: Icon(
-                      s.expanded ? Icons.expand_less : Icons.expand_more,
-                      size: 20,
-                      color: AppTheme.textMuted,
-                    ),
-                    onPressed: () => _toggleExpand(group.marketHashName),
-                    constraints:
-                        const BoxConstraints(minWidth: 36, minHeight: 36),
-                    padding: EdgeInsets.zero,
-                  )
-                else
-                  const SizedBox(width: 36),
+                // Chevron
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded,
+                    size: 20, color: AppTheme.textDisabled),
+                const SizedBox(width: 4),
               ],
             ),
           ),
         ),
-
-        // Quantity controls (when selected)
-        if (s.selected) _buildQuantityRow(group, s),
-
-        // Expanded items
-        if (s.expanded && group.count > 1) _buildExpandedItems(group, s),
 
         Divider(height: 1, color: AppTheme.divider),
       ],
     );
   }
 
-  // --- Quantity row --------------------------------------------------------
+  // --- Helper: selected groups with counts ---------------------------------
 
-  Widget _buildQuantityRow(_ItemGroup group, _GroupSel s) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 52, right: 12, bottom: 8),
-      child: Row(
-        children: [
-          // Quick actions
-          _QuickChip(
-            label: 'All',
-            active: !s.isIndividualMode && s.sellCount == group.count,
-            onTap: () => _sellAllGroup(group.marketHashName, group.count),
-          ),
-          const Spacer(),
-          // Sell value for this group
-          Text(
-            '~\$${((group.estimatedPrice ?? 0) * _effectiveCount(s)).toStringAsFixed(2)}',
-            style: AppTheme.monoSmall.copyWith(
-              color: AppTheme.accent,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Quantity picker
-          _QuantityPicker(
-            value: s.isIndividualMode ? s.pickedIds.length : s.sellCount,
-            max: group.count,
-            enabled: !s.isIndividualMode,
-            onChanged: (v) =>
-                _setCount(group.marketHashName, v, group.count),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- Expanded items ------------------------------------------------------
-
-  Widget _buildExpandedItems(_ItemGroup group, _GroupSel s) {
-    return Container(
-      margin: const EdgeInsets.only(left: 52, right: 12, bottom: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: AppTheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: group.items.map((item) {
-          final picked = s.pickedIds.contains(item.assetId);
-          final hasFloat = item.floatValue != null;
-
-          return GestureDetector(
-            onTap: () =>
-                _toggleItem(group.marketHashName, item.assetId, group),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: picked
-                    ? AppTheme.warning.withValues(alpha: 0.08)
-                    : AppTheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: picked
-                      ? AppTheme.warning.withValues(alpha: 0.3)
-                      : AppTheme.border,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    picked
-                        ? Icons.check_box
-                        : Icons.check_box_outline_blank,
-                    size: 16,
-                    color: picked
-                        ? AppTheme.warning
-                        : AppTheme.textDisabled,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    hasFloat
-                        ? 'FV ${item.floatValue!.toStringAsFixed(4)}'
-                        : '#${item.assetId.length > 4 ? item.assetId.substring(item.assetId.length - 4) : item.assetId}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight:
-                          picked ? FontWeight.w600 : FontWeight.normal,
-                      color: picked
-                          ? AppTheme.textPrimary
-                          : AppTheme.textSecondary,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
+  List<({_ItemGroup group, int count})> get _selectedGroups {
+    final result = <({_ItemGroup group, int count})>[];
+    for (final g in _groups) {
+      final s = _sel[g.marketHashName];
+      if (s != null && s.selected) {
+        result.add((group: g, count: s.count));
+      }
+    }
+    return result;
   }
 
   // --- Bottom bar ----------------------------------------------------------
 
   Widget _buildBottomBar() {
+    final selected = _selectedGroups;
+
     return Container(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 14,
-        bottom: MediaQuery.of(context).padding.bottom + 14,
+      padding: const EdgeInsets.only(
+        top: 10,
+        bottom: 10,
       ),
       decoration: BoxDecoration(
         color: AppTheme.bgSecondary,
@@ -706,51 +599,608 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+          // Selected items preview
+          SizedBox(
+            height: 62,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: selected.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final entry = selected[i];
+                return GestureDetector(
+                  onTap: () => _openQuantitySheet(entry.group),
+                  child: Container(
+                    width: 56,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.warning.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        // Item image
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: entry.group.fullIconUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: entry.group.fullIconUrl,
+                                    fit: BoxFit.contain,
+                                  )
+                                : const Icon(Icons.image_not_supported,
+                                    size: 16, color: AppTheme.textDisabled),
+                          ),
+                        ),
+                        // Count badge
+                        if (entry.count > 1)
+                          Positioned(
+                            right: 2,
+                            top: 2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppTheme.warning,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${entry.count}',
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        // Remove button
+                        Positioned(
+                          left: 2,
+                          top: 2,
+                          child: GestureDetector(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              setState(() {
+                                _sel[entry.group.marketHashName]!
+                                    .selectedIds
+                                    .clear();
+                              });
+                            },
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close,
+                                  size: 10, color: AppTheme.textSecondary),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Summary + sell button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
               children: [
-                Text(
-                  'Selling $_totalSellCount items',
-                  style: AppTheme.title,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Selling $_totalSellCount items',
+                        style: AppTheme.title,
+                      ),
+                      Text(
+                        '~\$${_totalValue.toStringAsFixed(2)}',
+                        style: AppTheme.mono.copyWith(
+                          fontSize: 13,
+                          color: AppTheme.accent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Text(
-                  '~\$${_totalValue.toStringAsFixed(2)}',
-                  style: AppTheme.mono.copyWith(
-                    fontSize: 13,
-                    color: AppTheme.accent,
-                    fontWeight: FontWeight.bold,
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _totalSellCount > 0 ? _startSell : null,
+                    icon: const Icon(Icons.sell, size: 18),
+                    label: const Text(
+                      'Quick Sell',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.warning,
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: AppTheme.warning.withValues(alpha: 0.15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.r16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      elevation: 0,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          SizedBox(
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: _totalSellCount > 0 ? _startSell : null,
-              icon: const Icon(Icons.sell, size: 18),
-              label: const Text(
-                'Quick Sell',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.warning,
-                foregroundColor: Colors.black,
-                disabledBackgroundColor: AppTheme.warning.withValues(alpha: 0.15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.r16),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                elevation: 0,
-              ),
-            ),
-          ),
         ],
       ),
+    );
+  }
+}
+
+// ===========================================================================
+// Quantity picker bottom sheet (same UX as trades)
+// ===========================================================================
+
+class _BulkSellQuantitySheet extends StatefulWidget {
+  final _ItemGroup group;
+  final Set<String> preSelectedIds;
+  final void Function(List<String> assetIds) onConfirm;
+
+  const _BulkSellQuantitySheet({
+    required this.group,
+    required this.preSelectedIds,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_BulkSellQuantitySheet> createState() => _BulkSellQuantitySheetState();
+}
+
+class _BulkSellQuantitySheetState extends State<_BulkSellQuantitySheet> {
+  late bool _hasUniqueItems;
+  late int _quantity;
+  late Set<String> _manualSelected;
+
+  int get _max => widget.group.count > 1000 ? 1000 : widget.group.count;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasUniqueItems = widget.group.items.any((i) => i.floatValue != null);
+    _manualSelected = Set<String>.from(widget.preSelectedIds);
+    _quantity = widget.preSelectedIds.length;
+  }
+
+  int get _selectedCount =>
+      _hasUniqueItems ? _manualSelected.length : _quantity;
+
+  @override
+  Widget build(BuildContext context) {
+    final price = widget.group.estimatedPrice ?? 0;
+    final totalPrice = price * _selectedCount;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.bgSecondary,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(AppTheme.r20)),
+        border: const Border(
+          top: BorderSide(color: AppTheme.warning, width: 2),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 14),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.textDisabled,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Item preview
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppTheme.r8),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      color: AppTheme.surface,
+                      child: widget.group.fullIconUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: widget.group.fullIconUrl,
+                              fit: BoxFit.contain,
+                            )
+                          : const Icon(Icons.image_not_supported,
+                              color: AppTheme.textDisabled),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.group.displayName,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (price > 0)
+                          Text(
+                            '\$${price.toStringAsFixed(2)} each',
+                            style: const TextStyle(
+                                fontSize: 12, color: AppTheme.textMuted),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'x${widget.group.count}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Content: slider or manual list
+            if (_hasUniqueItems) _buildManualList() else _buildSlider(),
+
+            const SizedBox(height: 8),
+
+            // Total + confirm
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(
+                children: [
+                  if (price > 0)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Total value',
+                          style:
+                              TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                        ),
+                        Text(
+                          '~\$${totalPrice.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      if (_hasUniqueItems) {
+                        widget.onConfirm(_manualSelected.toList());
+                      } else {
+                        final ids = widget.group.items
+                            .take(_quantity)
+                            .map((i) => i.assetId)
+                            .toList();
+                        widget.onConfirm(ids);
+                      }
+                      Navigator.of(context).pop();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning,
+                        borderRadius: BorderRadius.circular(AppTheme.r12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.warning.withValues(alpha: 0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        _selectedCount == 0 ? 'Clear' : 'Select $_selectedCount',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Slider mode (generic items: cases, stickers, etc.) ──
+  Widget _buildSlider() {
+    final max = _max;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _QtyCircleBtn(
+                icon: Icons.remove_rounded,
+                enabled: _quantity > 0,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _quantity--);
+                },
+              ),
+              const SizedBox(width: 20),
+              Text(
+                '$_quantity',
+                style: const TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -1,
+                ),
+              ),
+              const SizedBox(width: 20),
+              _QtyCircleBtn(
+                icon: Icons.add_rounded,
+                enabled: _quantity < max,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _quantity++);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (max > 2)
+            SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: AppTheme.warning,
+                inactiveTrackColor: AppTheme.warning.withValues(alpha: 0.15),
+                thumbColor: AppTheme.warning,
+                overlayColor: AppTheme.warning.withValues(alpha: 0.12),
+                trackHeight: 4,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 8),
+              ),
+              child: Slider(
+                value: _quantity.toDouble(),
+                min: 0,
+                max: max.toDouble(),
+                divisions: max,
+                onChanged: (v) {
+                  final newQty = v.round();
+                  if (newQty != _quantity) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _quantity = newQty);
+                  }
+                },
+              ),
+            ),
+          if (max > 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _QuickBtn(
+                    label: '0',
+                    selected: _quantity == 0,
+                    onTap: () => setState(() => _quantity = 0),
+                  ),
+                  if (max >= 10)
+                    _QuickBtn(
+                      label: '${max ~/ 4}',
+                      selected: _quantity == max ~/ 4,
+                      onTap: () => setState(() => _quantity = max ~/ 4),
+                    ),
+                  if (max >= 4)
+                    _QuickBtn(
+                      label: '${max ~/ 2}',
+                      selected: _quantity == max ~/ 2,
+                      onTap: () => setState(() => _quantity = max ~/ 2),
+                    ),
+                  _QuickBtn(
+                    label: 'All ($max)',
+                    selected: _quantity == max,
+                    onTap: () => setState(() => _quantity = max),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Manual mode (unique items: weapons with floats) ──
+  Widget _buildManualList() {
+    final max = _max;
+    final sorted = List<InventoryItem>.from(widget.group.items)
+      ..sort((a, b) => (a.floatValue ?? 999).compareTo(b.floatValue ?? 999));
+
+    return Column(
+      children: [
+        // Select all / clear row
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Text(
+                '${_manualSelected.length} selected',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.warning,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    if (_manualSelected.length == max ||
+                        _manualSelected.length == sorted.length) {
+                      _manualSelected.clear();
+                    } else {
+                      _manualSelected = sorted
+                          .take(max)
+                          .map((i) => i.assetId)
+                          .toSet();
+                    }
+                  });
+                },
+                child: Text(
+                  _manualSelected.length == max ||
+                          _manualSelected.length == sorted.length
+                      ? 'Clear all'
+                      : 'Select all',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.warning.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Scrollable list
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 280),
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            itemCount: sorted.length,
+            separatorBuilder: (_, _) =>
+                Divider(height: 1, color: AppTheme.border),
+            itemBuilder: (_, index) {
+              final item = sorted[index];
+              final selected = _manualSelected.contains(item.assetId);
+              final atLimit = !selected && _manualSelected.length >= max;
+
+              return InkWell(
+                onTap: atLimit && !selected
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          if (selected) {
+                            _manualSelected.remove(item.assetId);
+                          } else {
+                            _manualSelected.add(item.assetId);
+                          }
+                        });
+                      },
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        selected
+                            ? Icons.check_circle_rounded
+                            : Icons.circle_outlined,
+                        size: 20,
+                        color: selected
+                            ? AppTheme.warning
+                            : atLimit
+                                ? AppTheme.textDisabled.withValues(alpha: 0.3)
+                                : AppTheme.textDisabled,
+                      ),
+                      const SizedBox(width: 10),
+                      if (item.floatValue != null)
+                        Expanded(
+                          child: Text(
+                            item.floatValue!.toStringAsFixed(8),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              fontFamily: 'monospace',
+                              color: selected
+                                  ? Colors.white
+                                  : atLimit
+                                      ? AppTheme.textDisabled
+                                      : AppTheme.textSecondary,
+                            ),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: Text(
+                            '#${item.assetId.length > 6 ? item.assetId.substring(item.assetId.length - 6) : item.assetId}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: atLimit
+                                  ? AppTheme.textDisabled
+                                  : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      if (item.steamPrice != null)
+                        Text(
+                          '\$${item.steamPrice!.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: selected ? Colors.white : AppTheme.textMuted,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -759,175 +1209,86 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
 // Supporting widgets
 // ===========================================================================
 
-class _QuickChip extends StatelessWidget {
-  final String label;
-  final bool active;
+class _QtyCircleBtn extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
   final VoidCallback onTap;
 
-  const _QuickChip(
-      {required this.label, required this.active, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: active
-              ? AppTheme.warning.withValues(alpha: 0.1)
-              : AppTheme.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: active
-                ? AppTheme.warning.withValues(alpha: 0.3)
-                : AppTheme.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-            color:
-                active ? AppTheme.warning : AppTheme.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QuantityPicker extends StatelessWidget {
-  final int value;
-  final int max;
-  final bool enabled;
-  final ValueChanged<int> onChanged;
-
-  const _QuantityPicker({
-    required this.value,
-    required this.max,
-    required this.onChanged,
-    this.enabled = true,
+  const _QtyCircleBtn({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _CBtn(
-            icon: Icons.remove,
-            active: enabled && value > 1,
-            onTap: () {
-              if (enabled && value > 1) {
-                onChanged(value - 1);
-                HapticFeedback.selectionClick();
-              }
-            },
-          ),
-          GestureDetector(
-            onTap: enabled ? () => _showInput(context) : null,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 36),
-              alignment: Alignment.center,
-              child: Text(
-                '$value',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: enabled ? AppTheme.textPrimary : AppTheme.warning,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ),
-          _CBtn(
-            icon: Icons.add,
-            active: enabled && value < max && value < 1000,
-            onTap: () {
-              if (enabled && value < max && value < 1000) {
-                onChanged(value + 1);
-                HapticFeedback.selectionClick();
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showInput(BuildContext context) {
-    final ctrl = TextEditingController(text: '$value');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgSecondary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.r16)),
-        title: const Text('Quantity'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(4),
-          ],
-          decoration: InputDecoration(
-            hintText: '1 – ${max > 1000 ? 1000 : max}',
-            border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: enabled
+              ? AppTheme.warning.withValues(alpha: 0.15)
+              : AppTheme.surface,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: enabled
+                ? AppTheme.warning.withValues(alpha: 0.3)
+                : AppTheme.border,
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final v = int.tryParse(ctrl.text);
-              final limit = max > 1000 ? 1000 : max;
-              if (v != null && v >= 1 && v <= limit) onChanged(v);
-              Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.warning,
-              foregroundColor: Colors.black,
-            ),
-            child: const Text('OK'),
-          ),
-        ],
+        child: Icon(
+          icon,
+          size: 20,
+          color: enabled ? AppTheme.warning : AppTheme.textDisabled,
+        ),
       ),
     );
   }
 }
 
-class _CBtn extends StatelessWidget {
-  final IconData icon;
-  final bool active;
+class _QuickBtn extends StatelessWidget {
+  final String label;
+  final bool selected;
   final VoidCallback onTap;
 
-  const _CBtn(
-      {required this.icon, required this.active, required this.onTap});
+  const _QuickBtn({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: active ? onTap : null,
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Icon(
-          icon,
-          size: 16,
-          color: active ? AppTheme.textPrimary : AppTheme.textDisabled,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.warning.withValues(alpha: 0.15)
+                : AppTheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? AppTheme.warning.withValues(alpha: 0.4)
+                  : AppTheme.border,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? AppTheme.warning : AppTheme.textSecondary,
+            ),
+          ),
         ),
       ),
     );

@@ -6,6 +6,7 @@ import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
 import '../../auth/session_provider.dart';
+import '../../../widgets/glass_sheet.dart';
 import '../sell_provider.dart';
 import 'fee_breakdown.dart';
 import 'sell_progress_sheet.dart';
@@ -55,15 +56,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     if (!mounted) return;
     // Close this sheet and open progress sheet
     Navigator.of(context, rootNavigator: true).pop();
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const SellProgressSheet(),
-    );
+    showGlassSheetLocked(context, const SellProgressSheet());
   }
 
   @override

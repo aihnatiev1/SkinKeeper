@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../../widgets/glass_sheet.dart';
 import '../../widgets/shared_ui.dart';
 import '../../models/trade_offer.dart';
 import '../auth/steam_auth_service.dart';
@@ -823,10 +824,17 @@ class _ItemExchangeStepState extends State<_ItemExchangeStep> {
           ),
         ),
 
-        // Sticky bottom bar
+        // Sticky bottom bar with selection tray
         _StickyTradeBar(
-          giveCount: widget.giveAssetIds.length,
-          recvCount: widget.recvAssetIds.length,
+          giveItems: widget.myItems
+              .where((i) => widget.giveAssetIds.contains(i.assetId))
+              .toList(),
+          recvItems: widget.partnerItems
+              .where((i) => widget.recvAssetIds.contains(i.assetId))
+              .toList(),
+          currency: widget.currency,
+          onRemoveGive: widget.onToggleGive,
+          onRemoveRecv: widget.onToggleRecv,
           onContinue: _handleContinue,
         ),
       ],
@@ -864,8 +872,47 @@ class _GroupedItemList extends StatefulWidget {
 }
 
 class _GroupedItemListState extends State<_GroupedItemList> {
-  final Set<String> _expanded = {};
   String _search = '';
+
+  void _showTradeQuantityPicker(
+    BuildContext context, {
+    required _TradeItemGroup group,
+    required Set<String> selectedIds,
+    required int sideSelected,
+    required CurrencyInfo currency,
+    required void Function(List<String>) onAddMultiple,
+    required void Function(List<String>) onRemoveMultiple,
+  }) {
+    final currentlySelected = group.items
+        .where((i) => selectedIds.contains(i.assetId))
+        .map((i) => i.assetId)
+        .toSet();
+    final currentCount = currentlySelected.length;
+    final maxAllowed = group.count.clamp(0, _kMaxTradeItems - sideSelected + currentCount);
+
+    showGlassSheet(
+      context,
+      _TradeQuantitySheet(
+        group: group,
+        currency: currency,
+        preSelectedIds: currentlySelected,
+        maxQuantity: maxAllowed,
+        onConfirm: (chosenIds) {
+          final chosenSet = chosenIds.toSet();
+          // Items to add (in chosen but not in current)
+          final toAdd = chosenIds
+              .where((id) => !currentlySelected.contains(id))
+              .toList();
+          // Items to remove (in current but not in chosen)
+          final toRemove = currentlySelected
+              .where((id) => !chosenSet.contains(id))
+              .toList();
+          if (toAdd.isNotEmpty) onAddMultiple(toAdd);
+          if (toRemove.isNotEmpty) onRemoveMultiple(toRemove);
+        },
+      ),
+    );
+  }
 
   List<_TradeItemGroup> _buildGroups() {
     final map = <String, List<TradeOfferItem>>{};
@@ -942,50 +989,24 @@ class _GroupedItemListState extends State<_GroupedItemList> {
             itemBuilder: (_, i) {
               final group = groups[i];
               final selectedCount = _selectedInGroup(group);
-              final isExpanded = _expanded.contains(group.marketHashName);
 
               return _GroupTile(
                 group: group,
                 selectedCount: selectedCount,
-                isExpanded: isExpanded,
                 sideSelected: widget.sideSelected,
                 selectedIds: widget.selectedIds,
                 currency: widget.currency,
-                onToggleExpand: () {
-                  setState(() {
-                    if (isExpanded) {
-                      _expanded.remove(group.marketHashName);
-                    } else {
-                      _expanded.add(group.marketHashName);
-                    }
-                  });
-                },
                 onToggleItem: widget.onToggle,
-                onSetQuantity: (qty) {
-                  final currentlySelected = group.items
-                      .where(
-                          (i) => widget.selectedIds.contains(i.assetId))
-                      .map((i) => i.assetId)
-                      .toList();
-                  final currentCount = currentlySelected.length;
-
-                  if (qty > currentCount) {
-                    // Add more
-                    final toAdd = group.items
-                        .where(
-                            (i) => !widget.selectedIds.contains(i.assetId))
-                        .take(qty - currentCount)
-                        .map((i) => i.assetId)
-                        .toList();
-                    widget.onAddMultiple(toAdd);
-                  } else if (qty < currentCount) {
-                    // Remove some
-                    final toRemove = currentlySelected
-                        .reversed
-                        .take(currentCount - qty)
-                        .toList();
-                    widget.onRemoveMultiple(toRemove);
-                  }
+                onOpenQuantityPicker: () {
+                  _showTradeQuantityPicker(
+                    context,
+                    group: group,
+                    selectedIds: widget.selectedIds,
+                    sideSelected: widget.sideSelected,
+                    currency: widget.currency,
+                    onAddMultiple: widget.onAddMultiple,
+                    onRemoveMultiple: widget.onRemoveMultiple,
+                  );
                 },
               );
             },
@@ -1003,23 +1024,19 @@ class _GroupedItemListState extends State<_GroupedItemList> {
 class _GroupTile extends StatelessWidget {
   final _TradeItemGroup group;
   final int selectedCount;
-  final bool isExpanded;
-  final int sideSelected;
   final Set<String> selectedIds;
-  final VoidCallback onToggleExpand;
+  final int sideSelected;
+  final VoidCallback onOpenQuantityPicker;
   final ValueChanged<String> onToggleItem;
-  final ValueChanged<int> onSetQuantity;
   final CurrencyInfo currency;
 
   const _GroupTile({
     required this.group,
     required this.selectedCount,
-    required this.isExpanded,
-    required this.sideSelected,
     required this.selectedIds,
-    required this.onToggleExpand,
+    required this.sideSelected,
+    required this.onOpenQuantityPicker,
     required this.onToggleItem,
-    required this.onSetQuantity,
     required this.currency,
   });
 
@@ -1032,13 +1049,13 @@ class _GroupTile extends StatelessWidget {
 
     return Column(
       children: [
-        // Main row
         InkWell(
           onTap: () {
             if (group.count == 1) {
               onToggleItem(group.first.assetId);
             } else {
-              onToggleExpand();
+              HapticFeedback.selectionClick();
+              onOpenQuantityPicker();
             }
           },
           child: Padding(
@@ -1112,7 +1129,7 @@ class _GroupTile extends StatelessWidget {
                       borderRadius: BorderRadius.circular(AppTheme.r8),
                     ),
                     child: Text(
-                      'x${group.count}',
+                      hasSelection ? '$selectedCount / ${group.count}' : 'x${group.count}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -1133,12 +1150,12 @@ class _GroupTile extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
 
-                // Multi item: expand arrow
+                // Multi item: chevron to indicate picker
                 if (group.count > 1)
                   Padding(
                     padding: const EdgeInsets.only(left: 6),
                     child: Icon(
-                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      Icons.chevron_right_rounded,
                       size: 20,
                       color: AppTheme.textMuted,
                     ),
@@ -1147,94 +1164,6 @@ class _GroupTile extends StatelessWidget {
             ),
           ),
         ),
-
-        // Expanded: quantity picker + individual items
-        if (isExpanded && group.count > 1) ...[
-          // Quantity row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            child: Row(
-              children: [
-                const Text('Select quantity:',
-                    style: TextStyle(
-                        fontSize: 12, color: AppTheme.textMuted)),
-                const Spacer(),
-                _QuantityPicker(
-                  value: selectedCount,
-                  max: group.count.clamp(0, _kMaxTradeItems - sideSelected + selectedCount),
-                  onChanged: onSetQuantity,
-                ),
-              ],
-            ),
-          ),
-
-          // Individual items
-          Container(
-            margin: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppTheme.surface.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(AppTheme.r12),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: group.items.map((item) {
-                final selected = selectedIds.contains(item.assetId);
-                return GestureDetector(
-                  onTap: () => onToggleItem(item.assetId),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppTheme.accent.withValues(alpha: 0.1)
-                          : AppTheme.surface,
-                      borderRadius: BorderRadius.circular(AppTheme.r8),
-                      border: Border.all(
-                        color: selected
-                            ? AppTheme.accent.withValues(alpha: 0.3)
-                            : AppTheme.border,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          selected
-                              ? Icons.check_circle
-                              : Icons.circle_outlined,
-                          size: 14,
-                          color: selected
-                              ? AppTheme.accent
-                              : AppTheme.textDisabled,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          item.floatValue != null
-                              ? 'FV ${item.floatValue!.toStringAsFixed(4)}'
-                              : '#${item.assetId.length > 4 ? item.assetId.substring(item.assetId.length - 4) : item.assetId}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                                selected ? FontWeight.w600 : FontWeight.normal,
-                            color: selected
-                                ? AppTheme.textPrimary
-                                : AppTheme.textSecondary,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-
         Divider(height: 1, color: AppTheme.border),
       ],
     );
@@ -1245,29 +1174,38 @@ class _GroupTile extends StatelessWidget {
 // Sticky bottom trade bar
 // ==========================================================================
 
-class _StickyTradeBar extends StatelessWidget {
-  final int giveCount;
-  final int recvCount;
+class _StickyTradeBar extends StatefulWidget {
+  final List<TradeOfferItem> giveItems;
+  final List<TradeOfferItem> recvItems;
+  final CurrencyInfo currency;
+  final ValueChanged<String> onRemoveGive;
+  final ValueChanged<String> onRemoveRecv;
   final VoidCallback onContinue;
 
   const _StickyTradeBar({
-    required this.giveCount,
-    required this.recvCount,
+    required this.giveItems,
+    required this.recvItems,
+    required this.currency,
+    required this.onRemoveGive,
+    required this.onRemoveRecv,
     required this.onContinue,
   });
 
   @override
+  State<_StickyTradeBar> createState() => _StickyTradeBarState();
+}
+
+class _StickyTradeBarState extends State<_StickyTradeBar> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final giveCount = widget.giveItems.length;
+    final recvCount = widget.recvItems.length;
     final total = giveCount + recvCount;
     final hasSelection = total > 0;
 
     return Container(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 12,
-        bottom: MediaQuery.of(context).padding.bottom + 12,
-      ),
       decoration: BoxDecoration(
         color: AppTheme.surface,
         border: Border(top: BorderSide(color: AppTheme.border)),
@@ -1279,52 +1217,355 @@ class _StickyTradeBar extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  hasSelection ? '$total items selected' : 'No items selected',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: hasSelection
-                        ? AppTheme.textPrimary
-                        : AppTheme.textMuted,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle (only when has items)
+            if (hasSelection)
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 2),
+                  child: Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppTheme.textDisabled.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
                 ),
-                if (hasSelection)
-                  Text(
-                    'Give $giveCount, Get $recvCount',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppTheme.textMuted),
+              ),
+
+            // Header row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          hasSelection
+                              ? '$total items selected'
+                              : 'No items selected',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: hasSelection
+                                ? AppTheme.textPrimary
+                                : AppTheme.textMuted,
+                          ),
+                        ),
+                        if (hasSelection)
+                          Text(
+                            'Give $giveCount, Get $recvCount',
+                            style: const TextStyle(
+                                fontSize: 12, color: AppTheme.textMuted),
+                          ),
+                      ],
+                    ),
                   ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 44,
-            child: ElevatedButton.icon(
-              onPressed: hasSelection ? onContinue : null,
-              icon: const Icon(Icons.arrow_forward, size: 18),
-              label: const Text('Continue',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.accent,
-                foregroundColor: Colors.black,
-                disabledBackgroundColor:
-                    AppTheme.accent.withValues(alpha: 0.12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.r12)),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                elevation: 0,
+                  SizedBox(
+                    height: 44,
+                    child: ElevatedButton.icon(
+                      onPressed: hasSelection ? widget.onContinue : null,
+                      icon: const Icon(Icons.arrow_forward, size: 18),
+                      label: const Text('Continue',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accent,
+                        foregroundColor: Colors.black,
+                        disabledBackgroundColor:
+                            AppTheme.accent.withValues(alpha: 0.12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.r12)),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+
+            // Expanded tray: horizontal scroll of selected items
+            if (hasSelection && _expanded) ...[
+              if (giveCount > 0) ...[
+                _TraySection(
+                  label: 'Give',
+                  color: AppTheme.loss,
+                  items: widget.giveItems,
+                  currency: widget.currency,
+                  onRemove: widget.onRemoveGive,
+                ),
+              ],
+              if (recvCount > 0) ...[
+                _TraySection(
+                  label: 'Get',
+                  color: AppTheme.profit,
+                  items: widget.recvItems,
+                  currency: widget.currency,
+                  onRemove: widget.onRemoveRecv,
+                ),
+              ],
+              const SizedBox(height: 4),
+            ]
+            // Collapsed: horizontal scroll of thumbnails
+            else if (hasSelection) ...[
+              SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  children: [
+                    ...widget.giveItems.map((item) => _TinyThumb(
+                          item: item,
+                          borderColor: AppTheme.loss,
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            widget.onRemoveGive(item.assetId);
+                          },
+                        )),
+                    if (giveCount > 0 && recvCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Center(
+                          child: Icon(Icons.swap_horiz,
+                              size: 16, color: AppTheme.textDisabled),
+                        ),
+                      ),
+                    ...widget.recvItems.map((item) => _TinyThumb(
+                          item: item,
+                          borderColor: AppTheme.profit,
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            widget.onRemoveRecv(item.assetId);
+                          },
+                        )),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Tray section (Give / Get) with label + horizontal scroll
+class _TraySection extends StatelessWidget {
+  final String label;
+  final Color color;
+  final List<TradeOfferItem> items;
+  final CurrencyInfo currency;
+  final ValueChanged<String> onRemove;
+
+  const _TraySection({
+    required this.label,
+    required this.color,
+    required this.items,
+    required this.currency,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$label (${items.length})',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
+        SizedBox(
+          height: 72,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            itemCount: items.length,
+            itemBuilder: (_, index) {
+              final item = items[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _TradeMiniCard(
+                  item: item,
+                  borderColor: color,
+                  currency: currency,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    onRemove(item.assetId);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Tiny thumbnail for collapsed tray
+class _TinyThumb extends StatelessWidget {
+  final TradeOfferItem item;
+  final Color borderColor;
+  final VoidCallback onTap;
+
+  const _TinyThumb({
+    required this.item,
+    required this.borderColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        margin: const EdgeInsets.only(right: 5),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSecondary,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: borderColor.withValues(alpha: 0.4),
+            width: 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: item.fullIconUrl.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: item.fullIconUrl,
+                  fit: BoxFit.contain,
+                  errorWidget: (_, _, _) => const SizedBox.shrink(),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+}
+
+// Mini card for expanded tray
+class _TradeMiniCard extends StatelessWidget {
+  final TradeOfferItem item;
+  final Color borderColor;
+  final CurrencyInfo currency;
+  final VoidCallback onTap;
+
+  const _TradeMiniCard({
+    required this.item,
+    required this.borderColor,
+    required this.currency,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 64,
+        decoration: BoxDecoration(
+          color: AppTheme.bgSecondary,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: borderColor.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Price
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 3, 4, 0),
+              child: Text(
+                item.priceCents > 0
+                    ? currency.format(item.priceUsd)
+                    : '—',
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.3,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // Image
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: item.fullIconUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: item.fullIconUrl,
+                        fit: BoxFit.contain,
+                        errorWidget: (_, _, _) => const Icon(
+                          Icons.image_not_supported_rounded,
+                          size: 12,
+                          color: AppTheme.textDisabled,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            // Float
+            if (item.floatValue != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                color: Colors.black.withValues(alpha: 0.2),
+                child: Text(
+                  item.floatValue!.toStringAsFixed(4),
+                  style: TextStyle(
+                    fontSize: 7,
+                    fontFamily: 'monospace',
+                    color: Colors.white.withValues(alpha: 0.5),
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1390,162 +1631,6 @@ class _SideLimitBadge extends StatelessWidget {
           color: atLimit ? AppTheme.loss : AppTheme.textSecondary,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
-      ),
-    );
-  }
-}
-
-// ==========================================================================
-// Quantity picker
-// ==========================================================================
-
-class _QuantityPicker extends StatefulWidget {
-  final int value;
-  final int max;
-  final ValueChanged<int> onChanged;
-
-  const _QuantityPicker({
-    required this.value,
-    required this.max,
-    required this.onChanged,
-  });
-
-  @override
-  State<_QuantityPicker> createState() => _QuantityPickerState();
-}
-
-class _QuantityPickerState extends State<_QuantityPicker> {
-  bool _editing = false;
-  late TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _startEditing() {
-    setState(() {
-      _editing = true;
-      _ctrl.text = widget.value > 0 ? '${widget.value}' : '';
-    });
-    HapticFeedback.selectionClick();
-  }
-
-  void _finishEditing() {
-    final parsed = int.tryParse(_ctrl.text) ?? 0;
-    final clamped = parsed.clamp(0, widget.max.clamp(0, _kMaxTradeItems));
-    widget.onChanged(clamped);
-    setState(() => _editing = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.r12),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _PkBtn(
-            icon: Icons.remove,
-            active: widget.value > 0,
-            onTap: () {
-              if (widget.value > 0) {
-                widget.onChanged(widget.value - 1);
-                HapticFeedback.selectionClick();
-              }
-            },
-          ),
-          GestureDetector(
-            onTap: _editing ? null : _startEditing,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 38),
-              alignment: Alignment.center,
-              child: _editing
-                  ? SizedBox(
-                      width: 42,
-                      height: 24,
-                      child: TextField(
-                        controller: _ctrl,
-                        autofocus: true,
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(3),
-                        ],
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                          border: InputBorder.none,
-                        ),
-                        onSubmitted: (_) => _finishEditing(),
-                        onTapOutside: (_) => _finishEditing(),
-                      ),
-                    )
-                  : Text(
-                      '${widget.value}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        decoration: TextDecoration.underline,
-                        decorationStyle: TextDecorationStyle.dotted,
-                        decorationColor: AppTheme.textDisabled,
-                      ),
-                    ),
-            ),
-          ),
-          _PkBtn(
-            icon: Icons.add,
-            active: widget.value < widget.max,
-            onTap: () {
-              if (widget.value < widget.max) {
-                widget.onChanged(widget.value + 1);
-                HapticFeedback.selectionClick();
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PkBtn extends StatelessWidget {
-  final IconData icon;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _PkBtn(
-      {required this.icon, required this.active, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: active ? onTap : null,
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Icon(icon,
-            size: 16,
-            color:
-                active ? AppTheme.textPrimary : AppTheme.textDisabled),
       ),
     );
   }
@@ -1982,6 +2067,574 @@ class _ReviewItemTile extends StatelessWidget {
                   color: AppTheme.textPrimary),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ==========================================================================
+// Trade Quantity Picker Sheet (auto-detect: slider for generic, list for unique)
+// ==========================================================================
+
+class _TradeQuantitySheet extends StatefulWidget {
+  final _TradeItemGroup group;
+  final CurrencyInfo currency;
+  final Set<String> preSelectedIds;
+  final int maxQuantity;
+  final void Function(List<String> assetIds) onConfirm;
+
+  const _TradeQuantitySheet({
+    required this.group,
+    required this.currency,
+    required this.preSelectedIds,
+    required this.maxQuantity,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_TradeQuantitySheet> createState() => _TradeQuantitySheetState();
+}
+
+class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
+  late bool _hasUniqueItems;
+  // Slider mode state
+  late int _quantity;
+  // Manual mode state
+  late Set<String> _manualSelected;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-detect: if any item has a float value, items are unique
+    _hasUniqueItems = widget.group.items.any((i) => i.floatValue != null);
+
+    final preSelected = widget.group.items
+        .where((i) => widget.preSelectedIds.contains(i.assetId))
+        .map((i) => i.assetId)
+        .toSet();
+
+    _quantity = preSelected.length;
+    _manualSelected = Set<String>.from(preSelected);
+  }
+
+  int get _selectedCount => _hasUniqueItems ? _manualSelected.length : _quantity;
+
+  @override
+  Widget build(BuildContext context) {
+    final max = widget.maxQuantity;
+    final totalPrice = widget.group.priceUsd * _selectedCount;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.bgSecondary,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(AppTheme.r20)),
+        border: const Border(
+          top: BorderSide(color: AppTheme.accent, width: 2),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 14),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.textDisabled,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Item preview
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppTheme.r8),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      color: AppTheme.surface,
+                      child: widget.group.fullIconUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: widget.group.fullIconUrl,
+                              fit: BoxFit.contain,
+                            )
+                          : const Icon(Icons.image_not_supported,
+                              color: AppTheme.textDisabled),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.group.displayName,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (widget.group.priceCents > 0)
+                          Text(
+                            widget.currency.format(widget.group.priceUsd),
+                            style: const TextStyle(
+                                fontSize: 12, color: AppTheme.textMuted),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'x${widget.group.count}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.accent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            if (max < widget.group.count)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Limited to $max (trade max $_kMaxTradeItems per side)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.warning.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
+            // --- Content: slider or manual list ---
+            if (_hasUniqueItems)
+              _buildManualList(max)
+            else
+              _buildSlider(max),
+
+            const SizedBox(height: 8),
+
+            // Total + confirm
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(
+                children: [
+                  if (widget.group.priceCents > 0)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Total value',
+                          style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                        ),
+                        Text(
+                          widget.currency.format(totalPrice),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      if (_hasUniqueItems) {
+                        widget.onConfirm(_manualSelected.toList());
+                      } else {
+                        final ids = widget.group.items
+                            .take(_quantity)
+                            .map((i) => i.assetId)
+                            .toList();
+                        widget.onConfirm(ids);
+                      }
+                      Navigator.of(context).pop();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent,
+                        borderRadius: BorderRadius.circular(AppTheme.r12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.accent.withValues(alpha: 0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        _selectedCount == 0 ? 'Clear' : 'Select $_selectedCount',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Slider mode (generic items: cases, stickers, etc.) ──
+  Widget _buildSlider(int max) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _QtyCircleBtn(
+                icon: Icons.remove_rounded,
+                enabled: _quantity > 0,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _quantity--);
+                },
+              ),
+              const SizedBox(width: 20),
+              Text(
+                '$_quantity',
+                style: const TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -1,
+                ),
+              ),
+              const SizedBox(width: 20),
+              _QtyCircleBtn(
+                icon: Icons.add_rounded,
+                enabled: _quantity < max,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _quantity++);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (max > 2)
+            SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: AppTheme.accent,
+                inactiveTrackColor: AppTheme.accent.withValues(alpha: 0.15),
+                thumbColor: AppTheme.accent,
+                overlayColor: AppTheme.accent.withValues(alpha: 0.12),
+                trackHeight: 4,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 8),
+              ),
+              child: Slider(
+                value: _quantity.toDouble(),
+                min: 0,
+                max: max.toDouble(),
+                divisions: max,
+                onChanged: (v) {
+                  final newQty = v.round();
+                  if (newQty != _quantity) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _quantity = newQty);
+                  }
+                },
+              ),
+            ),
+          if (max > 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _TradeQuickBtn(
+                    label: '0',
+                    selected: _quantity == 0,
+                    onTap: () => setState(() => _quantity = 0),
+                  ),
+                  if (max >= 10)
+                    _TradeQuickBtn(
+                      label: '${max ~/ 4}',
+                      selected: _quantity == max ~/ 4,
+                      onTap: () => setState(() => _quantity = max ~/ 4),
+                    ),
+                  if (max >= 4)
+                    _TradeQuickBtn(
+                      label: '${max ~/ 2}',
+                      selected: _quantity == max ~/ 2,
+                      onTap: () => setState(() => _quantity = max ~/ 2),
+                    ),
+                  _TradeQuickBtn(
+                    label: 'Max ($max)',
+                    selected: _quantity == max,
+                    onTap: () => setState(() => _quantity = max),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Manual mode (unique items: weapons with floats, phases, etc.) ──
+  Widget _buildManualList(int max) {
+    // Sort by float ascending (best float first)
+    final sorted = List<TradeOfferItem>.from(widget.group.items)
+      ..sort((a, b) => (a.floatValue ?? 999).compareTo(b.floatValue ?? 999));
+
+    return Column(
+      children: [
+        // Select all / clear row
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Text(
+                '${_manualSelected.length} selected',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.accent,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    if (_manualSelected.length == max || _manualSelected.length == sorted.length) {
+                      _manualSelected.clear();
+                    } else {
+                      _manualSelected = sorted
+                          .take(max)
+                          .map((i) => i.assetId)
+                          .toSet();
+                    }
+                  });
+                },
+                child: Text(
+                  _manualSelected.length == max || _manualSelected.length == sorted.length
+                      ? 'Clear all'
+                      : 'Select all',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.accent.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Scrollable list
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 280),
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            itemCount: sorted.length,
+            separatorBuilder: (_, _) => Divider(height: 1, color: AppTheme.border),
+            itemBuilder: (_, index) {
+              final item = sorted[index];
+              final selected = _manualSelected.contains(item.assetId);
+              final atLimit = !selected && _manualSelected.length >= max;
+
+              return InkWell(
+                onTap: atLimit && !selected
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          if (selected) {
+                            _manualSelected.remove(item.assetId);
+                          } else {
+                            _manualSelected.add(item.assetId);
+                          }
+                        });
+                      },
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        selected
+                            ? Icons.check_circle_rounded
+                            : Icons.circle_outlined,
+                        size: 20,
+                        color: selected
+                            ? AppTheme.accent
+                            : atLimit
+                                ? AppTheme.textDisabled.withValues(alpha: 0.3)
+                                : AppTheme.textDisabled,
+                      ),
+                      const SizedBox(width: 10),
+                      // Float value
+                      if (item.floatValue != null)
+                        Expanded(
+                          child: Text(
+                            item.floatValue!.toStringAsFixed(8),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              fontFamily: 'monospace',
+                              color: selected
+                                  ? Colors.white
+                                  : atLimit
+                                      ? AppTheme.textDisabled
+                                      : AppTheme.textSecondary,
+                            ),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: Text(
+                            '#${item.assetId.length > 6 ? item.assetId.substring(item.assetId.length - 6) : item.assetId}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: atLimit
+                                  ? AppTheme.textDisabled
+                                  : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      // Price
+                      if (item.priceCents > 0)
+                        Text(
+                          widget.currency.format(item.priceUsd),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: selected
+                                ? Colors.white
+                                : AppTheme.textMuted,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QtyCircleBtn extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _QtyCircleBtn({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: enabled
+              ? AppTheme.accent.withValues(alpha: 0.15)
+              : Colors.white.withValues(alpha: 0.03),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: enabled
+                ? AppTheme.accent.withValues(alpha: 0.3)
+                : Colors.white.withValues(alpha: 0.05),
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: enabled ? AppTheme.accent : AppTheme.textDisabled,
+        ),
+      ),
+    );
+  }
+}
+
+class _TradeQuickBtn extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TradeQuickBtn({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.accent.withValues(alpha: 0.2)
+                : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? AppTheme.accent.withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.08),
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? AppTheme.accent : AppTheme.textMuted,
+            ),
+          ),
+        ),
       ),
     );
   }
