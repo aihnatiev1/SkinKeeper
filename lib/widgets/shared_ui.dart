@@ -36,6 +36,34 @@ class GlassCard extends StatelessWidget {
     this.elevated = false,
   });
 
+  /// Interactive card with press feedback (scale + glow).
+  const GlassCard.interactive({
+    super.key,
+    required this.child,
+    required this.onTap,
+    this.padding,
+    this.margin,
+    this.radius = AppTheme.r16,
+    this.color,
+    this.borderColor,
+    this.borderOpacity = 0.06,
+    this.elevated = false,
+  });
+
+  /// Outlined card for selected / emphasized states.
+  const GlassCard.outlined({
+    super.key,
+    required this.child,
+    Color accentColor = AppTheme.primary,
+    this.padding,
+    this.margin,
+    this.radius = AppTheme.r16,
+    this.color,
+    this.onTap,
+    this.elevated = false,
+  })  : borderColor = accentColor,
+        borderOpacity = 0.3;
+
   @override
   Widget build(BuildContext context) {
     final decoration = elevated
@@ -55,15 +83,46 @@ class GlassCard extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap!();
-        },
+      return _InteractiveWrapper(
+        onTap: onTap!,
         child: container,
       );
     }
     return container;
+  }
+}
+
+/// Adds scale + haptic feedback on press for interactive cards.
+class _InteractiveWrapper extends StatefulWidget {
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _InteractiveWrapper({required this.onTap, required this.child});
+
+  @override
+  State<_InteractiveWrapper> createState() => _InteractiveWrapperState();
+}
+
+class _InteractiveWrapperState extends State<_InteractiveWrapper> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        widget.onTap();
+      },
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    );
   }
 }
 
@@ -709,6 +768,333 @@ class AppRefreshIndicator extends StatelessWidget {
       strokeWidth: 2.5,
       displacement: 50,
       child: child,
+    );
+  }
+}
+
+// ─── Status Chip ────────────────────────────────────────────────
+
+/// Themed status chip with color-coded icon for trade/transaction status.
+class StatusChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData? icon;
+
+  const StatusChip({
+    super.key,
+    required this.label,
+    required this.color,
+    this.icon,
+  });
+
+  /// Create status chip from trade status string.
+  factory StatusChip.fromTradeStatus(String status) {
+    final (Color c, String l, IconData i) = switch (status) {
+      'pending' => (AppTheme.warning, 'Pending', Icons.hourglass_top_rounded),
+      'awaiting_confirmation' => (
+        const Color(0xFFFB923C),
+        'Awaiting',
+        Icons.phone_android_rounded
+      ),
+      'on_hold' => (AppTheme.warning, 'On Hold', Icons.pause_circle_rounded),
+      'accepted' => (AppTheme.profit, 'Accepted', Icons.check_circle_rounded),
+      'declined' => (AppTheme.loss, 'Declined', Icons.cancel_rounded),
+      'cancelled' => (
+        AppTheme.textMuted,
+        'Cancelled',
+        Icons.block_rounded
+      ),
+      'expired' => (
+        AppTheme.textMuted,
+        'Expired',
+        Icons.timer_off_rounded
+      ),
+      'countered' => (
+        AppTheme.steamBlue,
+        'Countered',
+        Icons.swap_horiz_rounded
+      ),
+      'error' => (AppTheme.loss, 'Error', Icons.error_rounded),
+      _ => (AppTheme.textMuted, status, Icons.info_outline_rounded),
+    };
+    return StatusChip(label: l, color: c, icon: i);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppTheme.r8),
+        border: Border.all(
+          color: color.withValues(alpha: 0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Pulse Indicator ────────────────────────────────────────────
+
+/// Pulsing dot indicator for live sync / loading states.
+class PulseIndicator extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const PulseIndicator({
+    super.key,
+    this.color = AppTheme.profit,
+    this.size = 8,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.5),
+            blurRadius: size,
+          ),
+        ],
+      ),
+    )
+        .animate(onPlay: (c) => c.repeat(reverse: true))
+        .scaleXY(
+          begin: 0.8,
+          end: 1.2,
+          duration: 1000.ms,
+          curve: Curves.easeInOut,
+        )
+        .fade(
+          begin: 0.5,
+          end: 1.0,
+          duration: 1000.ms,
+        );
+  }
+}
+
+// ─── Gradient Divider ───────────────────────────────────────────
+
+/// Themed section separator with gradient fade.
+class GradientDivider extends StatelessWidget {
+  final double height;
+  final EdgeInsetsGeometry? margin;
+
+  const GradientDivider({
+    super.key,
+    this.height = 1,
+    this.margin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      margin: margin ?? const EdgeInsets.symmetric(vertical: AppTheme.s12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            AppTheme.border.withValues(alpha: 0.5),
+            AppTheme.border.withValues(alpha: 0.5),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.2, 0.8, 1.0],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Animated Counter ───────────────────────────────────────────
+
+/// Smooth number counter animation for portfolio values.
+/// Extends AnimatedNumber with currency-aware formatting.
+class AnimatedCounter extends StatelessWidget {
+  final double value;
+  final TextStyle? style;
+  final String prefix;
+  final String suffix;
+  final int decimals;
+  final Duration duration;
+
+  const AnimatedCounter({
+    super.key,
+    required this.value,
+    this.style,
+    this.prefix = '',
+    this.suffix = '',
+    this.decimals = 2,
+    this.duration = const Duration(milliseconds: 800),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: value),
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      builder: (context, val, _) => Text(
+        '$prefix${val.toStringAsFixed(decimals)}$suffix',
+        style: style ?? AppTheme.priceLarge,
+      ),
+    );
+  }
+}
+
+// ─── Skeleton Card ──────────────────────────────────────────────
+
+/// Layout-matched skeleton placeholder for inventory grid cards.
+class SkeletonItemCard extends StatelessWidget {
+  const SkeletonItemCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.04),
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Price header shimmer
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+            child: ShimmerBox(height: 14, width: 60, radius: 4),
+          ),
+          // Image area
+          const Expanded(child: SizedBox.shrink()),
+          // Footer shimmer
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 7),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ShimmerBox(height: 10, width: 40, radius: 3),
+                const SizedBox(height: 4),
+                ShimmerBox(height: 4, radius: 2),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Skeleton for portfolio stat cards row.
+class SkeletonStatCards extends StatelessWidget {
+  const SkeletonStatCards({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(
+        3,
+        (i) => Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(left: i > 0 ? 8 : 0),
+            child: Container(
+              height: 80,
+              decoration: AppTheme.glass(),
+              padding: const EdgeInsets.all(AppTheme.s12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ShimmerBox(height: 10, width: 50, radius: 3),
+                  const Spacer(),
+                  ShimmerBox(height: 18, width: 70, radius: 4),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Skeleton for trade offer list items.
+class SkeletonTradeTile extends StatelessWidget {
+  const SkeletonTradeTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: AppTheme.glass(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ShimmerBox(height: 16, width: 16, radius: 8),
+              const SizedBox(width: 8),
+              ShimmerBox(height: 14, width: 120, radius: 4),
+              const Spacer(),
+              ShimmerBox(height: 20, width: 60, radius: 8),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: List.generate(
+                    3,
+                    (i) => Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: ShimmerBox(height: 36, width: 36, radius: 6),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Row(
+                  children: List.generate(
+                    3,
+                    (i) => Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: ShimmerBox(height: 36, width: 36, radius: 6),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
