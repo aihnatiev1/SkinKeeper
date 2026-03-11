@@ -1,5 +1,6 @@
 import axios from "axios";
 import crypto from "crypto";
+import * as cheerio from "cheerio";
 import { pool } from "../db/pool.js";
 import { getLatestPrices } from "./prices.js";
 import { SteamSessionService, type SteamSession } from "./steamSession.js";
@@ -233,9 +234,27 @@ export async function fetchTradeToken(
         maxRedirects: 5,
       }
     );
-    // Token is in URL: https://steamcommunity.com/tradeoffer/new/?partner=XXXXX&token=YYYYY
-    const match = (data as string).match(/token=([A-Za-z0-9_-]+)/);
-    return match ? match[1] : null;
+    const html = data as string;
+
+    // Try cheerio first: find the trade URL input field
+    try {
+      const $ = cheerio.load(html);
+      const tradeUrl = $('input[id="trade_offer_access_url"]').val() as string
+        || $('input[name="trade_offer_access_url"]').val() as string
+        || "";
+      const cheerioMatch = tradeUrl.match(/token=([A-Za-z0-9_-]+)/);
+      if (cheerioMatch) return cheerioMatch[1];
+    } catch {
+      // cheerio parse failed, fall through to regex
+    }
+
+    // Fallback: regex
+    const match = html.match(/token=([A-Za-z0-9_-]+)/);
+    if (match) {
+      console.warn("[Trade] Trade token extracted via regex fallback");
+      return match[1];
+    }
+    return null;
   } catch (err) {
     console.warn("[Trade] Failed to fetch trade token:", (err as Error).message);
     return null;
@@ -1508,6 +1527,88 @@ interface ScrapedOffer {
 }
 
 function parseTradeOffersHtml(html: string, direction: "incoming" | "outgoing"): ScrapedOffer[] {
+  // Try cheerio-based parsing first, fall back to regex
+  try {
+    return parseTradeOffersCheerio(html, direction);
+  } catch (err) {
+    console.warn("[Trade] Cheerio parse failed, falling back to regex:", (err as Error).message);
+    return parseTradeOffersRegex(html, direction);
+  }
+}
+
+function parseTradeOffersCheerio(html: string, direction: "incoming" | "outgoing"): ScrapedOffer[] {
+  const $ = cheerio.load(html);
+  const offers: ScrapedOffer[] = [];
+
+  $(".tradeoffer").each((_i, el) => {
+    const $offer = $(el);
+    const offerId = $offer.attr("id")?.replace("tradeofferid_", "");
+    if (!offerId) return;
+
+    // Partner steam64 from profile link
+    const profileLink = $offer.find('a[href*="/profiles/"]').attr("href") ?? "";
+    const partnerMatch = profileLink.match(/profiles\/(\d{17})/);
+    const partnerSteamId = partnerMatch ? partnerMatch[1] : null;
+
+    // Partner name from header
+    let partnerName = "Unknown";
+    const headerText = $offer.find(".tradeoffer_header").text().trim();
+    const nameMatch = headerText.match(/offered\s+(.+?)\s+a trade/) || headerText.match(/^(.+?)\s+offered you/);
+    if (nameMatch) partnerName = nameMatch[1].trim();
+
+    // Message
+    const rawMsg = $offer.find(".quote").text().trim();
+    const message = rawMsg || null;
+
+    // Status from banner
+    let status = "pending";
+    const bannerText = $offer.find(".tradeoffer_items_banner").text().trim().toLowerCase();
+    if (bannerText.includes("awaiting mobile")) status = "awaiting_confirmation";
+    else if (bannerText.includes("accepted")) status = "accepted";
+    else if (bannerText.includes("expired")) status = "expired";
+    else if (bannerText.includes("canceled") || bannerText.includes("cancelled")) status = "cancelled";
+    else if (bannerText.includes("declined")) status = "declined";
+    else if (bannerText.includes("counter")) status = "countered";
+    else if (bannerText.includes("escrow") || bannerText.includes("hold")) status = "on_hold";
+
+    // Check for inactive state
+    if ($offer.find(".tradeoffer_items_ctn.inactive").length > 0 && status === "pending") {
+      status = "awaiting_confirmation";
+    }
+
+    // Items from primary and secondary sections
+    const itemClassIds: ScrapedOffer["itemClassIds"] = [];
+    const parseItems = ($section: ReturnType<typeof $>, side: "give" | "receive") => {
+      $section.find("[data-economy-item]").each((_j, itemEl) => {
+        const econData = $(itemEl).attr("data-economy-item") ?? "";
+        const parts = econData.split("/");
+        if (parts.length >= 3) {
+          const classid = parts[parts.length - 2];
+          const instanceid = parts[parts.length - 1];
+          const imgSrc = $(itemEl).find("img").attr("src") ?? "";
+          itemClassIds.push({ side, classid, instanceid, iconUrl: imgSrc });
+        }
+      });
+    };
+
+    const $primary = $offer.find(".tradeoffer_items.primary");
+    const $secondary = $offer.find(".tradeoffer_items.secondary");
+
+    if (direction === "outgoing") {
+      parseItems($primary, "give");
+      parseItems($secondary, "receive");
+    } else {
+      parseItems($primary, "receive");
+      parseItems($secondary, "give");
+    }
+
+    offers.push({ steamOfferId: offerId, partnerSteamId, partnerName, message, status, itemClassIds });
+  });
+
+  return offers;
+}
+
+function parseTradeOffersRegex(html: string, direction: "incoming" | "outgoing"): ScrapedOffer[] {
   const offers: ScrapedOffer[] = [];
 
   // Split HTML into offer blocks
@@ -1519,26 +1620,21 @@ function parseTradeOffersHtml(html: string, direction: "incoming" | "outgoing"):
     if (!idMatch) continue;
     const steamOfferId = idMatch[1];
 
-    // Partner steam64 from profile link in "secondary" section
     const partnerMatch = block.match(/href="https:\/\/steamcommunity\.com\/profiles\/(\d{17})"/);
-    // Partner name from header: "You offered NAME a trade:" or "NAME offered you a trade:"
     const headerMatch = block.match(/tradeoffer_header">\s*(.*?)\s*<\/div>/s);
     let partnerName = "Unknown";
     if (headerMatch) {
       const h = headerMatch[1].trim();
-      // "You offered NAME a trade:" or "NAME offered you a trade:"
       const nameMatch = h.match(/offered\s+(.+?)\s+a trade/) || h.match(/^(.+?)\s+offered you/);
       if (nameMatch) partnerName = nameMatch[1].trim();
     }
 
-    // Message (strip HTML tags and entities)
     const msgMatch = block.match(/class="quote">\s*([\s\S]*?)\s*<\/div>/);
     const rawMsg = msgMatch ? msgMatch[1].trim() : null;
     const message = rawMsg
       ? rawMsg.replace(/&nbsp;/g, " ").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() || null
       : null;
 
-    // Status from banner
     let status = "pending";
     const bannerMatch = block.match(/tradeoffer_items_banner[^>]*">\s*([\s\S]*?)(?:<span|<div)/);
     if (bannerMatch) {
@@ -1551,12 +1647,10 @@ function parseTradeOffersHtml(html: string, direction: "incoming" | "outgoing"):
       else if (bannerText.includes("counter")) status = "countered";
       else if (bannerText.includes("escrow") || bannerText.includes("hold")) status = "on_hold";
     }
-    // "inactive" class on items_ctn means non-active
     if (block.includes('tradeoffer_items_ctn  inactive') && status === "pending") {
       status = "awaiting_confirmation";
     }
 
-    // Items: split by primary (my items) and secondary (their items)
     const itemClassIds: ScrapedOffer["itemClassIds"] = [];
     const primaryMatch = block.match(/tradeoffer_items primary">([\s\S]*?)tradeoffer_items secondary/);
     const secondaryMatch = block.match(/tradeoffer_items secondary">([\s\S]*?)(?:tradeoffer_footer|$)/);
@@ -1564,35 +1658,20 @@ function parseTradeOffersHtml(html: string, direction: "incoming" | "outgoing"):
     const parseItems = (section: string, side: "give" | "receive") => {
       const itemMatches = section.matchAll(/data-economy-item="classinfo\/\d+\/(\d+)\/(\d+)"/g);
       for (const m of itemMatches) {
-        // Icon URL from nearby img
         const imgMatch = section.match(new RegExp(`classinfo/\\d+/${m[1]}/${m[2]}"[\\s\\S]*?<img src="([^"]+)"`));
-        itemClassIds.push({
-          side,
-          classid: m[1],
-          instanceid: m[2],
-          iconUrl: imgMatch ? imgMatch[1] : "",
-        });
+        itemClassIds.push({ side, classid: m[1], instanceid: m[2], iconUrl: imgMatch ? imgMatch[1] : "" });
       }
     };
 
     if (direction === "outgoing") {
-      // Sent page: primary = my items (give), secondary = their items (receive)
       if (primaryMatch) parseItems(primaryMatch[1], "give");
       if (secondaryMatch) parseItems(secondaryMatch[1], "receive");
     } else {
-      // Received page: primary = their items (give to me = receive), secondary = my items (give)
       if (primaryMatch) parseItems(primaryMatch[1], "receive");
       if (secondaryMatch) parseItems(secondaryMatch[1], "give");
     }
 
-    offers.push({
-      steamOfferId,
-      partnerSteamId: partnerMatch ? partnerMatch[1] : null,
-      partnerName,
-      message,
-      status,
-      itemClassIds,
-    });
+    offers.push({ steamOfferId, partnerSteamId: partnerMatch ? partnerMatch[1] : null, partnerName, message, status, itemClassIds });
   }
   return offers;
 }
@@ -2052,6 +2131,61 @@ interface ScrapedHistoryTrade {
 }
 
 function parseTradeHistoryHtml(html: string): { trades: ScrapedHistoryTrade[]; nextUrl: string | null } {
+  try {
+    return parseTradeHistoryCheerio(html);
+  } catch (err) {
+    console.warn("[Trade] Cheerio history parse failed, falling back to regex:", err instanceof Error ? err.message : err);
+    return parseTradeHistoryRegex(html);
+  }
+}
+
+function parseTradeHistoryCheerio(html: string): { trades: ScrapedHistoryTrade[]; nextUrl: string | null } {
+  const $ = cheerio.load(html);
+  const trades: ScrapedHistoryTrade[] = [];
+
+  $(".tradehistoryrow").each((_i, row) => {
+    const $row = $(row);
+
+    // Date + timestamp
+    const $dateBlock = $row.find(".tradehistory_date");
+    const dateMain = $dateBlock.contents().filter(function () { return this.type === "text"; }).text().trim();
+    const timestamp = $dateBlock.find(".tradehistory_timestamp").text().trim();
+    const dateText = `${dateMain} ${timestamp}`.trim();
+
+    // Partner Steam64
+    const partnerLink = $row.find('a[href*="steamcommunity.com/profiles/"]').attr("href") ?? "";
+    const partnerSteamId = partnerLink.match(/profiles\/(\d{17})/)?.[1] ?? null;
+    const partnerName = $row.find("[data-miniprofile]").text().trim() || "Unknown";
+
+    const givenItems: { name: string; iconUrl: string }[] = [];
+    const receivedItems: { name: string; iconUrl: string }[] = [];
+
+    $row.find(".tradehistory_items_group").each((_j, group) => {
+      const $group = $(group);
+      const plusMinus = $group.find(".tradehistory_items_plusminus").text().trim();
+      const isReceived = plusMinus === "+";
+      const isGiven = plusMinus === "\u2013" || plusMinus === "-";
+      const target = isReceived ? receivedItems : isGiven ? givenItems : receivedItems;
+
+      $group.find(".history_item").each((_k, itemEl) => {
+        const $item = $(itemEl);
+        const name = $item.find("[class*='history_item_name']").text().trim();
+        const iconUrl = $item.find("img").attr("src") ?? "";
+        if (name) target.push({ name, iconUrl });
+      });
+    });
+
+    trades.push({ partnerSteamId, partnerName, dateText, givenItems, receivedItems });
+  });
+
+  // Pagination
+  const nextHref = $("a.pagebtn").filter(function () { return $(this).text().includes(">"); }).attr("href");
+  const nextUrl = nextHref ? nextHref.replace(/^\?/, "") : null;
+
+  return { trades, nextUrl };
+}
+
+function parseTradeHistoryRegex(html: string): { trades: ScrapedHistoryTrade[]; nextUrl: string | null } {
   const trades: ScrapedHistoryTrade[] = [];
 
   const blocks = html.split(/<div class="tradehistoryrow">/);
