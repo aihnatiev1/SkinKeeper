@@ -138,9 +138,12 @@ describe("steamRequest", () => {
       maxRetries: 2,
     });
 
-    await vi.runAllTimersAsync();
-
-    await expect(promise).rejects.toThrow(SteamRequestError);
+    const [, result] = await Promise.all([
+      vi.runAllTimersAsync(),
+      promise.catch((e: unknown) => e),
+    ]);
+    expect(result).toBeInstanceOf(SteamRequestError);
+    vi.useRealTimers();
   });
 
   it("throws SteamSessionError on redirect to login (302)", async () => {
