@@ -139,7 +139,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 15-01-PLAN.md — Backend: jest setup, test DB, utility tests, service tests, Steam client/scraper tests, route integration tests, coverage
+- [x] 15-01-PLAN.md — Backend: jest setup, test DB, utility tests, service tests, Steam client/scraper tests, route integration tests, coverage
 - [ ] 15-02-PLAN.md — Flutter: test infra, provider unit tests, widget tests, screen tests, E2E integration tests, coverage
 
 ## Progress
@@ -163,4 +163,4 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 12. Offline Price Cache | 0/2 | Pending | — |
 | 13. Home Screen Widget | 1/2 | In Progress | — |
 | 14. Grand Refactoring | 2/2 | Complete | 2026-03-12 |
-| 15. Testing | 0/2 | Pending | — |
+| 15. Testing | 1/2 | In Progress | — |

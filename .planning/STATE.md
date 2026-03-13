@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: M3
-milestone_name: Post-Launch Features
+milestone: M4
+milestone_name: Quality & Stability
 status: in-progress
-stopped_at: Completed 14-02-PLAN.md (Flutter UX/UI refactoring — decompose, performance, design system)
-last_updated: "2026-03-12T00:00:00.000Z"
-last_activity: 2026-03-12 -- Phase 14 Plan 2 complete (Flutter refactoring — god widget decompose, IndexedStack, filter chips, skeletons)
+stopped_at: Completed 15-01-PLAN.md (Backend unit + integration tests — Vitest, 174 tests, 18 test files)
+last_updated: "2026-03-13T00:00:00.000Z"
+last_activity: 2026-03-13 -- Phase 15 Plan 1 complete (backend test suite — utilities, services, routes, SteamClient)
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 5
-  percent: 83
+  total_plans: 7
+  completed_plans: 6
+  percent: 86
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Users can track their CS2 inventory value and sell skins quickly — with real market prices, instant price alerts, and one-tap quick sell.
-**Current focus:** Phase 14: Grand Refactoring (complete)
+**Current focus:** Phase 15: Testing (Plan 1 complete, Plan 2 next)
 
 ## Current Position
 
-Phase: 14 of 15 (Grand Refactoring)
-Plan: 2 of 2 complete
-Status: Phase 14 complete
-Last activity: 2026-03-12 -- Phase 14 Plan 2 complete (Flutter refactoring)
+Phase: 15 of 15 (Testing)
+Plan: 1 of 2 complete
+Status: Phase 15 in progress
+Last activity: 2026-03-13 -- Phase 15 Plan 1 complete (backend tests)
 
-Progress: [████████░░] 83%
+Progress: [████████░░] 86%
 
 ## Performance Metrics
 
@@ -44,6 +44,7 @@ Progress: [████████░░] 83%
 | 13 | 02 | 169s | 5 | 5 |
 | 14 | 01 | 970s | 8 | 35 |
 | 14 | 02 | 2175s | 8 | 30 |
+| 15 | 01 | 1800s | 6 | 19 |
 
 ## Accumulated Context
 
@@ -70,6 +71,8 @@ Progress: [████████░░] 83%
 - [14-02]: Settings bottom sheets kept Material-themed (solid bg, not glass)
 - [14-02]: GlassCard.interactive uses AnimatedScale for press feedback
 - [14-02]: StatusChip.fromTradeStatus replaces all inline status badge implementations
+- [15-01]: Coverage thresholds set to 18% baseline — large services (steamSession, tradeOffers) deferred; raise incrementally as coverage grows
+- [15-01]: csfloat.test.ts rewritten to match refactored API — fetchCSFloatItemPrice no longer exported, AdaptiveCrawler pattern tested instead
 
 ### Pending Todos
 
@@ -81,6 +84,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Completed 14-02-PLAN.md (Flutter UX/UI refactoring — decompose, performance, design system)
+Last session: 2026-03-13
+Stopped at: Completed 15-01-PLAN.md (Backend unit + integration tests — Vitest, 174 tests, 18 test files)
 Resume file: None
