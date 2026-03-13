@@ -24,6 +24,16 @@ class CacheService {
     _metaBox = await Hive.openBox('cacheMeta');
   }
 
+  /// Initialize for tests using an explicit path (avoids path_provider).
+  /// @visibleForTesting
+  static Future<void> initForTest(String path) async {
+    Hive.init(path);
+    _priceBox = await Hive.openBox('prices');
+    _inventoryBox = await Hive.openBox('inventory');
+    _portfolioBox = await Hive.openBox('portfolio');
+    _metaBox = await Hive.openBox('cacheMeta');
+  }
+
   // ─── Prices ───────────────────────────────────────────────────────
 
   /// Returns cached multi-source prices for [marketHashName], or null if
