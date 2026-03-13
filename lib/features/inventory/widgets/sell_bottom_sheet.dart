@@ -6,6 +6,8 @@ import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
 import '../../auth/session_provider.dart';
+import '../../auth/steam_auth_service.dart';
+import '../../settings/accounts_provider.dart';
 import '../../../widgets/glass_sheet.dart';
 import '../sell_provider.dart';
 import 'fee_breakdown.dart';
@@ -22,11 +24,35 @@ class SellBottomSheet extends ConsumerStatefulWidget {
 
 class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   bool _showCustomPrice = false;
+  bool _isClosing = false;
   final _priceController = TextEditingController();
   int? _customPriceCents;
+  Animation<double>? _routeAnimation;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation != _routeAnimation) {
+      _routeAnimation?.removeStatusListener(_onRouteAnimationStatus);
+      _routeAnimation = animation;
+      _routeAnimation?.addStatusListener(_onRouteAnimationStatus);
+    }
+  }
+
+  void _onRouteAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.reverse && mounted && !_isClosing) {
+      // Route is closing — remove TextField from the tree immediately so
+      // EditableTextState.dispose() deregisters from WidgetsBinding before
+      // the keyboard sends didChangeMetrics on the now-deactivated element.
+      FocusManager.instance.primaryFocus?.unfocus();
+      setState(() => _isClosing = true);
+    }
+  }
 
   @override
   void dispose() {
+    _routeAnimation?.removeStatusListener(_onRouteAnimationStatus);
     _priceController.dispose();
     super.dispose();
   }
@@ -43,20 +69,33 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   Future<void> _startSell(int priceCentsPerItem) async {
     HapticFeedback.mediumImpact();
 
+    // Dismiss keyboard before any navigation to prevent
+    // EditableTextState.didChangeMetrics on deactivated widget
+    FocusManager.instance.primaryFocus?.unfocus();
+
     final items = widget.items
         .map((item) => {
               'assetId': item.assetId,
               'marketHashName': item.marketHashName,
               'priceCents': priceCentsPerItem,
+              if (item.accountId != null) 'accountId': item.accountId,
             })
         .toList();
 
     await ref.read(sellOperationProvider.notifier).startOperation(items);
 
     if (!mounted) return;
-    // Close this sheet and open progress sheet
-    Navigator.of(context, rootNavigator: true).pop();
-    showGlassSheetLocked(context, const SellProgressSheet());
+
+    // Capture root navigator context before popping — remains valid after
+    // this sheet is removed, unlike the sheet's own context.
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    final rootContext = rootNav.context;
+    rootNav.pop();
+
+    // Defer push to next frame so Navigator is no longer locked mid-pop
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showGlassSheetLocked(rootContext, const SellProgressSheet());
+    });
   }
 
   @override
@@ -66,6 +105,11 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     final walletAsync = ref.watch(walletInfoProvider);
     final item = widget.items.first;
     final count = widget.items.length;
+    final activeAccountId = ref.watch(
+      authStateProvider.select((u) => u.valueOrNull?.activeAccountId),
+    );
+    final isNonActiveAccount = item.accountId != null &&
+        item.accountId != activeAccountId;
 
     // Quick price — only fetch for single items or first of batch
     final quickPriceAsync = ref.watch(
@@ -97,6 +141,12 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             ),
           ),
           const SizedBox(height: 16),
+
+          // Cross-account warning banner
+          if (isNonActiveAccount) ...[
+            _buildSwitchAccountBanner(context),
+            const SizedBox(height: 4),
+          ],
 
           // Header — item info
           _buildHeader(item, count),
@@ -205,8 +255,12 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
-                context.push('/session');
+                // Capture router before pop — context is deactivated after pop
+                final router = GoRouter.of(context);
+                Navigator.of(context, rootNavigator: true).pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  router.push('/session');
+                });
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.loss,
@@ -216,6 +270,54 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                 ),
               ),
               child: const Text('Connect Session'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchAccountBanner(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppTheme.warning.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.swap_horiz_rounded,
+              size: 16, color: AppTheme.warning.withValues(alpha: 0.8)),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'This item belongs to another account. Switch accounts to sell it.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.warning,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              final accountId = widget.items.first.accountId;
+              if (accountId != null) {
+                Navigator.of(context).pop();
+                await ref.read(accountsProvider.notifier).setActive(accountId);
+              }
+            },
+            child: const Text(
+              'Switch',
+              style: TextStyle(
+                color: AppTheme.warning,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -444,6 +546,10 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                 child: OutlinedButton(
                   onPressed: () {
                     HapticFeedback.selectionClick();
+                    if (_showCustomPrice) {
+                      // Dismiss keyboard before AnimatedSize removes the TextField
+                      FocusManager.instance.primaryFocus?.unfocus();
+                    }
                     setState(() => _showCustomPrice = !_showCustomPrice);
                   },
                   style: OutlinedButton.styleFrom(
@@ -476,7 +582,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
         AnimatedSize(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
-          child: _showCustomPrice
+          child: _showCustomPrice && !_isClosing
               ? _buildCustomPriceInput(count)
               : const SizedBox.shrink(),
         ),
