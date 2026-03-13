@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 18-01-PLAN.md (typed error hierarchy — SessionExpiredError in steamSession + tradeOffers)
-last_updated: "2026-03-13T14:53:35Z"
-last_activity: 2026-03-13 -- Phase 18 plan 01 complete (typed SessionExpiredError throws + steamRequest() migration)
+stopped_at: "Completed 18-02-PLAN.md (route cleanup — next(err) propagation, SESSION_EXPIRED route tests, Flutter api_client test)"
+last_updated: "2026-03-13T15:21:00Z"
+last_activity: "2026-03-13 -- Phase 18 complete (backend error propagation — typed SessionExpiredError in all services+routes)"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 10
-  percent: 83
+  completed_plans: 11
+  percent: 92
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 18 (backend-error-propagation) in progress
-Plan: 18-01 complete
-Status: Phase 18 plan 01 done — typed error hierarchy wired to steamSession + tradeOffers
-Last activity: 2026-03-13 -- Phase 18 plan 01 complete (typed SessionExpiredError throws + steamRequest() migration)
+Phase: 18 (backend-error-propagation) complete
+Plan: 18-02 complete
+Status: Phase 18 complete — typed error hierarchy + route cleanup + tests all done
+Last activity: 2026-03-13 -- Phase 18 plan 02 complete (route next(err) propagation + SESSION_EXPIRED tests + Flutter api_client test)
 
 Progress: [██████████] 100%
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100%
 | 16 | 02 | 600s | 2 | 5 |
 | 16 | 03 | 600s | 2 | 3 |
 | 18 | 01 | 420s | 2 | 3 |
+| 18 | 02 | 566s | 2 | 5 |
 
 ## Accumulated Context
 
@@ -94,6 +95,7 @@ Progress: [██████████] 100%
 - [16-03]: CachedNetworkImage uses errorWidget not errorBuilder — plan had wrong param name, auto-fixed
 - [18-01]: isSessionExpiredError() retains duck-type fallback for backward compat with catch blocks that may still hold old-style errors
 - [18-01]: axios import kept in steamSession.ts — used elsewhere; only extractSessionId/validateSession migrated to steamRequest()
+- [18-02]: Test bodies must satisfy Zod schema validation before mocks are exercised — partnerSteamId requires 17-digit string, sellOperationSchema requires marketHashName per item
 
 ### Pending Todos
 
@@ -106,5 +108,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 18-01-PLAN.md (typed error hierarchy — SessionExpiredError in steamSession + tradeOffers)
+Stopped at: "Completed 18-02-PLAN.md (route cleanup — next(err) propagation, SESSION_EXPIRED route tests, Flutter api_client test)"
 Resume file: None
