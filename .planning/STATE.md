@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 19-01-PLAN.md (portfolios table migration + CRUD routes + P/L filter by portfolioId)"
-last_updated: "2026-03-13T19:52:00Z"
-last_activity: "2026-03-13 -- Phase 19 plan 01 executed (named portfolios backend: migration, CRUD routes, P/L filter)"
+stopped_at: "Completed 19-02-PLAN.md (named portfolios Flutter: selector bar, CRUD sheets, provider, AddTx picker)"
+last_updated: "2026-03-13T20:04:00Z"
+last_activity: "2026-03-13 -- Phase 19 plan 02 executed (Flutter portfolio selector, CRUD sheets, filtering, AddTx picker)"
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 14
-  completed_plans: 13
-  percent: 93
+  completed_plans: 14
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 19 (named-portfolios) — 19-01 complete, 19-02 next
-Plan: 19-02-PLAN.md next
-Status: 19-01 backend executed — portfolios migration, CRUD routes, P/L filter done
-Last activity: 2026-03-13 -- 19-01 executed (portfolios table, CRUD API, P/L filter by portfolioId)
+Phase: 19 (named-portfolios) — COMPLETE (both 19-01 and 19-02 done)
+Plan: All plans complete
+Status: 19-02 Flutter executed — selector bar, CRUD sheets, provider, AddTx picker done
+Last activity: 2026-03-13 -- 19-02 executed (Flutter named portfolios UI: selector bar, CRUD sheets, filtering, AddTx picker)
 
 Progress: [██████████] 100%
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 | 18 | 01 | 420s | 2 | 3 |
 | 18 | 02 | 566s | 2 | 5 |
 | 19 | 01 | ~900s | 3 | 4 |
+| 19 | 02 | ~1200s | 4 | 6 |
 
 ## Accumulated Context
 
@@ -100,6 +101,8 @@ Progress: [██████████] 100%
 - [19-01]: portfoliosRouter exported as named export from portfolio.ts, mounted at /api — avoids /api/portfolio/portfolios prefix conflict
 - [19-01]: getPortfolioPL accountId branch refactored to dynamic params array — supports accountId + portfolioId independently or together
 - [19-01]: getItemsPL with portfolioId bypasses item_cost_basis entirely — aggregates from transactions directly since item_cost_basis is global
+- [19-02]: color.toARGB32() used instead of deprecated color.value for Color→hex serialization in Flutter
+- [19-02]: _PortfolioSelectorBar placed in Items tab (tab 2) above ItemPLList — shows portfolio filter chips for item-level P/L view
 
 ### Pending Todos
 
@@ -112,5 +115,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: "Completed 19-01-PLAN.md (portfolios table migration + CRUD routes + P/L filter by portfolioId)"
+Stopped at: "Completed 19-02-PLAN.md (named portfolios Flutter UI)"
 Resume file: None
