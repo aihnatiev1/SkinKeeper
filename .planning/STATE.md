@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: M4
 milestone_name: Quality & Stability
 status: in-progress
-stopped_at: Completed 15-01-PLAN.md (Backend unit + integration tests — Vitest, 174 tests, 18 test files)
+stopped_at: Completed 15-02-PLAN.md (Flutter unit + widget + E2E tests — 101 tests, 14 test files)
 last_updated: "2026-03-13T00:00:00.000Z"
-last_activity: 2026-03-13 -- Phase 15 Plan 1 complete (backend test suite — utilities, services, routes, SteamClient)
+last_activity: 2026-03-13 -- Phase 15 Plan 2 complete (Flutter tests — widget, screen, E2E, CI scripts)
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 6
-  percent: 86
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Users can track their CS2 inventory value and sell skins quickly — with real market prices, instant price alerts, and one-tap quick sell.
-**Current focus:** Phase 15: Testing (Plan 1 complete, Plan 2 next)
+**Current focus:** Phase 15: Testing — COMPLETE (both plans done)
 
 ## Current Position
 
 Phase: 15 of 15 (Testing)
-Plan: 1 of 2 complete
-Status: Phase 15 in progress
-Last activity: 2026-03-13 -- Phase 15 Plan 1 complete (backend tests)
+Plan: 2 of 2 complete
+Status: All phases complete
+Last activity: 2026-03-13 -- Phase 15 Plan 2 complete (Flutter tests — 101 tests)
 
-Progress: [████████░░] 86%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Progress: [████████░░] 86%
 | 14 | 01 | 970s | 8 | 35 |
 | 14 | 02 | 2175s | 8 | 30 |
 | 15 | 01 | 1800s | 6 | 19 |
+| 15 | 02 | 1800s | 6 | 12 |
 
 ## Accumulated Context
 
@@ -73,6 +74,10 @@ Progress: [████████░░] 86%
 - [14-02]: StatusChip.fromTradeStatus replaces all inline status badge implementations
 - [15-01]: Coverage thresholds set to 18% baseline — large services (steamSession, tradeOffers) deferred; raise incrementally as coverage grows
 - [15-01]: csfloat.test.ts rewritten to match refactored API — fetchCSFloatItemPrice no longer exported, AdaptiveCrawler pattern tested instead
+- [15-02]: Use pump(Duration) not pumpAndSettle — flutter_animate repeating animations block pumpAndSettle indefinitely
+- [15-02]: CacheService.initForTest(path) added to CacheService for test Hive init without path_provider plugin
+- [15-02]: Provider overrides pattern for all screen tests — no network calls in any test
+- [15-02]: Coverage thresholds deferred for Flutter — integration_test requires device/emulator
 
 ### Pending Todos
 
@@ -85,5 +90,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 15-01-PLAN.md (Backend unit + integration tests — Vitest, 174 tests, 18 test files)
+Stopped at: Completed 15-02-PLAN.md (Flutter unit + widget + E2E tests — 101 tests, 14 test files)
 Resume file: None
