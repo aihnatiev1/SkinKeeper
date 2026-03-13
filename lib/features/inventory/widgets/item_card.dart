@@ -27,6 +27,8 @@ class ItemCard extends StatelessWidget {
   final int? groupCount;
   final int? selectedCount;
   final bool isSelected;
+  final bool showAccountBadge;
+  final VoidCallback? onAccountBadgeTap;
 
   const ItemCard({
     super.key,
@@ -40,6 +42,8 @@ class ItemCard extends StatelessWidget {
     this.groupCount,
     this.selectedCount,
     this.isSelected = false,
+    this.showAccountBadge = false,
+    this.onAccountBadgeTap,
   });
 
   @override
@@ -61,8 +65,8 @@ class ItemCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF1E2A48),
-              const Color(0xFF161F3A),
+              AppTheme.surface,
+              AppTheme.bgSecondary,
             ],
           ),
           border: Border.all(
@@ -165,22 +169,28 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       // Info button
-                      if (!compact)
-                        GestureDetector(
+                      GestureDetector(
                           onTap: onInfoTap,
                           behavior: HitTestBehavior.opaque,
                           child: Container(
-                            width: 24,
-                            height: 24,
+                            width: 22,
+                            height: 22,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.05),
                               shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                width: 1,
+                              ),
                             ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.info_outline_rounded,
-                                size: 14,
-                                color: AppTheme.textMuted,
+                            alignment: Alignment.center,
+                            child: Text(
+                              'i',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+
+                                color: Colors.white.withValues(alpha: 0.4),
+                                height: 1,
                               ),
                             ),
                           ),
@@ -202,8 +212,8 @@ class ItemCard extends StatelessWidget {
                                 center: Alignment.center,
                                 radius: 0.6,
                                 colors: [
-                                  rarityColor.withValues(alpha: compact ? 0.18 : 0.25),
-                                  rarityColor.withValues(alpha: 0.05),
+                                  rarityColor.withValues(alpha: compact ? 0.10 : 0.14),
+                                  rarityColor.withValues(alpha: 0.03),
                                   Colors.transparent,
                                 ],
                                 stops: const [0.0, 0.5, 1.0],
@@ -354,7 +364,63 @@ class ItemCard extends StatelessWidget {
                   ),
                 ),
               ),
+
+            // ── Account badge (bottom-left corner) ──
+            if (showAccountBadge && item.accountId != null)
+              Positioned(
+                bottom: 4,
+                left: 4,
+                child: GestureDetector(
+                  onTap: onAccountBadgeTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.surface,
+                        width: 1.5,
+                      ),
+                      color: AppTheme.primary.withValues(alpha: 0.85),
+                    ),
+                    child: ClipOval(
+                      child: item.accountAvatarUrl != null && item.accountAvatarUrl!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: item.accountAvatarUrl!,
+                            fit: BoxFit.cover,
+                            placeholder: (_, url) => _AccountInitial(item.accountName),
+                            errorWidget: (_, url, err) => _AccountInitial(item.accountName),
+                          )
+                        : _AccountInitial(item.accountName),
+                    ),
+                  ),
+                ),
+              ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Account Initial ─────────────────────────────────────────────────
+class _AccountInitial extends StatelessWidget {
+  final String? accountName;
+  const _AccountInitial(this.accountName);
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = (accountName ?? '?').isNotEmpty
+        ? accountName![0].toUpperCase()
+        : '?';
+    return Center(
+      child: Text(
+        initial,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
         ),
       ),
     );
@@ -370,10 +436,14 @@ class _FooterSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasWear = !item.isNonWeapon && item.wearShort != null;
+    final hasBan = !item.tradable;
+    if (!hasWear && !hasBan) return const SizedBox.shrink();
+
     return Container(
       padding: EdgeInsets.fromLTRB(
         compact ? 7 : 10,
-        compact ? 4 : 6,
+        compact ? 6 : 6,
         compact ? 5 : 8,
         compact ? 5 : 7,
       ),
@@ -383,8 +453,7 @@ class _FooterSection extends StatelessWidget {
           Expanded(
             child: compact ? _buildCompactInfo() : _buildFullInfo(),
           ),
-          // Right: lock
-          if (!item.tradable)
+          if (hasBan)
             _TradeBanBadge(item: item, compact: compact),
         ],
       ),
@@ -392,8 +461,8 @@ class _FooterSection extends StatelessWidget {
   }
 
   Widget _buildCompactInfo() {
-    // Non-weapon items (stickers, patches, etc.) don't show wear/float
-    if (item.isNonWeapon) return const SizedBox.shrink();
+    // Non-weapon items or items without wear (cases, capsules, etc.) don't show wear/float
+    if (item.isNonWeapon || item.wearShort == null) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,7 +494,7 @@ class _FooterSection extends StatelessWidget {
         ),
         if (item.floatValue != null)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: 5),
             child: _MiniFloatBar(floatValue: item.floatValue!),
           ),
       ],
@@ -433,8 +502,8 @@ class _FooterSection extends StatelessWidget {
   }
 
   Widget _buildFullInfo() {
-    // Non-weapon items (stickers, patches, etc.) don't show wear/float/rarity
-    if (item.isNonWeapon) return const SizedBox.shrink();
+    // Non-weapon items or items without wear (cases, capsules, etc.) don't show wear/float/rarity
+    if (item.isNonWeapon || item.wearShort == null) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -546,19 +615,11 @@ class _MiniFloatBar extends StatelessWidget {
 
   const _MiniFloatBar({required this.floatValue});
 
-  static const _segments = [
-    (end: 0.07, color: Color(0xFF10B981)),  // FN
-    (end: 0.15, color: Color(0xFF34D399)),  // MW
-    (end: 0.38, color: Color(0xFFF59E0B)),  // FT
-    (end: 0.45, color: Color(0xFFF97316)),  // WW
-    (end: 1.00, color: Color(0xFFEF4444)),  // BS
-  ];
-
   @override
   Widget build(BuildContext context) {
     final clamped = floatValue.clamp(0.0, 1.0);
     return SizedBox(
-      height: 4,
+      height: 3,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final w = constraints.maxWidth;
@@ -566,22 +627,25 @@ class _MiniFloatBar extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
             child: Stack(
               children: [
-                // Segment backgrounds
-                Row(
-                  children: _segments.map((seg) {
-                    final idx = _segments.indexOf(seg);
-                    final prevEnd = idx > 0 ? _segments[idx - 1].end : 0.0;
-                    return Expanded(
-                      flex: ((seg.end - prevEnd) * 1000).round(),
-                      child: Container(
-                        color: seg.color.withValues(alpha: 0.2),
-                      ),
-                    );
-                  }).toList(),
+                // Smooth gradient track: green → yellow → red
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0xFF10B981),
+                        Color(0xFFF59E0B),
+                        Color(0xFFEF4444),
+                      ],
+                      stops: [0.0, 0.45, 1.0],
+                    ),
+                  ),
+                  foregroundDecoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                  ),
                 ),
                 // Position indicator
                 Positioned(
-                  left: (clamped * w) - 1,
+                  left: (clamped * w - 1).clamp(0.0, w - 2),
                   top: 0,
                   bottom: 0,
                   child: Container(
@@ -591,8 +655,8 @@ class _MiniFloatBar extends StatelessWidget {
                       borderRadius: BorderRadius.circular(1),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          blurRadius: 3,
+                          color: Colors.white.withValues(alpha: 0.5),
+                          blurRadius: 2,
                         ),
                       ],
                     ),
@@ -735,28 +799,27 @@ class _TradeBanBadge extends StatelessWidget {
           size: 11, color: AppTheme.warning.withValues(alpha: 0.7));
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: AppTheme.warning.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: AppTheme.warning.withValues(alpha: 0.15),
-          width: 0.5,
+          color: AppTheme.warning.withValues(alpha: 0.3),
+          width: 1,
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.lock_clock,
-              size: 10, color: AppTheme.warning.withValues(alpha: 0.8)),
+          Icon(Icons.lock_outline_rounded,
+              size: 9, color: AppTheme.warning.withValues(alpha: 0.5)),
           if (text != null) ...[
-            const SizedBox(width: 2),
+            const SizedBox(width: 3),
             Text(
               text,
               style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.warning.withValues(alpha: 0.8),
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.warning.withValues(alpha: 0.5),
               ),
             ),
           ],

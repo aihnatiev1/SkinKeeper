@@ -9,7 +9,9 @@ import '../../../core/theme.dart';
 import '../../../widgets/shared_ui.dart';
 import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
+import '../../auth/steam_auth_service.dart';
 import '../../portfolio/portfolio_pl_provider.dart' show itemPLFamilyProvider;
+import '../../settings/accounts_provider.dart';
 import 'glass_bottom_sheet.dart';
 import 'group_expand_sheet.dart';
 import 'item_card.dart';
@@ -113,6 +115,14 @@ class _GridItem extends ConsumerWidget {
           ))
         : (isSelected ? 1 : 0);
 
+    final accountCount = ref.watch(
+      authStateProvider.select((u) => u.valueOrNull?.accountCount ?? 1),
+    );
+    final activeAccountId = ref.watch(
+      authStateProvider.select((u) => u.valueOrNull?.activeAccountId),
+    );
+    final showBadge = accountCount > 1;
+
     return ItemCard(
       item: item,
       compact: columns >= 4,
@@ -121,6 +131,15 @@ class _GridItem extends ConsumerWidget {
       groupCount: group.isGroup ? group.count : null,
       selectedCount: group.isGroup && selectedCount > 0 ? selectedCount : null,
       isSelected: isSelected || selectedCount > 0,
+      showAccountBadge: showBadge,
+      onAccountBadgeTap: showBadge && group.representative.accountId != null
+        ? () async {
+            final accountId = group.representative.accountId!;
+            if (accountId != activeAccountId) {
+              await ref.read(accountsProvider.notifier).setActive(accountId);
+            }
+          }
+        : null,
       onTap: () {
         HapticFeedback.selectionClick();
         if (group.isGroup) {
@@ -167,11 +186,15 @@ class _GridItem extends ConsumerWidget {
   void _showQuantityPicker(
       BuildContext context, WidgetRef ref, ItemGroup group) {
     final currency = ref.read(currencyProvider);
+    final selected = ref.read(selectionProvider);
+    final currentCount =
+        group.items.where((i) => selected.contains(i.assetId)).length;
     showGlassSheet(
       context,
       QuantityPickerSheet(
         group: group,
         currency: currency,
+        initialCount: currentCount > 0 ? currentCount : 1,
         onConfirm: (assetIds) {
           ref.read(selectionProvider.notifier).replaceGroupSelection(
                 group.items.map((i) => i.assetId).toList(),
