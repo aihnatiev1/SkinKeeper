@@ -3,6 +3,7 @@ import { encrypt, decrypt } from "./crypto.js";
 import axios from "axios";
 import { LoginSession, EAuthTokenPlatformType } from "steam-session";
 import { SessionExpiredError } from "../utils/errors.js";
+import { steamRequest } from "../utils/SteamClient.js";
 import QRCode from "qrcode";
 import crypto from "crypto";
 import { detectWalletCurrency } from "./currency.js";
@@ -265,18 +266,17 @@ export class SteamSessionService {
     steamLoginSecure: string
   ): Promise<string | null> {
     try {
-      const response = await axios.get("https://steamcommunity.com/", {
-        headers: {
-          Cookie: `steamLoginSecure=${steamLoginSecure}`,
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-        maxRedirects: 5,
-        timeout: 10000,
+      const resp = await steamRequest<string>({
+        url: "https://steamcommunity.com/",
+        cookies: { steamLoginSecure, sessionId: "" },
+        followRedirects: true,
+        validateStatus: () => true,
+        maxRetries: 1,
       });
-      const cookies = response.headers["set-cookie"];
+      const cookies = resp.headers["set-cookie"];
       if (!cookies) return null;
-      for (const cookie of cookies) {
+      const cookieArray = Array.isArray(cookies) ? cookies : [cookies];
+      for (const cookie of cookieArray) {
         const match = cookie.match(/sessionid=([^;]+)/);
         if (match) return match[1];
       }
@@ -291,20 +291,18 @@ export class SteamSessionService {
    */
   static async validateSession(session: SteamSession): Promise<boolean> {
     try {
-      const { status, headers } = await axios.get(
-        "https://steamcommunity.com/my/",
-        {
-          headers: {
-            Cookie: `steamLoginSecure=${session.steamLoginSecure}`,
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          },
-          maxRedirects: 0,
-          validateStatus: () => true,
-          timeout: 10000,
-        }
-      );
-      const location = (headers["location"] || "") as string;
+      const resp = await steamRequest({
+        url: "https://steamcommunity.com/my/",
+        cookies: {
+          steamLoginSecure: session.steamLoginSecure,
+          sessionId: session.sessionId,
+        },
+        followRedirects: false,
+        validateStatus: () => true,
+        maxRetries: 1,
+      });
+      const status = resp.status;
+      const location = (resp.headers?.["location"] || "") as string;
       if (location.includes("/login")) return false;
       return status === 200 || (status === 302 && !location.includes("/login"));
     } catch {
