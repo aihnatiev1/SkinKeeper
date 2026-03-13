@@ -17,6 +17,8 @@ import 'core/widget_service.dart';
 import 'core/settings_provider.dart';
 import 'core/theme.dart';
 import 'features/auth/steam_auth_service.dart';
+import 'features/inventory/inventory_provider.dart';
+import 'features/settings/accounts_provider.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -107,6 +109,13 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     if (uri.host == 'portfolio') {
       final router = ref.read(routerProvider);
       router.go('/portfolio');
+      return;
+    }
+
+    // skinkeeper://account-linked?steamId=XXX (from backend redirect after linking)
+    if (uri.host == 'account-linked') {
+      ref.invalidate(accountsProvider);
+      ref.invalidate(inventoryProvider);
       return;
     }
 

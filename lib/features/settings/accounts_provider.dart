@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
@@ -9,6 +10,12 @@ import '../inventory/inventory_provider.dart';
 import '../portfolio/portfolio_pl_provider.dart';
 import '../trades/trades_provider.dart';
 import '../transactions/transactions_provider.dart';
+
+class PremiumRequiredException implements Exception {
+  const PremiumRequiredException();
+  @override
+  String toString() => 'Upgrade to Premium to link multiple Steam accounts';
+}
 
 final accountsProvider =
     AsyncNotifierProvider<AccountsNotifier, List<SteamAccount>>(
@@ -58,7 +65,17 @@ class AccountsNotifier extends AsyncNotifier<List<SteamAccount>> {
 
   Future<Map<String, dynamic>> startLinkAccount() async {
     final api = ref.read(apiClientProvider);
-    final response = await api.post('/auth/accounts/link');
-    return response.data as Map<String, dynamic>;
+    try {
+      final response = await api.post('/auth/accounts/link');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        final body = e.response?.data;
+        if (body is Map && body['error'] == 'premium_required') {
+          throw const PremiumRequiredException();
+        }
+      }
+      rethrow;
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import '../../models/user.dart';
 import 'accounts_provider.dart';
@@ -260,8 +261,24 @@ class _LinkAccountButton extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
-            context.push('/session?linkMode=true');
+          onTap: () async {
+            try {
+              final result =
+                  await ref.read(accountsProvider.notifier).startLinkAccount();
+              final url = result['url'] as String?;
+              if (url != null && context.mounted) {
+                await launchUrl(Uri.parse(url),
+                    mode: LaunchMode.externalApplication);
+              }
+            } on PremiumRequiredException {
+              if (context.mounted) context.push('/premium');
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to start linking: $e')),
+                );
+              }
+            }
           },
           borderRadius: BorderRadius.circular(AppTheme.r12),
           child: const Center(
