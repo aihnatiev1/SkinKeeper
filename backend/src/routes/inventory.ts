@@ -27,7 +27,8 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
               i.inspect_link, i.paint_seed, i.paint_index, i.stickers, i.charms,
               sa.steam_id as account_steam_id,
               sa.id as account_id,
-              sa.display_name as account_name
+              sa.display_name as account_name,
+              sa.avatar_url as account_avatar_url
        FROM inventory_items i
        JOIN steam_accounts sa ON i.steam_account_id = sa.id
        WHERE sa.user_id = $1${accountFilter}

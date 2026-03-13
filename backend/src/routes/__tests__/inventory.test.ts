@@ -153,3 +153,58 @@ describe("GET /api/inventory", () => {
     expect(queryCall[1]).toContain(2); // accountId = 2 should be in params
   });
 });
+
+// ─── GET /api/inventory — avatar_url and multi-account tests ─────────────
+
+describe("GET /api/inventory — account_avatar_url", () => {
+  const mockItem = {
+    asset_id: "abc",
+    market_hash_name: "AK-47 | Redline (FT)",
+    account_id: 1,
+    account_steam_id: "76561198000000001",
+    account_name: "TestUser",
+    account_avatar_url: "https://avatars.steamstatic.com/abc_medium.jpg",
+    tradable: true,
+  };
+
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  it("returns all accounts items when no accountId filter", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [mockItem] });
+
+    const res = await request(app)
+      .get("/api/inventory")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.items)).toBe(true);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.count).toBe(1);
+  });
+
+  it("includes account_avatar_url in each item", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [mockItem] });
+
+    const res = await request(app)
+      .get("/api/inventory")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].account_avatar_url).toBe(
+      "https://avatars.steamstatic.com/abc_medium.jpg"
+    );
+  });
+
+  it("filters by accountId when provided", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [mockItem] });
+
+    const res = await request(app)
+      .get("/api/inventory?accountId=1")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].account_id).toBe(1);
+  });
+});

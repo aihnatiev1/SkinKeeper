@@ -294,3 +294,46 @@ describe("DELETE /api/auth/accounts/:accountId", () => {
     expect(res.body.lastAccountRemoved).toBe(true);
   });
 });
+
+// ─── POST /api/auth/accounts/link — premium gate ─────────────────────────
+
+describe("POST /api/auth/accounts/link — premium gate", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  it("returns 403 premium_required for free user who already has 1 account", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: false }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 1 }] });
+
+    const res = await request(app)
+      .post("/api/auth/accounts/link")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("premium_required");
+  });
+
+  it("returns 200 for free user with no accounts yet", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: false }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 0 }] });
+
+    const res = await request(app)
+      .post("/api/auth/accounts/link")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(200);
+    expect(typeof res.body.url).toBe("string");
+  });
+
+  it("returns 200 for premium user regardless of account count", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] });
+
+    const res = await request(app)
+      .post("/api/auth/accounts/link")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(200);
+    expect(typeof res.body.url).toBe("string");
+  });
+});

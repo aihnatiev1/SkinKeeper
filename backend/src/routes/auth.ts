@@ -214,26 +214,25 @@ router.get("/accounts", authMiddleware, async (req: AuthRequest, res: Response) 
 // POST /api/auth/accounts/link — Start linking a new Steam account
 router.post("/accounts/link", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    // TODO: re-enable premium gate after testing
-    // const { rows: userRow } = await pool.query(
-    //   `SELECT is_premium FROM users WHERE id = $1`,
-    //   [req.userId]
-    // );
-    // const isPremium = userRow[0]?.is_premium ?? false;
-    //
-    // if (!isPremium) {
-    //   const { rows: countRow } = await pool.query(
-    //     `SELECT COUNT(*)::int as cnt FROM steam_accounts WHERE user_id = $1`,
-    //     [req.userId]
-    //   );
-    //   if (countRow[0].cnt >= 1) {
-    //     res.status(403).json({
-    //       error: "premium_required",
-    //       message: "Upgrade to Premium to link multiple Steam accounts",
-    //     });
-    //     return;
-    //   }
-    // }
+    const { rows: userRow } = await pool.query(
+      `SELECT is_premium FROM users WHERE id = $1`,
+      [req.userId]
+    );
+    const isPremium = userRow[0]?.is_premium ?? false;
+
+    if (!isPremium) {
+      const { rows: countRow } = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM steam_accounts WHERE user_id = $1`,
+        [req.userId]
+      );
+      if (countRow[0].cnt >= 1) {
+        res.status(403).json({
+          error: "premium_required",
+          message: "Upgrade to Premium to link multiple Steam accounts",
+        });
+        return;
+      }
+    }
 
     // Build OpenID URL with state param to identify this as a link flow
     const returnUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api/auth/steam/callback`;
