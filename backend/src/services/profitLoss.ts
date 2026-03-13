@@ -82,16 +82,25 @@ export interface PortfolioPL {
   totalCurrentValueCents: number;
 }
 
-export async function getPortfolioPL(userId: number, accountId?: number): Promise<PortfolioPL> {
-  // If accountId is provided, compute P/L directly from transactions for that account
+export async function getPortfolioPL(userId: number, accountId?: number, portfolioId?: number): Promise<PortfolioPL> {
+  // If accountId or portfolioId is provided, compute P/L directly from transactions
   // Otherwise use the global item_cost_basis table
-  const accountFilter = accountId
-    ? `AND steam_account_id = ${parseInt(String(accountId))}`
-    : "";
 
-  // When filtering by account, we recompute from transactions directly
-  // (item_cost_basis is global; per-account P/L must aggregate transactions)
-  if (accountId) {
+  // When filtering by account or portfolio, we recompute from transactions directly
+  // (item_cost_basis is global; per-account/per-portfolio P/L must aggregate transactions)
+  if (accountId || portfolioId) {
+    const params: unknown[] = [userId];
+    let accountCond = "";
+    if (accountId) {
+      params.push(accountId);
+      accountCond = `AND steam_account_id = $${params.length}`;
+    }
+    let portfolioCond = "";
+    if (portfolioId) {
+      params.push(portfolioId);
+      portfolioCond = `AND portfolio_id = $${params.length}`;
+    }
+
     const txRes = await pool.query(
       `
       WITH buy_agg AS (
@@ -99,7 +108,7 @@ export async function getPortfolioPL(userId: number, accountId?: number): Promis
                COUNT(*)::int AS qty,
                SUM(price_cents)::int AS total
         FROM transactions
-        WHERE user_id = $1 AND type = 'buy' AND steam_account_id = $2
+        WHERE user_id = $1 AND type = 'buy' ${accountCond} ${portfolioCond}
         GROUP BY market_hash_name
       ),
       sell_agg AS (
@@ -107,7 +116,7 @@ export async function getPortfolioPL(userId: number, accountId?: number): Promis
                COUNT(*)::int AS qty,
                SUM(price_cents)::int AS total
         FROM transactions
-        WHERE user_id = $1 AND type = 'sell' AND steam_account_id = $2
+        WHERE user_id = $1 AND type = 'sell' ${accountCond} ${portfolioCond}
         GROUP BY market_hash_name
       ),
       combined AS (
@@ -140,7 +149,7 @@ export async function getPortfolioPL(userId: number, accountId?: number): Promis
         json_agg(json_build_object('name', market_hash_name, 'holding', current_holding)) FILTER (WHERE current_holding > 0) AS holdings
       FROM combined
       `,
-      [userId, accountId]
+      params
     );
 
     const basis = txRes.rows[0];
@@ -157,7 +166,10 @@ export async function getPortfolioPL(userId: number, accountId?: number): Promis
          JOIN LATERAL (
            SELECT price_usd FROM price_history ph
            WHERE ph.market_hash_name = n.market_hash_name AND ph.price_usd > 0
-           ORDER BY ph.recorded_at DESC LIMIT 1
+           ORDER BY
+             CASE WHEN ph.source = 'steam' THEN 0 ELSE 1 END,
+             ph.recorded_at DESC
+           LIMIT 1
          ) lp ON true`,
         [names]
       );
@@ -216,7 +228,10 @@ export async function getPortfolioPL(userId: number, accountId?: number): Promis
     LEFT JOIN LATERAL (
       SELECT price_usd FROM price_history ph
       WHERE ph.market_hash_name = h.market_hash_name AND ph.price_usd > 0
-      ORDER BY ph.recorded_at DESC LIMIT 1
+      ORDER BY
+        CASE WHEN ph.source = 'steam' THEN 0 ELSE 1 END,
+        ph.recorded_at DESC
+      LIMIT 1
     ) lp ON true
     `,
     [userId]
@@ -289,13 +304,113 @@ export interface ItemPL {
   currentPriceCents: number;
   totalProfitCents: number;
   profitPct: number;
+  updatedAt: Date;
 }
 
-export async function getItemsPL(userId: number): Promise<ItemPL[]> {
+export async function getItemsPL(userId: number, portfolioId?: number): Promise<ItemPL[]> {
+  // When portfolioId is provided, compute P/L from transactions directly
+  // (item_cost_basis is global; portfolio-filtered view must aggregate transactions)
+  if (portfolioId) {
+    const pid = parseInt(String(portfolioId));
+    const res = await pool.query(`
+      WITH buy_agg AS (
+        SELECT market_hash_name,
+               COUNT(*)::int AS qty,
+               SUM(price_cents)::int AS total,
+               MAX(icon_url) FILTER (WHERE icon_url IS NOT NULL AND icon_url != '') AS icon_url
+        FROM transactions
+        WHERE user_id = $1 AND type = 'buy' AND portfolio_id = $2
+        GROUP BY market_hash_name
+      ),
+      sell_agg AS (
+        SELECT market_hash_name,
+               COUNT(*)::int AS qty,
+               SUM(price_cents)::int AS total
+        FROM transactions
+        WHERE user_id = $1 AND type = 'sell' AND portfolio_id = $2
+        GROUP BY market_hash_name
+      ),
+      combined AS (
+        SELECT
+          COALESCE(b.market_hash_name, s.market_hash_name) AS market_hash_name,
+          COALESCE(b.qty, 0) AS qty_bought,
+          COALESCE(b.total, 0) AS total_spent,
+          COALESCE(s.qty, 0) AS qty_sold,
+          COALESCE(s.total, 0) AS total_earned,
+          GREATEST(COALESCE(b.qty, 0) - COALESCE(s.qty, 0), 0) AS current_holding,
+          CASE WHEN COALESCE(b.qty, 0) > 0
+            THEN (COALESCE(b.total, 0) / COALESCE(b.qty, 1))
+            ELSE 0
+          END AS avg_buy_price,
+          COALESCE(s.total, 0) - (
+            CASE WHEN COALESCE(b.qty, 0) > 0
+              THEN (COALESCE(b.total, 0)::float / b.qty * COALESCE(s.qty, 0))::int
+              ELSE 0
+            END
+          ) AS realized_profit,
+          COALESCE(b.icon_url, '') AS icon_url
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s USING (market_hash_name)
+      )
+      SELECT c.*, t.last_tx_at
+      FROM combined c
+      LEFT JOIN LATERAL (
+        SELECT MAX(created_at) AS last_tx_at FROM transactions t2
+        WHERE t2.user_id = $1 AND t2.market_hash_name = c.market_hash_name AND t2.portfolio_id = $2
+      ) t ON true
+    `, [userId, pid]);
+
+    // Join with current prices (LATERAL pattern)
+    const names = res.rows.map((r: any) => r.market_hash_name).filter(Boolean);
+    const priceMap = new Map<string, number>();
+    if (names.length > 0) {
+      const priceRes = await pool.query(`
+        WITH names AS (SELECT unnest($1::text[]) AS market_hash_name)
+        SELECT n.market_hash_name, lp.price_usd
+        FROM names n
+        JOIN LATERAL (
+          SELECT price_usd FROM price_history ph
+          WHERE ph.market_hash_name = n.market_hash_name AND ph.price_usd > 0
+          ORDER BY CASE WHEN ph.source = 'steam' THEN 0 ELSE 1 END, ph.recorded_at DESC
+          LIMIT 1
+        ) lp ON true
+      `, [names]);
+      for (const r of priceRes.rows) {
+        priceMap.set(r.market_hash_name, parseFloat(r.price_usd));
+      }
+    }
+
+    return res.rows
+      .filter((r: any) => r.market_hash_name)
+      .map((r: any) => {
+        const currentPriceCents = Math.round((priceMap.get(r.market_hash_name) ?? 0) * 100);
+        const unrealized = currentPriceCents * r.current_holding - r.avg_buy_price * r.current_holding;
+        const total = r.realized_profit + unrealized;
+        const invested = r.total_spent || 0;
+        return {
+          marketHashName: r.market_hash_name,
+          avgBuyPriceCents: r.avg_buy_price,
+          totalQuantityBought: r.qty_bought,
+          totalSpentCents: r.total_spent,
+          totalQuantitySold: r.qty_sold,
+          totalEarnedCents: r.total_earned,
+          currentHolding: r.current_holding,
+          realizedProfitCents: r.realized_profit,
+          unrealizedProfitCents: unrealized,
+          currentPriceCents,
+          totalProfitCents: total,
+          profitPct: invested > 0 ? Math.round((total / invested) * 10000) / 100 : 0,
+          updatedAt: r.last_tx_at,
+          iconUrl: r.icon_url || null,
+        } as ItemPL;
+      });
+  }
+
+  // Global path — use item_cost_basis
   const res = await pool.query(
     `
     WITH holdings AS (
-      SELECT * FROM item_cost_basis WHERE user_id = $1
+      SELECT * FROM item_cost_basis WHERE user_id = $1 AND market_hash_name != ''
     )
     SELECT
       h.market_hash_name,
@@ -306,14 +421,29 @@ export async function getItemsPL(userId: number): Promise<ItemPL[]> {
       h.total_earned_cents,
       h.current_holding,
       h.realized_profit_cents,
+      lt.last_created_at AS updated_at,
       COALESCE((lp.price_usd * 100)::int, 0) AS current_price_cents,
-      COALESCE((lp.price_usd * 100)::int * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding) AS unrealized_profit_cents
+      COALESCE((lp.price_usd * 100)::int * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding) AS unrealized_profit_cents,
+      ti.icon_url
     FROM holdings h
     LEFT JOIN LATERAL (
       SELECT price_usd FROM price_history ph
       WHERE ph.market_hash_name = h.market_hash_name AND ph.price_usd > 0
-      ORDER BY ph.recorded_at DESC LIMIT 1
+      ORDER BY
+        CASE WHEN ph.source = 'steam' THEN 0 ELSE 1 END,
+        ph.recorded_at DESC
+      LIMIT 1
     ) lp ON true
+    LEFT JOIN LATERAL (
+      SELECT MAX(created_at) AS last_created_at FROM transactions t
+      WHERE t.user_id = $1 AND t.market_hash_name = h.market_hash_name
+    ) lt ON true
+    LEFT JOIN LATERAL (
+      SELECT icon_url FROM transactions t
+      WHERE t.user_id = $1 AND t.market_hash_name = h.market_hash_name
+        AND t.icon_url IS NOT NULL AND t.icon_url != ''
+      ORDER BY t.created_at DESC LIMIT 1
+    ) ti ON true
     ORDER BY ABS(h.realized_profit_cents + COALESCE((lp.price_usd * 100)::int * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding)) DESC
     `,
     [userId]
@@ -337,6 +467,8 @@ export async function getItemsPL(userId: number): Promise<ItemPL[]> {
       currentPriceCents: r.current_price_cents,
       totalProfitCents: total,
       profitPct: invested > 0 ? Math.round((total / invested) * 10000) / 100 : 0,
+      updatedAt: r.updated_at,
+      iconUrl: r.icon_url ?? null,
     };
   });
 }

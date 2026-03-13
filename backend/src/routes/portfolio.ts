@@ -30,12 +30,12 @@ router.get(
       const names = [...new Set(items.map((i) => i.market_hash_name))];
       const priceMap = await getLatestPrices(names);
 
-      // Calculate total value (using skinport price first, then steam)
+      // Calculate total value using Steam price (consistent with inventory screen)
       let totalValue = 0;
       for (const item of items) {
         const prices = priceMap.get(item.market_hash_name);
         if (prices) {
-          totalValue += prices.skinport ?? prices.steam ?? 0;
+          totalValue += prices.steam ?? prices.skinport ?? 0;
         }
       }
 
@@ -48,7 +48,7 @@ router.get(
            JOIN LATERAL (
              SELECT price_usd FROM price_history ph
              WHERE ph.market_hash_name = n.market_hash_name
-               AND ph.source = 'skinport'
+               AND ph.source = 'steam'
                AND ph.recorded_at < NOW() - INTERVAL '24 hours'
              ORDER BY ph.recorded_at DESC LIMIT 1
            ) lp ON true`,
@@ -61,7 +61,7 @@ router.get(
            JOIN LATERAL (
              SELECT price_usd FROM price_history ph
              WHERE ph.market_hash_name = n.market_hash_name
-               AND ph.source = 'skinport'
+               AND ph.source = 'steam'
                AND ph.recorded_at < NOW() - INTERVAL '7 days'
              ORDER BY ph.recorded_at DESC LIMIT 1
            ) lp ON true`,
@@ -124,10 +124,12 @@ router.get(
 
 // GET /api/portfolio/pl — Portfolio P/L summary (FREE)
 // Optional ?accountId=X to filter by specific steam account
+// Optional ?portfolioId=X to filter by named portfolio
 router.get("/pl", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : undefined;
-    const pl = await getPortfolioPL(req.userId!, accountId);
+    const portfolioId = req.query.portfolioId ? parseInt(req.query.portfolioId as string) : undefined;
+    const pl = await getPortfolioPL(req.userId!, accountId, portfolioId);
     res.json(pl);
   } catch (err) {
     console.error("Portfolio P/L error:", err);
@@ -152,6 +154,7 @@ router.get(
 );
 
 // GET /api/portfolio/pl/items — Per-item P/L (PREMIUM)
+// Optional ?portfolioId=X to filter by named portfolio
 // TODO: re-enable requirePremium after testing
 router.get(
   "/pl/items",
@@ -159,7 +162,8 @@ router.get(
   // requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
-      const items = await getItemsPL(req.userId!);
+      const portfolioId = req.query.portfolioId ? parseInt(req.query.portfolioId as string) : undefined;
+      const items = await getItemsPL(req.userId!, portfolioId);
       res.json({ items });
     } catch (err) {
       console.error("Item P/L error:", err);
@@ -203,3 +207,80 @@ router.post(
 );
 
 export default router;
+
+// ---- Named Portfolios CRUD (mounted at /api) ----
+// Routes: GET/POST/PUT/DELETE /api/portfolios
+
+export const portfoliosRouter = Router();
+
+// GET /api/portfolios — list portfolios
+portfoliosRouter.get("/portfolios", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, color, created_at AS "createdAt" FROM portfolios WHERE user_id = $1 ORDER BY created_at ASC`,
+      [req.userId]
+    );
+    res.json({ portfolios: rows });
+  } catch (err) {
+    console.error("List portfolios error:", err);
+    res.status(500).json({ error: "Failed to list portfolios" });
+  }
+});
+
+// POST /api/portfolios — create portfolio
+portfoliosRouter.post("/portfolios", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const name = (req.body.name ?? "").trim();
+    if (!name) { res.status(400).json({ error: "name is required" }); return; }
+    const color = (req.body.color ?? "#6366F1").trim();
+    const { rows } = await pool.query(
+      `INSERT INTO portfolios (user_id, name, color) VALUES ($1, $2, $3)
+       RETURNING id, name, color, created_at AS "createdAt"`,
+      [req.userId, name, color]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Create portfolio error:", err);
+    res.status(500).json({ error: "Failed to create portfolio" });
+  }
+});
+
+// PUT /api/portfolios/:id — update portfolio
+portfoliosRouter.put("/portfolios/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const name = (req.body.name ?? "").trim();
+    const color = req.body.color;
+    if (!name) { res.status(400).json({ error: "name is required" }); return; }
+    const updates: string[] = ["name = $2"];
+    const params: unknown[] = [req.userId, name];
+    if (color) { updates.push(`color = $${params.length + 1}`); params.push(color.trim()); }
+    params.push(id);
+    const { rows } = await pool.query(
+      `UPDATE portfolios SET ${updates.join(", ")} WHERE user_id = $1 AND id = $${params.length}
+       RETURNING id, name, color, created_at AS "createdAt"`,
+      params
+    );
+    if (!rows.length) { res.status(404).json({ error: "Portfolio not found" }); return; }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Update portfolio error:", err);
+    res.status(500).json({ error: "Failed to update portfolio" });
+  }
+});
+
+// DELETE /api/portfolios/:id — delete portfolio
+portfoliosRouter.delete("/portfolios/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const { rowCount } = await pool.query(
+      `DELETE FROM portfolios WHERE id = $1 AND user_id = $2`,
+      [id, req.userId]
+    );
+    if (!rowCount) { res.status(404).json({ error: "Portfolio not found" }); return; }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete portfolio error:", err);
+    res.status(500).json({ error: "Failed to delete portfolio" });
+  }
+});
