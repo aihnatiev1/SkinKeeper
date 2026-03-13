@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: M4
 milestone_name: Quality & Stability
 status: in-progress
-stopped_at: Completed 15-02-PLAN.md (Flutter unit + widget + E2E tests — 101 tests, 14 test files)
+stopped_at: Completed 15-03-PLAN.md (Steam scraper gap closure — npm test exit 0, 215 tests, 23 test files)
 last_updated: "2026-03-13T00:00:00.000Z"
-last_activity: 2026-03-13 -- Phase 15 Plan 2 complete (Flutter tests — widget, screen, E2E, CI scripts)
+last_activity: 2026-03-13 -- Phase 15 Plan 3 complete (Steam scraper tests — SteamClient fix + fixture HTML + scrapers.test.ts)
 progress:
   total_phases: 3
   completed_phases: 3
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Users can track their CS2 inventory value and sell skins quickly — with real market prices, instant price alerts, and one-tap quick sell.
-**Current focus:** Phase 15: Testing — COMPLETE (both plans done)
+**Current focus:** Phase 15: Testing — gap closure plans in progress
 
 ## Current Position
 
 Phase: 15 of 15 (Testing)
-Plan: 2 of 2 complete
-Status: All phases complete
-Last activity: 2026-03-13 -- Phase 15 Plan 2 complete (Flutter tests — 101 tests)
+Plan: 15-03 complete (gap closure)
+Status: In progress (gap closure plans)
+Last activity: 2026-03-13 -- Phase 15 Plan 03 complete (Steam scraper tests — 215 tests, exit 0)
 
 Progress: [██████████] 100%
 
@@ -46,6 +46,7 @@ Progress: [██████████] 100%
 | 14 | 02 | 2175s | 8 | 30 |
 | 15 | 01 | 1800s | 6 | 19 |
 | 15 | 02 | 1800s | 6 | 12 |
+| 15 | 03 | 300s | 2 | 6 |
 
 ## Accumulated Context
 
@@ -78,6 +79,9 @@ Progress: [██████████] 100%
 - [15-02]: CacheService.initForTest(path) added to CacheService for test Hive init without path_provider plugin
 - [15-02]: Provider overrides pattern for all screen tests — no network calls in any test
 - [15-02]: Coverage thresholds deferred for Flutter — integration_test requires device/emulator
+- [15-03]: Use Promise.all pattern to attach rejection handler before vi.runAllTimersAsync() — eliminates vitest unhandled rejection
+- [15-03]: Mock pool path from services/__tests__ must be ../../db/pool.js not ../pool.js
+- [15-03]: syncTradeOffers exercises parseTradeOffersHtml via scrapeTradeOffersHtml — requires web_api_key mock to proceed past early return
 
 ### Pending Todos
 
@@ -90,5 +94,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 15-02-PLAN.md (Flutter unit + widget + E2E tests — 101 tests, 14 test files)
+Stopped at: Completed 15-03-PLAN.md (Steam scraper gap closure — npm test exit 0, 215 tests)
 Resume file: None
