@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { createTestJwt } from "../../__tests__/helpers.js";
+import { SessionExpiredError } from "../../utils/errors.js";
 
 // Mock all dependencies before importing app
 const mockQuery = vi.fn();
@@ -246,5 +247,33 @@ describe("GET /api/market/wallet-info", () => {
     expect(res.body.detected).toBe(false);
     expect(res.body.currencyId).toBe(1);
     expect(res.body.code).toBe("USD");
+  });
+});
+
+// ─── SESSION_EXPIRED propagation ─────────────────────────────────────────
+
+describe("SESSION_EXPIRED propagation", () => {
+  it("POST /sell-operation returns 401 when ensureValidSession throws SessionExpiredError", async () => {
+    const { SteamSessionService } = await import("../../services/steamSession.js");
+    vi.mocked(SteamSessionService.ensureValidSession).mockRejectedValueOnce(new SessionExpiredError());
+    const jwt = createTestJwt(1);
+    const res = await request(app)
+      .post("/api/market/sell-operation")
+      .set("Authorization", `Bearer ${jwt}`)
+      .send({ items: [{ assetId: "a1", marketHashName: "AK-47 | Redline (Field-Tested)", priceCents: 500 }] });
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
+  });
+
+  it("POST /sell returns 401 when session is invalid", async () => {
+    const { SteamSessionService } = await import("../../services/steamSession.js");
+    vi.mocked(SteamSessionService.validateSession).mockResolvedValueOnce(false);
+    const jwt = createTestJwt(1);
+    const res = await request(app)
+      .post("/api/market/sell")
+      .set("Authorization", `Bearer ${jwt}`)
+      .send({ assetId: "a1", priceInCents: 500 });
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { createTestJwt } from "../../__tests__/helpers.js";
+import { SessionExpiredError } from "../../utils/errors.js";
 
 // Mock all dependencies before importing app
 const mockQuery = vi.fn();
@@ -258,5 +259,54 @@ describe("PUT /api/trades/accounts/:id/trade-token", () => {
       .send({});
 
     expect(res.status).toBe(400);
+  });
+});
+
+// ─── SESSION_EXPIRED propagation ─────────────────────────────────────────
+
+describe("SESSION_EXPIRED propagation", () => {
+  it("POST /send returns 401 SESSION_EXPIRED when service throws SessionExpiredError", async () => {
+    const { createAndSendOffer } = await import("../../services/tradeOffers.js");
+    vi.mocked(createAndSendOffer).mockRejectedValueOnce(new SessionExpiredError());
+    const jwt = createTestJwt(1);
+    const res = await request(app)
+      .post("/api/trades/send")
+      .set("Authorization", `Bearer ${jwt}`)
+      .send({ partnerSteamId: "76561198000000001", itemsToGive: [{ assetId: "a1" }], itemsToReceive: [] });
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
+  });
+
+  it("POST /:id/accept returns 401 SESSION_EXPIRED", async () => {
+    const { acceptOffer } = await import("../../services/tradeOffers.js");
+    vi.mocked(acceptOffer).mockRejectedValueOnce(new SessionExpiredError());
+    const jwt = createTestJwt(1);
+    const res = await request(app)
+      .post("/api/trades/999/accept")
+      .set("Authorization", `Bearer ${jwt}`);
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
+  });
+
+  it("POST /:id/decline returns 401 SESSION_EXPIRED", async () => {
+    const { declineOffer } = await import("../../services/tradeOffers.js");
+    vi.mocked(declineOffer).mockRejectedValueOnce(new SessionExpiredError());
+    const jwt = createTestJwt(1);
+    const res = await request(app)
+      .post("/api/trades/999/decline")
+      .set("Authorization", `Bearer ${jwt}`);
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
+  });
+
+  it("POST /:id/cancel returns 401 SESSION_EXPIRED", async () => {
+    const { cancelOffer } = await import("../../services/tradeOffers.js");
+    vi.mocked(cancelOffer).mockRejectedValueOnce(new SessionExpiredError());
+    const jwt = createTestJwt(1);
+    const res = await request(app)
+      .post("/api/trades/999/cancel")
+      .set("Authorization", `Bearer ${jwt}`);
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
   });
 });
