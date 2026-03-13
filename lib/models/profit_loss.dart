@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 class PortfolioPL {
   final int totalInvestedCents;
   final int totalEarnedCents;
@@ -55,6 +57,8 @@ class ItemPL {
   final int currentPriceCents;
   final int totalProfitCents;
   final double profitPct;
+  final DateTime? updatedAt;
+  final String? iconUrl;
 
   const ItemPL({
     required this.marketHashName,
@@ -69,6 +73,8 @@ class ItemPL {
     required this.currentPriceCents,
     required this.totalProfitCents,
     required this.profitPct,
+    this.updatedAt,
+    this.iconUrl,
   });
 
   double get avgBuyPrice => avgBuyPriceCents / 100;
@@ -79,13 +85,37 @@ class ItemPL {
   double get currentPrice => currentPriceCents / 100;
   double get totalProfit => totalProfitCents / 100;
   bool get isProfitable => totalProfitCents >= 0;
+  bool get isSoldOut => currentHolding == 0 && totalQuantitySold > 0;
+  double get avgSellPrice =>
+      totalQuantitySold > 0 ? totalEarnedCents / totalQuantitySold / 100 : 0;
 
-  String get displayName {
-    final parts = marketHashName.split(' | ');
-    return parts.length > 1 ? parts[1].split(' (').first : marketHashName;
+  // Total current market value of held items
+  int get totalWorthNowCents => currentPriceCents * currentHolding;
+  double get totalWorthNow => totalWorthNowCents / 100;
+
+  // Gain after Steam fees (~15%): realized already net, unrealized needs 15% deducted
+  int get gainAfterFeesCents {
+    final heldNet = currentHolding > 0
+        ? (currentPriceCents * 0.85).round() * currentHolding -
+            avgBuyPriceCents * currentHolding
+        : 0;
+    return realizedProfitCents + heldNet;
   }
 
+  double get gainAfterFees => gainAfterFeesCents / 100;
+
+  String? get imageUrl =>
+      iconUrl != null && iconUrl!.isNotEmpty
+          ? 'https://community.cloudflare.steamstatic.com/economy/image/$iconUrl/64fx64f'
+          : null;
+
+  // "Karambit | Crimson Web (Field-Tested)" → "Karambit | Crimson Web"
+  String get displayName =>
+      marketHashName.replaceAll(RegExp(r'\s*\([^)]+\)$'), '').trim();
+
   String get weaponName => marketHashName.split(' | ').first;
+
+  bool get hasCostData => avgBuyPriceCents > 0 || totalSpentCents > 0;
 
   factory ItemPL.fromJson(Map<String, dynamic> json) {
     return ItemPL(
@@ -101,6 +131,10 @@ class ItemPL {
       currentPriceCents: json['currentPriceCents'] as int? ?? 0,
       totalProfitCents: json['totalProfitCents'] as int? ?? 0,
       profitPct: (json['profitPct'] as num?)?.toDouble() ?? 0,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'] as String)
+          : null,
+      iconUrl: json['iconUrl'] as String?,
     );
   }
 }
@@ -162,4 +196,31 @@ class PLHistoryPoint {
       unrealizedProfitCents: json['unrealizedProfitCents'] as int? ?? 0,
     );
   }
+}
+
+class Portfolio {
+  final int id;
+  final String name;
+  final Color color;
+  final DateTime createdAt;
+
+  const Portfolio({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.createdAt,
+  });
+
+  factory Portfolio.fromJson(Map<String, dynamic> json) {
+    final hex = (json['color'] as String? ?? '#6366F1').replaceAll('#', '');
+    return Portfolio(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      color: Color(int.parse('0xFF$hex')),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+
+  String get colorHex =>
+      '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
 }

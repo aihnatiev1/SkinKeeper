@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,7 +7,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/steam_image.dart';
 import '../../../core/theme.dart';
+import '../../../models/profit_loss.dart';
 import '../../../widgets/shared_ui.dart';
 import '../manual_tx_provider.dart';
 import '../portfolio_pl_provider.dart';
@@ -45,16 +46,34 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   final _priceController = TextEditingController();
   final _qtyController = TextEditingController(text: '1');
   final _noteController = TextEditingController();
-  final _searchDebounce = Debouncer(milliseconds: 400);
-
   String _type = 'buy'; // buy or sell
   String _source = 'manual';
   DateTime _date = DateTime.now();
   String? _selectedItem;
   String? _selectedIconUrl;
+  int? _portfolioId;
   bool _showSearch = false;
   bool _saving = false;
-  String _searchQuery = '';
+  bool _isClosing = false;
+  Animation<double>? _routeAnimation;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation != _routeAnimation) {
+      _routeAnimation?.removeStatusListener(_onRouteAnimationStatus);
+      _routeAnimation = animation;
+      _routeAnimation?.addStatusListener(_onRouteAnimationStatus);
+    }
+  }
+
+  void _onRouteAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.reverse && mounted && !_isClosing) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      setState(() => _isClosing = true);
+    }
+  }
 
   @override
   void initState() {
@@ -68,6 +87,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
 
   @override
   void dispose() {
+    _routeAnimation?.removeStatusListener(_onRouteAnimationStatus);
     _itemController.dispose();
     _priceController.dispose();
     _qtyController.dispose();
@@ -106,10 +126,12 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         source: _source,
         note: _noteController.text.isNotEmpty ? _noteController.text : null,
         iconUrl: _selectedIconUrl,
+        portfolioId: _portfolioId,
       );
 
       if (success && mounted) {
         HapticFeedback.mediumImpact();
+        FocusManager.instance.primaryFocus?.unfocus();
         // Refresh P/L data
         ref.invalidate(portfolioPLProvider);
         ref.invalidate(itemsPLProvider);
@@ -130,6 +152,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Sheet is closing — remove all TextFields from the tree so
+    // EditableTextState.dispose() deregisters before keyboard sends didChangeMetrics.
+    if (_isClosing) return const SizedBox.shrink();
+
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
@@ -305,6 +331,70 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   _buildLabel('SOURCE'),
                   const SizedBox(height: 6),
                   _buildSourceChips(),
+
+                  // ── Portfolio picker ──
+                  Consumer(
+                    builder: (ctx, ref, _) {
+                      final portfoliosAsync = ref.watch(portfoliosProvider);
+                      return portfoliosAsync.when(
+                        loading: () => const SizedBox.shrink(),
+                        error: (e, _) => const SizedBox.shrink(),
+                        data: (portfolios) {
+                          if (portfolios.isEmpty) return const SizedBox.shrink();
+                          final selected = portfolios
+                              .where((p) => p.id == _portfolioId)
+                              .firstOrNull;
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.folder_outlined,
+                                    size: 16, color: AppTheme.textMuted),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Portfolio',
+                                  style: AppTheme.captionSmall
+                                      .copyWith(color: AppTheme.textMuted),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () =>
+                                      _pickPortfolio(context, portfolios),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: selected != null
+                                          ? selected.color
+                                              .withValues(alpha: 0.15)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: selected != null
+                                            ? selected.color
+                                            : AppTheme.divider,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      selected?.name ?? 'None',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: selected?.color ??
+                                            AppTheme.textMuted,
+                                        fontWeight: selected != null
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
                   const SizedBox(height: 16),
 
                   // ── Note (optional) ──
@@ -341,6 +431,64 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         ],
       ),
     );
+  }
+
+  // ─── Portfolio picker ──────────────────────────────────────
+
+  Future<void> _pickPortfolio(
+      BuildContext context, List<Portfolio> portfolios) async {
+    final picked = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: AppTheme.glass(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Assign Portfolio',
+              style: AppTheme.bodySmall.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: Icon(Icons.close, color: AppTheme.textMuted, size: 18),
+              title: Text('None',
+                  style:
+                      AppTheme.bodySmall.copyWith(color: AppTheme.textMuted)),
+              onTap: () => Navigator.pop(context, -1), // -1 = clear
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+            for (final p in portfolios)
+              ListTile(
+                leading: Container(
+                  width: 12,
+                  height: 12,
+                  decoration:
+                      BoxDecoration(color: p.color, shape: BoxShape.circle),
+                ),
+                title: Text(p.name,
+                    style: AppTheme.bodySmall
+                        .copyWith(color: AppTheme.textPrimary)),
+                onTap: () => Navigator.pop(context, p.id),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == -1) {
+      setState(() => _portfolioId = null);
+    } else if (picked != null) {
+      setState(() => _portfolioId = picked);
+    }
   }
 
   // ─── Builders ─────────────────────────────────────────────
@@ -418,7 +566,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                 borderRadius: BorderRadius.circular(4),
                 child: CachedNetworkImage(
                   imageUrl:
-                      'https://community.steamstatic.com/economy/image/$_selectedIconUrl/64fx64f',
+                      SteamImage.url(_selectedIconUrl!, size: '64fx64f'),
                   width: 28,
                   height: 28,
                   fit: BoxFit.contain,
@@ -436,16 +584,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                 color: AppTheme.textPrimary,
               ),
               onChanged: (v) {
-                _searchDebounce.run(() {
-                  if (mounted) {
-                    setState(() {
-                      _searchQuery = v;
-                      _showSearch = v.length >= 2;
-                      if (v != _selectedItem) {
-                        _selectedItem = null;
-                        _selectedIconUrl = null;
-                      }
-                    });
+                setState(() {
+                  _showSearch = v.length >= 2;
+                  if (v != _selectedItem) {
+                    _selectedItem = null;
+                    _selectedIconUrl = null;
                   }
                 });
               },
@@ -478,9 +621,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   }
 
   Widget _buildSearchResults() {
-    if (_searchQuery.length < 2) return const SizedBox.shrink();
+    final query = _itemController.text;
+    if (query.length < 2) return const SizedBox.shrink();
 
-    final results = ref.watch(itemSearchProvider(_searchQuery));
+    final results = ref.watch(itemSearchProvider(query));
 
     return Container(
       margin: const EdgeInsets.only(top: 4),
@@ -812,15 +956,3 @@ class _TypeBtn extends StatelessWidget {
   }
 }
 
-// ─── Debouncer ─────────────────────────────────────────────────
-class Debouncer {
-  final int milliseconds;
-  Timer? _timer;
-
-  Debouncer({required this.milliseconds});
-
-  void run(VoidCallback action) {
-    _timer?.cancel();
-    _timer = Timer(Duration(milliseconds: milliseconds), action);
-  }
-}

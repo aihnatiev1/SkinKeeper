@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
-import 'portfolio_pl_provider.dart';
+import '../../core/steam_image.dart';
 
 /// Search result for item autocomplete
 class ItemSearchResult {
@@ -9,9 +9,7 @@ class ItemSearchResult {
 
   const ItemSearchResult({required this.marketHashName, this.iconUrl});
 
-  String get imageUrl => iconUrl != null && iconUrl!.isNotEmpty
-      ? 'https://community.steamstatic.com/economy/image/$iconUrl/128fx128f'
-      : '';
+  String get imageUrl => SteamImage.url(iconUrl ?? '', size: '128fx128f');
 
   factory ItemSearchResult.fromJson(Map<String, dynamic> json) {
     return ItemSearchResult(
@@ -50,6 +48,7 @@ class ManualTxService {
     String source = 'manual',
     String? note,
     String? iconUrl,
+    int? portfolioId,
   }) async {
     final body = <String, dynamic>{
       'marketHashName': marketHashName,
@@ -61,6 +60,7 @@ class ManualTxService {
     if (date != null) body['date'] = date.toIso8601String();
     if (note != null) body['note'] = note;
     if (iconUrl != null) body['iconUrl'] = iconUrl;
+    if (portfolioId != null) body['portfolioId'] = portfolioId;
 
     if (quantity > 1) {
       final res = await _api.post('/transactions/manual/batch', data: body);

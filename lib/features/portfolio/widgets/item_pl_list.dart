@@ -1,226 +1,540 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/profit_loss.dart';
+import '../../../widgets/glass_sheet.dart';
 import '../portfolio_pl_provider.dart';
+import 'add_transaction_sheet.dart';
 
+// ── Layout constants ──────────────────────────────────────────────────────────
+const _kRowH = 52.0;
+const _kHdrH = 28.0;
+const _kNameW = 162.0; // sticky: icon + name
+
+// Scrollable column widths — order matches screenshot
+const _kColQty = 46.0;
+const _kColBuy = 76.0;
+const _kColCur = 76.0;
+const _kColInv = 86.0;
+const _kColWorth = 82.0;
+const _kColPct = 54.0;
+const _kColGain = 82.0;
+const _kColFees = 86.0;
+
+const _hdrStyle = TextStyle(
+  fontSize: 10,
+  fontWeight: FontWeight.w700,
+  color: AppTheme.textMuted,
+  letterSpacing: 0.7,
+);
+
+// ── Public widget ─────────────────────────────────────────────────────────────
 class ItemPLList extends ConsumerWidget {
   final List<ItemPL> items;
-
   const ItemPLList({super.key, required this.items});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (items.isEmpty) {
+    final valid = items.where((i) => i.marketHashName.isNotEmpty).toList();
+    if (valid.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(32),
         decoration: AppTheme.glass(),
         child: Center(
-          child: Text(
-            'No transactions found.\nSync your Steam Market history.',
-            textAlign: TextAlign.center,
-            style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
-          ),
+          child: Text('No transactions found.\nSync your Steam Market history.',
+              textAlign: TextAlign.center,
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted)),
         ),
       );
     }
 
+    final tab = ref.watch(plTabProvider);
     final sort = ref.watch(plSortProvider);
-    final sorted = List<ItemPL>.from(items);
-    switch (sort) {
-      case PLSort.profitDesc:
-        sorted.sort((a, b) => b.totalProfitCents.compareTo(a.totalProfitCents));
-      case PLSort.profitAsc:
-        sorted.sort((a, b) => a.totalProfitCents.compareTo(b.totalProfitCents));
-      case PLSort.investedDesc:
-        sorted.sort((a, b) => b.totalSpentCents.compareTo(a.totalSpentCents));
-      case PLSort.holdingDesc:
-        sorted.sort((a, b) => b.currentHolding.compareTo(a.currentHolding));
-    }
+
+    final active = valid.where((i) => i.currentHolding > 0).toList();
+    final sold = valid.where((i) => i.currentHolding == 0).toList();
+    final current = tab == PlTab.active ? active : sold;
+    final sorted = _applySort(current, sort);
 
     return Container(
       decoration: AppTheme.glass(),
       child: Column(
         children: [
-          // Sort header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-            child: Row(
-              children: [
-                Text(
-                  '${items.length} items',
-                  style: AppTheme.caption,
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    // Cycle through sort options
-                    const cycle = [
-                      PLSort.profitDesc,
-                      PLSort.profitAsc,
-                      PLSort.investedDesc,
-                      PLSort.holdingDesc,
-                    ];
-                    final idx = cycle.indexOf(sort);
-                    ref.read(plSortProvider.notifier).state =
-                        cycle[(idx + 1) % cycle.length];
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Sort by ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textMuted,
-                        ),
-                      ),
-                      Text(
-                        _sortLabel(sort),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const Icon(Icons.keyboard_arrow_down_rounded,
-                          size: 16, color: AppTheme.textSecondary),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _Header(activeCount: active.length, soldCount: sold.length),
           Divider(height: 1, color: AppTheme.divider),
-          // Item list
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: sorted.length,
-            separatorBuilder: (_, _) =>
-                Divider(height: 1, color: AppTheme.divider),
-            itemBuilder: (context, index) =>
-                _ItemPLRow(item: sorted[index])
-                    .animate()
-                    .fadeIn(duration: 300.ms, delay: (index * 30).ms),
-          ),
+          if (sorted.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('No items',
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted)),
+            )
+          else
+            _TableContent(items: sorted, sort: sort),
         ],
       ),
     );
   }
 
-  String _sortLabel(PLSort sort) {
-    switch (sort) {
-      case PLSort.profitDesc:
-        return 'Profit ↓';
-      case PLSort.profitAsc:
-        return 'Profit ↑';
-      case PLSort.investedDesc:
-        return 'Invested ↓';
-      case PLSort.holdingDesc:
-        return 'Holdings ↓';
+  static List<ItemPL> _applySort(List<ItemPL> src, PlSort s) {
+    final out = List<ItemPL>.from(src);
+    int cmp(ItemPL a, ItemPL b) {
+      switch (s.col) {
+        case PlSortCol.recent:
+          if (a.updatedAt == null && b.updatedAt == null) return 0;
+          if (a.updatedAt == null) return 1;
+          if (b.updatedAt == null) return -1;
+          return b.updatedAt!.compareTo(a.updatedAt!);
+        case PlSortCol.qty:
+          return b.currentHolding.compareTo(a.currentHolding);
+        case PlSortCol.buyPrice:
+          return b.avgBuyPriceCents.compareTo(a.avgBuyPriceCents);
+        case PlSortCol.currentPrice:
+          return b.currentPriceCents.compareTo(a.currentPriceCents);
+        case PlSortCol.invested:
+          return b.totalSpentCents.compareTo(a.totalSpentCents);
+        case PlSortCol.worth:
+          return b.totalWorthNowCents.compareTo(a.totalWorthNowCents);
+        case PlSortCol.pct:
+          return b.profitPct.compareTo(a.profitPct);
+        case PlSortCol.gain:
+          return b.totalProfitCents.compareTo(a.totalProfitCents);
+        case PlSortCol.afterFees:
+          return b.gainAfterFeesCents.compareTo(a.gainAfterFeesCents);
+      }
     }
+    out.sort((a, b) => s.desc ? cmp(a, b) : -cmp(a, b));
+    return out;
   }
 }
 
-class _ItemPLRow extends ConsumerWidget {
-  final ItemPL item;
-
-  const _ItemPLRow({required this.item});
+// ── Header: tabs + item count ────────────────────────────────────────────────
+class _Header extends ConsumerWidget {
+  final int activeCount;
+  final int soldCount;
+  const _Header({required this.activeCount, required this.soldCount});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currency = ref.watch(currencyProvider);
-    final profitColor =
-        item.isProfitable ? AppTheme.profit : AppTheme.loss;
-    final pctPrefix = item.profitPct >= 0 ? '+' : '';
+    final tab = ref.watch(plTabProvider);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Row(
+        children: [
+          _TabChip(label: 'Active', count: activeCount, active: tab == PlTab.active,
+              onTap: () { HapticFeedback.selectionClick(); ref.read(plTabProvider.notifier).state = PlTab.active; }),
+          const SizedBox(width: 8),
+          _TabChip(label: 'Sold', count: soldCount, active: tab == PlTab.sold,
+              onTap: () { HapticFeedback.selectionClick(); ref.read(plTabProvider.notifier).state = PlTab.sold; }),
+        ],
+      ),
+    );
+  }
+}
 
-    return InkWell(
-      onTap: () {
-        // Navigate to item detail if in inventory
-        // For now, just provide haptic feedback
-        HapticFeedback.lightImpact();
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
+class _TabChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool active;
+  final VoidCallback onTap;
+  const _TabChip({required this.label, required this.count, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? AppTheme.primary.withValues(alpha: 0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? AppTheme.primary : AppTheme.divider,
+            width: active ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          '$label  $count',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            color: active ? AppTheme.primary : AppTheme.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────
+class _TableContent extends StatefulWidget {
+  final List<ItemPL> items;
+  final PlSort sort;
+  const _TableContent({required this.items, required this.sort});
+
+  @override
+  State<_TableContent> createState() => _TableContentState();
+}
+
+class _TableContentState extends State<_TableContent> {
+  final _hCtrl = ScrollController();
+
+  @override
+  void dispose() { _hCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Sticky left: icon + name
+        SizedBox(
+          width: _kNameW,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _stickyHeader(),
+              for (final item in widget.items)
+                GestureDetector(
+                  onLongPress: () => _showItemActions(context, item),
+                  child: _stickyRow(item),
+                ),
+            ],
+          ),
+        ),
+        Container(width: 0.5, color: AppTheme.divider),
+        // Scrollable columns
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _hCtrl,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _dataHeader(),
+                for (final item in widget.items)
+                  Consumer(builder: (ctx, ref, child) => _dataRow(item, ref)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Item long-press actions ────────────────────────────────────────────────
+  void _showItemActions(BuildContext context, ItemPL item) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: AppTheme.glass(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Item info
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Avg: ${currency.format(item.avgBuyPrice)}',
-                    style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted),
-                  ),
-                ],
-              ),
+            Text(
+              item.displayName,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14),
+              textAlign: TextAlign.center,
             ),
-            // Current price
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    currency.format(item.currentPrice),
-                    style: AppTheme.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  if (item.currentHolding > 0)
-                    Text(
-                      '${item.currentHolding} held',
-                      style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted),
-                    ),
-                ],
+            const SizedBox(height: 12),
+            ListTile(
+              leading: Icon(Icons.add_circle_outline,
+                  color: AppTheme.primary, size: 20),
+              title: Text(
+                'Log transaction',
+                style:
+                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
               ),
-            ),
-            const SizedBox(width: 12),
-            // Profit
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    currency.formatWithSign(item.totalProfit),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: profitColor,
-                    ),
+              onTap: () {
+                Navigator.pop(context);
+                showGlassSheet(
+                  context,
+                  AddTransactionSheet(
+                    initialItemName: item.marketHashName,
+                    initialIconUrl: item.imageUrl,
                   ),
-                  Text(
-                    '$pctPrefix${item.profitPct.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: profitColor.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
+              contentPadding: EdgeInsets.zero,
+              dense: true,
             ),
           ],
         ),
       ),
     );
   }
+
+  // ── Sticky header ──────────────────────────────────────────────────────────
+  Widget _stickyHeader() => Container(
+        height: _kHdrH,
+        padding: const EdgeInsets.only(left: 10),
+        decoration: _border(),
+        alignment: Alignment.centerLeft,
+        child: const Text('ITEM', style: _hdrStyle),
+      );
+
+  // ── Sticky row ─────────────────────────────────────────────────────────────
+  Widget _stickyRow(ItemPL item) {
+    final subtitle = item.currentHolding > 0
+        ? '${item.currentHolding} in stock'
+        : 'sold all';
+    return Container(
+      height: _kRowH,
+      padding: const EdgeInsets.only(left: 8, right: 6),
+      decoration: _border(),
+      child: Row(
+        children: [
+          // Icon
+          if (item.imageUrl != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: CachedNetworkImage(
+                imageUrl: item.imageUrl!,
+                width: 30,
+                height: 30,
+                fit: BoxFit.contain,
+                errorWidget: (ctx, url, err) => _iconPlaceholder(),
+                placeholder: (ctx, url) => _iconPlaceholder(),
+              ),
+            )
+          else
+            _iconPlaceholder(),
+          const SizedBox(width: 6),
+          // Name
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(item.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodySmall.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textPrimary)),
+                const SizedBox(height: 1),
+                Text(subtitle,
+                    style: AppTheme.captionSmall.copyWith(
+                        color: item.currentHolding > 0
+                            ? AppTheme.textMuted
+                            : AppTheme.textDisabled)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconPlaceholder() => Container(
+        width: 30, height: 30,
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      );
+
+  // ── Data header ────────────────────────────────────────────────────────────
+  Widget _dataHeader() => Consumer(
+        builder: (ctx, ref, _) {
+          final sort = ref.watch(plSortProvider);
+          void tap(PlSortCol c) {
+            HapticFeedback.selectionClick();
+            ref.read(plSortProvider.notifier).state = sort.withCol(c);
+          }
+          return Container(
+            height: _kHdrH,
+            decoration: _border(),
+            child: Row(children: [
+              _hdrCell('QTY', _kColQty, PlSortCol.qty, sort, tap),
+              _hdrCell('BUY', _kColBuy, PlSortCol.buyPrice, sort, tap),
+              _hdrCell('CURRENT', _kColCur, PlSortCol.currentPrice, sort, tap),
+              _hdrCell('INVESTED', _kColInv, PlSortCol.invested, sort, tap),
+              _hdrCell('WORTH', _kColWorth, PlSortCol.worth, sort, tap),
+              _hdrCell('%', _kColPct, PlSortCol.pct, sort, tap),
+              _hdrCell('GAIN', _kColGain, PlSortCol.gain, sort, tap),
+              _hdrCell('AFTER FEES', _kColFees, PlSortCol.afterFees, sort, tap),
+            ]),
+          );
+        },
+      );
+
+  Widget _hdrCell(String label, double w, PlSortCol col, PlSort sort,
+      void Function(PlSortCol) tap) {
+    final active = sort.col == col;
+    return GestureDetector(
+      onTap: () => tap(col),
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: w,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(label,
+                    style: _hdrStyle.copyWith(
+                        color: active ? Colors.white : AppTheme.textMuted),
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 2),
+              Text(
+                active ? (sort.desc ? '↓' : '↑') : '⇅',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: active ? AppTheme.primary : AppTheme.textDisabled,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Data row ───────────────────────────────────────────────────────────────
+  Widget _dataRow(ItemPL item, WidgetRef ref) {
+    final currency = ref.watch(currencyProvider);
+    final tab = ref.watch(plTabProvider);
+    final profitColor = item.isProfitable ? AppTheme.profit : AppTheme.loss;
+    final feesColor =
+        item.gainAfterFeesCents >= 0 ? AppTheme.profit : AppTheme.loss;
+    final pctPrefix = item.profitPct >= 0 ? '+' : '';
+
+    // For sold tab: show avg sell price as "current"
+    final displayPrice = tab == PlTab.sold && item.isSoldOut
+        ? item.avgSellPrice
+        : item.currentPrice;
+    final displayPriceLabel =
+        tab == PlTab.sold && item.isSoldOut ? 'sold @' : null;
+
+    return Container(
+      height: _kRowH,
+      decoration: _border(),
+      child: Row(children: [
+        // QTY
+        _cell(_kColQty,
+            child: Text(
+              tab == PlTab.sold
+                  ? '${item.totalQuantitySold}'
+                  : '${item.currentHolding}',
+              style: AppTheme.bodySmall.copyWith(fontWeight: FontWeight.w600),
+            )),
+
+        // BUY price (each)
+        _cell(_kColBuy,
+            child: Text(
+              item.avgBuyPriceCents > 0 ? currency.format(item.avgBuyPrice) : '—',
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+            )),
+
+        // CURRENT / sold @
+        _cell(_kColCur,
+            child: displayPrice > 0
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(currency.format(displayPrice),
+                          style: AppTheme.bodySmall
+                              .copyWith(fontWeight: FontWeight.w500)),
+                      if (displayPriceLabel != null)
+                        Text(displayPriceLabel,
+                            style: AppTheme.captionSmall
+                                .copyWith(color: AppTheme.textDisabled)),
+                    ],
+                  )
+                : Text('—',
+                    style:
+                        TextStyle(color: AppTheme.textDisabled, fontSize: 15))),
+
+        // TOTAL INVESTED
+        _cell(_kColInv,
+            child: Text(
+              item.totalSpentCents > 0
+                  ? currency.format(item.totalSpent)
+                  : '—',
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+            )),
+
+        // WORTH NOW
+        _cell(_kColWorth,
+            child: Text(
+              item.totalWorthNowCents > 0
+                  ? currency.format(item.totalWorthNow)
+                  : '—',
+              style: AppTheme.bodySmall.copyWith(fontWeight: FontWeight.w500),
+            )),
+
+        // %
+        _cell(_kColPct,
+            child: item.hasCostData
+                ? Text(
+                    '$pctPrefix${item.profitPct.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: profitColor),
+                  )
+                : Text('—',
+                    style: TextStyle(
+                        color: AppTheme.textDisabled, fontSize: 15))),
+
+        // GAIN
+        _cell(_kColGain,
+            child: item.hasCostData
+                ? Text(
+                    currency.formatWithSign(item.totalProfit),
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: profitColor),
+                  )
+                : Text('—',
+                    style: TextStyle(
+                        color: AppTheme.textDisabled, fontSize: 15))),
+
+        // AFTER FEES
+        _cell(_kColFees,
+            child: item.hasCostData
+                ? Text(
+                    currency.formatWithSign(item.gainAfterFees),
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: feesColor),
+                  )
+                : Text('—',
+                    style: TextStyle(
+                        color: AppTheme.textDisabled, fontSize: 15))),
+      ]),
+    );
+  }
+
+  Widget _cell(double width, {required Widget child}) => SizedBox(
+        width: width,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Align(alignment: Alignment.centerRight, child: child),
+        ),
+      );
+
+  BoxDecoration _border() => BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: AppTheme.divider, width: 0.5)),
+      );
 }

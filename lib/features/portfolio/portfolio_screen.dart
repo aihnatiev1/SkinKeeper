@@ -105,16 +105,28 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
               ),
             ),
 
-            // ── Tab content (IndexedStack keeps all tabs mounted) ──
+            // ── Tab content — Visibility keeps state, avoids IndexedStack height bloat ──
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
               sliver: SliverToBoxAdapter(
-                child: IndexedStack(
-                  index: tab,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _ValueTab(key: const ValueKey('value')),
-                    _PLChartTab(key: const ValueKey('pl')),
-                    _ItemsTab(key: const ValueKey('items')),
+                    Visibility(
+                      visible: tab == 0,
+                      maintainState: true,
+                      child: _ValueTab(key: const ValueKey('value')),
+                    ),
+                    Visibility(
+                      visible: tab == 1,
+                      maintainState: true,
+                      child: _PLChartTab(key: const ValueKey('pl')),
+                    ),
+                    Visibility(
+                      visible: tab == 2,
+                      maintainState: true,
+                      child: _ItemsTab(key: const ValueKey('items')),
+                    ),
                   ],
                 ),
               ),
@@ -615,7 +627,7 @@ class _PillTabs extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOutCubic,
                 decoration: BoxDecoration(
-                  gradient: active ? AppTheme.accentGradient : null,
+                  gradient: active ? AppTheme.primaryGradient : null,
                   borderRadius: BorderRadius.circular(11),
                   boxShadow: active ? [
                     BoxShadow(
@@ -965,7 +977,13 @@ class _ItemsTab extends ConsumerWidget {
       isPremium: isPremium,
       featureName: 'Per-item profit & loss breakdown',
       child: itemsPL.when(
-        data: (items) => ItemPLList(items: items).animate().fadeIn(duration: 400.ms),
+        data: (items) => Column(
+          children: [
+            const _PortfolioSelectorBar(),
+            const SizedBox(height: 8),
+            ItemPLList(items: items).animate().fadeIn(duration: 400.ms),
+          ],
+        ),
         loading: () => Column(
           children: List.generate(5, (i) => const Padding(
             padding: EdgeInsets.only(bottom: 8),
@@ -1020,37 +1038,7 @@ class _PLSummaryCard extends ConsumerWidget {
             fontSize: 10, fontWeight: FontWeight.w600,
             letterSpacing: 1.5, color: AppTheme.textDisabled,
           )),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              AnimatedNumber(
-                value: data.totalProfit,
-                style: TextStyle(
-                  fontSize: 32, fontWeight: FontWeight.w800,
-                  color: plColor, letterSpacing: -0.5,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-                formatter: (v) => currency.formatWithSign(v),
-              ),
-              const SizedBox(width: 10),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: plColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    AppTheme.pctText(data.totalProfitPct),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: plColor),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Row(
             children: [
               _MiniStat(label: 'Invested', value: currency.format(data.totalInvested, decimals: 0)),
@@ -1189,6 +1177,552 @@ class _AccountBreakdownCard extends ConsumerWidget {
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Portfolio selector ──────────────────────────────────────────────────────
+
+class _PortfolioSelectorBar extends ConsumerWidget {
+  const _PortfolioSelectorBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final portfoliosAsync = ref.watch(portfoliosProvider);
+    final selected = ref.watch(selectedPortfolioIdProvider);
+
+    return portfoliosAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (portfolios) {
+        if (portfolios.isEmpty) {
+          // Show just the "All" chip + "+" button to create first portfolio
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+            child: Row(
+              children: [
+                _chip(
+                  label: 'All',
+                  color: AppTheme.primary,
+                  isSelected: true,
+                  onTap: () {},
+                  onLongPress: null,
+                ),
+                const SizedBox(width: 8),
+                _addButton(context, ref),
+              ],
+            ),
+          );
+        }
+        return SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            children: [
+              _chip(
+                label: 'All',
+                color: AppTheme.primary,
+                isSelected: selected == null,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  ref.read(selectedPortfolioIdProvider.notifier).state = null;
+                  ref.read(plTabProvider.notifier).state = PlTab.active;
+                },
+                onLongPress: null,
+              ),
+              const SizedBox(width: 8),
+              for (final p in portfolios) ...[
+                _chip(
+                  label: p.name,
+                  color: p.color,
+                  isSelected: selected == p.id,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    ref.read(selectedPortfolioIdProvider.notifier).state = p.id;
+                    ref.read(plTabProvider.notifier).state = PlTab.active;
+                  },
+                  onLongPress: () => _showPortfolioOptions(context, ref, p),
+                ),
+                const SizedBox(width: 8),
+              ],
+              _addButton(context, ref),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _chip({
+    required String label,
+    required Color color,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required VoidCallback? onLongPress,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? color : AppTheme.divider,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? color : AppTheme.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _addButton(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        showGlassSheet(context, const _CreatePortfolioSheet());
+      },
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.divider),
+        ),
+        child: const Icon(Icons.add, size: 16, color: AppTheme.textMuted),
+      ),
+    );
+  }
+
+  void _showPortfolioOptions(BuildContext context, WidgetRef ref, Portfolio p) {
+    HapticFeedback.mediumImpact();
+    showGlassSheet(
+      context,
+      _PortfolioOptionsSheet(portfolio: p),
+    );
+  }
+}
+
+// ── Preset colors for portfolio picker ──────────────────────────────────────
+const _kPortfolioColors = [
+  Color(0xFF6366F1), // indigo (default)
+  Color(0xFF10B981), // green
+  Color(0xFFF59E0B), // amber
+  Color(0xFFEF4444), // red
+  Color(0xFF8B5CF6), // purple
+  Color(0xFF06B6D4), // cyan
+];
+
+// ── Create Portfolio Sheet ───────────────────────────────────────────────────
+class _CreatePortfolioSheet extends ConsumerStatefulWidget {
+  const _CreatePortfolioSheet();
+
+  @override
+  ConsumerState<_CreatePortfolioSheet> createState() =>
+      _CreatePortfolioSheetState();
+}
+
+class _CreatePortfolioSheetState extends ConsumerState<_CreatePortfolioSheet> {
+  final _nameCtrl = TextEditingController();
+  Color _color = _kPortfolioColors[0];
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Name is required');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(portfoliosProvider.notifier).createPortfolio(name, _color);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to create portfolio';
+        _saving = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'New Portfolio',
+            style: AppTheme.bodySmall.copyWith(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameCtrl,
+            autofocus: true,
+            style: AppTheme.bodySmall.copyWith(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Portfolio name',
+              hintStyle: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
+              errorText: _error,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppTheme.divider),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppTheme.primary),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFEF4444)),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFEF4444)),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Color',
+              style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (final c in _kPortfolioColors) ...[
+                GestureDetector(
+                  onTap: () => setState(() => _color = c),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _color == c ? Colors.white : Colors.transparent,
+                        width: 2,
+                      ),
+                      boxShadow: _color == c
+                          ? [
+                              BoxShadow(
+                                  color: c.withValues(alpha: 0.5), blurRadius: 6)
+                            ]
+                          : null,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _saving ? null : _save,
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+              child: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Create'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Portfolio Options Sheet (long-press) ─────────────────────────────────────
+class _PortfolioOptionsSheet extends ConsumerWidget {
+  final Portfolio portfolio;
+  const _PortfolioOptionsSheet({required this.portfolio});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                    color: portfolio.color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                portfolio.name,
+                style: AppTheme.bodySmall.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            leading:
+                Icon(Icons.edit_outlined, color: AppTheme.textSecondary),
+            title: Text('Edit',
+                style:
+                    AppTheme.bodySmall.copyWith(color: AppTheme.textPrimary)),
+            onTap: () {
+              Navigator.of(context).pop();
+              showGlassSheet(
+                  context, _EditPortfolioSheet(portfolio: portfolio));
+            },
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline,
+                color: Color(0xFFEF4444)),
+            title: Text('Delete',
+                style: AppTheme.bodySmall
+                    .copyWith(color: const Color(0xFFEF4444))),
+            onTap: () async {
+              Navigator.of(context).pop();
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  backgroundColor: AppTheme.surface,
+                  title: Text(
+                    'Delete "${portfolio.name}"?',
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  content: Text(
+                    'Transactions in this portfolio will become untagged.',
+                    style:
+                        AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text('Cancel',
+                          style: TextStyle(color: AppTheme.textMuted)),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Delete',
+                          style: TextStyle(color: Color(0xFFEF4444))),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true && context.mounted) {
+                await ref
+                    .read(portfoliosProvider.notifier)
+                    .deletePortfolio(portfolio.id);
+                // Reset selection if this portfolio was active
+                if (ref.read(selectedPortfolioIdProvider) == portfolio.id) {
+                  ref.read(selectedPortfolioIdProvider.notifier).state = null;
+                }
+              }
+            },
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Edit Portfolio Sheet ─────────────────────────────────────────────────────
+class _EditPortfolioSheet extends ConsumerStatefulWidget {
+  final Portfolio portfolio;
+  const _EditPortfolioSheet({required this.portfolio});
+
+  @override
+  ConsumerState<_EditPortfolioSheet> createState() =>
+      _EditPortfolioSheetState();
+}
+
+class _EditPortfolioSheetState extends ConsumerState<_EditPortfolioSheet> {
+  late final TextEditingController _nameCtrl;
+  late Color _color;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.portfolio.name);
+    _color = widget.portfolio.color;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Name is required');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(portfoliosProvider.notifier)
+          .updatePortfolio(widget.portfolio.id, name, _color);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to update portfolio';
+        _saving = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Edit Portfolio',
+            style: AppTheme.bodySmall.copyWith(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameCtrl,
+            style: AppTheme.bodySmall.copyWith(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Portfolio name',
+              hintStyle: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
+              errorText: _error,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppTheme.divider),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppTheme.primary),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFEF4444)),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFEF4444)),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Color',
+              style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (final c in _kPortfolioColors) ...[
+                GestureDetector(
+                  onTap: () => setState(() => _color = c),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _color == c ? Colors.white : Colors.transparent,
+                        width: 2,
+                      ),
+                      boxShadow: _color == c
+                          ? [
+                              BoxShadow(
+                                  color: c.withValues(alpha: 0.5), blurRadius: 6)
+                            ]
+                          : null,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _saving ? null : _save,
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+              child: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Save'),
+            ),
+          ),
         ],
       ),
     );

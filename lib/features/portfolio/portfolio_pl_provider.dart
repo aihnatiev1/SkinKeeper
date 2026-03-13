@@ -1,11 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../models/profit_loss.dart';
 
-// ──── MOCK FLAG ────────────────────────────────────────────────
-// Set to true to show mock data for premium features demo
-const _useMockData = false;
-// ───────────────────────────────────────────────────────────────
+/// null = "All portfolios" (no filter)
+final selectedPortfolioIdProvider = StateProvider<int?>((ref) => null);
 
 // Portfolio P/L summary (free tier)
 final portfolioPLProvider =
@@ -14,23 +13,22 @@ final portfolioPLProvider =
 
 class PortfolioPLNotifier extends AsyncNotifier<PortfolioPL> {
   @override
-  Future<PortfolioPL> build() => _fetch();
+  Future<PortfolioPL> build() {
+    ref.watch(selectedPortfolioIdProvider); // re-fetch when portfolio selection changes
+    return _fetch();
+  }
 
   Future<PortfolioPL> _fetch() async {
-    if (_useMockData) return _mockPL;
     final api = ref.read(apiClientProvider);
-    final res = await api.get('/portfolio/pl');
+    final portfolioId = ref.read(selectedPortfolioIdProvider);
+    final params = portfolioId != null ? {'portfolioId': portfolioId.toString()} : <String, String>{};
+    final res = await api.get('/portfolio/pl', queryParameters: params);
     return PortfolioPL.fromJson(res.data as Map<String, dynamic>);
   }
 
   Future<void> recalculate() async {
     state = const AsyncLoading();
     try {
-      if (_useMockData) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        state = AsyncData(_mockPL);
-        return;
-      }
       final api = ref.read(apiClientProvider);
       final res = await api.post('/portfolio/pl/recalculate');
       state = AsyncData(PortfolioPL.fromJson(res.data as Map<String, dynamic>));
@@ -51,7 +49,6 @@ class PortfolioPLNotifier extends AsyncNotifier<PortfolioPL> {
 
 // Per-account P/L breakdown (premium)
 final accountsPLProvider = FutureProvider<List<AccountPL>>((ref) async {
-  if (_useMockData) return [];
   final api = ref.read(apiClientProvider);
   final res = await api.get('/portfolio/pl/by-account');
   final data = res.data as Map<String, dynamic>;
@@ -62,9 +59,10 @@ final accountsPLProvider = FutureProvider<List<AccountPL>>((ref) async {
 
 // Per-item P/L (premium — returns 403 for free users)
 final itemsPLProvider = FutureProvider<List<ItemPL>>((ref) async {
-  if (_useMockData) return _mockItems;
+  final portfolioId = ref.watch(selectedPortfolioIdProvider);
   final api = ref.read(apiClientProvider);
-  final res = await api.get('/portfolio/pl/items');
+  final params = portfolioId != null ? {'portfolioId': portfolioId.toString()} : <String, String>{};
+  final res = await api.get('/portfolio/pl/items', queryParameters: params);
   final data = res.data as Map<String, dynamic>;
   return (data['items'] as List<dynamic>)
       .map((e) => ItemPL.fromJson(e as Map<String, dynamic>))
@@ -74,7 +72,6 @@ final itemsPLProvider = FutureProvider<List<ItemPL>>((ref) async {
 // P/L history for chart (premium)
 final plHistoryProvider =
     FutureProvider.family<List<PLHistoryPoint>, int>((ref, days) async {
-  if (_useMockData) return _mockHistory(days);
   final api = ref.read(apiClientProvider);
   final res =
       await api.get('/portfolio/pl/history', queryParameters: {'days': days});
@@ -84,10 +81,22 @@ final plHistoryProvider =
       .toList();
 });
 
-// Sort option for per-item list
-enum PLSort { profitDesc, profitAsc, investedDesc, holdingDesc }
+// Sort column enum
+enum PlSortCol { recent, qty, buyPrice, currentPrice, invested, worth, pct, gain, afterFees }
 
-final plSortProvider = StateProvider<PLSort>((ref) => PLSort.profitDesc);
+// Sort state: column + direction
+class PlSort {
+  final PlSortCol col;
+  final bool desc;
+  const PlSort(this.col, {this.desc = true});
+  PlSort withCol(PlSortCol c) => c == col ? PlSort(c, desc: !desc) : PlSort(c);
+}
+
+final plSortProvider = StateProvider<PlSort>((ref) => const PlSort(PlSortCol.recent));
+
+// Active / Sold tab
+enum PlTab { active, sold }
+final plTabProvider = StateProvider<PlTab>((ref) => PlTab.active);
 
 // Item P/L lookup map (for item cards)
 final itemPLMapProvider = Provider<Map<String, ItemPL>>((ref) {
@@ -104,147 +113,42 @@ final itemPLFamilyProvider = Provider.family<ItemPL?, String>((ref, marketHashNa
   return ref.watch(itemPLMapProvider.select((map) => map[marketHashName]));
 });
 
-// ──── MOCK DATA ────────────────────────────────────────────────
+// Named portfolios CRUD
+final portfoliosProvider =
+    AsyncNotifierProvider<PortfoliosNotifier, List<Portfolio>>(
+        PortfoliosNotifier.new);
 
-const _mockPL = PortfolioPL(
-  totalInvestedCents: 652000,
-  totalEarnedCents: 189500,
-  realizedProfitCents: 47300,
-  unrealizedProfitCents: 141200,
-  totalProfitCents: 188500,
-  totalProfitPct: 28.91,
-  holdingCount: 47,
-  totalCurrentValueCents: 794091,
-);
+class PortfoliosNotifier extends AsyncNotifier<List<Portfolio>> {
+  @override
+  Future<List<Portfolio>> build() => _fetch();
 
-const _mockItems = [
-  ItemPL(
-    marketHashName: 'AK-47 | Asiimov (Field-Tested)',
-    avgBuyPriceCents: 3200,
-    totalQuantityBought: 5,
-    totalSpentCents: 16000,
-    totalQuantitySold: 2,
-    totalEarnedCents: 8400,
-    currentHolding: 3,
-    realizedProfitCents: 2000,
-    unrealizedProfitCents: 3600,
-    currentPriceCents: 4400,
-    totalProfitCents: 5600,
-    profitPct: 35.0,
-  ),
-  ItemPL(
-    marketHashName: 'AWP | Dragon Lore (Battle-Scarred)',
-    avgBuyPriceCents: 185000,
-    totalQuantityBought: 1,
-    totalSpentCents: 185000,
-    totalQuantitySold: 0,
-    totalEarnedCents: 0,
-    currentHolding: 1,
-    realizedProfitCents: 0,
-    unrealizedProfitCents: 62000,
-    currentPriceCents: 247000,
-    totalProfitCents: 62000,
-    profitPct: 33.51,
-  ),
-  ItemPL(
-    marketHashName: 'M4A4 | Howl (Minimal Wear)',
-    avgBuyPriceCents: 420000,
-    totalQuantityBought: 1,
-    totalSpentCents: 420000,
-    totalQuantitySold: 0,
-    totalEarnedCents: 0,
-    currentHolding: 1,
-    realizedProfitCents: 0,
-    unrealizedProfitCents: 55000,
-    currentPriceCents: 475000,
-    totalProfitCents: 55000,
-    profitPct: 13.1,
-  ),
-  ItemPL(
-    marketHashName: 'Glock-18 | Fade (Factory New)',
-    avgBuyPriceCents: 95000,
-    totalQuantityBought: 2,
-    totalSpentCents: 190000,
-    totalQuantitySold: 1,
-    totalEarnedCents: 112000,
-    currentHolding: 1,
-    realizedProfitCents: 17000,
-    unrealizedProfitCents: 8500,
-    currentPriceCents: 103500,
-    totalProfitCents: 25500,
-    profitPct: 13.42,
-  ),
-  ItemPL(
-    marketHashName: 'USP-S | Kill Confirmed (Field-Tested)',
-    avgBuyPriceCents: 1850,
-    totalQuantityBought: 10,
-    totalSpentCents: 18500,
-    totalQuantitySold: 4,
-    totalEarnedCents: 6200,
-    currentHolding: 6,
-    realizedProfitCents: -1200,
-    unrealizedProfitCents: -900,
-    currentPriceCents: 1700,
-    totalProfitCents: -2100,
-    profitPct: -11.35,
-  ),
-  ItemPL(
-    marketHashName: 'Karambit | Doppler (Factory New)',
-    avgBuyPriceCents: 135000,
-    totalQuantityBought: 1,
-    totalSpentCents: 135000,
-    totalQuantitySold: 0,
-    totalEarnedCents: 0,
-    currentHolding: 1,
-    realizedProfitCents: 0,
-    unrealizedProfitCents: 18000,
-    currentPriceCents: 153000,
-    totalProfitCents: 18000,
-    profitPct: 13.33,
-  ),
-  ItemPL(
-    marketHashName: 'AK-47 | Redline (Field-Tested)',
-    avgBuyPriceCents: 1100,
-    totalQuantityBought: 20,
-    totalSpentCents: 22000,
-    totalQuantitySold: 12,
-    totalEarnedCents: 15600,
-    currentHolding: 8,
-    realizedProfitCents: 2400,
-    unrealizedProfitCents: -400,
-    currentPriceCents: 1050,
-    totalProfitCents: 2000,
-    profitPct: 9.09,
-  ),
-];
-
-List<PLHistoryPoint> _mockHistory(int days) {
-  final now = DateTime.now();
-  final points = <PLHistoryPoint>[];
-  // Simulate gradual growth with some dips
-  const baseInvested = 652000;
-  var cumProfit = 120000; // start from some base
-
-  for (var i = days; i >= 0; i--) {
-    final date = now.subtract(Duration(days: i));
-    // Sinusoidal variation + upward trend
-    final dayFactor = (days - i) / days;
-    final variation = (i % 7 - 3) * 2500; // weekly oscillation
-    final trend = (dayFactor * 68000).toInt(); // upward trend
-    cumProfit = 120000 + trend + variation;
-
-    final realized = (47300 * dayFactor).toInt();
-    final unrealized = cumProfit - realized;
-
-    points.add(PLHistoryPoint(
-      date: date,
-      totalInvestedCents: baseInvested,
-      totalCurrentValueCents: baseInvested + cumProfit,
-      cumulativeProfitCents: cumProfit,
-      realizedProfitCents: realized,
-      unrealizedProfitCents: unrealized,
-    ));
+  Future<List<Portfolio>> _fetch() async {
+    final api = ref.read(apiClientProvider);
+    final res = await api.get('/portfolios');
+    final data = res.data as Map<String, dynamic>;
+    return (data['portfolios'] as List<dynamic>)
+        .map((e) => Portfolio.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  return points;
+  Future<Portfolio> createPortfolio(String name, Color color) async {
+    final api = ref.read(apiClientProvider);
+    final hex = '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+    final res = await api.post('/portfolios', data: {'name': name, 'color': hex});
+    ref.invalidateSelf();
+    return Portfolio.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<void> updatePortfolio(int id, String name, Color color) async {
+    final api = ref.read(apiClientProvider);
+    final hex = '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+    await api.put('/portfolios/$id', data: {'name': name, 'color': hex});
+    ref.invalidateSelf();
+  }
+
+  Future<void> deletePortfolio(int id) async {
+    final api = ref.read(apiClientProvider);
+    await api.delete('/portfolios/$id');
+    ref.invalidateSelf();
+  }
 }
