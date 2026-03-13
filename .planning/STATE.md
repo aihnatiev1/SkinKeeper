@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: M4
 milestone_name: Quality & Stability
 status: in-progress
-stopped_at: Completed 15-03-PLAN.md (Steam scraper gap closure — npm test exit 0, 215 tests, 23 test files)
+stopped_at: Completed 15-04-PLAN.md (route integration tests — auth/trades/market/session, 215 tests, 25.8% coverage)
 last_updated: "2026-03-13T00:00:00.000Z"
-last_activity: 2026-03-13 -- Phase 15 Plan 3 complete (Steam scraper tests — SteamClient fix + fixture HTML + scrapers.test.ts)
+last_activity: 2026-03-13 -- Phase 15 Plan 4 complete (route integration tests — 35 new tests, coverage 18%→25.8%)
 progress:
   total_phases: 3
   completed_phases: 3
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 15 of 15 (Testing)
-Plan: 15-03 complete (gap closure)
+Plan: 15-04 complete (gap closure)
 Status: In progress (gap closure plans)
-Last activity: 2026-03-13 -- Phase 15 Plan 03 complete (Steam scraper tests — 215 tests, exit 0)
+Last activity: 2026-03-13 -- Phase 15 Plan 04 complete (route integration tests — 215 tests, 25.8% coverage)
 
 Progress: [██████████] 100%
 
@@ -47,6 +47,7 @@ Progress: [██████████] 100%
 | 15 | 01 | 1800s | 6 | 19 |
 | 15 | 02 | 1800s | 6 | 12 |
 | 15 | 03 | 300s | 2 | 6 |
+| 15 | 04 | 455s | 2 | 6 |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Progress: [██████████] 100%
 - [15-03]: Use Promise.all pattern to attach rejection handler before vi.runAllTimersAsync() — eliminates vitest unhandled rejection
 - [15-03]: Mock pool path from services/__tests__ must be ../../db/pool.js not ../pool.js
 - [15-03]: syncTradeOffers exercises parseTradeOffersHtml via scrapeTradeOffersHtml — requires web_api_key mock to proceed past early return
+- [15-04]: vi.mock factory cannot reference top-level variables (hoisting issue) — use inline `new Map()` instead of variable reference
+- [15-04]: session routes were missing from createTestApp — added as auto-fix
+- [15-04]: Coverage thresholds updated to actual measured values (25/19/26/26%)
 
 ### Pending Todos
 
@@ -94,5 +98,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 15-03-PLAN.md (Steam scraper gap closure — npm test exit 0, 215 tests)
+Stopped at: Completed 15-04-PLAN.md (route integration tests — auth/trades/market/session, 215 tests, 25.8% coverage)
 Resume file: None
