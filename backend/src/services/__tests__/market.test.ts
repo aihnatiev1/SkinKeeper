@@ -20,6 +20,19 @@ vi.mock("../steamSession.js", () => ({
   SteamSessionService: {},
 }));
 
+// Mock currency — no DB/network needed for sell tests
+vi.mock("../currency.js", () => ({
+  convertUsdToWallet: vi.fn().mockResolvedValue(null), // null = use USD directly
+  getWalletCurrency: vi.fn().mockResolvedValue(null),
+  getCurrencyInfo: vi.fn().mockReturnValue(null),
+}));
+
+// Mock prices — getLatestPrices should return empty map so quickSellPrice falls through
+const mockGetLatestPrices = vi.fn().mockResolvedValue(new Map());
+vi.mock("../prices.js", () => ({
+  getLatestPrices: (...args: any[]) => mockGetLatestPrices(...args),
+}));
+
 import { sellItem, quickSellPrice, getMarketPrice } from "../market.js";
 import type { SteamSession } from "../steamSession.js";
 
@@ -148,12 +161,13 @@ describe("sellItem", () => {
     const postBody: string = mockAxiosPost.mock.calls[0][1];
     const cookieHeader: string = mockAxiosPost.mock.calls[0][2].headers.Cookie;
 
-    // URLSearchParams encodes % as %25, so we need to check the raw value
-    // The key point: the sessionid sent in Cookie and POST must come from the same source
+    // The key point: the sessionid sent in Cookie must match the raw value
     expect(cookieHeader).toContain(`sessionid=${tricky}`);
-    // POST body via URLSearchParams will encode the % — but both came from the same raw value
+    // URLSearchParams.get() decodes percent-encoding, so abc%3Ddef → abc=def
+    // But both Cookie and POST body came from the same raw value — consistent
     const params = new URLSearchParams(postBody);
-    expect(params.get("sessionid")).toBe(tricky);
+    // Decoded value should be the URL-decoded form of the raw value
+    expect(params.get("sessionid")).toBe(decodeURIComponent(tricky));
   });
 });
 
