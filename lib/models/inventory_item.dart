@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/steam_image.dart';
 
 class StickerInfo {
   final int slot;
@@ -25,11 +26,7 @@ class StickerInfo {
     );
   }
 
-  String get fullImageUrl => image.isNotEmpty
-      ? (image.startsWith('http')
-          ? image
-          : 'https://community.steamstatic.com/economy/image/$image')
-      : '';
+  String get fullImageUrl => SteamImage.url(image);
 }
 
 class CharmInfo {
@@ -54,11 +51,7 @@ class CharmInfo {
     );
   }
 
-  String get fullImageUrl => image.isNotEmpty
-      ? (image.startsWith('http')
-          ? image
-          : 'https://community.steamstatic.com/economy/image/$image')
-      : '';
+  String get fullImageUrl => SteamImage.url(image);
 }
 
 class InventoryItem {
@@ -80,6 +73,7 @@ class InventoryItem {
   final int? accountId;
   final String? accountSteamId;
   final String? accountName;
+  final String? accountAvatarUrl;
 
   const InventoryItem({
     required this.assetId,
@@ -100,6 +94,7 @@ class InventoryItem {
     this.accountId,
     this.accountSteamId,
     this.accountName,
+    this.accountAvatarUrl,
   });
 
   String get displayName {
@@ -260,10 +255,7 @@ class InventoryItem {
   double? get csfloatPrice => prices['csfloat'];
   double? get dmarketPrice => prices['dmarket'];
 
-  String get fullIconUrl =>
-      iconUrl.isNotEmpty
-          ? 'https://community.steamstatic.com/economy/image/$iconUrl/360fx360f'
-          : '';
+  String get fullIconUrl => SteamImage.url(iconUrl, size: '360fx360f');
 
   /// Returns a copy with updated inspect data
   InventoryItem withInspectData({
@@ -291,6 +283,7 @@ class InventoryItem {
       accountId: accountId,
       accountSteamId: accountSteamId,
       accountName: accountName,
+      accountAvatarUrl: accountAvatarUrl,
     );
   }
 
@@ -319,6 +312,7 @@ class InventoryItem {
       accountId: json['account_id'] as int?,
       accountSteamId: json['account_steam_id'] as String?,
       accountName: json['account_name'] as String?,
+      accountAvatarUrl: json['account_avatar_url'] as String?,
       stickers: (json['stickers'] as List<dynamic>?)
               ?.map((e) => StickerInfo.fromJson(e as Map<String, dynamic>))
               .toList() ??

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../models/inventory_item.dart';
-import '../auth/steam_auth_service.dart';
 
 final inventoryProvider =
     AsyncNotifierProvider<InventoryNotifier, List<InventoryItem>>(
@@ -158,13 +157,7 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     }
   }
 
-  int? get _activeAccountId =>
-      ref.read(authStateProvider).valueOrNull?.activeAccountId;
-
-  Map<String, dynamic> get _accountQuery {
-    final id = _activeAccountId;
-    return id != null ? {'accountId': '$id'} : {};
-  }
+  Map<String, dynamic> get _accountQuery => {};
 
   Future<List<InventoryItem>> _fetchFromApi() async {
     final api = ref.read(apiClientProvider);
