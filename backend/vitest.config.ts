@@ -19,12 +19,12 @@ export default defineConfig({
         "**/db/migrations/**",
       ],
       thresholds: {
-        // Phase 1 baseline: covers core services + routes. Large services (steamSession,
-        // tradeOffers, etc.) deferred to phase 2. Raise as coverage expands.
-        statements: 18,
-        branches: 13,
-        functions: 18,
-        lines: 18,
+        // Phase 2 gap closure (15-04): added auth, trades, market, session route tests.
+        // Actual coverage after 15-03+15-04: ~25% statements. Target: 70% by end of phase.
+        statements: 25,
+        branches: 19,
+        functions: 26,
+        lines: 26,
       },
     },
   },
