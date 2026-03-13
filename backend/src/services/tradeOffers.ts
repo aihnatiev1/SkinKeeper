@@ -7,6 +7,8 @@ import { SteamSessionService, type SteamSession } from "./steamSession.js";
 import { sendPush, isFirebaseReady } from "./firebase.js";
 import { TTLCache } from "../utils/TTLCache.js";
 import { registerCache } from "../utils/cacheRegistry.js";
+import { SessionExpiredError } from "../utils/errors.js";
+import { SteamSessionError } from "../utils/SteamClient.js";
 
 // ─── Trade Push Notifications ───────────────────────────────────────────
 
@@ -94,8 +96,10 @@ function generateSessionId(): string {
   return crypto.randomBytes(12).toString("hex");
 }
 
-function isSessionExpiredError(err: any): boolean {
-  return err?.code === "SESSION_EXPIRED";
+function isSessionExpiredError(err: unknown): boolean {
+  if (err instanceof SessionExpiredError) return true;
+  if (err instanceof SteamSessionError) return true;
+  return (err as any)?.code === "SESSION_EXPIRED";
 }
 
 /**
@@ -111,9 +115,7 @@ async function getValidSession(accountId: number, forceRefresh = false) {
       const session = await SteamSessionService.getSession(accountId);
       if (session) return session;
     }
-    const error = new Error("Steam session expired. Please re-authenticate.");
-    (error as any).code = "SESSION_EXPIRED";
-    throw error;
+    throw new SessionExpiredError("Steam session expired. Please re-authenticate.");
   }
   return SteamSessionService.ensureValidSession(accountId);
 }
@@ -415,15 +417,11 @@ async function acceptSteamTradeOffer(
   // Detect session expiry: redirect to login or 403
   if (status === 302 || status === 301) {
     if (location.includes("/login")) {
-      const sessionErr = new Error("Steam session expired — please re-authenticate.");
-      (sessionErr as any).code = "SESSION_EXPIRED";
-      throw sessionErr;
+      throw new SessionExpiredError("Steam session expired — please re-authenticate.");
     }
   }
   if (status === 403) {
-    const sessionErr = new Error("Steam session expired — please re-authenticate.");
-    (sessionErr as any).code = "SESSION_EXPIRED";
-    throw sessionErr;
+    throw new SessionExpiredError("Steam session expired — please re-authenticate.");
   }
 
   // Steam error codes in JSON response
@@ -441,9 +439,7 @@ async function acceptSteamTradeOffer(
     // Error 42 can mean expired session OR trade eligibility restriction.
     // On first attempt we treat it as session issue (triggers refresh + retry).
     // The caller handles retry logic — if retry also fails, it becomes a clear error.
-    const sessionErr = new Error("Steam rejected the request (42). This may be a session or trade eligibility issue.");
-    (sessionErr as any).code = "SESSION_EXPIRED";
-    throw sessionErr;
+    throw new SessionExpiredError("Steam session expired — please re-authenticate.");
   }
   if (strError?.includes("(25)") || steamCode === 25) {
     throw new Error("Trade offer has expired or is no longer valid on Steam.");
@@ -505,14 +501,10 @@ async function declineSteamTradeOffer(
 
   // Detect session expiry
   if ((status === 302 || status === 301) && location.includes("/login")) {
-    const sessionErr = new Error("Steam session expired — please re-authenticate.");
-    (sessionErr as any).code = "SESSION_EXPIRED";
-    throw sessionErr;
+    throw new SessionExpiredError("Steam session expired — please re-authenticate.");
   }
   if (status === 403) {
-    const sessionErr = new Error("Steam session expired — please re-authenticate.");
-    (sessionErr as any).code = "SESSION_EXPIRED";
-    throw sessionErr;
+    throw new SessionExpiredError("Steam session expired — please re-authenticate.");
   }
 
   const strError = typeof data === "object" ? data?.strError : undefined;
@@ -526,9 +518,7 @@ async function declineSteamTradeOffer(
   }
 
   if (strError?.includes("(42)") || steamCode === 42) {
-    const sessionErr = new Error("Steam session expired — please re-authenticate.");
-    (sessionErr as any).code = "SESSION_EXPIRED";
-    throw sessionErr;
+    throw new SessionExpiredError("Steam session expired — please re-authenticate.");
   }
   if (strError?.includes("(25)") || steamCode === 25) {
     throw new Error("Trade offer has expired or is no longer valid on Steam.");
@@ -1014,14 +1004,10 @@ export async function cancelOffer(
       console.log(`[Trade] Cancel response for ${offer.steamOfferId}: HTTP ${status}, data=${JSON.stringify(data)}, dataType=${typeof data}`);
 
       if ((status === 302 || status === 301) && location.includes("/login")) {
-        const sessionErr = new Error("Steam session expired — please re-authenticate.");
-        (sessionErr as any).code = "SESSION_EXPIRED";
-        throw sessionErr;
+        throw new SessionExpiredError("Steam session expired — please re-authenticate.");
       }
       if (status === 403) {
-        const sessionErr = new Error("Steam session expired — please re-authenticate.");
-        (sessionErr as any).code = "SESSION_EXPIRED";
-        throw sessionErr;
+        throw new SessionExpiredError("Steam session expired — please re-authenticate.");
       }
 
       const strError = typeof data === "object" ? data?.strError : undefined;
@@ -1035,9 +1021,7 @@ export async function cancelOffer(
       }
 
       if (strError?.includes("(42)") || steamCode === 42) {
-        const sessionErr = new Error("Steam session expired — please re-authenticate.");
-        (sessionErr as any).code = "SESSION_EXPIRED";
-        throw sessionErr;
+        throw new SessionExpiredError("Steam session expired — please re-authenticate.");
       }
       if (strError?.includes("(25)") || steamCode === 25) {
         throw new Error("Trade offer has expired or is no longer valid on Steam.");
@@ -1156,12 +1140,18 @@ export async function listOffers(
     SELECT o.*, json_agg(
       json_build_object(
         'id', i.id, 'side', i.side, 'assetId', i.asset_id,
-        'marketHashName', i.market_hash_name, 'iconUrl', i.icon_url,
+        'marketHashName', i.market_hash_name,
+        'iconUrl', COALESCE(i.icon_url, ii.icon_url),
         'floatValue', i.float_value, 'priceCents', i.price_cents
       ) ORDER BY i.id
     ) AS items
     FROM trade_offers o
     LEFT JOIN trade_offer_items i ON i.offer_id = o.id
+    LEFT JOIN LATERAL (
+      SELECT icon_url FROM inventory_items
+      WHERE market_hash_name = i.market_hash_name AND icon_url IS NOT NULL
+      LIMIT 1
+    ) ii ON true
     WHERE o.user_id = $1`;
 
   const params: unknown[] = [userId];
@@ -1199,12 +1189,18 @@ async function getOfferRaw(
     `SELECT o.*, json_agg(
        json_build_object(
          'id', i.id, 'side', i.side, 'assetId', i.asset_id,
-         'marketHashName', i.market_hash_name, 'iconUrl', i.icon_url,
+         'marketHashName', i.market_hash_name,
+         'iconUrl', COALESCE(i.icon_url, ii.icon_url),
          'floatValue', i.float_value, 'priceCents', i.price_cents
        ) ORDER BY i.id
      ) AS items
      FROM trade_offers o
      LEFT JOIN trade_offer_items i ON i.offer_id = o.id
+     LEFT JOIN LATERAL (
+       SELECT icon_url FROM inventory_items
+       WHERE market_hash_name = i.market_hash_name AND icon_url IS NOT NULL
+       LIMIT 1
+     ) ii ON true
      WHERE o.id = $1 AND o.user_id = $2
      GROUP BY o.id`,
     [offerId, userId]
@@ -1586,7 +1582,7 @@ function parseTradeOffersCheerio(html: string, direction: "incoming" | "outgoing
           const classid = parts[parts.length - 2];
           const instanceid = parts[parts.length - 1];
           const imgSrc = $(itemEl).find("img").attr("src") ?? "";
-          itemClassIds.push({ side, classid, instanceid, iconUrl: imgSrc });
+          itemClassIds.push({ side, classid, instanceid, iconUrl: extractIconPath(imgSrc) });
         }
       });
     };
@@ -1659,7 +1655,7 @@ function parseTradeOffersRegex(html: string, direction: "incoming" | "outgoing")
       const itemMatches = section.matchAll(/data-economy-item="classinfo\/\d+\/(\d+)\/(\d+)"/g);
       for (const m of itemMatches) {
         const imgMatch = section.match(new RegExp(`classinfo/\\d+/${m[1]}/${m[2]}"[\\s\\S]*?<img src="([^"]+)"`));
-        itemClassIds.push({ side, classid: m[1], instanceid: m[2], iconUrl: imgMatch ? imgMatch[1] : "" });
+        itemClassIds.push({ side, classid: m[1], instanceid: m[2], iconUrl: extractIconPath(imgMatch ? imgMatch[1] : "") });
       }
     };
 
@@ -2167,11 +2163,21 @@ function parseTradeHistoryCheerio(html: string): { trades: ScrapedHistoryTrade[]
       const isGiven = plusMinus === "\u2013" || plusMinus === "-";
       const target = isReceived ? receivedItems : isGiven ? givenItems : receivedItems;
 
-      $group.find(".history_item").each((_k, itemEl) => {
-        const $item = $(itemEl);
-        const name = $item.find("[class*='history_item_name']").text().trim();
-        const iconUrl = $item.find("img").attr("src") ?? "";
-        if (name) target.push({ name, iconUrl });
+      // Item names are in a separate container (.trade_items_traded_names), not inside
+      // each .history_item element. Collect names and icon URLs separately then pair by index.
+      const names: string[] = [];
+      $group.find("[class*='history_item_name']").each((_k, el) => {
+        const name = $(el).text().trim();
+        if (name) names.push(name);
+      });
+
+      const iconUrls: string[] = [];
+      $group.find(".history_item img").each((_k, el) => {
+        iconUrls.push(extractIconPath($(el).attr("src") ?? ""));
+      });
+
+      names.forEach((name, idx) => {
+        target.push({ name, iconUrl: iconUrls[idx] ?? "" });
       });
     });
 
@@ -2224,7 +2230,7 @@ function parseTradeHistoryRegex(html: string): { trades: ScrapedHistoryTrade[]; 
 
       for (const nm of nameMatches) {
         const itemName = nm[1].trim();
-        const iconUrl = imgIdx < imgMatches.length ? imgMatches[imgIdx][1] : "";
+        const iconUrl = extractIconPath(imgIdx < imgMatches.length ? imgMatches[imgIdx][1] : "");
         imgIdx++;
         const item = { name: itemName, iconUrl };
         if (isReceived) receivedItems.push(item);
@@ -2365,47 +2371,110 @@ async function scrapeTradeHistoryHtml(
     const syntheticOfferId = `histhtml_${sigHash}`;
 
     try {
-      const { rows } = await pool.query(
-        `INSERT INTO trade_offers
-           (user_id, direction, steam_offer_id, partner_steam_id, partner_name, message,
-            status, is_quick_transfer, value_give_cents, value_recv_cents,
-            is_internal, account_id_from, account_id_to,
-            created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NULL, 'accepted', FALSE, $6, $7,
-                 $8, $9, $10, $11, $11)
-         ON CONFLICT (user_id, steam_offer_id) WHERE steam_offer_id IS NOT NULL
-         DO NOTHING
-         RETURNING id`,
-        [
-          userId, direction, syntheticOfferId,
-          trade.partnerSteamId || trade.partnerName,
-          trade.partnerName,
-          giveValue, recvValue, isInternal,
-          direction === "outgoing" ? accountId : partnerAccountId,
-          direction === "incoming" ? accountId : partnerAccountId,
-          tradeDate || new Date(),
-        ]
-      );
+      const allItems = [...giveItems, ...recvItems];
 
-      if (rows.length > 0) {
-        const offerId = rows[0].id;
-        const allItems = [...giveItems, ...recvItems];
-        if (allItems.length > 0) {
-          const offerIds = allItems.map(() => offerId);
-          const sides = allItems.map(i => i.side);
-          const assetIds = allItems.map(() => "0");
-          const marketNames = allItems.map(i => i.name);
-          const iconUrls = allItems.map(i => i.iconUrl);
-          const priceCentsList = allItems.map(i => i.priceCents);
-          await pool.query(
-            `INSERT INTO trade_offer_items
-               (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
-             SELECT unnest($1::uuid[]), unnest($2::text[]), unnest($3::text[]),
-                    unnest($4::text[]), unnest($5::text[]), unnest($6::int[])`,
-            [offerIds, sides, assetIds, marketNames, iconUrls, priceCentsList]
-          );
+      // Before inserting a new histhtml_ record, check if a real-ID record already exists
+      // for the same partner + approximate date. This avoids duplicates when a trade was
+      // captured by the active-offers scraper (real steam_offer_id) and then again by the
+      // history scraper (histhtml_ synthetic ID).
+      let offerId: string | null = null;
+      if (trade.partnerSteamId && tradeDate) {
+        const { rows: existing } = await pool.query(
+          `SELECT id FROM trade_offers
+           WHERE user_id = $1
+             AND partner_steam_id = $2
+             AND status = 'accepted'
+             AND steam_offer_id NOT LIKE 'histhtml_%'
+             AND created_at BETWEEN $3::timestamptz - INTERVAL '15 minutes'
+                                AND $3::timestamptz + INTERVAL '15 minutes'
+           ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamptz)))
+           LIMIT 1`,
+          [userId, trade.partnerSteamId, tradeDate]
+        );
+        if (existing.length > 0) {
+          offerId = existing[0].id;
         }
-        synced++;
+      }
+
+      if (offerId) {
+        // Real-ID record found — backfill items if it has no named items yet
+        if (allItems.length > 0) {
+          const { rows: existingItems } = await pool.query(
+            `SELECT 1 FROM trade_offer_items WHERE offer_id = $1 AND market_hash_name IS NOT NULL LIMIT 1`,
+            [offerId]
+          );
+          if (existingItems.length === 0) {
+            await pool.query(`DELETE FROM trade_offer_items WHERE offer_id = $1`, [offerId]);
+            const offerIds = allItems.map(() => offerId);
+            const sides = allItems.map(i => i.side);
+            const assetIds = allItems.map(() => "0");
+            const marketNames = allItems.map(i => i.name);
+            const iconUrls = allItems.map(i => i.iconUrl);
+            const priceCentsList = allItems.map(i => i.priceCents);
+            await pool.query(
+              `INSERT INTO trade_offer_items
+                 (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
+               SELECT unnest($1::uuid[]), unnest($2::text[]), unnest($3::text[]),
+                      unnest($4::text[]), unnest($5::text[]), unnest($6::int[])`,
+              [offerIds, sides, assetIds, marketNames, iconUrls, priceCentsList]
+            );
+            synced++;
+          }
+        }
+      } else {
+        // No existing real-ID record — upsert histhtml_ record.
+        // Use DO UPDATE (no-op) so we always get the id back, even on conflict,
+        // allowing items to be backfilled for existing 0-item records.
+        const { rows } = await pool.query(
+          `INSERT INTO trade_offers
+             (user_id, direction, steam_offer_id, partner_steam_id, partner_name, message,
+              status, is_quick_transfer, value_give_cents, value_recv_cents,
+              is_internal, account_id_from, account_id_to,
+              created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NULL, 'accepted', FALSE, $6, $7,
+                   $8, $9, $10, $11, $11)
+           ON CONFLICT (user_id, steam_offer_id) WHERE steam_offer_id IS NOT NULL
+           DO UPDATE SET updated_at = trade_offers.updated_at
+           RETURNING id, (xmax = 0) AS is_new`,
+          [
+            userId, direction, syntheticOfferId,
+            trade.partnerSteamId || trade.partnerName,
+            trade.partnerName,
+            giveValue, recvValue, isInternal,
+            direction === "outgoing" ? accountId : partnerAccountId,
+            direction === "incoming" ? accountId : partnerAccountId,
+            tradeDate || new Date(),
+          ]
+        );
+
+        if (rows.length > 0) {
+          offerId = rows[0].id;
+          const isNew = rows[0].is_new;
+          // Backfill items if: new record with items, OR existing record with no named items
+          if (allItems.length > 0) {
+            const { rows: existingItems } = await pool.query(
+              `SELECT 1 FROM trade_offer_items WHERE offer_id = $1 AND market_hash_name IS NOT NULL LIMIT 1`,
+              [offerId]
+            );
+            if (isNew || existingItems.length === 0) {
+              await pool.query(`DELETE FROM trade_offer_items WHERE offer_id = $1`, [offerId]);
+              const offerIds = allItems.map(() => offerId);
+              const sides = allItems.map(i => i.side);
+              const assetIds = allItems.map(() => "0");
+              const marketNames = allItems.map(i => i.name);
+              const iconUrls = allItems.map(i => i.iconUrl);
+              const priceCentsList = allItems.map(i => i.priceCents);
+              await pool.query(
+                `INSERT INTO trade_offer_items
+                   (offer_id, side, asset_id, market_hash_name, icon_url, price_cents)
+                 SELECT unnest($1::uuid[]), unnest($2::text[]), unnest($3::text[]),
+                        unnest($4::text[]), unnest($5::text[]), unnest($6::int[])`,
+                [offerIds, sides, assetIds, marketNames, iconUrls, priceCentsList]
+              );
+            }
+          }
+          if (isNew) synced++;
+        }
       }
     } catch (err: any) {
       console.warn(`[Trade] History HTML upsert failed:`, err.message);
@@ -2556,6 +2625,23 @@ async function syncTradeHistoryForAccount(userId: number, accountId: number): Pr
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Extract the icon path hash from a full Steam CDN URL or passthrough if already a hash.
+ * Flutter's fullIconUrl prepends the Steam CDN base, so we only want the path portion.
+ * e.g. "https://community.fastly.steamstatic.com/economy/image/class/730/CLASSID/96fx96f"
+ *   → "class/730/CLASSID" (strip size suffix)
+ * e.g. "https://community.steamstatic.com/economy/image/HASH/360fx360f" → "HASH"
+ * e.g. already a hash "i0CoZ81Ui0m..." → passthrough
+ */
+function extractIconPath(src: string): string {
+  if (!src) return "";
+  // Already a relative path (no http)
+  if (!src.startsWith("http")) return src;
+  // Full URL: extract everything after /economy/image/ and strip trailing size suffix
+  const match = src.match(/\/economy\/image\/(.+?)(?:\/\d+fx\d+f)?$/);
+  return match ? match[1] : src;
+}
 
 function mapOfferRow(row: any): TradeOffer {
   const items: TradeOfferItem[] = (row.items ?? [])

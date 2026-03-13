@@ -2,6 +2,7 @@ import { pool } from "../db/pool.js";
 import { encrypt, decrypt } from "./crypto.js";
 import axios from "axios";
 import { LoginSession, EAuthTokenPlatformType } from "steam-session";
+import { SessionExpiredError } from "../utils/errors.js";
 import QRCode from "qrcode";
 import crypto from "crypto";
 import { detectWalletCurrency } from "./currency.js";
@@ -621,9 +622,7 @@ export class SteamSessionService {
     }
 
     console.error(`[Session] ensureValidSession FAILED for accountId=${accountId}, status=${status}`);
-    const error = new Error("Steam session expired or not configured. Please re-authenticate.");
-    (error as any).code = "SESSION_EXPIRED";
-    throw error;
+    throw new SessionExpiredError("Steam session expired or not configured. Please re-authenticate.");
   }
 
   // ─── Link Mode Helpers ──────────────────────────────────────────────
