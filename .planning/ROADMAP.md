@@ -118,7 +118,12 @@ Plans:
   3. Account badge tap switches active account and reloads inventory
   4. Sell flow works from any account (active account session used; account-switch CTA when item belongs to non-active account)
   5. Link callback correctly associates new Steam account with existing user (state param verified)
-**Plans**: 0 plans
+**Plans**: 3 plans
+
+Plans:
+- [ ] 16-01-PLAN.md — Backend: uncomment premium gate in auth.ts, add account_avatar_url to inventory query, integration tests for ACCT-05 + multi-account inventory
+- [ ] 16-02-PLAN.md — Flutter data layer: drop accountId filter in inventory provider, add PremiumRequiredException handling, account-linked deep link handler, accountAvatarUrl in InventoryItem model
+- [ ] 16-03-PLAN.md — Flutter UI: account badge overlay on ItemCard, sell sheet cross-account warning banner + accountId in sell request
 
 ### Phase 17: Offline Cache Gap Closure
 **Goal**: Complete offline cache — wire price caching, add cache-first providers, offline display with last-updated indicator, background price sync, LRU eviction
@@ -208,6 +213,6 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 13. Home Screen Widget | 1/2 | In Progress | — |
 | 14. Grand Refactoring | 2/2 | Complete | 2026-03-12 |
 | 15. Testing | 4/4 | Complete    | 2026-03-13 |
-| 16. Multi-Account Gap Closure | 0/0 | Pending | — |
+| 16. Multi-Account Gap Closure | 0/3 | Pending | — |
 | 17. Offline Cache Gap Closure | 0/0 | Pending | — |
 | 18. Backend Error Propagation | 0/0 | Pending | — |
