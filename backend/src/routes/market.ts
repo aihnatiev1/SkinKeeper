@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Response, NextFunction } from "express";
 import axios from "axios";
 import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
@@ -25,6 +25,7 @@ import {
   getCurrencyInfo,
   convertUsdToWallet,
 } from "../services/currency.js";
+import { SessionExpiredError } from "../utils/errors.js";
 
 const router = Router();
 
@@ -224,7 +225,7 @@ router.post(
   "/sell-operation",
   authMiddleware,
   validateBody(sellOperationSchema),
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { items, accountId } = req.body;
 
@@ -255,16 +256,8 @@ router.post(
         status: "pending",
         totalItems: items.length,
       });
-    } catch (err: unknown) {
-      if ((err as any)?.code === "SESSION_EXPIRED") {
-        res.status(401).json({
-          error: "Steam session expired. Please re-authenticate.",
-          code: "SESSION_EXPIRED",
-        });
-        return;
-      }
-      console.error("Sell operation create error:", err);
-      res.status(500).json({ error: "Failed to create sell operation" });
+    } catch (err) {
+      next(err);
     }
   }
 );
@@ -384,7 +377,7 @@ router.get("/quickprice/:marketHashName", async (req, res) => {
 router.post(
   "/sell",
   authMiddleware,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { assetId, priceInCents, accountId } = req.body;
       if (!assetId || !priceInCents) {
@@ -403,15 +396,14 @@ router.post(
       }
       const isValid = await SteamSessionService.validateSession(session);
       if (!isValid) {
-        res.status(401).json({ error: "Steam session expired. Please re-authenticate.", code: "SESSION_EXPIRED" });
+        next(new SessionExpiredError("Steam session expired. Please re-authenticate."));
         return;
       }
 
       const result = await sellItem(session, assetId, priceInCents, resolvedAccountId);
       res.json(result);
     } catch (err) {
-      console.error("Sell error:", err);
-      res.status(500).json({ error: "Failed to sell item" });
+      next(err);
     }
   }
 );
@@ -420,7 +412,7 @@ router.post(
 router.post(
   "/bulk-sell",
   authMiddleware,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { items, accountId } = req.body as {
         items: Array<{ assetId: string; priceInCents: number }>;
@@ -447,7 +439,7 @@ router.post(
       }
       const isValid = await SteamSessionService.validateSession(session);
       if (!isValid) {
-        res.status(401).json({ error: "Steam session expired. Please re-authenticate.", code: "SESSION_EXPIRED" });
+        next(new SessionExpiredError("Steam session expired. Please re-authenticate."));
         return;
       }
 
@@ -455,8 +447,7 @@ router.post(
       const succeeded = results.filter((r) => r.result.success).length;
       res.json({ results, succeeded, total: items.length });
     } catch (err) {
-      console.error("Bulk sell error:", err);
-      res.status(500).json({ error: "Failed to bulk sell" });
+      next(err);
     }
   }
 );

@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Response, NextFunction } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import { sendTradeSchema, quickTransferSchema, tradeTokenSchema, tradesListQuerySchema } from "../middleware/schemas.js";
@@ -235,7 +235,7 @@ router.post(
   "/send",
   authMiddleware,
   validateBody(sendTradeSchema),
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const input = req.body as CreateTradeInput;
 
@@ -246,18 +246,8 @@ router.post(
 
       const offer = await createAndSendOffer(req.userId!, input);
       res.json(offer);
-    } catch (err: any) {
-      if (err?.code === "SESSION_EXPIRED") {
-        res.status(401).json({
-          error: "Steam session expired. Please re-authenticate.",
-          code: "SESSION_EXPIRED",
-        });
-        return;
-      }
-      console.error("Send trade offer error:", err?.message || err);
-      res
-        .status(500)
-        .json({ error: err.message || "Failed to send trade offer" });
+    } catch (err) {
+      next(err);
     }
   }
 );
@@ -269,19 +259,15 @@ router.post(
 router.post(
   "/:id/accept",
   authMiddleware,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const result = await acceptOffer(req.userId!, req.params.id as string);
       res.json({
         status: "accepted",
         needsConfirmation: result.needsConfirmation,
       });
-    } catch (err: any) {
-      if (err?.code === "SESSION_EXPIRED") {
-        res.status(401).json({ error: "Session expired", code: "SESSION_EXPIRED" });
-        return;
-      }
-      res.status(500).json({ error: err.message || "Failed to accept" });
+    } catch (err) {
+      next(err);
     }
   }
 );
@@ -293,17 +279,12 @@ router.post(
 router.post(
   "/:id/decline",
   authMiddleware,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       await declineOffer(req.userId!, req.params.id as string);
       res.json({ status: "declined" });
-    } catch (err: any) {
-      if (err?.code === "SESSION_EXPIRED") {
-        res.status(401).json({ error: "Session expired", code: "SESSION_EXPIRED" });
-        return;
-      }
-      console.error("Decline trade offer error:", err);
-      res.status(500).json({ error: err.message || "Failed to decline" });
+    } catch (err) {
+      next(err);
     }
   }
 );
@@ -315,17 +296,12 @@ router.post(
 router.post(
   "/:id/cancel",
   authMiddleware,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       await cancelOffer(req.userId!, req.params.id as string);
       res.json({ status: "cancelled" });
-    } catch (err: any) {
-      if (err?.code === "SESSION_EXPIRED") {
-        res.status(401).json({ error: "Session expired", code: "SESSION_EXPIRED" });
-        return;
-      }
-      console.error("Cancel trade offer error:", err);
-      res.status(500).json({ error: err.message || "Failed to cancel" });
+    } catch (err) {
+      next(err);
     }
   }
 );
@@ -341,7 +317,7 @@ router.post(
   "/quick-transfer",
   authMiddleware,
   validateBody(quickTransferSchema),
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { fromAccountId, toAccountId, items } = req.body;
 
@@ -394,18 +370,8 @@ router.post(
       });
 
       res.json(offer);
-    } catch (err: any) {
-      if (err?.code === "SESSION_EXPIRED") {
-        res.status(401).json({
-          error: "Steam session expired",
-          code: "SESSION_EXPIRED",
-        });
-        return;
-      }
-      console.error("Quick transfer error:", err);
-      res
-        .status(500)
-        .json({ error: err.message || "Failed to create transfer" });
+    } catch (err) {
+      next(err);
     }
   }
 );
