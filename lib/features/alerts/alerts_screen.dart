@@ -6,9 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
 import '../../models/alert.dart';
-import '../../widgets/premium_gate.dart';
 import '../../widgets/shared_ui.dart';
-import '../purchases/iap_service.dart';
 import 'alerts_provider.dart';
 
 class AlertsScreen extends ConsumerStatefulWidget {
@@ -47,9 +45,14 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
               children: [
                 // ── Custom header ──
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(4, 8, 16, 0),
                   child: Row(
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                            size: 20, color: AppTheme.textSecondary),
+                        onPressed: () => context.pop(),
+                      ),
                       const Expanded(
                         child: Text(
                           'Price Alerts',
@@ -181,44 +184,6 @@ class _ActiveAlertsTab extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 13,
                     color: AppTheme.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    context.push('/alerts/create');
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.accentGradient,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.accent.withValues(alpha: 0.35),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.add_alert_rounded,
-                            size: 18, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text(
-                          'Create Alert',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ],
