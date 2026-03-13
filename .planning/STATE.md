@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 16-02-PLAN.md (Flutter data layer wired for multi-account)
-last_updated: "2026-03-13T16:30:00.000Z"
-last_activity: 2026-03-13 -- Phase 16 Plan 02 complete (multi-account inventory fetch, PremiumRequiredException, deep link, accountAvatarUrl)
+stopped_at: Completed 16-03-PLAN.md (Multi-account UI — item card badges + sell sheet)
+last_updated: "2026-03-13T17:00:00.000Z"
+last_activity: 2026-03-13 -- Phase 16 Plan 03 complete (account badge on item cards, cross-account warning in sell sheet)
 progress:
   total_phases: 5
   completed_phases: 3
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 15 of 15 (Testing)
-Plan: 16-02 complete
-Status: In progress (phase 16 gap closure)
-Last activity: 2026-03-13 -- Phase 16 Plan 02 complete (multi-account inventory fetch, PremiumRequiredException, deep link, accountAvatarUrl)
+Plan: 16-03 complete
+Status: In progress (phase 16 gap closure — human verify needed)
+Last activity: 2026-03-13 -- Phase 16 Plan 03 complete (account badge on item cards, cross-account warning in sell sheet)
 
 Progress: [██████████] 100%
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100%
 | 15 | 04 | 455s | 2 | 6 |
 | 16 | 01 | 180s | 2 | 4 |
 | 16 | 02 | 600s | 2 | 5 |
+| 16 | 03 | 600s | 2 | 3 |
 
 ## Accumulated Context
 
@@ -89,6 +90,7 @@ Progress: [██████████] 100%
 - [15-04]: session routes were missing from createTestApp — added as auto-fix
 - [15-04]: Coverage thresholds updated to actual measured values (25/19/26/26%)
 - [16-02]: _LinkAccountButton updated to call startLinkAccount() directly (browser OAuth flow) instead of navigating to /session?linkMode=true (QR flow)
+- [16-03]: CachedNetworkImage uses errorWidget not errorBuilder — plan had wrong param name, auto-fixed
 
 ### Pending Todos
 
@@ -101,5 +103,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 16-02-PLAN.md (Flutter data layer wired for multi-account)
+Stopped at: Completed 16-03-PLAN.md — awaiting human verify (account badges + sell sheet banner)
 Resume file: None
