@@ -48,7 +48,7 @@ Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3
 ### Milestone 4 (Planned)
 
 - [ ] **Phase 14: Grand Refactoring** — Backend perf (DB pool, caches, validation, SteamClient), Flutter UX/UI overhaul (widget decomposition, state optimization, design polish)
-- [ ] **Phase 15: Testing** — Backend unit + integration tests, Flutter unit + widget + E2E tests, coverage targets
+- [x] **Phase 15: Testing** — Backend unit + integration tests, Flutter unit + widget + E2E tests, coverage targets (completed 2026-03-13)
 
 ## Phase Details (M3)
 
@@ -165,4 +165,4 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 12. Offline Price Cache | 0/2 | Pending | — |
 | 13. Home Screen Widget | 1/2 | In Progress | — |
 | 14. Grand Refactoring | 2/2 | Complete | 2026-03-12 |
-| 15. Testing | 4/4 | Complete | 2026-03-13 |
+| 15. Testing | 4/4 | Complete    | 2026-03-13 |
