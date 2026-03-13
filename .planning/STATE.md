@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 16-03-PLAN.md (Multi-account UI — item card badges + sell sheet)
-last_updated: "2026-03-13T17:00:00.000Z"
-last_activity: 2026-03-13 -- Phase 16 Plan 03 complete (account badge on item cards, cross-account warning in sell sheet)
+stopped_at: Completed 16-03-PLAN.md (multi-account UI — item card badges + sell sheet + backend premium gate)
+last_updated: "2026-03-13T17:15:00.000Z"
+last_activity: 2026-03-13 -- Phase 16 complete (multi-account gap closure — premium gate, avatar_url, Flutter data layer + UI)
 progress:
   total_phases: 5
   completed_phases: 3
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 15 of 15 (Testing)
-Plan: 16-03 complete
-Status: In progress (phase 16 gap closure — human verify needed)
-Last activity: 2026-03-13 -- Phase 16 Plan 03 complete (account badge on item cards, cross-account warning in sell sheet)
+Phase: 16 complete (multi-account gap closure)
+Plan: 16-03 complete (human-verified)
+Status: Phase 16 complete — all 3 plans done
+Last activity: 2026-03-13 -- Phase 16 complete (multi-account gap closure — premium gate, avatar_url, Flutter data layer + UI)
 
 Progress: [██████████] 100%
 
@@ -103,5 +103,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: Completed 16-03-PLAN.md — awaiting human verify (account badges + sell sheet banner)
+Stopped at: Completed 16-03-PLAN.md (multi-account UI — item card badges + sell sheet + backend premium gate)
 Resume file: None
