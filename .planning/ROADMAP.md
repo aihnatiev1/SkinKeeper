@@ -154,6 +154,22 @@ Plans:
 - [ ] 18-01-PLAN.md — Services: replace raw Error+.code throws with SessionExpiredError, migrate steamSession.ts axios to steamRequest(), add steamSession.test.ts
 - [ ] 18-02-PLAN.md — Routes + tests: remove inline SESSION_EXPIRED handlers, convert to next(err), extend route integration tests, add Flutter api_client_test.dart
 
+### Phase 19: Named Portfolios
+**Goal**: Users can create named portfolio groups, tag manual transactions to them, and filter the P/L view by portfolio
+**Depends on**: Phase 18 (backend error propagation complete)
+**Requirements**: PORTFOLIO-01 (create/edit/delete portfolios), PORTFOLIO-02 (filter P/L by portfolio), PORTFOLIO-03 (assign portfolio in AddTransactionSheet)
+**Success Criteria**:
+  1. User can create/edit/delete named portfolios with name + color
+  2. Portfolio selector bar on P/L tab — "All" + one chip per portfolio + "+" create button
+  3. Selecting a portfolio chip filters the P/L summary + items table to that portfolio only
+  4. AddTransactionSheet has optional portfolio picker (defaults to untagged)
+  5. Long-press on item row in P/L table shows "Log transaction" shortcut
+**Plans**: 2 plans
+
+Plans:
+- [x] 19-01-PLAN.md — Backend: migration (portfolios table + transactions.portfolio_id FK), CRUD routes, P/L filter by portfolioId
+- [ ] 19-02-PLAN.md — Flutter: Portfolio model, portfoliosProvider, selectedPortfolioIdProvider, selector bar, create/edit/delete sheets, AddTransactionSheet picker, item row long-press
+
 ## Phase Details (M4)
 
 ### Phase 14: Grand Refactoring
@@ -217,6 +233,7 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 13. Home Screen Widget | 1/2 | In Progress | — |
 | 14. Grand Refactoring | 2/2 | Complete | 2026-03-12 |
 | 15. Testing | 4/4 | Complete    | 2026-03-13 |
-| 16. Multi-Account Gap Closure | 0/3 | Pending | — |
+| 16. Multi-Account Gap Closure | 3/3 | Complete | 2026-03-13 |
 | 17. Offline Cache Gap Closure | 0/0 | Pending | — |
-| 18. Backend Error Propagation | 0/2 | Pending | — |
+| 18. Backend Error Propagation | 2/2 | Complete | 2026-03-13 |
+| 19. Named Portfolios | 1/2 | Active | — |

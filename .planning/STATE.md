@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 18-02-PLAN.md (route cleanup — next(err) propagation, SESSION_EXPIRED route tests, Flutter api_client test)"
-last_updated: "2026-03-13T15:21:00Z"
-last_activity: "2026-03-13 -- Phase 18 complete (backend error propagation — typed SessionExpiredError in all services+routes)"
+stopped_at: "Completed 19-01-PLAN.md (portfolios table migration + CRUD routes + P/L filter by portfolioId)"
+last_updated: "2026-03-13T19:52:00Z"
+last_activity: "2026-03-13 -- Phase 19 plan 01 executed (named portfolios backend: migration, CRUD routes, P/L filter)"
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 11
-  percent: 92
+  total_plans: 14
+  completed_plans: 13
+  percent: 93
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 18 (backend-error-propagation) complete
-Plan: 18-02 complete
-Status: Phase 18 complete — typed error hierarchy + route cleanup + tests all done
-Last activity: 2026-03-13 -- Phase 18 plan 02 complete (route next(err) propagation + SESSION_EXPIRED tests + Flutter api_client test)
+Phase: 19 (named-portfolios) — 19-01 complete, 19-02 next
+Plan: 19-02-PLAN.md next
+Status: 19-01 backend executed — portfolios migration, CRUD routes, P/L filter done
+Last activity: 2026-03-13 -- 19-01 executed (portfolios table, CRUD API, P/L filter by portfolioId)
 
 Progress: [██████████] 100%
 
@@ -53,6 +53,7 @@ Progress: [██████████] 100%
 | 16 | 03 | 600s | 2 | 3 |
 | 18 | 01 | 420s | 2 | 3 |
 | 18 | 02 | 566s | 2 | 5 |
+| 19 | 01 | ~900s | 3 | 4 |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Progress: [██████████] 100%
 - [18-01]: isSessionExpiredError() retains duck-type fallback for backward compat with catch blocks that may still hold old-style errors
 - [18-01]: axios import kept in steamSession.ts — used elsewhere; only extractSessionId/validateSession migrated to steamRequest()
 - [18-02]: Test bodies must satisfy Zod schema validation before mocks are exercised — partnerSteamId requires 17-digit string, sellOperationSchema requires marketHashName per item
+- [19-01]: portfoliosRouter exported as named export from portfolio.ts, mounted at /api — avoids /api/portfolio/portfolios prefix conflict
+- [19-01]: getPortfolioPL accountId branch refactored to dynamic params array — supports accountId + portfolioId independently or together
+- [19-01]: getItemsPL with portfolioId bypasses item_cost_basis entirely — aggregates from transactions directly since item_cost_basis is global
 
 ### Pending Todos
 
@@ -108,5 +112,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-13
-Stopped at: "Completed 18-02-PLAN.md (route cleanup — next(err) propagation, SESSION_EXPIRED route tests, Flutter api_client test)"
+Stopped at: "Completed 19-01-PLAN.md (portfolios table migration + CRUD routes + P/L filter by portfolioId)"
 Resume file: None
