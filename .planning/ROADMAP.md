@@ -148,7 +148,11 @@ Plans:
   2. `tradeOffers.ts` throws typed errors — session expiry during trade returns 401 not 500
   3. `steamSession.ts` uses `steamRequest()` from SteamClient — retry/backoff active on all Steam HTTP calls
   4. Flutter SESSION_EXPIRED handling tested end-to-end with typed error response
-**Plans**: 0 plans
+**Plans**: 2 plans
+
+Plans:
+- [ ] 18-01-PLAN.md — Services: replace raw Error+.code throws with SessionExpiredError, migrate steamSession.ts axios to steamRequest(), add steamSession.test.ts
+- [ ] 18-02-PLAN.md — Routes + tests: remove inline SESSION_EXPIRED handlers, convert to next(err), extend route integration tests, add Flutter api_client_test.dart
 
 ## Phase Details (M4)
 
@@ -215,4 +219,4 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 15. Testing | 4/4 | Complete    | 2026-03-13 |
 | 16. Multi-Account Gap Closure | 0/3 | Pending | — |
 | 17. Offline Cache Gap Closure | 0/0 | Pending | — |
-| 18. Backend Error Propagation | 0/0 | Pending | — |
+| 18. Backend Error Propagation | 0/2 | Pending | — |
