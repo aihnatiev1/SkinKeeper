@@ -10,12 +10,14 @@ class QuantityPickerSheet extends StatefulWidget {
   final ItemGroup group;
   final CurrencyInfo? currency;
   final void Function(List<String> assetIds) onConfirm;
+  final int initialCount;
 
   const QuantityPickerSheet({
     super.key,
     required this.group,
     this.currency,
     required this.onConfirm,
+    this.initialCount = 1,
   });
 
   @override
@@ -28,7 +30,7 @@ class _QuantityPickerSheetState extends State<QuantityPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _quantity = 1;
+    _quantity = widget.initialCount.clamp(1, widget.group.count);
   }
 
   @override

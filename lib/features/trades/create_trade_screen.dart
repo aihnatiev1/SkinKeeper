@@ -59,7 +59,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+              padding: const EdgeInsets.fromLTRB(8, 16, 16, 0),
               child: Row(
                 children: [
                   IconButton(
@@ -70,6 +70,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
                         HapticFeedback.lightImpact();
                         setState(() => _step--);
                       } else {
+                        FocusScope.of(context).unfocus();
                         context.pop();
                       }
                     },
@@ -405,6 +406,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
       ref.invalidate(tradesProvider);
 
       if (mounted) {
+        FocusScope.of(context).unfocus();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Trade offer sent!')),
         );
@@ -515,8 +517,8 @@ class _FriendPickerStep extends ConsumerWidget {
                       icon: const Icon(Icons.refresh, size: 16),
                       label: const Text('Retry'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: Colors.black,
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
                       ),
                     ),
                   ],
@@ -693,11 +695,11 @@ class _ItemExchangeStepState extends State<_ItemExchangeStep> {
           content: Text('You have no items on the $emptySide side. Continue anyway?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
+              onPressed: () => ctx.pop(false),
               child: const Text('No'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
+              onPressed: () => ctx.pop(true),
               child: const Text('Yes'),
             ),
           ],
@@ -1102,7 +1104,7 @@ class _GroupTile extends StatelessWidget {
                             Text(
                               '$selectedCount selected',
                               style: const TextStyle(
-                                  fontSize: 11, color: AppTheme.accent),
+                                  fontSize: 11, color: AppTheme.primary),
                             )
                           else if (priceStr.isNotEmpty)
                             Text(
@@ -1124,7 +1126,7 @@ class _GroupTile extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: hasSelection
-                          ? AppTheme.accent.withValues(alpha: 0.1)
+                          ? AppTheme.primary.withValues(alpha: 0.1)
                           : AppTheme.surface,
                       borderRadius: BorderRadius.circular(AppTheme.r8),
                     ),
@@ -1134,7 +1136,7 @@ class _GroupTile extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: hasSelection
-                            ? AppTheme.accent
+                            ? AppTheme.primary
                             : AppTheme.textSecondary,
                       ),
                     ),
@@ -1145,7 +1147,7 @@ class _GroupTile extends StatelessWidget {
                   Checkbox(
                     value: hasSelection,
                     onChanged: (_) => onToggleItem(group.first.assetId),
-                    activeColor: AppTheme.accent,
+                    activeColor: AppTheme.primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
                   ),
@@ -1282,10 +1284,10 @@ class _StickyTradeBarState extends State<_StickyTradeBar> {
                           style: TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: Colors.black,
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
                         disabledBackgroundColor:
-                            AppTheme.accent.withValues(alpha: 0.12),
+                            AppTheme.primary.withValues(alpha: 0.12),
                         shape: RoundedRectangleBorder(
                             borderRadius:
                                 BorderRadius.circular(AppTheme.r12)),
@@ -1796,10 +1798,10 @@ class _ReviewStep extends StatelessWidget {
                     fontSize: 16, fontWeight: FontWeight.w600),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.accent,
-                foregroundColor: Colors.black,
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
                 disabledBackgroundColor:
-                    AppTheme.accent.withValues(alpha: 0.15),
+                    AppTheme.primary.withValues(alpha: 0.15),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppTheme.r16)),
                 elevation: 0,
@@ -2130,7 +2132,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
         borderRadius:
             const BorderRadius.vertical(top: Radius.circular(AppTheme.r20)),
         border: const Border(
-          top: BorderSide(color: AppTheme.accent, width: 2),
+          top: BorderSide(color: AppTheme.primary, width: 2),
         ),
       ),
       child: SafeArea(
@@ -2194,7 +2196,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppTheme.accent.withValues(alpha: 0.15),
+                      color: AppTheme.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -2202,7 +2204,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.accent,
+                        color: AppTheme.primary,
                       ),
                     ),
                   ),
@@ -2268,17 +2270,17 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                             .toList();
                         widget.onConfirm(ids);
                       }
-                      Navigator.of(context).pop();
+                      context.pop();
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 24, vertical: 12),
                       decoration: BoxDecoration(
-                        color: AppTheme.accent,
+                        color: AppTheme.primary,
                         borderRadius: BorderRadius.circular(AppTheme.r12),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.accent.withValues(alpha: 0.3),
+                            color: AppTheme.primary.withValues(alpha: 0.3),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           ),
@@ -2345,10 +2347,10 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
           if (max > 2)
             SliderTheme(
               data: SliderThemeData(
-                activeTrackColor: AppTheme.accent,
-                inactiveTrackColor: AppTheme.accent.withValues(alpha: 0.15),
-                thumbColor: AppTheme.accent,
-                overlayColor: AppTheme.accent.withValues(alpha: 0.12),
+                activeTrackColor: AppTheme.primary,
+                inactiveTrackColor: AppTheme.primary.withValues(alpha: 0.15),
+                thumbColor: AppTheme.primary,
+                overlayColor: AppTheme.primary.withValues(alpha: 0.12),
                 trackHeight: 4,
                 thumbShape:
                     const RoundSliderThumbShape(enabledThumbRadius: 8),
@@ -2421,7 +2423,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.accent,
+                  color: AppTheme.primary,
                 ),
               ),
               const Spacer(),
@@ -2446,7 +2448,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.accent.withValues(alpha: 0.8),
+                    color: AppTheme.primary.withValues(alpha: 0.8),
                   ),
                 ),
               ),
@@ -2492,7 +2494,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                             : Icons.circle_outlined,
                         size: 20,
                         color: selected
-                            ? AppTheme.accent
+                            ? AppTheme.primary
                             : atLimit
                                 ? AppTheme.textDisabled.withValues(alpha: 0.3)
                                 : AppTheme.textDisabled,
@@ -2573,19 +2575,19 @@ class _QtyCircleBtn extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           color: enabled
-              ? AppTheme.accent.withValues(alpha: 0.15)
+              ? AppTheme.primary.withValues(alpha: 0.15)
               : Colors.white.withValues(alpha: 0.03),
           shape: BoxShape.circle,
           border: Border.all(
             color: enabled
-                ? AppTheme.accent.withValues(alpha: 0.3)
+                ? AppTheme.primary.withValues(alpha: 0.3)
                 : Colors.white.withValues(alpha: 0.05),
           ),
         ),
         child: Icon(
           icon,
           size: 20,
-          color: enabled ? AppTheme.accent : AppTheme.textDisabled,
+          color: enabled ? AppTheme.primary : AppTheme.textDisabled,
         ),
       ),
     );
@@ -2616,12 +2618,12 @@ class _TradeQuickBtn extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: selected
-                ? AppTheme.accent.withValues(alpha: 0.2)
+                ? AppTheme.primary.withValues(alpha: 0.2)
                 : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected
-                  ? AppTheme.accent.withValues(alpha: 0.4)
+                  ? AppTheme.primary.withValues(alpha: 0.4)
                   : Colors.white.withValues(alpha: 0.08),
               width: 0.5,
             ),
@@ -2631,7 +2633,7 @@ class _TradeQuickBtn extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: selected ? AppTheme.accent : AppTheme.textMuted,
+              color: selected ? AppTheme.primary : AppTheme.textMuted,
             ),
           ),
         ),

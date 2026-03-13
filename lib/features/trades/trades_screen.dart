@@ -140,11 +140,11 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                     decoration: BoxDecoration(
-                      gradient: AppTheme.accentGradient,
+                      gradient: AppTheme.primaryGradient,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.accent.withValues(alpha: 0.45),
+                          color: AppTheme.primary.withValues(alpha: 0.45),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -561,17 +561,20 @@ class _TradeOfferTile extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(AppTheme.r8),
+                    border: Border.all(
+                      color: AppTheme.warning.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.phone_android_rounded, color: Colors.orange, size: 16),
+                      Icon(Icons.phone_android_rounded, color: AppTheme.warning.withValues(alpha: 0.7), size: 15),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Confirm or revoke in Steam mobile app',
-                          style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w500),
+                          style: TextStyle(color: AppTheme.warning.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ],
@@ -741,18 +744,21 @@ class _ItemsPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return Container(
-        height: 48,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(AppTheme.r12),
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(AppTheme.r8),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.07),
+            width: 1,
+          ),
         ),
-        child: const Center(
-          child: Text(
-            'Nothing',
-            style: TextStyle(
-              fontSize: 11,
-              color: AppTheme.textDisabled,
-            ),
+        child: Center(
+          child: Icon(
+            Icons.inventory_2_outlined,
+            size: 18,
+            color: Colors.white.withValues(alpha: 0.12),
           ),
         ),
       );

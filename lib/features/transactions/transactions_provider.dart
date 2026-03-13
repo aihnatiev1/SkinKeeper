@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
+import '../../core/steam_image.dart';
 
 class TransactionItem {
   final String id;
@@ -17,6 +18,7 @@ class TransactionItem {
   final int? recvTotal;
   final String? iconUrl;
   final int? currentPriceCents;
+  final String? note;
 
   const TransactionItem({
     required this.id,
@@ -34,6 +36,7 @@ class TransactionItem {
     this.recvTotal,
     this.iconUrl,
     this.currentPriceCents,
+    this.note,
   });
 
   double get priceUsd => priceCents / 100.0;
@@ -43,7 +46,7 @@ class TransactionItem {
 
   String? get imageUrl =>
       iconUrl != null && iconUrl!.isNotEmpty
-          ? 'https://community.steamstatic.com/economy/image/$iconUrl/128fx128f'
+          ? SteamImage.url(iconUrl!, size: '128fx128f')
           : null;
 
   double? get currentPriceUsd =>
@@ -83,6 +86,7 @@ class TransactionItem {
       recvTotal: (json['recv_total'] as num?)?.toInt(),
       iconUrl: json['icon_url'] as String?,
       currentPriceCents: (json['current_price_cents'] as num?)?.toInt(),
+      note: json['note'] as String?,
     );
   }
 }

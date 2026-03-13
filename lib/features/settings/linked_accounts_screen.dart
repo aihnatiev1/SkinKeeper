@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import '../../models/user.dart';
+import '../../widgets/shared_ui.dart';
 import 'accounts_provider.dart';
 import '../auth/steam_auth_service.dart';
 
@@ -24,7 +25,7 @@ class LinkedAccountsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+              padding: const EdgeInsets.fromLTRB(8, 16, 16, 0),
               child: Row(
                 children: [
                   IconButton(
@@ -189,10 +190,8 @@ class _AccountCard extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.vpn_key, size: 16),
-                  label: const Text('Auth'),
-                  onPressed: () {
-                    context.push('/session?accountId=${account.id}');
-                  },
+                  label: Text(account.isActive ? 'Re-auth' : 'Auth'),
+                  onPressed: () => context.push('/session'),
                 ),
               ),
               const SizedBox(width: 8),
@@ -210,14 +209,19 @@ class _AccountCard extends ConsumerWidget {
   void _confirmRemove(BuildContext context, WidgetRef ref, bool isLastAccount) {
     showDialog(
       context: context,
+      barrierColor: Colors.black54,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove Account?'),
         content: Text(isLastAccount
             ? 'This is your only account. Removing it will sign you out.'
-            : 'Remove ${account.displayName}? This will delete its inventory data.'),
+            : 'Remove ${account.displayName}? This will delete cached inventory, trade history, and session data for this account.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.loss),
             onPressed: () async {
               Navigator.pop(ctx);
               try {
@@ -234,7 +238,7 @@ class _AccountCard extends ConsumerWidget {
                 }
               }
             },
-            child: const Text('Remove', style: TextStyle(color: AppTheme.loss)),
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -252,54 +256,29 @@ class _LinkAccountButton extends ConsumerWidget {
     // TODO: re-enable premium gate after testing
     // final blocked = !isPremium && accountCount >= 1;
 
-    return Container(
+    return GradientButton(
+      label: 'Link New Account',
+      icon: Icons.add,
       height: 48,
-      decoration: BoxDecoration(
-        gradient: AppTheme.primaryGradient,
-        borderRadius: BorderRadius.circular(AppTheme.r12),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () async {
-            try {
-              final result =
-                  await ref.read(accountsProvider.notifier).startLinkAccount();
-              final url = result['url'] as String?;
-              if (url != null && context.mounted) {
-                await launchUrl(Uri.parse(url),
-                    mode: LaunchMode.externalApplication);
-              }
-            } on PremiumRequiredException {
-              if (context.mounted) context.push('/premium');
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to start linking: $e')),
-                );
-              }
-            }
-          },
-          borderRadius: BorderRadius.circular(AppTheme.r12),
-          child: const Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Link New Account',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      onPressed: () async {
+        try {
+          final result =
+              await ref.read(accountsProvider.notifier).startLinkAccount();
+          final url = result['url'] as String?;
+          if (url != null && context.mounted) {
+            await launchUrl(Uri.parse(url),
+                mode: LaunchMode.externalApplication);
+          }
+        } on PremiumRequiredException {
+          if (context.mounted) context.push('/premium');
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to start linking: $e')),
+            );
+          }
+        }
+      },
     );
   }
 }

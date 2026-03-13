@@ -13,6 +13,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/api_client.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../../widgets/glass_sheet.dart';
 import '../../widgets/shared_ui.dart';
 import '../auth/session_provider.dart';
 import 'transactions_provider.dart';
@@ -58,16 +59,7 @@ class TransactionsScreen extends ConsumerWidget {
                     tooltip: 'Export CSV',
                     onPressed: () {
                       HapticFeedback.selectionClick();
-                      showModalBottomSheet(
-                        context: context,
-                        useRootNavigator: true,
-                        isScrollControlled: true,
-                        backgroundColor: AppTheme.surface,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                        ),
-                        builder: (_) => _ExportSheet(ref: ref),
-                      );
+                      showGlassSheet(context, _ExportSheet(ref: ref));
                     },
                   ),
                   IconButton(
@@ -300,30 +292,21 @@ class TransactionsScreen extends ConsumerWidget {
     return '${fmt.format(from)} – ${fmt.format(to ?? now)}';
   }
 
-  void _showItemFilter(BuildContext context, WidgetRef ref) {
-    final itemsList = ref.read(txItemsListProvider);
-    itemsList.when(
-      data: (items) {
-        showModalBottomSheet(
-          context: context,
-          useRootNavigator: true,
-          isScrollControlled: true,
-          backgroundColor: AppTheme.surface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          builder: (_) => _ItemFilterSheet(
-            items: items,
-            onSelect: (name) {
-              ref.read(txItemFilterProvider.notifier).state = name;
-              ref.read(transactionsProvider.notifier).refresh();
-              Navigator.pop(context);
-            },
-          ),
-        );
-      },
-      loading: () {},
-      error: (_, _) {},
+  Future<void> _showItemFilter(BuildContext context, WidgetRef ref) async {
+    final items = await ref.read(txItemsListProvider.future);
+    if (!context.mounted) return;
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      builder: (sheetCtx) => _ItemFilterSheet(
+        items: items,
+        onSelect: (name) {
+          ref.read(txItemFilterProvider.notifier).state = name;
+          ref.read(transactionsProvider.notifier).refresh();
+          Navigator.of(sheetCtx, rootNavigator: true).pop();
+        },
+      ),
     );
   }
 
@@ -332,10 +315,6 @@ class TransactionsScreen extends ConsumerWidget {
     await showModalBottomSheet(
       context: context,
       useRootNavigator: true,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => _DateFilterSheet(
         currentFrom: ref.read(txDateFromProvider),
         currentTo: ref.read(txDateToProvider),
@@ -583,7 +562,7 @@ class _TransactionTile extends ConsumerWidget {
 
   Widget _buildMarketTile(BuildContext context, WidgetRef ref, CurrencyInfo currency) {
     final isBuy = tx.isBuy;
-    final color = isBuy ? AppTheme.loss : AppTheme.profit;
+    final color = isBuy ? AppTheme.primary : AppTheme.profit;
     final delta = tx.plDeltaCents;
     final deltaPct = tx.plDeltaPct;
     final hasDelta = delta != null && tx.currentPriceCents != null;
@@ -630,6 +609,18 @@ class _TransactionTile extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (tx.note != null && tx.note!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      tx.note!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.captionSmall.copyWith(
+                        color: AppTheme.textMuted,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -934,15 +925,15 @@ class _TransactionTile extends ConsumerWidget {
     // Use hashCode-based selection but make it static
     final hash = pct.hashCode.abs();
     if (pct >= 15) {
-      return const ['Bro, you absolutely cooked here', 'Free money glitch activated', 'W trade. Hall of fame material.'][hash % 3];
+      return const ['Excellent outcome', 'Strong return on investment', 'Outstanding trade result'][hash % 3];
     } else if (pct >= 3) {
-      return const ['Nice one! You came out on top', 'Solid trade, clean profit', 'GG, you won this round'][hash % 3];
+      return const ['Solid profit', 'Good deal', 'Profitable outcome'][hash % 3];
     } else if (pct >= -3) {
-      return const ['Fair trade. Both happy, nobody scammed', 'Perfectly balanced, as all things should be', "A gentleman's agreement"][hash % 3];
+      return const ['Balanced trade', 'Fair exchange', 'Break-even'][hash % 3];
     } else if (pct >= -15) {
-      return const ["I'd think twice about this one...", 'Not your best trade, chief', 'You might be leaving money on the table'][hash % 3];
+      return const ['Minor loss', 'Below market value', 'Slight negative return'][hash % 3];
     } else {
-      return const ['Bro... who hurt you?', "I'm calling the trade police on this one", 'My brother in Christ, what are you doing?'][hash % 3];
+      return const ['Significant loss', 'Well below market price', 'Large negative P/L'][hash % 3];
     }
   }
 }
@@ -1003,7 +994,7 @@ class _ItemThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isBuy ? AppTheme.loss : AppTheme.profit;
+    final color = isBuy ? AppTheme.primary : AppTheme.profit;
     return Container(
       width: 40,
       height: 40,
@@ -1573,7 +1564,11 @@ class _ExportSheetState extends State<_ExportSheet> {
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd MMM yyyy');
-    return Padding(
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.bgSecondary,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.r24)),
+      ),
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
@@ -1604,7 +1599,7 @@ class _ExportSheetState extends State<_ExportSheet> {
                 child: _CheckTile(
                   label: 'Purchases',
                   icon: Icons.shopping_cart,
-                  color: AppTheme.loss,
+                  color: AppTheme.primary,
                   checked: _includeBuy,
                   onChanged: (v) => setState(() => _includeBuy = v),
                 ),

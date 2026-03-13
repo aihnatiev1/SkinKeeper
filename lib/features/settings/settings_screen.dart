@@ -11,6 +11,7 @@ import '../../core/push_service.dart';
 import '../../core/api_client.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../../widgets/shared_ui.dart';
 import '../auth/steam_auth_service.dart';
 import '../../core/router.dart';
 import '../onboarding/onboarding_screen.dart';
@@ -89,7 +90,7 @@ class SettingsScreen extends ConsumerWidget {
           }).maybeWhen(orElse: () => const SizedBox.shrink()),
           const SizedBox(height: 16),
 
-          // Steam Session
+          // Account group: Steam Session + Linked Accounts
           Container(
             clipBehavior: Clip.antiAlias,
             decoration: AppTheme.glass(),
@@ -118,38 +119,21 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ),
                   trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () => _showSessionSetup(context, ref),
+                  onTap: () => context.push('/session'),
                 ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 50.ms).slideY(begin: 0.05, end: 0),
-          const SizedBox(height: 16),
-
-          // Options
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: Column(
-              children: [
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.people, color: AppTheme.textSecondary),
                   title: Text(l10n.linkedAccounts),
                   trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
                   onTap: () => context.push('/settings/accounts'),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.notifications, color: AppTheme.textSecondary),
-                  title: Text(l10n.priceAlerts),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () => context.push('/alerts'),
-                ),
               ],
             ),
-          ).animate().fadeIn(duration: 300.ms, delay: 100.ms).slideY(begin: 0.05, end: 0),
+          ).animate().fadeIn(duration: 300.ms, delay: 50.ms).slideY(begin: 0.05, end: 0),
           const SizedBox(height: 16),
 
-          // Push Notification Preferences
+          // Notifications group: Price Alerts + Push Preferences
           _PushPrefsSection(),
           const SizedBox(height: 16),
 
@@ -221,7 +205,7 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () async {
                     await resetOnboarding();
                     ref.invalidate(onboardingCompleteProvider);
-                    if (context.mounted) context.go('/onboarding');
+                    if (context.mounted) context.push('/onboarding');
                   },
                 ),
               ],
@@ -274,15 +258,6 @@ class SettingsScreen extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-
-  void _showSessionSetup(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      builder: (_) => _SteamSessionSheet(ref: ref),
     );
   }
 
@@ -417,7 +392,7 @@ class _PushPrefsSection extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Text(
-              'Push Notifications',
+              'Notifications',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -425,6 +400,14 @@ class _PushPrefsSection extends ConsumerWidget {
               ),
             ),
           ),
+          // Price Alerts nav row
+          ListTile(
+            leading: const Icon(Icons.notifications, color: AppTheme.textSecondary),
+            title: const Text('Price Alerts', style: TextStyle(fontSize: 14)),
+            trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
+            onTap: () => context.push('/alerts'),
+          ),
+          const Divider(height: 1),
           for (var i = 0; i < _items.length; i++) ...[
             if (i > 0) const Divider(height: 1),
             SwitchListTile.adaptive(
@@ -448,191 +431,3 @@ class _PushPrefsSection extends ConsumerWidget {
   }
 }
 
-class _SteamSessionSheet extends StatefulWidget {
-  final WidgetRef ref;
-
-  const _SteamSessionSheet({required this.ref});
-
-  @override
-  State<_SteamSessionSheet> createState() => _SteamSessionSheetState();
-}
-
-class _SteamSessionSheetState extends State<_SteamSessionSheet> {
-  final _controller = TextEditingController();
-  bool _loading = false;
-  String? _error;
-  String? _success;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-
-    setState(() {
-      _loading = true;
-      _error = null;
-      _success = null;
-    });
-
-    try {
-      final msg = await widget.ref
-          .read(steamSessionStatusProvider.notifier)
-          .submitClientToken(text);
-      setState(() {
-        _success = msg;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null) {
-      _controller.text = data!.text!;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.connectSteamSession,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            l10n.sessionBrowserHint,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () => launchUrl(
-              Uri.parse('https://steamcommunity.com/chat/clientjstoken'),
-              mode: LaunchMode.externalApplication,
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: AppTheme.glass(radius: AppTheme.r8),
-              child: Row(
-                children: [
-                  const Icon(Icons.open_in_new, size: 14, color: AppTheme.accent),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'steamcommunity.com/chat/clientjstoken',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.accent,
-                        fontFamily: 'monospace',
-                        decoration: TextDecoration.underline,
-                        decorationColor: AppTheme.accent,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 18),
-                    onPressed: () {
-                      Clipboard.setData(const ClipboardData(
-                        text: 'https://steamcommunity.com/chat/clientjstoken',
-                      ));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.urlCopied),
-                          duration: const Duration(seconds: 1),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            l10n.sessionPasteHint,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _controller,
-            maxLines: 4,
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-            decoration: InputDecoration(
-              hintText: '{"logged_in":true,"steamid":"...","token":"..."}',
-              hintStyle: const TextStyle(color: AppTheme.textDisabled, fontSize: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.paste, size: 20),
-                onPressed: _paste,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: AppTheme.loss, fontSize: 13),
-              ),
-            ),
-          if (_success != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                _success!,
-                style: const TextStyle(color: AppTheme.profit, fontSize: 13),
-              ),
-            ),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _loading ? null : _submit,
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(l10n.connect),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-}

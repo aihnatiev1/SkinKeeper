@@ -146,13 +146,13 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
               child: Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new_rounded,
                         size: 20, color: AppTheme.textSecondary),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => context.pop(),
                   ),
                   Expanded(
                     child: Text(
@@ -653,7 +653,7 @@ class _AddPurchaseSheetState extends State<_AddPurchaseSheet> {
       widget.ref.invalidate(portfolioPLProvider);
 
       HapticFeedback.mediumImpact();
-      if (mounted) Navigator.pop(context);
+      if (mounted) context.pop();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

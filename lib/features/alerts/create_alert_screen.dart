@@ -149,13 +149,13 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+              padding: const EdgeInsets.fromLTRB(8, 16, 16, 0),
               child: Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new_rounded,
                         size: 20, color: AppTheme.textSecondary),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => context.pop(),
                   ),
                   const Expanded(
                     child: Text(
@@ -371,7 +371,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: AlertSource.values.map((s) {
+                        children: [AlertSource.any, AlertSource.steam, AlertSource.skinport, AlertSource.csfloat, AlertSource.dmarket].map((s) {
                           final selected = _source == s;
                           final (label, color) = switch (s) {
                             AlertSource.steam =>
@@ -535,12 +535,13 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                     duration: 200.ms,
                     height: 54,
                     decoration: BoxDecoration(
-                      gradient: hasItem && _thresholdController.text.isNotEmpty
-                          ? AppTheme.primaryGradient
-                          : null,
+                      gradient: AppTheme.primaryGradient,
+                      borderRadius: BorderRadius.circular(AppTheme.r16),
+                    ),
+                    foregroundDecoration: BoxDecoration(
                       color: hasItem && _thresholdController.text.isNotEmpty
-                          ? null
-                          : AppTheme.surface,
+                          ? Colors.transparent
+                          : Colors.black.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(AppTheme.r16),
                     ),
                     child: Center(

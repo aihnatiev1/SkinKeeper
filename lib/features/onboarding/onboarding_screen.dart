@@ -90,7 +90,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     HapticFeedback.mediumImpact();
     await markOnboardingComplete();
     ref.invalidate(onboardingCompleteProvider);
-    if (mounted) context.go('/portfolio');
+    if (mounted) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/portfolio');
+      }
+    }
   }
 
   @override
@@ -106,11 +112,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               // Skip button
               Align(
                 alignment: Alignment.topRight,
-                child: TextButton(
-                  onPressed: _finish,
-                  child: Text(
-                    'Skip',
-                    style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
+                child: GestureDetector(
+                  onTap: _finish,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 20, 8),
+                    child: Text(
+                      'Skip',
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textDisabled,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -137,7 +148,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     width: i == _page ? 28 : 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      gradient: i == _page ? AppTheme.accentGradient : null,
+                      gradient: i == _page ? AppTheme.primaryGradient : null,
                       color: i != _page
                           ? AppTheme.textDisabled.withValues(alpha: 0.3)
                           : null,
@@ -154,7 +165,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: AppTheme.s32),
                 child: GradientButton(
                   label: _page == _pages.length - 1 ? 'Get Started' : 'Next',
-                  gradient: AppTheme.accentGradient,
+                  gradient: AppTheme.primaryGradient,
                   onPressed: _next,
                 ),
               ),
@@ -192,27 +203,45 @@ class _OnboardingPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.s40),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          const Spacer(flex: 3),
           // Animated icon with glow
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: data.iconColor.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: data.iconColor.withValues(alpha: 0.15),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: data.iconColor.withValues(alpha: 0.15),
-                  blurRadius: 40,
-                  spreadRadius: -8,
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // Outer glow ring
+              Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: data.iconColor.withValues(alpha: 0.08),
+                    width: 1,
+                  ),
                 ),
-              ],
-            ),
-            child: Icon(data.icon, size: 44, color: data.iconColor),
+              ),
+              Container(
+                width: 116,
+                height: 116,
+                decoration: BoxDecoration(
+                  color: data.iconColor.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: data.iconColor.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: data.iconColor.withValues(alpha: 0.25),
+                      blurRadius: 60,
+                      spreadRadius: -4,
+                    ),
+                  ],
+                ),
+                child: Icon(data.icon, size: 52, color: data.iconColor),
+              ),
+            ],
           )
               .animate()
               .fadeIn(duration: 500.ms)
@@ -242,6 +271,7 @@ class _OnboardingPage extends StatelessWidget {
           )
               .animate()
               .fadeIn(duration: 400.ms, delay: 300.ms),
+          const Spacer(flex: 4),
         ],
       ),
     );

@@ -45,7 +45,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
               children: [
                 // ── Custom header ──
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 8, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(4, 16, 16, 0),
                   child: Row(
                     children: [
                       IconButton(
@@ -110,11 +110,11 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 14),
                     decoration: BoxDecoration(
-                      gradient: AppTheme.accentGradient,
+                      gradient: AppTheme.primaryGradient,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.accent.withValues(alpha: 0.45),
+                          color: AppTheme.primary.withValues(alpha: 0.45),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -156,42 +156,21 @@ class _ActiveAlertsTab extends ConsumerWidget {
 
     return alertsAsync.when(
       loading: () => const Center(
-        child: CircularProgressIndicator(strokeWidth: 2),
+        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
       ),
       error: (e, _) => Center(
         child: Text('Failed to load', style: const TextStyle(color: AppTheme.textSecondary)),
       ),
       data: (alerts) {
         if (alerts.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.notifications_none,
-                    size: 64, color: AppTheme.textDisabled),
-                const SizedBox(height: 16),
-                const Text(
-                  'No alerts yet',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Create your first price alert',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 400.ms);
+          return const EmptyState(
+            icon: Icons.notifications_none,
+            title: 'No alerts yet',
+            subtitle: 'Create your first price alert',
+          );
         }
 
-        return RefreshIndicator(
+        return AppRefreshIndicator(
           onRefresh: () async => ref.invalidate(alertsProvider),
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -358,42 +337,21 @@ class _HistoryTab extends ConsumerWidget {
 
     return historyAsync.when(
       loading: () => const Center(
-        child: CircularProgressIndicator(strokeWidth: 2),
+        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
       ),
       error: (e, _) => Center(
         child: Text('Failed to load', style: const TextStyle(color: AppTheme.textSecondary)),
       ),
       data: (history) {
         if (history.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.history,
-                    size: 64, color: AppTheme.textDisabled),
-                const SizedBox(height: 16),
-                const Text(
-                  'No triggered alerts yet',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Alerts will appear here when triggered',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 400.ms);
+          return const EmptyState(
+            icon: Icons.history,
+            title: 'No triggered alerts yet',
+            subtitle: 'Alerts will appear here when triggered',
+          );
         }
 
-        return RefreshIndicator(
+        return AppRefreshIndicator(
           onRefresh: () async => ref.invalidate(alertHistoryProvider),
           child: ListView.builder(
             padding: const EdgeInsets.all(16),

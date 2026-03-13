@@ -65,7 +65,7 @@ class InventoryAppBar extends ConsumerWidget {
                       const SizedBox(height: 4),
                       allItems.whenData((items) {
                         final totalValue = items.fold<double>(
-                            0, (sum, item) => sum + (item.bestPrice ?? 0));
+                            0, (sum, item) => sum + (item.steamPrice ?? 0));
                         return Text(
                           '${items.length} items \u2022 ${currency.format(totalValue)}',
                           style: const TextStyle(

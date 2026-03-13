@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
+import '../../core/steam_image.dart';
 
 // ---------------------------------------------------------------------------
 // Fee calculation (pure Dart, mirrors backend logic)
@@ -331,7 +332,7 @@ class DuplicateGroup {
   });
 
   String get fullIconUrl =>
-      'https://community.steamstatic.com/economy/image/$iconUrl';
+      SteamImage.url(iconUrl);
 
   factory DuplicateGroup.fromJson(Map<String, dynamic> json) {
     return DuplicateGroup(

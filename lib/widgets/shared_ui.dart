@@ -372,11 +372,11 @@ class PillTabSelector extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOutCubic,
                 decoration: BoxDecoration(
-                  gradient: isSelected ? AppTheme.accentGradient : null,
+                  gradient: isSelected ? AppTheme.primaryGradient : null,
                   borderRadius: BorderRadius.circular(11),
                   boxShadow: isSelected ? [
                     BoxShadow(
-                      color: AppTheme.accent.withValues(alpha: 0.35),
+                      color: AppTheme.primary.withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 3),
                     ),

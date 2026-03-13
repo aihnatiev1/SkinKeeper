@@ -434,7 +434,7 @@ class AppTheme {
         borderRadius: BorderRadius.vertical(top: Radius.circular(r24)),
       ),
       dragHandleColor: textDisabled,
-      showDragHandle: true,
+      showDragHandle: false,
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: bgSecondary,
@@ -583,7 +583,7 @@ class AppTheme {
         borderRadius: BorderRadius.vertical(top: Radius.circular(r24)),
       ),
       dragHandleColor: lightTextMuted,
-      showDragHandle: true,
+      showDragHandle: false,
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: lightTextPrimary,

@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
@@ -275,13 +276,13 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
               child: Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new_rounded,
                         size: 20, color: AppTheme.textSecondary),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => context.pop(),
                   ),
                   const Expanded(
                     child: Text(
@@ -429,28 +430,31 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
               children: [
                 // Selection indicator
                 SizedBox(
-                  width: 44,
-                  child: s.selected
-                      ? Container(
-                          margin: const EdgeInsets.only(left: 8),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.warning.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${s.count}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.warning,
+                  width: 36,
+                  child: Center(
+                    child: s.selected
+                        ? Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.check_rounded,
+                                size: 14, color: Colors.white),
+                          )
+                        : Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                width: 1.5,
+                              ),
                             ),
                           ),
-                        )
-                      : const Icon(Icons.add_circle_outline_rounded,
-                          size: 22, color: AppTheme.textDisabled),
+                  ),
                 ),
 
                 // Image
@@ -517,28 +521,36 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                   ),
                 ),
 
-                // Count badge
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: s.selected
-                        ? AppTheme.warning.withValues(alpha: 0.08)
-                        : AppTheme.surface,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'x${group.count}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                // Count badge — only show when more than 1
+                if (group.count > 1) ...[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
                       color: s.selected
-                          ? AppTheme.warning
-                          : AppTheme.textSecondary,
+                          ? AppTheme.warning.withValues(alpha: 0.1)
+                          : Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: s.selected
+                            ? AppTheme.warning.withValues(alpha: 0.3)
+                            : Colors.white.withValues(alpha: 0.08),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      'x${group.count}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: s.selected
+                            ? AppTheme.warning
+                            : AppTheme.textMuted,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
+                ],
 
                 // Price
                 Text(
@@ -546,21 +558,16 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                   style: AppTheme.mono.copyWith(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.accent,
+                    color: AppTheme.primary,
                   ),
                 ),
 
-                // Chevron
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right_rounded,
-                    size: 20, color: AppTheme.textDisabled),
                 const SizedBox(width: 4),
               ],
             ),
           ),
         ),
 
-        Divider(height: 1, color: AppTheme.divider),
       ],
     );
   }
@@ -711,7 +718,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                         '~\$${_totalValue.toStringAsFixed(2)}',
                         style: AppTheme.mono.copyWith(
                           fontSize: 13,
-                          color: AppTheme.accent,
+                          color: AppTheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -920,7 +927,7 @@ class _BulkSellQuantitySheetState extends State<_BulkSellQuantitySheet> {
                             .toList();
                         widget.onConfirm(ids);
                       }
-                      Navigator.of(context).pop();
+                      context.pop();
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(

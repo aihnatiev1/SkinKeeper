@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../widgets/shared_ui.dart';
 import 'steam_auth_service.dart';
+import 'widgets/clienttoken_auth_tab.dart';
 
 // ─── Login QR state ──────────────────────────────────────────────────────
 
@@ -96,19 +98,31 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  int _selectedTab = 0;
+  int _selectedTab = 0; // 0 = Login, 1 = Webtoken, 2 = QR
   late final PageController _pageCtrl;
   Timer? _pollTimer;
+  bool _qrStarted = false;
 
   @override
   void initState() {
     super.initState();
     _pageCtrl = PageController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // QR starts only when user switches to that tab
+  }
+
+  void _onTabChanged(int i) {
+    setState(() => _selectedTab = i);
+    _pageCtrl.animateToPage(
+      i,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+    if (i == 2 && !_qrStarted) {
+      _qrStarted = true;
       ref.read(_loginQrProvider.notifier).startQR().then((_) {
-        _startPolling();
+        if (mounted) _startPolling();
       });
-    });
+    }
   }
 
   void _startPolling() {
@@ -148,6 +162,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     });
 
+    final canPop = context.canPop();
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -160,7 +176,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 32),
+              if (canPop)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                        size: 20, color: AppTheme.textSecondary),
+                    onPressed: () => context.pop(),
+                  ),
+                ),
+              SizedBox(height: canPop ? 8 : 32),
               _buildHeader(),
               const SizedBox(height: 24),
 
@@ -168,56 +193,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: PillTabSelector(
-                  tabs: const ['QR Login', 'Steam Browser'],
+                  tabs: const ['Login', 'Webtoken', 'QR'],
                   selected: _selectedTab,
-                  onChanged: (i) {
-                    setState(() => _selectedTab = i);
-                    _pageCtrl.animateToPage(i, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
-                  },
+                  onChanged: _onTabChanged,
                 ),
               ).animate().fadeIn(duration: 400.ms, delay: 400.ms),
 
               Expanded(
                 child: PageView(
                   controller: _pageCtrl,
-                  onPageChanged: (i) => setState(() => _selectedTab = i),
+                  onPageChanged: _onTabChanged,
                   children: [
-                    _buildQrTab(),
                     _buildBrowserTab(isLoading),
+                    const ClientTokenAuthTab(),
+                    _buildQrTab(),
                   ],
                 ),
               ),
 
-              // Dev login
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 0, 32, 16),
-                child: GestureDetector(
-                  onTap: isLoading
-                      ? null
-                      : () {
-                          HapticFeedback.lightImpact();
-                          ref.read(authStateProvider.notifier).devLogin();
-                        },
-                  child: Container(
-                    width: double.infinity,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppTheme.r16),
-                      border: Border.all(color: AppTheme.border),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Dev Login (Quake 3)',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ).animate().fadeIn(duration: 400.ms, delay: 600.ms),
             ],
           ),
         ),

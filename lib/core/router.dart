@@ -11,7 +11,6 @@ import '../features/inventory/inventory_screen.dart';
 import '../features/portfolio/portfolio_screen.dart';
 import '../features/transactions/transactions_screen.dart';
 import '../features/settings/settings_screen.dart';
-import '../features/auth/steam_session_screen.dart';
 import '../features/inventory/item_detail_screen.dart';
 import '../features/inventory/bulk_sell_screen.dart';
 import '../features/trades/trades_screen.dart';
@@ -157,17 +156,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/session',
-            builder: (_, state) {
-              final accountId = int.tryParse(
-                state.uri.queryParameters['accountId'] ?? '',
-              );
-              final linkMode =
-                  state.uri.queryParameters['linkMode'] == 'true';
-              return SteamSessionScreen(
-                accountId: accountId,
-                linkMode: linkMode,
-              );
-            },
+            builder: (_, _) => const LoginScreen(),
           ),
           GoRoute(
             path: '/premium',
