@@ -84,25 +84,27 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ACCT-01 | Phase 11 | Pending |
-| ACCT-02 | Phase 11 | Pending |
-| ACCT-03 | Phase 11 | Pending |
-| ACCT-04 | Phase 11 | Pending |
-| ACCT-05 | Phase 11 | Pending |
-| ACCT-06 | Phase 11 | Pending |
-| CACHE-01 | Phase 12 | Pending |
-| CACHE-02 | Phase 12 | Pending |
-| CACHE-03 | Phase 12 | Pending |
-| CACHE-04 | Phase 12 | Pending |
-| CACHE-05 | Phase 12 | Pending |
-| WIDGET-01 | Phase 13 | Pending |
-| WIDGET-02 | Phase 13 | Pending |
-| WIDGET-03 | Phase 13 | Pending |
-| WIDGET-04 | Phase 13 | Pending |
-| WIDGET-05 | Phase 13 | Pending |
+| ACCT-01 | Phase 16 (gap closure) | Pending |
+| ACCT-02 | Phase 11 | Satisfied |
+| ACCT-03 | Phase 16 (gap closure) | Pending |
+| ACCT-04 | Phase 16 (gap closure) | Pending |
+| ACCT-05 | Phase 16 (gap closure) | Pending |
+| ACCT-06 | Phase 11 | Satisfied |
+| CACHE-01 | Phase 17 (gap closure) | Pending |
+| CACHE-02 | Phase 17 (gap closure) | Pending |
+| CACHE-03 | Phase 17 (gap closure) | Pending |
+| CACHE-04 | Phase 12 | Satisfied |
+| CACHE-05 | Phase 17 (gap closure) | Pending |
+| WIDGET-01 | Phase 13 | Satisfied |
+| WIDGET-02 | Phase 13 | Satisfied |
+| WIDGET-03 | Phase 13 | Satisfied |
+| WIDGET-04 | Phase 13 | Satisfied |
+| WIDGET-05 | Phase 13 | Satisfied |
 
 **Coverage:**
 - M3 requirements: 17 total
+- Satisfied: 8 (ACCT-02, ACCT-06, CACHE-04, WIDGET-01..05)
+- Pending gap closure: 9 (ACCT-01, ACCT-03..05, CACHE-01..03, CACHE-05)
 - Mapped to phases: 17
 - Unmapped: 0
 

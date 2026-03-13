@@ -15,7 +15,9 @@ Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3
 
 ### Milestone 3: Post-Launch Features — ACTIVE
 
-### Milestone 4: Quality & Stability — PLANNED
+### Milestone 4: Quality & Stability — COMPLETE (phases 14-15)
+
+### Gap Closure (v1.0 audit) — ACTIVE
 
 ## Phases
 
@@ -103,6 +105,46 @@ Plans:
 - [ ] 13-01-PLAN.md — Native: iOS WidgetKit extension (Swift) + Android AppWidgetProvider (Kotlin), App Groups data sharing, home_widget Flutter bridge
 - [ ] 13-02-PLAN.md — Flutter: widget data provider, background refresh scheduling, premium P/L in widget, deep link handling
 
+## Phase Details (Gap Closure)
+
+### Phase 16: Multi-Account Gap Closure
+**Goal**: Complete multi-account feature — re-enable premium gate, implement multi-account inventory merge with per-account badges, wire per-item account context for sell flow
+**Depends on**: Phase 15 (tests in place to catch regressions)
+**Requirements**: ACCT-01, ACCT-03, ACCT-04, ACCT-05
+**Gap Closure**: Closes gaps from v1.0 milestone audit
+**Success Criteria**:
+  1. Free tier enforces 1-account limit — `/auth/accounts/link` returns 403 for free users with >1 account; Flutter shows paywall
+  2. Inventory shows items from ALL linked accounts simultaneously with account badge (avatar/initials) on each item card
+  3. Account badge tap switches active account and reloads inventory
+  4. Sell flow works from any account (active account session used; account-switch CTA when item belongs to non-active account)
+  5. Link callback correctly associates new Steam account with existing user (state param verified)
+**Plans**: 0 plans
+
+### Phase 17: Offline Cache Gap Closure
+**Goal**: Complete offline cache — wire price caching, add cache-first providers, offline display with last-updated indicator, background price sync, LRU eviction
+**Depends on**: Phase 16
+**Requirements**: CACHE-01, CACHE-02, CACHE-03, CACHE-05
+**Gap Closure**: Closes gaps from v1.0 milestone audit
+**Success Criteria**:
+  1. `putPrices` called after every price fetch; `getPrices` used as cache-first fallback — item cards show cached prices offline
+  2. All providers (inventory, portfolio, prices) show cached data when offline with SyncIndicator showing "last updated X ago"
+  3. Background price sync registered — WorkManager (Android) / BGTask (iOS) fetches fresh prices every 30min when network available
+  4. `CacheService.evictIfNeeded(maxBytes: 50MB)` called on app resume via `didChangeAppLifecycleState`
+  5. App opens instantly with cached data — no loading spinner on repeat launches when cache is fresh
+**Plans**: 0 plans
+
+### Phase 18: Backend Error Propagation
+**Goal**: Wire typed error hierarchy to production services — session expiry returns 401 not 500; Steam errors typed and propagated correctly
+**Depends on**: Phase 17
+**Requirements**: REFAC-03-gap, REFAC-05-gap
+**Gap Closure**: Closes integration gaps from v1.0 milestone audit
+**Success Criteria**:
+  1. `steamSession.ts` throws `SessionExpiredError` / `SteamRequestError` (AppError subclasses) — errorHandler maps to 401/429
+  2. `tradeOffers.ts` throws typed errors — session expiry during trade returns 401 not 500
+  3. `steamSession.ts` uses `steamRequest()` from SteamClient — retry/backoff active on all Steam HTTP calls
+  4. Flutter SESSION_EXPIRED handling tested end-to-end with typed error response
+**Plans**: 0 plans
+
 ## Phase Details (M4)
 
 ### Phase 14: Grand Refactoring
@@ -166,3 +208,6 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 13. Home Screen Widget | 1/2 | In Progress | — |
 | 14. Grand Refactoring | 2/2 | Complete | 2026-03-12 |
 | 15. Testing | 4/4 | Complete    | 2026-03-13 |
+| 16. Multi-Account Gap Closure | 0/0 | Pending | — |
+| 17. Offline Cache Gap Closure | 0/0 | Pending | — |
+| 18. Backend Error Propagation | 0/0 | Pending | — |
