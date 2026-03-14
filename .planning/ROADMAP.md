@@ -2,7 +2,7 @@
 
 ## Overview
 
-Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3 adds post-launch power features: multi-account support, offline price cache, and home screen widgets. Milestone 4 focuses on quality: full-stack refactoring and comprehensive test coverage.
+Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3 adds post-launch power features: multi-account support, offline price cache, and home screen widgets. Milestone 4 focuses on quality: full-stack refactoring and comprehensive test coverage. Milestone 5 delivers a full web platform with Next.js — full feature parity with the mobile app, responsive design, Stripe payments, and animations.
 
 ## Milestones
 
@@ -18,6 +18,19 @@ Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3
 ### Milestone 4: Quality & Stability — COMPLETE (phases 14-15)
 
 ### Gap Closure (v1.0 audit) — ACTIVE
+- [x] Phase 16: Multi-Account Gap Closure
+- [ ] Phase 17: Offline Cache Gap Closure
+- [x] Phase 18: Backend Error Propagation
+- [x] Phase 19: Named Portfolios
+- [x] Phase 20: Premium Gate Activation (completed 2026-03-14)
+
+### Milestone 5: Web Platform — PLANNED
+- [ ] Phase 21: Web Foundation — Next.js scaffold, design system, auth, layout shell
+- [ ] Phase 22: Dashboard & Inventory — Portfolio dashboard, inventory grid, item detail, price comparison
+- [ ] Phase 23: Trading & Transactions — Trade management, transaction history, bulk sell, manual transactions
+- [ ] Phase 24: Alerts & Settings — Price alerts CRUD, settings, linked accounts, CSV export, Web Push
+- [ ] Phase 25: Stripe Payments — Checkout, webhooks, billing page, cross-platform premium
+- [ ] Phase 26: Polish & Launch — Animations, responsive QA, performance, error pages
 
 ## Phases
 
@@ -168,7 +181,25 @@ Plans:
 
 Plans:
 - [x] 19-01-PLAN.md — Backend: migration (portfolios table + transactions.portfolio_id FK), CRUD routes, P/L filter by portfolioId
-- [ ] 19-02-PLAN.md — Flutter: Portfolio model, portfoliosProvider, selectedPortfolioIdProvider, selector bar, create/edit/delete sheets, AddTransactionSheet picker, item row long-press
+- [x] 19-02-PLAN.md — Flutter: Portfolio model, portfoliosProvider, selectedPortfolioIdProvider, selector bar, create/edit/delete sheets, AddTransactionSheet picker, item row long-press
+
+### Phase 20: Premium Gate Activation
+**Goal**: Enable the freemium model before public release — wire premiumProvider to real subscription status and activate all feature gates
+**Depends on**: Phase 19 (all features built, gates can now be switched on)
+**Requirements**: PREMIUM-01 (real subscription check), PREMIUM-02 (multi-account limit), PREMIUM-03 (P/L gate), PREMIUM-04 (multi-source prices gate), PREMIUM-05 (bulk sell gate), PREMIUM-06 (alerts limit), PREMIUM-07 (CSV export gate), PREMIUM-08 (paywall CTAs)
+**Success Criteria**:
+  1. `premiumProvider` returns real subscription status from `/auth/me` — no longer returns `true` unconditionally
+  2. Free users limited to 1 linked account (Phase 16 backend gate already exists — Flutter CTA confirmed)
+  3. P/L tracking tab shows paywall gate for free users (PremiumGate widget active)
+  4. Multi-source prices (Buff, CSFloat, Skinport, DMarket) gated — free users see Steam price only
+  5. Bulk sell gated — free users see paywall CTA when trying to bulk sell
+  6. Free users limited to 5 price alerts — creating a 6th shows paywall
+  7. CSV export gated — free users see paywall CTA in settings
+  8. Paywall CTAs are consistent: same PaywallScreen with feature-specific highlight text
+**Plans**: 1 plan
+
+Plans:
+- [ ] 20-01-PLAN.md — Flutter + backend: wire premiumProvider to authStateProvider, implement PremiumGate lock overlay, backend tier-based alert limit (5 free/20 premium), re-enable requirePremium on /pl/export/alerts-history, gate bulk-sell/CSV/multi-source prices in Flutter
 
 ## Phase Details (M4)
 
@@ -211,6 +242,128 @@ Plans:
 - [x] 15-03-PLAN.md — Gap closure: fix SteamClient unhandled rejection (exit code 1), Steam HTML scraper fixtures + scrapers.test.ts
 - [x] 15-04-PLAN.md — Gap closure: auth/trades/market/session route integration tests, coverage threshold update to actual measured value
 
+## Phase Details (M5 — Web Platform)
+
+**Stack**: Next.js 15 (App Router) + Tailwind CSS 4 + Framer Motion + TanStack Query + Zustand + Recharts + Stripe
+**Directory**: `web-app/` (separate from Flutter's `web/`)
+**Deploy**: Vercel
+**Auth**: Steam OpenID redirect → JWT in httpOnly cookie
+**Payments**: Stripe (cross-platform with IAP — same `is_premium` flag)
+
+### Phase 21: Web Foundation
+**Goal**: Working Next.js shell with Steam auth, design system, and responsive layout
+**Depends on**: Phase 20 (premium gates active, backend stable)
+**Success Criteria**:
+  1. `web-app/` scaffold: Next.js 15, TypeScript, Tailwind, Framer Motion, TanStack Query, Zustand
+  2. Tailwind config ports all design tokens from Flutter `theme.dart` — colors, spacing, radius, typography
+  3. Base components: `GlassCard`, `Button` (primary/secondary/ghost), `Badge`, `Skeleton`, `Modal`, `Sheet`
+  4. Layout shell: sidebar nav (desktop) → bottom nav (mobile), responsive breakpoints (640/1024px)
+  5. API client: fetch wrapper with JWT from httpOnly cookie, interceptors for TOKEN_EXPIRED/SESSION_EXPIRED
+  6. Steam OpenID login: redirect to Steam → callback → backend verifies → Set-Cookie JWT → redirect to `/portfolio`
+  7. QR code login as alternative: poll-based flow with animated QR display
+  8. Protected route middleware: check JWT cookie, redirect to `/login` if missing/expired
+  9. Dark theme by default, glassmorphic card style with `backdrop-blur`
+**Plans**: 3 plans
+
+Plans:
+- [ ] 21-01-PLAN.md — Scaffold: Next.js init, Tailwind config (design tokens), base component library (GlassCard, Button, Badge, Skeleton, Modal)
+- [ ] 21-02-PLAN.md — Layout: sidebar/bottom nav shell, responsive breakpoints, page transitions (Framer Motion AnimatePresence)
+- [ ] 21-03-PLAN.md — Auth: API client with cookie JWT, Steam OpenID flow, QR login, protected route middleware, login/callback pages
+
+### Phase 22: Dashboard & Inventory
+**Goal**: Portfolio dashboard and inventory grid with full feature parity
+**Depends on**: Phase 21 (auth and layout working)
+**Success Criteria**:
+  1. Portfolio page: total value card with 24h change %, animated counter, P/L summary (realized + unrealized)
+  2. P/L stat cards: Invested, Current Value, Total Profit, ROI %, Item Count — with Framer Motion enter
+  3. Value chart: Recharts LineChart — 7d/30d/90d toggle, tooltip on hover, responsive
+  4. P/L items table: sortable by item, profit, %, quantity — with portfolio filter chips
+  5. Inventory grid: CSS Grid 2→5 columns, item cards with rarity glow, wear pill, float bar, sticker thumbs
+  6. Item grouping: identical items stacked (x797), click opens quantity selector
+  7. Search + filters: search bar, wear dropdown, sort (price/float/name), tradable toggle, hide-no-price
+  8. Item detail page: `/inventory/[assetId]` — hero image, float/stickers/charms, multi-source price table, inspect link
+  9. Named portfolios: selector bar, create/edit/delete, filter P/L by portfolio
+  10. Staggered fade-in animation on grid, hover scale on cards, layout animation on filter change
+**Plans**: 3 plans
+
+Plans:
+- [ ] 22-01-PLAN.md — Portfolio dashboard: value card, P/L summary, stat cards, chart (Recharts), period toggle
+- [ ] 22-02-PLAN.md — Inventory: grid layout, item card component, grouping, quantity selector, search/filter bar, sort
+- [ ] 22-03-PLAN.md — Item detail page, multi-source price comparison table, named portfolio selector + CRUD
+
+### Phase 23: Trading & Transactions
+**Goal**: Trade management and transaction history with full CRUD
+**Depends on**: Phase 22
+**Success Criteria**:
+  1. Trades page: tabs (Incoming/Outgoing), trade cards with partner info, items, status badge, value diff
+  2. Trade detail: expand to see full item lists (give/receive), inspect links, partner profile
+  3. Accept/Decline/Cancel: API calls with optimistic UI update + confirmation dialog
+  4. Create trade: multi-step flow — search partner → select items give/receive → set message → send
+  5. Transactions page: table with date, item, type (buy/sell), price, source — sortable, filterable
+  6. Manual transaction: modal form (item name, type, price, date, quantity, optional portfolio, note)
+  7. Bulk sell: selection mode → price summary → confirm → progress tracker with per-item status
+  8. Multi-account context: account switcher in sidebar, all data scoped to active account
+**Plans**: 3 plans
+
+Plans:
+- [ ] 23-01-PLAN.md — Trades: list page (tabs, trade cards, status badges), detail view, accept/decline/cancel actions
+- [ ] 23-02-PLAN.md — Create trade flow, transactions page (table, filters, sort), manual transaction modal
+- [ ] 23-03-PLAN.md — Bulk sell flow (selection → pricing → confirm → progress), multi-account switcher in sidebar
+
+### Phase 24: Alerts & Settings
+**Goal**: Price alerts, settings, and notifications
+**Depends on**: Phase 23
+**Success Criteria**:
+  1. Alerts page: list of price alerts with condition, threshold, source, status toggle, last triggered
+  2. Create alert: form with item search (autocomplete), condition (above/below/change%), threshold, source picker, cooldown
+  3. Alert history: timeline of triggered alerts
+  4. Settings page: profile info, theme, notification preferences (per alert type, per trade type)
+  5. Linked accounts: list accounts, switch active, link new (Steam redirect), unlink with confirmation
+  6. CSV export: download button with date range picker and type filter
+  7. Web Push notifications: Service Worker registration, permission prompt, push events for alerts/trades
+**Plans**: 2 plans
+
+Plans:
+- [ ] 24-01-PLAN.md — Alerts: list page, create form (autocomplete, condition, source), alert history, toggle/delete
+- [ ] 24-02-PLAN.md — Settings page, linked accounts manager, CSV export, Web Push (Service Worker + permission flow)
+
+### Phase 25: Stripe Payments
+**Goal**: Web subscription via Stripe with cross-platform premium sync
+**Depends on**: Phase 24
+**Success Criteria**:
+  1. Stripe Products configured: monthly ($4.99), semi-annual ($19.99), yearly ($29.99)
+  2. Pricing page: plan cards with feature comparison, CTA buttons
+  3. Checkout: Stripe Checkout Session → redirect → success page with confetti
+  4. Backend webhook: `POST /api/stripe/webhook` handles `invoice.paid`, `customer.subscription.updated`, `customer.subscription.deleted`
+  5. Backend updates `users.is_premium` + `premium_until` on Stripe events, `purchase_receipts.store = 'stripe'`
+  6. Billing page: current plan, next billing date, cancel/change plan button
+  7. Stripe Customer Portal: self-service billing management link
+  8. Cross-platform: purchase on web (Stripe) → premium works in mobile app, and vice versa (IAP → works on web)
+  9. Premium gates: same features gated as mobile (P/L, multi-source, bulk sell, alerts >5, CSV, multi-account)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Backend: Stripe integration (products, checkout session, webhook handler, premium sync), purchase_receipts store='stripe'
+- [ ] 25-02-PLAN.md — Web: pricing page, checkout flow, success/cancel pages, billing management, premium gate components
+
+### Phase 26: Polish & Launch
+**Goal**: Production-ready web app with polished UX and performance
+**Depends on**: Phase 25
+**Success Criteria**:
+  1. Page transitions: Framer Motion AnimatePresence on all route changes
+  2. Micro-interactions: hover effects on all interactive elements, press feedback, toast notifications
+  3. Skeleton loaders: every data-dependent component has a loading skeleton
+  4. Mobile responsive QA: all pages tested at 375px, 640px, 1024px, 1440px
+  5. Performance: Lighthouse score ≥90, code splitting per route, next/image for Steam CDN images
+  6. Error pages: custom 404, 500, offline — consistent with design system
+  7. Analytics: page views, feature usage, conversion funnel (Vercel Analytics or PostHog)
+  8. Favicon, OG meta tags, manifest.json for PWA install prompt
+**Plans**: 2 plans
+
+Plans:
+- [ ] 26-01-PLAN.md — Animations (page transitions, micro-interactions, skeletons, toasts), responsive QA pass
+- [ ] 26-02-PLAN.md — Performance (Lighthouse, code splitting, image optimization), error pages, analytics, meta/OG/PWA
+
 ## Progress
 
 **Execution Order:**
@@ -236,4 +389,12 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 16. Multi-Account Gap Closure | 3/3 | Complete | 2026-03-13 |
 | 17. Offline Cache Gap Closure | 0/0 | Pending | — |
 | 18. Backend Error Propagation | 2/2 | Complete | 2026-03-13 |
-| 19. Named Portfolios | 1/2 | Active | — |
+| 19. Named Portfolios | 2/2 | Complete | 2026-03-14 |
+| 20. Premium Gate Activation | 0/1 | Pending | — |
+| **Milestone 5: Web Platform** | | | |
+| 21. Web Foundation | 0/3 | Pending | — |
+| 22. Dashboard & Inventory | 0/3 | Pending | — |
+| 23. Trading & Transactions | 0/3 | Pending | — |
+| 24. Alerts & Settings | 0/2 | Pending | — |
+| 25. Stripe Payments | 0/2 | Pending | — |
+| 26. Polish & Launch | 0/2 | Pending | — |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 19-02-PLAN.md (named portfolios Flutter: selector bar, CRUD sheets, provider, AddTx picker)"
-last_updated: "2026-03-13T20:04:00Z"
-last_activity: "2026-03-13 -- Phase 19 plan 02 executed (Flutter portfolio selector, CRUD sheets, filtering, AddTx picker)"
+stopped_at: "Completed 20-01-PLAN.md (premium gate activation)"
+last_updated: "2026-03-14T22:40:00Z"
+last_activity: "2026-03-14 -- Phase 20 complete: premium gates activated across Flutter + backend"
 progress:
-  total_phases: 6
-  completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_phases: 13
+  completed_phases: 5
+  total_plans: 30
+  completed_plans: 15
+  percent: 50
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 19 (named-portfolios) — COMPLETE (both 19-01 and 19-02 done)
-Plan: All plans complete
-Status: 19-02 Flutter executed — selector bar, CRUD sheets, provider, AddTx picker done
-Last activity: 2026-03-13 -- 19-02 executed (Flutter named portfolios UI: selector bar, CRUD sheets, filtering, AddTx picker)
+Phase: 21 (Web Foundation) — next up
+Next: Phase 22 (Dashboard & Inventory) after Phase 21
+Status: Phase 20 complete (premium gates activated — premiumProvider wired, PremiumGate widget, tier-based alert limits, requirePremium re-enabled on P/L/CSV routes)
+Last activity: 2026-03-14 -- Phase 20 complete: all premium gates active, 234 backend tests passing
 
 Progress: [██████████] 100%
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | 18 | 02 | 566s | 2 | 5 |
 | 19 | 01 | ~900s | 3 | 4 |
 | 19 | 02 | ~1200s | 4 | 6 |
+| 20 | 01 | ~480s | 9 | 11 |
 
 ## Accumulated Context
 
@@ -103,6 +104,10 @@ Progress: [██████████] 100%
 - [19-01]: getItemsPL with portfolioId bypasses item_cost_basis entirely — aggregates from transactions directly since item_cost_basis is global
 - [19-02]: color.toARGB32() used instead of deprecated color.value for Color→hex serialization in Flutter
 - [19-02]: _PortfolioSelectorBar placed in Items tab (tab 2) above ItemPLList — shows portfolio filter chips for item-level P/L view
+- [20-01]: premiumProvider derives isPremium from authStateProvider.valueOrNull?.isPremium — no separate API call needed
+- [20-01]: Bulk sell gate placed in InventoryScreen callbacks (not SellBottomSheet) — avoids showing sheet at all for free users
+- [20-01]: Route is /premium not /paywall — plan had /paywall but router only registers /premium
+- [20-01]: /pl, /pl/items, and /pl/history all get requirePremium re-enabled — all P/L routes are premium
 
 ### Pending Todos
 
@@ -114,6 +119,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-13
-Stopped at: "Completed 19-02-PLAN.md (named portfolios Flutter UI)"
+Last session: 2026-03-14
+Stopped at: "Completed 20-01-PLAN.md (premium gate activation)"
 Resume file: None
