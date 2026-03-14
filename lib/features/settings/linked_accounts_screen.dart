@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import '../../models/user.dart';
 import '../../widgets/shared_ui.dart';
@@ -183,6 +182,7 @@ class _AccountCard extends ConsumerWidget {
                     onPressed: () async {
                       HapticFeedback.mediumImpact();
                       await ref.read(accountsProvider.notifier).setActive(account.id);
+                      if (context.mounted) context.go('/portfolio');
                     },
                   ),
                 ),
@@ -253,31 +253,18 @@ class _LinkAccountButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // TODO: re-enable premium gate after testing
-    // final blocked = !isPremium && accountCount >= 1;
+    final blocked = !isPremium && accountCount >= 1;
 
     return GradientButton(
       label: 'Link New Account',
       icon: Icons.add,
       height: 48,
-      onPressed: () async {
-        try {
-          final result =
-              await ref.read(accountsProvider.notifier).startLinkAccount();
-          final url = result['url'] as String?;
-          if (url != null && context.mounted) {
-            await launchUrl(Uri.parse(url),
-                mode: LaunchMode.externalApplication);
-          }
-        } on PremiumRequiredException {
-          if (context.mounted) context.push('/premium');
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to start linking: $e')),
-            );
-          }
+      onPressed: () {
+        if (blocked) {
+          context.push('/premium');
+          return;
         }
+        context.push('/link-account');
       },
     );
   }

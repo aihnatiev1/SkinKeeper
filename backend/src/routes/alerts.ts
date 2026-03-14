@@ -10,16 +10,14 @@ import { createAlertSchema, toggleAlertSchema, registerDeviceSchema } from "../m
 
 const router = Router();
 
-// GET /api/alerts — list user's alerts (premium only)
-// TODO: re-enable requirePremium after testing
+// GET /api/alerts — list user's alerts (free tier allowed for managing existing alerts)
 router.get(
   "/",
   authMiddleware,
-  // requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT id, market_hash_name, condition, threshold, source,
+        `SELECT id, market_hash_name, condition, threshold::float, source,
                 is_active, cooldown_minutes, last_triggered_at, created_at
          FROM price_alerts
          WHERE user_id = $1
@@ -34,12 +32,10 @@ router.get(
   }
 );
 
-// POST /api/alerts — create alert (premium only)
-// TODO: re-enable requirePremium after testing
+// POST /api/alerts — create alert (tier-based limit: 5 free / 20 premium)
 router.post(
   "/",
   authMiddleware,
-  // requirePremium,
   validateBody(createAlertSchema),
   async (req: AuthRequest, res: Response) => {
     try {
@@ -49,12 +45,26 @@ router.post(
       const alertSource = source;
       const cooldown = cooldown_minutes;
 
-      // Limit: max 20 alerts per user
+      // Query premium status first, then apply tier-based limit
+      const { rows: userRows } = await pool.query(
+        `SELECT is_premium FROM users WHERE id = $1`,
+        [req.userId]
+      );
+      const isPremium = userRows[0]?.is_premium ?? false;
+      const maxAlerts = isPremium ? 20 : 5;
+
       const { rows: countRows } = await pool.query(
         `SELECT COUNT(*)::int AS cnt FROM price_alerts WHERE user_id = $1`,
         [req.userId]
       );
-      if (countRows[0].cnt >= 20) {
+      if (countRows[0].cnt >= maxAlerts) {
+        if (!isPremium) {
+          res.status(403).json({
+            error: "premium_required",
+            message: "Upgrade to PRO to create more than 5 price alerts",
+          });
+          return;
+        }
         res.status(400).json({ error: "Maximum 20 alerts reached" });
         return;
       }
@@ -74,12 +84,11 @@ router.post(
   }
 );
 
-// GET /api/alerts/history — triggered alert history (BEFORE /:id)
-// TODO: re-enable requirePremium after testing
+// GET /api/alerts/history — triggered alert history (BEFORE /:id) (PREMIUM)
 router.get(
   "/history",
   authMiddleware,
-  // requirePremium,
+  requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
@@ -145,12 +154,10 @@ router.delete(
   }
 );
 
-// PATCH /api/alerts/:id — toggle active/inactive
-// TODO: re-enable requirePremium after testing
+// PATCH /api/alerts/:id — toggle active/inactive (free tier allowed)
 router.patch(
   "/:id",
   authMiddleware,
-  // requirePremium,
   validateBody(toggleAlertSchema),
   async (req: AuthRequest, res: Response) => {
     try {
@@ -173,12 +180,10 @@ router.patch(
   }
 );
 
-// DELETE /api/alerts/:id
-// TODO: re-enable requirePremium after testing
+// DELETE /api/alerts/:id (free tier allowed)
 router.delete(
   "/:id",
   authMiddleware,
-  // requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const { rowCount } = await pool.query(

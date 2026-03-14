@@ -49,6 +49,7 @@ router.get(
              SELECT price_usd FROM price_history ph
              WHERE ph.market_hash_name = n.market_hash_name
                AND ph.source = 'steam'
+               AND ph.price_usd > 0
                AND ph.recorded_at < NOW() - INTERVAL '24 hours'
              ORDER BY ph.recorded_at DESC LIMIT 1
            ) lp ON true`,
@@ -62,6 +63,7 @@ router.get(
              SELECT price_usd FROM price_history ph
              WHERE ph.market_hash_name = n.market_hash_name
                AND ph.source = 'steam'
+               AND ph.price_usd > 0
                AND ph.recorded_at < NOW() - INTERVAL '7 days'
              ORDER BY ph.recorded_at DESC LIMIT 1
            ) lp ON true`,
@@ -122,10 +124,10 @@ router.get(
   }
 );
 
-// GET /api/portfolio/pl — Portfolio P/L summary (FREE)
+// GET /api/portfolio/pl — Portfolio P/L summary (PREMIUM)
 // Optional ?accountId=X to filter by specific steam account
 // Optional ?portfolioId=X to filter by named portfolio
-router.get("/pl", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get("/pl", authMiddleware, requirePremium, async (req: AuthRequest, res: Response) => {
   try {
     const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : undefined;
     const portfolioId = req.query.portfolioId ? parseInt(req.query.portfolioId as string) : undefined;
@@ -155,16 +157,18 @@ router.get(
 
 // GET /api/portfolio/pl/items — Per-item P/L (PREMIUM)
 // Optional ?portfolioId=X to filter by named portfolio
-// TODO: re-enable requirePremium after testing
 router.get(
   "/pl/items",
   authMiddleware,
-  // requirePremium,
+  requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const portfolioId = req.query.portfolioId ? parseInt(req.query.portfolioId as string) : undefined;
-      const items = await getItemsPL(req.userId!, portfolioId);
-      res.json({ items });
+      const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : undefined;
+      const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 500) : 100;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+      const result = await getItemsPL(req.userId!, portfolioId, accountId, limit, offset);
+      res.json({ items: result.items, total: result.total, offset, limit });
     } catch (err) {
       console.error("Item P/L error:", err);
       res.status(500).json({ error: "Failed to load item P/L" });
@@ -173,15 +177,15 @@ router.get(
 );
 
 // GET /api/portfolio/pl/history?days=30 — P/L history chart (PREMIUM)
-// TODO: re-enable requirePremium after testing
 router.get(
   "/pl/history",
   authMiddleware,
-  // requirePremium,
+  requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
-      const history = await getPLHistory(req.userId!, Math.min(days, 365));
+      const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : undefined;
+      const history = await getPLHistory(req.userId!, Math.min(days, 365), accountId);
       res.json({ history });
     } catch (err) {
       console.error("P/L history error:", err);

@@ -24,7 +24,7 @@ vi.mock("../../services/profitLoss.js", () => ({
     totalCurrentValueCents: 10500,
   }),
   getPortfolioPLByAccount: vi.fn().mockResolvedValue([]),
-  getItemsPL: vi.fn().mockResolvedValue([]),
+  getItemsPL: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   getPLHistory: vi.fn().mockResolvedValue([]),
   recalculateCostBasis: vi.fn().mockResolvedValue(undefined),
 }));
@@ -139,6 +139,9 @@ describe("Portfolio routes", () => {
           unrealizedProfitCents: 1000,
         },
       ]);
+
+      // requirePremium queries is_premium — mock a premium user
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] });
 
       const res = await request(app)
         .get("/api/portfolio/pl/history?days=7")

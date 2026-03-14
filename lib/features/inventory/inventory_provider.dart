@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../models/inventory_item.dart';
+import '../purchases/iap_service.dart';
 
 final inventoryProvider =
     AsyncNotifierProvider<InventoryNotifier, List<InventoryItem>>(
@@ -43,8 +45,43 @@ class ItemGroup {
   double get totalValue => (bestPrice ?? 0) * count;
 }
 
+/// Free users see only Steam prices. Premium users see all sources.
+final gatedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
+  final inventory = ref.watch(filteredInventoryProvider);
+  final isPremium = ref.watch(premiumProvider).valueOrNull ?? false;
+  if (isPremium) return inventory;
+  return inventory.whenData((items) => items
+      .map((item) {
+        final steamOnly = item.prices.containsKey('steam')
+            ? {'steam': item.prices['steam']!}
+            : <String, double>{};
+        return InventoryItem(
+          assetId: item.assetId,
+          marketHashName: item.marketHashName,
+          iconUrl: item.iconUrl,
+          wear: item.wear,
+          floatValue: item.floatValue,
+          tradable: item.tradable,
+          rarity: item.rarity,
+          rarityColor: item.rarityColor,
+          prices: steamOnly,
+          inspectLink: item.inspectLink,
+          paintSeed: item.paintSeed,
+          paintIndex: item.paintIndex,
+          stickers: item.stickers,
+          charms: item.charms,
+          tradeBanUntil: item.tradeBanUntil,
+          accountId: item.accountId,
+          accountSteamId: item.accountSteamId,
+          accountName: item.accountName,
+          accountAvatarUrl: item.accountAvatarUrl,
+        );
+      })
+      .toList());
+});
+
 final groupedInventoryProvider = Provider<AsyncValue<List<ItemGroup>>>((ref) {
-  final filtered = ref.watch(filteredInventoryProvider);
+  final filtered = ref.watch(gatedInventoryProvider);
   final grouping = ref.watch(groupingEnabledProvider);
 
   return filtered.whenData((items) {
@@ -126,13 +163,21 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
 });
 
 class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
+  // Incremented on every build() — guards against stale background refreshes
+  // writing old-account data to the shared CacheService after an account switch.
+  int _generation = 0;
+
   @override
   Future<List<InventoryItem>> build() async {
+    _generation++;
+    // Re-build when account scope changes
+    ref.watch(accountScopeProvider);
+
     // 1. Try cache first for instant display (skip if empty — means account was switched)
     final cached = CacheService.getInventory();
     if (cached != null && cached.isNotEmpty) {
       // Start background refresh (don't await)
-      _refreshInBackground();
+      _refreshInBackground(_generation);
       return cached.map((j) => InventoryItem.fromJson(j)).toList();
     }
 
@@ -145,19 +190,24 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     }
   }
 
-  Future<void> _refreshInBackground() async {
+  Future<void> _refreshInBackground(int gen) async {
     try {
       // Sync from Steam first, then fetch updated data from DB
       final api = ref.read(apiClientProvider);
       await api.post('/inventory/refresh', queryParameters: _accountQuery);
+      if (gen != _generation) return; // account switched while we were fetching
       final fresh = await _fetchFromApi();
+      if (gen != _generation) return; // double-check after second async gap
       state = AsyncData(fresh);
     } catch (_) {
       // Keep showing cached data on network error
     }
   }
 
-  Map<String, dynamic> get _accountQuery => {};
+  Map<String, dynamic> get _accountQuery {
+    final scope = ref.read(accountScopeProvider);
+    return scope != null ? {'accountId': scope} : {};
+  }
 
   Future<List<InventoryItem>> _fetchFromApi() async {
     final api = ref.read(apiClientProvider);

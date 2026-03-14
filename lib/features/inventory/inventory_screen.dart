@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
+import '../purchases/iap_service.dart';
 import 'inventory_selection_provider.dart';
 import 'sell_provider.dart';
 import 'widgets/glass_bottom_sheet.dart';
@@ -44,17 +46,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     if (items.isEmpty) return;
     HapticFeedback.mediumImpact();
 
-    final marketHashName = items.first.marketHashName;
     try {
-      final priceCents = await ref.read(
-        quickPriceProvider(marketHashName).future,
+      // Fetch quick price per unique market hash name in parallel
+      final uniqueNames = items.map((i) => i.marketHashName).toSet();
+      final priceEntries = await Future.wait(
+        uniqueNames.map((name) async {
+          final price = await ref.read(quickPriceProvider(name).future);
+          return MapEntry(name, price);
+        }),
       );
+      final priceMap = Map.fromEntries(priceEntries);
 
       final sellItems = items
           .map((item) => {
                 'assetId': item.assetId,
                 'marketHashName': item.marketHashName,
-                'priceCents': priceCents,
+                'priceCents': priceMap[item.marketHashName] ?? 0,
+                if (item.accountId != null) 'accountId': item.accountId,
               })
           .toList();
 
@@ -108,10 +116,24 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 setState(() => _trayExpanded = false);
               },
               onSell: () {
-                if (selectedItems.isNotEmpty) _showSellSheet(selectedItems);
+                if (selectedItems.isNotEmpty) {
+                  final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
+                  if (selectedItems.length > 1 && !isPremium) {
+                    context.push('/premium');
+                    return;
+                  }
+                  _showSellSheet(selectedItems);
+                }
               },
               onQuickSell: () {
-                if (selectedItems.isNotEmpty) _quickSell(selectedItems);
+                if (selectedItems.isNotEmpty) {
+                  final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
+                  if (selectedItems.length > 1 && !isPremium) {
+                    context.push('/premium');
+                    return;
+                  }
+                  _quickSell(selectedItems);
+                }
               },
             ),
         ],

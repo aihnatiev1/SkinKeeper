@@ -11,11 +11,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/api_client.dart';
+import '../../widgets/account_scope_chip.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_sheet.dart';
 import '../../widgets/shared_ui.dart';
 import '../auth/session_provider.dart';
+import '../purchases/iap_service.dart';
 import 'transactions_provider.dart';
 
 class TransactionsScreen extends ConsumerWidget {
@@ -45,6 +47,8 @@ class TransactionsScreen extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       AppLocalizations.of(context).historyTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -58,6 +62,11 @@ class TransactionsScreen extends ConsumerWidget {
                     icon: Icon(Icons.file_download_outlined, color: AppTheme.textMuted, size: 22),
                     tooltip: 'Export CSV',
                     onPressed: () {
+                      final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
+                      if (!isPremium) {
+                        context.push('/premium');
+                        return;
+                      }
                       HapticFeedback.selectionClick();
                       showGlassSheet(context, _ExportSheet(ref: ref));
                     },
@@ -67,10 +76,10 @@ class TransactionsScreen extends ConsumerWidget {
                     tooltip: 'Sync from Steam',
                     onPressed: () async {
                       try {
-                        await ref.read(transactionsProvider.notifier).sync();
+                        final fetched = await ref.read(transactionsProvider.notifier).sync();
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Sync complete')),
+                            SnackBar(content: Text('Synced $fetched transactions')),
                           );
                         }
                       } catch (e) {
@@ -82,6 +91,9 @@ class TransactionsScreen extends ConsumerWidget {
                       }
                     },
                   ),
+                  const SizedBox(width: 4),
+                  const AccountScopeChip(),
+                  const SizedBox(width: 8),
                 ],
               ),
             ),
@@ -322,7 +334,6 @@ class TransactionsScreen extends ConsumerWidget {
           ref.read(txDateFromProvider.notifier).state = from;
           ref.read(txDateToProvider.notifier).state = to;
           ref.read(transactionsProvider.notifier).refresh();
-          Navigator.pop(context);
         },
       ),
     );
@@ -1252,6 +1263,7 @@ class _DateFilterSheetState extends State<_DateFilterSheet> {
               onPressed: () {
                 HapticFeedback.mediumImpact();
                 widget.onApply(_from, _to);
+                Navigator.of(context).pop();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
@@ -1530,7 +1542,7 @@ class _ExportSheetState extends State<_ExportSheet> {
       final lines = csvData.split('\n').length - 1;
 
       if (mounted) {
-        Navigator.pop(context);
+        context.pop();
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/skinkeeper_export.csv');
         await file.writeAsString(csvData);
@@ -1544,7 +1556,7 @@ class _ExportSheetState extends State<_ExportSheet> {
     } on DioException catch (e) {
       setState(() => _exporting = false);
       if (e.response?.statusCode == 403 && mounted) {
-        Navigator.pop(context);
+        context.pop();
         context.push('/premium');
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

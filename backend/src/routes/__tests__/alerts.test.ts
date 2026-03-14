@@ -145,6 +145,7 @@ describe("Alerts routes", () => {
     });
 
     it("creates alert successfully", async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] }); // premium check
       mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 0 }] }); // count check
       mockQuery.mockResolvedValueOnce({
         rows: [{
@@ -170,8 +171,9 @@ describe("Alerts routes", () => {
       expect(res.body.id).toBeDefined(); // route returns rows[0] directly (not { alert: ... })
     });
 
-    it("returns 400 when user hits 20 alert limit", async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 20 }] });
+    it("returns 400 when premium user hits 20 alert limit", async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] }); // premium check
+      mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 20 }] }); // count check
 
       const res = await request(app)
         .post("/api/alerts")
@@ -184,6 +186,23 @@ describe("Alerts routes", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("Maximum 20");
+    });
+
+    it("returns 403 when free user hits 5 alert limit", async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: false }] }); // premium check
+      mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 5 }] }); // count check
+
+      const res = await request(app)
+        .post("/api/alerts")
+        .set("Authorization", `Bearer ${jwt}`)
+        .send({
+          market_hash_name: "AK-47 | Redline (Field-Tested)",
+          condition: "above",
+          threshold: 10,
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("premium_required");
     });
   });
 

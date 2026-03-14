@@ -48,7 +48,9 @@ final premiumProvider =
 class PremiumNotifier extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {
-    return true; // TODO: re-enable premium checks before release
+    // Watch auth state — updates reactively when user re-authenticates
+    final user = ref.watch(authStateProvider).valueOrNull;
+    return user?.isPremium ?? false;
   }
 
   void setPremium(bool value) {
