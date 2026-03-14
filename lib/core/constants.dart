@@ -1,8 +1,7 @@
 class AppConstants {
   static const String appName = 'SkinKeeper';
 
-  // Backend API — simulator uses localhost, device needs machine IP
-  static const String apiBaseUrl = 'http://localhost:3000/api';
+  static const String apiBaseUrl = 'https://api.skinkeeper.store/api';
 
   // Steam
   static const String steamOpenIdUrl = 'https://steamcommunity.com/openid/login';
@@ -25,7 +24,4 @@ class AppConstants {
   static const int cs2AppId = 730;
   static const int cs2ContextId = 2;
 
-  // Dev token (remove in production)
-  static const String devToken =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInN0ZWFtSWQiOiI3NjU2MTE5OTA3NzYwNzgxMyIsImlhdCI6MTc3MjkyNTQwOCwiZXhwIjoxNzc1NTE3NDA4fQ.alKne1xdFoxLUtWtxQfuEHegLn6Z1ICoXIe-whK1WSc';
 }

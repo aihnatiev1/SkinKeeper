@@ -39,32 +39,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   static const _pages = [
     _PageData(
-      icon: Icons.trending_up_rounded,
-      iconColor: AppTheme.accent,
-      title: 'Track CS2 Skin Prices',
-      subtitle:
-          'Real-time prices from Steam, Skinport, CSFloat, and DMarket \u2014 all in one app.',
+      image: 'assets/onboarding/dashboard.png',
+      title: 'Portfolio & P/L Dashboard',
+      subtitle: 'Track your total value and profit across all your skins in real time.',
     ),
     _PageData(
-      icon: Icons.inventory_2_rounded,
-      iconColor: AppTheme.primary,
-      title: 'Manage Your Inventory',
-      subtitle:
-          'View float values, stickers, charms. Sell items directly or send trade offers to friends.',
+      image: 'assets/onboarding/inventory.png',
+      title: 'Full Inventory Control',
+      subtitle: 'Float values, stickers, charms. Sell directly or send trade offers.',
     ),
     _PageData(
-      icon: Icons.show_chart_rounded,
-      iconColor: AppTheme.profit,
-      title: 'Profit & Loss Analytics',
-      subtitle:
-          'Track every buy and sell. See your total portfolio value and profit over time.',
+      image: 'assets/onboarding/trades.png',
+      title: 'Easy Trade Offers',
+      subtitle: 'Send and accept trades without leaving the app. No Steam browser needed.',
     ),
     _PageData(
-      icon: Icons.notifications_active_rounded,
-      iconColor: AppTheme.warning,
-      title: 'Price Alerts & Export',
-      subtitle:
-          'Get notified when prices change. Export your data to CSV. Upgrade to PRO for full power.',
+      image: 'assets/onboarding/multi_account.png',
+      title: 'Multiple Steam Accounts',
+      subtitle: 'Switch between accounts instantly. All inventory in one place.',
     ),
   ];
 
@@ -180,14 +172,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 }
 
 class _PageData {
-  final IconData icon;
-  final Color iconColor;
+  final String image;
   final String title;
   final String subtitle;
 
   const _PageData({
-    required this.icon,
-    required this.iconColor,
+    required this.image,
     required this.title,
     required this.subtitle,
   });
@@ -200,80 +190,57 @@ class _OnboardingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppTheme.s40),
-      child: Column(
-        children: [
-          const Spacer(flex: 3),
-          // Animated icon with glow
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // Outer glow ring
-              Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: data.iconColor.withValues(alpha: 0.08),
-                    width: 1,
+    return Column(
+      children: [
+        // Screenshot — upper 60% of slide
+        Expanded(
+          flex: 6,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                data.image,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.image_outlined,
+                        size: 64, color: AppTheme.textDisabled),
                   ),
                 ),
               ),
-              Container(
-                width: 116,
-                height: 116,
-                decoration: BoxDecoration(
-                  color: data.iconColor.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: data.iconColor.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: data.iconColor.withValues(alpha: 0.25),
-                      blurRadius: 60,
-                      spreadRadius: -4,
-                    ),
-                  ],
+            ),
+          ),
+        ),
+
+        // Text — lower 40%
+        Expanded(
+          flex: 4,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.s32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  data.title,
+                  textAlign: TextAlign.center,
+                  style: AppTheme.h2,
                 ),
-                child: Icon(data.icon, size: 52, color: data.iconColor),
-              ),
-            ],
-          )
-              .animate()
-              .fadeIn(duration: 500.ms)
-              .scale(
-                begin: const Offset(0.85, 0.85),
-                duration: 500.ms,
-                curve: Curves.easeOutBack,
-              ),
-
-          const SizedBox(height: AppTheme.s32),
-
-          Text(
-            data.title,
-            textAlign: TextAlign.center,
-            style: AppTheme.h2,
-          )
-              .animate()
-              .fadeIn(duration: 400.ms, delay: 150.ms)
-              .slideY(begin: 0.15, duration: 400.ms, curve: Curves.easeOutCubic),
-
-          const SizedBox(height: AppTheme.s14),
-
-          Text(
-            data.subtitle,
-            textAlign: TextAlign.center,
-            style: AppTheme.subtitle.copyWith(height: 1.5),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms, delay: 300.ms),
-          const Spacer(flex: 4),
-        ],
-      ),
+                const SizedBox(height: AppTheme.s14),
+                Text(
+                  data.subtitle,
+                  textAlign: TextAlign.center,
+                  style: AppTheme.subtitle.copyWith(height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

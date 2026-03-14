@@ -9,7 +9,8 @@ import '../session_provider.dart';
 import '../../settings/accounts_provider.dart';
 
 class ClientTokenAuthTab extends ConsumerStatefulWidget {
-  const ClientTokenAuthTab({super.key});
+  final bool isLinking;
+  const ClientTokenAuthTab({super.key, this.isLinking = false});
 
   @override
   ConsumerState<ClientTokenAuthTab> createState() => _ClientTokenAuthTabState();
@@ -17,9 +18,26 @@ class ClientTokenAuthTab extends ConsumerStatefulWidget {
 
 class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab> {
   final _tokenController = TextEditingController();
+  // Saved in initState so we can reset it in dispose() without using ref.
+  StateController<bool>? _sessionLinkModeNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isLinking) {
+      _sessionLinkModeNotifier = ref.read(sessionLinkModeProvider.notifier);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _sessionLinkModeNotifier?.state = true;
+      });
+    }
+  }
 
   @override
   void dispose() {
+    final notifier = _sessionLinkModeNotifier;
+    if (notifier != null) {
+      Future(() => notifier.state = false);
+    }
     _tokenController.dispose();
     super.dispose();
   }

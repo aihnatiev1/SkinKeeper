@@ -100,7 +100,7 @@
   "alertSource": "Market",
   "alertSourceAny": "Any market",
   "alertCooldown": "Cooldown",
-  "alertHistory": "Alert History",
+  "alertHistory": "Notifications",
   "alertTriggered": "Triggered",
   "alertActive": "Active",
   "alertPaused": "Paused",

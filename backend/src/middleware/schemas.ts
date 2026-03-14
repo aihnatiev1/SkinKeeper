@@ -68,8 +68,8 @@ export const sellOperationSchema = z.object({
     assetId: z.string().min(1),
     marketHashName: z.string().min(1),
     priceCents: z.number().int().min(1).max(100_000_000),
+    accountId: z.number().int().positive().optional(),
   })).min(1).max(50),
-  accountId: z.number().int().positive().optional(),
 });
 
 export const sellItemSchema = z.object({
@@ -103,23 +103,25 @@ export const transactionQuerySchema = z.object({
 
 export const manualTransactionSchema = z.object({
   marketHashName: z.string().min(1).max(255),
-  priceCents: z.number().int().min(1),
+  priceCents: z.number().int().min(1).max(10_000_000),
   type: z.enum(["buy", "sell"]).optional().default("buy"),
   date: z.string().optional(),
   source: z.string().max(20).optional().default("manual"),
-  note: z.string().max(500).optional(),
+  note: z.string().max(250).optional(),
   iconUrl: z.string().optional(),
+  portfolioId: z.number().int().positive().optional(),
 });
 
 export const batchManualSchema = z.object({
   marketHashName: z.string().min(1).max(255),
-  priceCentsPerUnit: z.number().int().min(1),
-  quantity: z.number().int().min(1).max(10000).optional().default(1),
+  priceCentsPerUnit: z.number().int().min(1).max(10_000_000),
+  quantity: z.number().int().min(1).max(100000).optional().default(1),
   type: z.enum(["buy", "sell"]).optional().default("buy"),
   date: z.string().optional(),
   source: z.string().max(20).optional().default("manual"),
-  note: z.string().max(500).optional(),
+  note: z.string().max(250).optional(),
   iconUrl: z.string().optional(),
+  portfolioId: z.number().int().positive().optional(),
 });
 
 export const csvImportSchema = z.object({

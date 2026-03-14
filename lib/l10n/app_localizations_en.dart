@@ -283,7 +283,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get alertCooldown => 'Cooldown';
 
   @override
-  String get alertHistory => 'Alert History';
+  String get alertHistory => 'Notifications';
 
   @override
   String get alertTriggered => 'Triggered';

@@ -283,7 +283,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get alertCooldown => 'Затримка';
 
   @override
-  String get alertHistory => 'Історія сповіщень';
+  String get alertHistory => 'Сповіщення';
 
   @override
   String get alertTriggered => 'Спрацювало';

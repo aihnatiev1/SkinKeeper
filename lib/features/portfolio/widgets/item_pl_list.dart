@@ -2,12 +2,15 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/api_client.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/profit_loss.dart';
 import '../../../widgets/glass_sheet.dart';
 import '../portfolio_pl_provider.dart';
 import 'add_transaction_sheet.dart';
+import 'csv_import_sheet.dart';
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const _kRowH = 52.0;
@@ -34,19 +37,81 @@ const _hdrStyle = TextStyle(
 // ── Public widget ─────────────────────────────────────────────────────────────
 class ItemPLList extends ConsumerWidget {
   final List<ItemPL> items;
-  const ItemPLList({super.key, required this.items});
+  final bool isLoadingMore;
+  const ItemPLList({super.key, required this.items, this.isLoadingMore = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final valid = items.where((i) => i.marketHashName.isNotEmpty).toList();
     if (valid.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
         decoration: AppTheme.glass(),
-        child: Center(
-          child: Text('No transactions found.\nSync your Steam Market history.',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'No transactions found.\nSync your Steam Market history\nor add them manually.',
               textAlign: TextAlign.center,
-              style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted)),
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => showGlassSheet(context, const AddTransactionSheet()),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_rounded, size: 16, color: AppTheme.primary),
+                          const SizedBox(width: 6),
+                          Text('Add transaction',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primary)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => showGlassSheet(context, const CsvImportSheet()),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.divider),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.upload_file_rounded, size: 16, color: AppTheme.textMuted),
+                          const SizedBox(width: 6),
+                          Text('Import CSV',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textMuted)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     }
@@ -73,6 +138,28 @@ class ItemPLList extends ConsumerWidget {
             )
           else
             _TableContent(items: sorted, sort: sort),
+          if (isLoadingMore)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Loading more items…',
+                    style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -170,16 +257,16 @@ class _TabChip extends StatelessWidget {
 }
 
 // ── Table ────────────────────────────────────────────────────────────────────
-class _TableContent extends StatefulWidget {
+class _TableContent extends ConsumerStatefulWidget {
   final List<ItemPL> items;
   final PlSort sort;
   const _TableContent({required this.items, required this.sort});
 
   @override
-  State<_TableContent> createState() => _TableContentState();
+  ConsumerState<_TableContent> createState() => _TableContentState();
 }
 
-class _TableContentState extends State<_TableContent> {
+class _TableContentState extends ConsumerState<_TableContent> {
   final _hCtrl = ScrollController();
 
   @override
@@ -222,8 +309,112 @@ class _TableContentState extends State<_TableContent> {
             ),
           ),
         ),
+        Container(width: 0.5, color: AppTheme.divider),
+        // Sticky right: edit + delete
+        SizedBox(
+          width: 72,
+          child: Column(
+            children: [
+              _actionsHeader(),
+              for (final item in widget.items)
+                _actionsRow(context, item),
+            ],
+          ),
+        ),
       ],
     );
+  }
+
+  Widget _actionsHeader() => Container(
+        height: _kHdrH,
+        decoration: _border(),
+      );
+
+  Widget _actionsRow(BuildContext context, ItemPL item) => Container(
+        height: _kRowH,
+        decoration: _border(),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                showGlassSheet(context, AddTransactionSheet(
+                  initialItemName: item.marketHashName,
+                  initialPriceUsd: item.avgBuyPrice > 0 ? item.avgBuyPrice : null,
+                  initialQty: item.currentHolding > 0 ? item.currentHolding : null,
+                  editMode: true,
+                ));
+              },
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: AppTheme.textMuted.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.edit_outlined, size: 14, color: AppTheme.textSecondary),
+              ),
+            ),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: () => _confirmDeleteAll(context, item),
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: AppTheme.loss.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.loss.withValues(alpha: 0.8)),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  // ── Delete all transactions for item ──────────────────────────────────────
+  void _confirmDeleteAll(BuildContext context, ItemPL item) {
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: Text('Delete transactions?',
+            style: const TextStyle(color: Colors.white, fontSize: 15)),
+        content: Text(
+          'Remove all records for "${item.displayName}"? Cannot be undone.',
+          style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => context.pop(),
+            child: Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () async {
+              context.pop();
+              _deleteAllForItem(context, item);
+            },
+            child: Text('Delete', style: TextStyle(color: AppTheme.loss, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteAllForItem(BuildContext context, ItemPL item) async {
+    try {
+      final api = ref.read(apiClientProvider);
+      final encoded = Uri.encodeQueryComponent(item.marketHashName);
+      await api.delete('/transactions?item=$encoded');
+      ref.invalidate(itemsPLProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppTheme.loss),
+        );
+      }
+    }
   }
 
   // ── Item long-press actions ────────────────────────────────────────────────
@@ -257,7 +448,7 @@ class _TableContentState extends State<_TableContent> {
                     TextStyle(color: AppTheme.textPrimary, fontSize: 14),
               ),
               onTap: () {
-                Navigator.pop(context);
+                context.pop();
                 showGlassSheet(
                   context,
                   AddTransactionSheet(
@@ -482,7 +673,7 @@ class _TableContentState extends State<_TableContent> {
 
         // %
         _cell(_kColPct,
-            child: item.hasCostData
+            child: item.hasCostData && item.currentPriceCents > 0
                 ? Text(
                     '$pctPrefix${item.profitPct.toStringAsFixed(1)}%',
                     style: TextStyle(
@@ -496,7 +687,7 @@ class _TableContentState extends State<_TableContent> {
 
         // GAIN
         _cell(_kColGain,
-            child: item.hasCostData
+            child: item.hasCostData && item.currentPriceCents > 0
                 ? Text(
                     currency.formatWithSign(item.totalProfit),
                     style: TextStyle(
@@ -510,7 +701,7 @@ class _TableContentState extends State<_TableContent> {
 
         // AFTER FEES
         _cell(_kColFees,
-            child: item.hasCostData
+            child: item.hasCostData && item.currentPriceCents > 0
                 ? Text(
                     currency.formatWithSign(item.gainAfterFees),
                     style: TextStyle(

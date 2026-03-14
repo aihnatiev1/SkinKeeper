@@ -283,7 +283,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get alertCooldown => 'Abklingzeit';
 
   @override
-  String get alertHistory => 'Alarmverlauf';
+  String get alertHistory => 'Benachrichtigungen';
 
   @override
   String get alertTriggered => 'Ausgelöst';

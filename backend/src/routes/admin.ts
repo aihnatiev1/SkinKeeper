@@ -1,9 +1,11 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
 import { getAllStats } from "../services/priceStats.js";
+import { getJobHealth } from "../services/priceJob.js";
 import { pool } from "../db/pool.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import { fetchSteamInventory } from "../services/steam.js";
+import { getCacheStats } from "../utils/cacheRegistry.js";
 
 const router = Router();
 
@@ -547,5 +549,15 @@ const OFFER_STATE_NAMES: Record<number, string> = {
   10: "CanceledBySecondFactor",
   11: "InEscrow",
 };
+
+// GET /api/admin/cache-stats — cache sizes and hit rates
+router.get("/cache-stats", requireAdminSecret, (_req: Request, res: Response) => {
+  res.json(getCacheStats());
+});
+
+// GET /api/admin/job-health — cron job health status
+router.get("/job-health", requireAdminSecret, (_req: Request, res: Response) => {
+  res.json(getJobHealth());
+});
 
 export default router;

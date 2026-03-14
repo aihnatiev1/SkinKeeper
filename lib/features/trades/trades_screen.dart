@@ -7,9 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
+import '../../core/review_service.dart';
 import '../../core/theme.dart';
 import '../../features/auth/session_provider.dart';
+import '../../features/settings/accounts_provider.dart';
+import '../../models/market_listing.dart';
 import '../../models/trade_offer.dart';
+import '../../models/user.dart';
 import '../../widgets/shared_ui.dart';
 import 'trades_provider.dart';
 
@@ -102,10 +106,11 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                       ),
                     ),
                   ),
+                _TradesAccountFilter(),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: PillTabSelector(
-                    tabs: [l10n.tradePending, l10n.alertHistory],
+                    tabs: [l10n.tradePending, l10n.alertHistory, 'Listings'],
                     selected: _selectedTab,
                     onChanged: (i) {
                       setState(() => _selectedTab = i);
@@ -117,7 +122,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                   child: PageView(
                     controller: _pageCtrl,
                     onPageChanged: (i) => setState(() => _selectedTab = i),
-                    children: [_PendingTab(), _HistoryTab()],
+                    children: [_PendingTab(), _HistoryTab(), _ListingsTab()],
                   ),
                 ),
                 // Bottom spacing for the FAB
@@ -456,12 +461,27 @@ class _TradeOfferTile extends ConsumerWidget {
                   ),
                 ),
 
+              if (offer.isInternal &&
+                  (offer.accountFromName != null || offer.accountToName != null))
+                Padding(
+                  padding: const EdgeInsets.only(top: 3, left: 22),
+                  child: _AccountBadge(
+                    fromName: offer.accountFromName,
+                    toName: offer.accountToName,
+                  ),
+                )
+              else if (!offer.isInternal && offer.ownerAccountName != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3, left: 22),
+                  child: _AccountBadge(fromName: offer.ownerAccountName),
+                ),
+
               const SizedBox(height: 10),
 
               // Items preview: give -> receive
               Row(
                 children: [
-                  Expanded(child: _ItemsPreview(items: giveItems, label: 'Give')),
+                  Expanded(child: _ItemsPreview(items: giveItems, label: 'Give', alignEnd: true)),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Icon(Icons.arrow_forward,
@@ -674,6 +694,7 @@ class _TradeOfferTile extends ConsumerWidget {
     HapticFeedback.mediumImpact();
     try {
       await ref.read(tradesProvider.notifier).acceptOffer(offer.id);
+      ReviewService.maybeRequestReview();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Trade accepted')),
@@ -737,101 +758,688 @@ class _TradeOfferTile extends ConsumerWidget {
 class _ItemsPreview extends StatelessWidget {
   final List<TradeOfferItem> items;
   final String label;
+  /// Align items to the right edge (for the Give/left side).
+  final bool alignEnd;
 
-  const _ItemsPreview({required this.items, required this.label});
+  const _ItemsPreview({
+    required this.items,
+    required this.label,
+    this.alignEnd = false,
+  });
+
+  // 34px thumbs + 3px gaps, max 3 shown → worst case 3*37+34 = 145px
+  // safely fits within each Expanded half on any iPhone.
+  static const _kSize = 34.0;
+  static const _kGap = 3.0;
+  static const _kMax = 3;
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(AppTheme.r8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.07),
-            width: 1,
-          ),
-        ),
-        child: Center(
-          child: Icon(
-            Icons.inventory_2_outlined,
-            size: 18,
-            color: Colors.white.withValues(alpha: 0.12),
-          ),
-        ),
-      );
-    }
+    final visible = items.where((i) => i.fullIconUrl.isNotEmpty).toList();
+    final shown = visible.take(_kMax).toList();
+    final extra = items.length > _kMax ? items.length - _kMax : 0;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          '$label (${items.length})',
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.textMuted,
+        if (items.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '$label (${items.length})',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.textMuted,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        SizedBox(
-          height: 40,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length > 4 ? 5 : items.length,
-            itemBuilder: (_, i) {
-              if (i == 4 && items.length > 4) {
-                return Container(
-                  width: 36,
-                  height: 36,
-                  margin: const EdgeInsets.only(right: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '+${items.length - 4}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ),
-                );
-              }
-              final item = items[i];
-              return Container(
-                width: 36,
-                height: 36,
-                margin: const EdgeInsets.only(right: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: item.fullIconUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: item.fullIconUrl,
-                        fit: BoxFit.contain,
-                        errorWidget: (_, _, _) => const Icon(
-                            Icons.image_not_supported,
-                            size: 14,
-                            color: AppTheme.textDisabled),
-                      )
-                    : const Icon(Icons.image_not_supported,
-                        size: 14, color: AppTheme.textDisabled),
-              );
-            },
+        Align(
+          alignment:
+              alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: shown.isEmpty
+                ? [_emptyThumb()]
+                : [
+                    for (int i = 0; i < shown.length; i++) ...[
+                      _thumb(shown[i].fullIconUrl),
+                      if (i < shown.length - 1 || extra > 0)
+                        const SizedBox(width: _kGap),
+                    ],
+                    if (extra > 0) _badge('+$extra'),
+                  ],
           ),
         ),
       ],
     );
   }
+
+  Widget _thumb(String url) => SizedBox(
+        width: _kSize,
+        height: _kSize,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: ColoredBox(
+            color: AppTheme.surface,
+            child: CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.contain,
+              errorWidget: (_, _, _) => const Icon(
+                  Icons.image_not_supported,
+                  size: 13,
+                  color: AppTheme.textDisabled),
+            ),
+          ),
+        ),
+      );
+
+  Widget _badge(String text) => Container(
+        width: _kSize,
+        height: _kSize,
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        alignment: Alignment.center,
+        child: Text(text,
+            style: const TextStyle(
+                fontSize: 10, color: AppTheme.textSecondary)),
+      );
+
+  /// Subtle placeholder shown when a trade side has no items (or no images).
+  Widget _emptyThumb() => Container(
+        width: _kSize,
+        height: _kSize,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.09),
+            width: 1,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Icon(Icons.remove,
+            size: 13, color: Colors.white.withValues(alpha: 0.18)),
+      );
 }
 
 // StatusBadge replaced by shared StatusChip widget from shared_ui.dart
+
+// ---------------------------------------------------------------------------
+// Listings tab (active Steam Market listings)
+// ---------------------------------------------------------------------------
+
+class _ListingsTab extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final listingsAsync = ref.watch(listingsProvider);
+
+    return listingsAsync.when(
+      data: (state) {
+        if (state.listings.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppTheme.accent.withValues(alpha: 0.15),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.storefront_outlined,
+                    size: 36,
+                    color: AppTheme.accent.withValues(alpha: 0.5),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No active listings',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Items you list on Steam Market appear here',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.95, 0.95));
+        }
+        return RefreshIndicator(
+          onRefresh: () => ref.read(listingsProvider.notifier).refresh(),
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: state.listings.length,
+            itemBuilder: (_, i) => _ListingTile(listing: state.listings[i])
+                .animate()
+                .fadeIn(duration: 300.ms, delay: (i * 40).ms)
+                .slideX(begin: 0.03, end: 0),
+          ),
+        );
+      },
+      loading: () => ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: List.generate(4, (_) => const SkeletonTradeTile()),
+      ),
+      error: (_, _) => EmptyState(
+        icon: Icons.cloud_off_rounded,
+        title: 'Failed to load listings',
+        subtitle: 'Check your session and try again',
+        action: GradientButton(
+          label: 'Retry',
+          icon: Icons.refresh_rounded,
+          expanded: false,
+          onPressed: () => ref.read(listingsProvider.notifier).refresh(),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single listing tile
+// ---------------------------------------------------------------------------
+
+class _ListingTile extends StatelessWidget {
+  final MarketListing listing;
+  const _ListingTile({required this.listing});
+
+  @override
+  Widget build(BuildContext context) {
+    final createdStr = _formatDate(listing.createdAt);
+    final accentColor = listing.needsConfirmation
+        ? AppTheme.warning
+        : listing.isOnHold
+            ? AppTheme.textMuted
+            : null;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: accentColor != null
+          ? AppTheme.glassAccent(accentColor: accentColor)
+          : AppTheme.glass(),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(AppTheme.r8),
+              ),
+              child: listing.fullIconUrl.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(AppTheme.r8),
+                      child: Image.network(
+                        listing.fullIconUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Icon(
+                          Icons.image_not_supported,
+                          size: 22,
+                          color: AppTheme.textDisabled,
+                        ),
+                      ),
+                    )
+                  : const Icon(
+                      Icons.image_not_supported,
+                      size: 22,
+                      color: AppTheme.textDisabled,
+                    ),
+            ),
+            const SizedBox(width: 12),
+            // Name + meta
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          listing.displayName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (listing.needsConfirmation) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warning.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Confirm',
+                            style: TextStyle(fontSize: 10, color: AppTheme.warning, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ] else if (listing.isOnHold) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.textMuted.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'On Hold',
+                            style: TextStyle(fontSize: 10, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (listing.marketHashName != null &&
+                      listing.marketHashName != listing.displayName) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      listing.marketHashName!,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textMuted,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        createdStr,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textDisabled,
+                        ),
+                      ),
+                      if (listing.accountName != null) ...[
+                        const SizedBox(width: 6),
+                        _AccountBadge(fromName: listing.accountName),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Prices
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '\$${listing.sellerPriceValue.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.profit,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Buyer: \$${listing.buyerPriceValue.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textMuted,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[dt.month - 1]} ${dt.day}';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Account filter chip (only shown when user has multiple accounts)
+// ---------------------------------------------------------------------------
+
+class _TradesAccountFilter extends ConsumerWidget {
+  const _TradesAccountFilter();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accountsAsync = ref.watch(accountsProvider);
+    return accountsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (accounts) {
+        if (accounts.length <= 1) return const SizedBox.shrink();
+        final selectedId = ref.watch(
+          tradesProvider.select((s) => s.valueOrNull?.selectedAccountId),
+        );
+        final active = selectedId != null
+            ? accounts.firstWhere((a) => a.id == selectedId,
+                orElse: () => accounts.first)
+            : null;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: GestureDetector(
+            onTap: () => _showPicker(context, ref, accounts, selectedId),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: active != null
+                      ? AppTheme.primary.withValues(alpha: 0.4)
+                      : AppTheme.borderLight.withValues(alpha: 0.5),
+                  width: 0.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (active != null)
+                    _AccountAvatar(url: active.avatarUrl, size: 16)
+                  else
+                    _StackedAccountAvatars(accounts: accounts),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 110),
+                    child: Text(
+                      active?.displayName ?? 'All accounts',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: active != null
+                            ? AppTheme.primaryLight
+                            : AppTheme.textSecondary,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      maxLines: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.expand_more_rounded,
+                    size: 14,
+                    color: active != null
+                        ? AppTheme.primaryLight.withValues(alpha: 0.7)
+                        : AppTheme.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPicker(
+    BuildContext context,
+    WidgetRef ref,
+    List<SteamAccount> accounts,
+    int? currentId,
+  ) {
+    HapticFeedback.selectionClick();
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AccountFilterPicker(
+        accounts: accounts,
+        currentId: currentId,
+        onSelect: (id) {
+          HapticFeedback.selectionClick();
+          ref.read(tradesProvider.notifier).setAccountFilter(id);
+          Navigator.of(context, rootNavigator: true).pop();
+        },
+      ),
+    );
+  }
+}
+
+class _AccountFilterPicker extends StatelessWidget {
+  final List<SteamAccount> accounts;
+  final int? currentId;
+  final void Function(int?) onSelect;
+
+  const _AccountFilterPicker({
+    required this.accounts,
+    required this.currentId,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.bgSecondary,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.borderLight,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 4),
+              child: Text(
+                'Filter by account',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+              ),
+            ),
+            const Divider(color: AppTheme.divider, height: 1),
+            _PickerRow(
+              leading: _StackedAccountAvatars(accounts: accounts),
+              label: 'All accounts',
+              sublabel: '${accounts.length} linked',
+              selected: currentId == null,
+              onTap: () => onSelect(null),
+            ),
+            const Divider(color: AppTheme.divider, height: 1, indent: 20, endIndent: 20),
+            for (final a in accounts)
+              _PickerRow(
+                leading: _AccountAvatar(url: a.avatarUrl, size: 36),
+                label: a.displayName.isNotEmpty ? a.displayName : a.steamId,
+                sublabel: a.isActive ? 'Active' : null,
+                selected: currentId == a.id,
+                onTap: () => onSelect(a.id),
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerRow extends StatelessWidget {
+  final Widget leading;
+  final String label;
+  final String? sublabel;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PickerRow({
+    required this.leading,
+    required this.label,
+    this.sublabel,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            SizedBox(width: 36, height: 36, child: Center(child: leading)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? AppTheme.primaryLight : AppTheme.textPrimary,
+                    ),
+                  ),
+                  if (sublabel != null)
+                    Text(sublabel!, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                ],
+              ),
+            ),
+            if (selected) const Icon(Icons.check_rounded, size: 18, color: AppTheme.primary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountAvatar extends StatelessWidget {
+  final String url;
+  final double size;
+  const _AccountAvatar({required this.url, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: url.isNotEmpty
+          ? Image.network(url, width: size, height: size, fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => _placeholder())
+          : _placeholder(),
+    );
+  }
+
+  Widget _placeholder() => Container(
+    width: size, height: size, color: AppTheme.surfaceLight,
+    child: Icon(Icons.person_rounded, size: size * 0.7, color: AppTheme.textMuted),
+  );
+}
+
+class _StackedAccountAvatars extends StatelessWidget {
+  final List<SteamAccount> accounts;
+  const _StackedAccountAvatars({required this.accounts});
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 14.0;
+    final shown = accounts.take(2).toList();
+    return SizedBox(
+      width: size + (shown.length > 1 ? 8.0 : 0),
+      height: size,
+      child: Stack(
+        children: [
+          for (int i = 0; i < shown.length; i++)
+            Positioned(
+              left: i * 8.0,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.bg, width: 0.8),
+                ),
+                child: _AccountAvatar(url: shown[i].avatarUrl, size: size),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Account badge pill shown on trade/listing tiles
+// ---------------------------------------------------------------------------
+
+class _AccountBadge extends StatelessWidget {
+  final String? fromName;
+  final String? toName; // set only for internal trades
+
+  const _AccountBadge({this.fromName, this.toName});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = toName != null
+        ? '${fromName ?? '?'} → $toName'
+        : (fromName ?? '');
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.person_rounded, size: 10, color: AppTheme.primaryLight.withValues(alpha: 0.7)),
+          const SizedBox(width: 3),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 160),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: AppTheme.primaryLight.withValues(alpha: 0.85),
+                fontWeight: FontWeight.w500,
+                overflow: TextOverflow.ellipsis,
+              ),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Sync button with loading spinner

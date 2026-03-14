@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'constants.dart';
@@ -65,8 +66,8 @@ class ApiClient {
   ApiClient() {
     _dio = Dio(BaseOptions(
       baseUrl: AppConstants.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 30),
       headers: {'Content-Type': 'application/json'},
     ));
 
@@ -103,7 +104,18 @@ class ApiClient {
   }
 
   Future<void> saveToken(String token) async {
-    await _storage.write(key: 'jwt_token', value: token);
+    try {
+      await _storage.write(key: 'jwt_token', value: token);
+    } on PlatformException catch (e) {
+      // -25299 = errSecDuplicateItem: item exists, delete and retry
+      if (e.message?.contains('-25299') == true ||
+          e.message?.contains('already exists') == true) {
+        await _storage.delete(key: 'jwt_token');
+        await _storage.write(key: 'jwt_token', value: token);
+      } else {
+        rethrow;
+      }
+    }
   }
 
   Future<void> clearToken() async {

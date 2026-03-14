@@ -7,6 +7,7 @@ import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
 import '../inventory_provider.dart';
+import 'wear_bar.dart';
 
 class GroupExpandSheet extends StatelessWidget {
   final ItemGroup group;
@@ -185,12 +186,10 @@ class _GroupItemTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (item.floatValue != null)
-                    Text(
-                      'Float: ${item.floatValue!.toStringAsFixed(8)}',
-                      style: AppTheme.mono.copyWith(fontSize: 13),
-                    ),
-                  if (item.wear != null)
+                  if (item.floatValue != null) ...[
+                    WearBar(floatValue: item.floatValue!, height: 16),
+                    const SizedBox(height: 4),
+                  ] else if (item.wear != null)
                     Text(
                       item.wear!,
                       style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted),

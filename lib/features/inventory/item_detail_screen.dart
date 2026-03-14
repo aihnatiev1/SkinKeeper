@@ -40,8 +40,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   String? _historyError;
 
   late InventoryItem _item;
-  bool _inspecting = false;
-  bool _inspected = false;
   ChartPeriod _period = ChartPeriod.month;
 
   @override
@@ -49,7 +47,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     super.initState();
     _item = widget.item;
     _fetchHistory();
-    _autoInspect();
   }
 
   Future<void> _fetchHistory() async {
@@ -76,57 +73,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
         setState(() {
           _historyError = e.toString();
           _historyLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _autoInspect() async {
-    if (_item.inspectLink == null || _item.inspectLink!.isEmpty) return;
-    if (_item.floatValue != null && _item.paintSeed != null) {
-      _inspected = true;
-      return;
-    }
-    await _inspect();
-  }
-
-  Future<void> _inspect() async {
-    if (_inspecting) return;
-    setState(() => _inspecting = true);
-
-    try {
-      final api = ref.read(apiClientProvider);
-      final response = await api.get('/inventory/${_item.assetId}/inspect');
-      final data = response.data as Map<String, dynamic>;
-
-      if (mounted) {
-        final stickers = (data['stickers'] as List<dynamic>?)
-                ?.map((e) => StickerInfo.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [];
-        final charms = (data['charms'] as List<dynamic>?)
-                ?.map((e) => CharmInfo.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [];
-
-        setState(() {
-          _item = _item.withInspectData(
-            floatValue: (data['floatValue'] as num).toDouble(),
-            paintSeed: data['paintSeed'] as int? ?? 0,
-            stickers: stickers,
-            charms: charms,
-          );
-          _inspecting = false;
-          _inspected = true;
-        });
-        HapticFeedback.lightImpact();
-      }
-    } catch (e) {
-      dev.log('Inspect failed: $e', name: 'ItemDetail');
-      if (mounted) {
-        setState(() {
-          _inspecting = false;
-          _inspected = true;
         });
       }
     }
@@ -300,32 +246,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 child: WearBar(floatValue: item.floatValue!),
               )
                   .animate()
-                  .fadeIn(duration: 400.ms, delay: 250.ms)
-            else if (_inspecting)
-              GlassCard(
-                padding: const EdgeInsets.all(AppTheme.s16),
-                margin: const EdgeInsets.only(bottom: AppTheme.s12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.primary.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    const SizedBox(width: AppTheme.s10),
-                    Text('Inspecting item...', style: AppTheme.bodySmall),
-                  ],
-                ),
-              )
-                  .animate(onPlay: (c) => c.repeat())
-                  .shimmer(
-                    duration: 1500.ms,
-                    color: AppTheme.primary.withValues(alpha: 0.1),
-                  ),
+                  .fadeIn(duration: 400.ms, delay: 250.ms),
 
             // ── Stickers & Charms ──
             if (item.stickers.isNotEmpty || item.charms.isNotEmpty) ...[
@@ -433,28 +354,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   .animate()
                   .fadeIn(duration: 500.ms, delay: 450.ms),
 
-            // ── Re-inspect button ──
-            if (item.inspectLink != null &&
-                item.inspectLink!.isNotEmpty &&
-                _inspected &&
-                !_inspecting) ...[
-              const SizedBox(height: AppTheme.s16),
-              Center(
-                child: TextButton.icon(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    setState(() => _inspected = false);
-                    _inspect();
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Re-inspect'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.textMuted,
-                    textStyle: const TextStyle(fontSize: 13),
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       )),
@@ -972,6 +871,7 @@ class _SellActions extends ConsumerWidget {
                                 'assetId': item.assetId,
                                 'marketHashName': item.marketHashName,
                                 'priceCents': priceCents,
+                                if (item.accountId != null) 'accountId': item.accountId,
                               },
                             ];
                             await ref

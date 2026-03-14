@@ -151,6 +151,8 @@ export interface TradeOffer {
   isInternal: boolean;
   accountIdFrom: number | null;
   accountIdTo: number | null;
+  accountFromName: string | null;
+  accountToName: string | null;
   valueGiveCents: number;
   valueRecvCents: number;
   createdAt: string;
@@ -1121,30 +1123,41 @@ export async function listOffers(
   userId: number,
   status?: string,
   limit = 20,
-  offset = 0
+  offset = 0,
+  accountId?: number
 ): Promise<{ offers: TradeOffer[]; total: number; hasMore: boolean }> {
   const activeSteamId = await getActiveSteamId(userId);
 
   // Count query
   let countQuery = `SELECT COUNT(*) FROM trade_offers o WHERE o.user_id = $1`;
   const countParams: unknown[] = [userId];
+  let countParamIdx = 2;
   if (status) {
-    countQuery += ` AND o.status = $2`;
+    countQuery += ` AND o.status = $${countParamIdx}`;
     countParams.push(status);
+    countParamIdx++;
+  }
+  if (accountId) {
+    countQuery += ` AND (o.account_id_from = $${countParamIdx} OR o.account_id_to = $${countParamIdx})`;
+    countParams.push(accountId);
+    countParamIdx++;
   }
   const { rows: countRows } = await pool.query(countQuery, countParams);
   const total = parseInt(countRows[0].count) || 0;
 
   // Data query
   let query = `
-    SELECT o.*, json_agg(
-      json_build_object(
-        'id', i.id, 'side', i.side, 'assetId', i.asset_id,
-        'marketHashName', i.market_hash_name,
-        'iconUrl', COALESCE(i.icon_url, ii.icon_url),
-        'floatValue', i.float_value, 'priceCents', i.price_cents
-      ) ORDER BY i.id
-    ) AS items
+    SELECT o.*,
+      sa_from.display_name as account_from_name,
+      sa_to.display_name as account_to_name,
+      json_agg(
+        json_build_object(
+          'id', i.id, 'side', i.side, 'assetId', i.asset_id,
+          'marketHashName', i.market_hash_name,
+          'iconUrl', COALESCE(i.icon_url, ii.icon_url),
+          'floatValue', i.float_value, 'priceCents', i.price_cents
+        ) ORDER BY i.id
+      ) AS items
     FROM trade_offers o
     LEFT JOIN trade_offer_items i ON i.offer_id = o.id
     LEFT JOIN LATERAL (
@@ -1152,6 +1165,8 @@ export async function listOffers(
       WHERE market_hash_name = i.market_hash_name AND icon_url IS NOT NULL
       LIMIT 1
     ) ii ON true
+    LEFT JOIN steam_accounts sa_from ON sa_from.id = o.account_id_from
+    LEFT JOIN steam_accounts sa_to ON sa_to.id = o.account_id_to
     WHERE o.user_id = $1`;
 
   const params: unknown[] = [userId];
@@ -1162,8 +1177,13 @@ export async function listOffers(
     params.push(status);
     paramIdx++;
   }
+  if (accountId) {
+    query += ` AND (o.account_id_from = $${paramIdx} OR o.account_id_to = $${paramIdx})`;
+    params.push(accountId);
+    paramIdx++;
+  }
 
-  query += ` GROUP BY o.id ORDER BY o.created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+  query += ` GROUP BY o.id, sa_from.display_name, sa_to.display_name ORDER BY o.created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
   params.push(limit, offset);
 
   const { rows } = await pool.query(query, params);
@@ -2668,6 +2688,8 @@ function mapOfferRow(row: any): TradeOffer {
     isInternal: row.is_internal ?? false,
     accountIdFrom: row.account_id_from ?? null,
     accountIdTo: row.account_id_to ?? null,
+    accountFromName: row.account_from_name ?? null,
+    accountToName: row.account_to_name ?? null,
     valueGiveCents: parseInt(row.value_give_cents) || 0,
     valueRecvCents: parseInt(row.value_recv_cents) || 0,
     createdAt: row.created_at,
@@ -2689,6 +2711,8 @@ function mapOffer(row: any, items: any[]): TradeOffer {
     isInternal: row.is_internal ?? false,
     accountIdFrom: row.account_id_from ?? null,
     accountIdTo: row.account_id_to ?? null,
+    accountFromName: null,
+    accountToName: null,
     valueGiveCents: parseInt(row.value_give_cents) || 0,
     valueRecvCents: parseInt(row.value_recv_cents) || 0,
     createdAt: row.created_at,

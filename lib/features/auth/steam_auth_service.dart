@@ -35,23 +35,6 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
     }
   }
 
-  /// Dev login — saves token and creates user without server call
-  Future<void> devLogin() async {
-    state = const AsyncLoading();
-    try {
-      final api = ref.read(apiClientProvider);
-      await api.saveToken(AppConstants.devToken);
-      dev.log('Dev token saved, fetching /auth/me', name: 'Auth');
-      final response = await api.get('/auth/me');
-      dev.log('Dev login response: ${response.data}', name: 'Auth');
-      state = AsyncData(
-        SteamUser.fromJson(response.data as Map<String, dynamic>),
-      );
-    } catch (e, st) {
-      dev.log('Dev login failed: $e', name: 'Auth');
-      state = AsyncError(e, st);
-    }
-  }
 
   Future<void> loginWithSteamCallback(Map<String, String> params) async {
     state = const AsyncLoading();

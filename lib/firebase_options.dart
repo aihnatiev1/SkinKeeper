@@ -63,6 +63,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '272880225528',
     projectId: 'skinkeeper',
     storageBucket: 'skinkeeper.firebasestorage.app',
-    iosBundleId: 'com.skintracker.skinTracker',
+    iosBundleId: 'app.skinkeeper.store',
   );
 }

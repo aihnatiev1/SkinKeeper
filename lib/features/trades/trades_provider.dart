@@ -1,8 +1,10 @@
 import 'dart:developer' as dev;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
+import '../../models/market_listing.dart';
 import '../../models/trade_offer.dart';
 
 // ---------------------------------------------------------------------------
@@ -15,12 +17,14 @@ class TradesState {
   final bool hasMore;
   final int total;
   final bool isLoadingMore;
+  final int? selectedAccountId;
 
   const TradesState({
     this.offers = const [],
     this.hasMore = true,
     this.total = 0,
     this.isLoadingMore = false,
+    this.selectedAccountId,
   });
 
   TradesState copyWith({
@@ -28,14 +32,20 @@ class TradesState {
     bool? hasMore,
     int? total,
     bool? isLoadingMore,
+    Object? selectedAccountId = _sentinel,
   }) =>
       TradesState(
         offers: offers ?? this.offers,
         hasMore: hasMore ?? this.hasMore,
         total: total ?? this.total,
         isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+        selectedAccountId: selectedAccountId == _sentinel
+            ? this.selectedAccountId
+            : selectedAccountId as int?,
       );
 }
+
+const _sentinel = Object();
 
 // ---------------------------------------------------------------------------
 // Trade offers list with pagination
@@ -51,12 +61,14 @@ class TradesNotifier extends AutoDisposeAsyncNotifier<TradesState> {
   @override
   Future<TradesState> build() => _fetchPage(0);
 
-  Future<TradesState> _fetchPage(int offset) async {
+  Future<TradesState> _fetchPage(int offset, {int? accountId}) async {
     final api = ref.read(apiClientProvider);
-    final response = await api.get('/trades', queryParameters: {
+    final params = <String, String>{
       'limit': _pageSize.toString(),
       'offset': offset.toString(),
-    });
+    };
+    if (accountId != null) params['accountId'] = accountId.toString();
+    final response = await api.get('/trades', queryParameters: params);
     final data = response.data as Map<String, dynamic>;
     final list = data['offers'] as List<dynamic>;
     final offers = list
@@ -64,7 +76,12 @@ class TradesNotifier extends AutoDisposeAsyncNotifier<TradesState> {
         .toList();
     final hasMore = data['hasMore'] as bool? ?? false;
     final total = data['total'] as int? ?? offers.length;
-    return TradesState(offers: offers, hasMore: hasMore, total: total);
+    return TradesState(offers: offers, hasMore: hasMore, total: total, selectedAccountId: accountId);
+  }
+
+  Future<void> setAccountFilter(int? accountId) async {
+    state = const AsyncLoading();
+    state = AsyncData(await _fetchPage(0, accountId: accountId));
   }
 
   Future<void> loadMore() async {
@@ -75,10 +92,14 @@ class TradesNotifier extends AutoDisposeAsyncNotifier<TradesState> {
     try {
       final api = ref.read(apiClientProvider);
       final offset = current.offers.length;
-      final response = await api.get('/trades', queryParameters: {
+      final params = <String, String>{
         'limit': _pageSize.toString(),
         'offset': offset.toString(),
-      });
+      };
+      if (current.selectedAccountId != null) {
+        params['accountId'] = current.selectedAccountId.toString();
+      }
+      final response = await api.get('/trades', queryParameters: params);
       final data = response.data as Map<String, dynamic>;
       final list = data['offers'] as List<dynamic>;
       final newOffers = list
@@ -99,8 +120,9 @@ class TradesNotifier extends AutoDisposeAsyncNotifier<TradesState> {
   }
 
   Future<void> refresh() async {
+    final accountId = state.valueOrNull?.selectedAccountId;
     state = const AsyncLoading();
-    state = AsyncData(await _fetchPage(0));
+    state = AsyncData(await _fetchPage(0, accountId: accountId));
   }
 
   /// Trigger a sync from Steam, then refresh the list.
@@ -273,3 +295,69 @@ final linkedAccountsProvider =
       .map((e) => LinkedAccount.fromJson(e as Map<String, dynamic>))
       .toList();
 });
+
+// ---------------------------------------------------------------------------
+// Market listings (active sell listings on Steam Market)
+// ---------------------------------------------------------------------------
+
+@immutable
+class ListingsState {
+  final List<MarketListing> listings;
+  final int totalCount;
+
+  const ListingsState({
+    this.listings = const [],
+    this.totalCount = 0,
+  });
+}
+
+final listingsProvider =
+    AutoDisposeAsyncNotifierProvider<ListingsNotifier, ListingsState>(
+        ListingsNotifier.new);
+
+class ListingsNotifier extends AutoDisposeAsyncNotifier<ListingsState> {
+  @override
+  Future<ListingsState> build() => _fetch();
+
+  Future<ListingsState> _fetch() async {
+    // ignore: avoid_print
+    print('[Listings] _fetch called');
+    final api = ref.read(apiClientProvider);
+    late final Response response;
+    try {
+      response = await api.get('/market/listings');
+      // ignore: avoid_print
+      print('[Listings] response ${response.statusCode}');
+    } catch (e) {
+      // ignore: avoid_print
+      print('[Listings] ERROR: $e');
+      rethrow;
+    }
+    final data = response.data as Map<String, dynamic>;
+    final list = (data['listings'] as List<dynamic>?) ?? [];
+    // ignore: avoid_print
+    print('[Listings] list.length=${list.length}');
+    if (list.isNotEmpty) {
+      // ignore: avoid_print
+      print('[Listings] first item keys: ${(list.first as Map).keys.toList()}');
+    }
+    final listings = <MarketListing>[];
+    for (int i = 0; i < list.length; i++) {
+      try {
+        listings.add(MarketListing.fromJson(list[i] as Map<String, dynamic>));
+      } catch (e) {
+        // ignore: avoid_print
+        print('[Listings] fromJson error at $i: $e | data: ${list[i]}');
+      }
+    }
+    return ListingsState(
+      listings: listings,
+      totalCount: data['totalCount'] as int? ?? listings.length,
+    );
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(_fetch);
+  }
+}

@@ -99,7 +99,7 @@
   "alertSource": "Маркет",
   "alertSourceAny": "Любой маркет",
   "alertCooldown": "Задержка",
-  "alertHistory": "История оповещений",
+  "alertHistory": "Уведомления",
   "alertTriggered": "Сработало",
   "alertActive": "Активно",
   "alertPaused": "Приостановлено",

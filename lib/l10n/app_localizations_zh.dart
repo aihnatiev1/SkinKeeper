@@ -282,7 +282,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get alertCooldown => '冷却时间';
 
   @override
-  String get alertHistory => '提醒历史';
+  String get alertHistory => '通知';
 
   @override
   String get alertTriggered => '已触发';

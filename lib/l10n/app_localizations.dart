@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   /// No description provided for @alertHistory.
   ///
   /// In en, this message translates to:
-  /// **'Alert History'**
+  /// **'Notifications'**
   String get alertHistory;
 
   /// No description provided for @alertTriggered.

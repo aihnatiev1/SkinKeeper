@@ -4,7 +4,17 @@ import { validateBody } from "../middleware/validate.js";
 import { manualTransactionSchema, batchManualSchema, csvImportSchema } from "../middleware/schemas.js";
 import { pool } from "../db/pool.js";
 import { recalculateCostBasis } from "../services/profitLoss.js";
+import { fetchSteamMarketPrice, savePrices } from "../services/prices.js";
 import { randomUUID } from "crypto";
+
+// Fire-and-forget price fetch for a newly added item
+function fetchPriceAsync(marketHashName: string) {
+  fetchSteamMarketPrice(marketHashName)
+    .then(price => {
+      if (price) savePrices(new Map([[marketHashName, price]]), "steam");
+    })
+    .catch(() => {}); // ignore errors — price will come from crawler later
+}
 
 const router = Router();
 
@@ -26,20 +36,21 @@ router.post(
         source,
         note,
         iconUrl,
+        portfolioId,
       } = req.body;
 
       const txId = `manual_${randomUUID()}`;
       const txDate = date ? new Date(date).toISOString() : new Date().toISOString();
 
       const { rows } = await pool.query(
-        `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source, note, icon_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source, note, icon_url, portfolio_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, tx_id`,
-        [req.userId, txId, type, marketHashName, priceCents, txDate, source, note || null, iconUrl || null]
+        [req.userId, txId, type, marketHashName, priceCents, txDate, source, note || null, iconUrl || null, portfolioId ?? null]
       );
 
-      // Recalculate cost basis
       await recalculateCostBasis(req.userId!);
+      fetchPriceAsync(marketHashName);
 
       res.json({ success: true, id: rows[0].id, txId: rows[0].tx_id });
     } catch (err) {
@@ -233,6 +244,7 @@ router.post(
         source,
         note,
         iconUrl,
+        portfolioId,
       } = req.body;
 
       const qty = quantity;
@@ -242,19 +254,70 @@ router.post(
       for (let i = 0; i < qty; i++) {
         const txId = `manual_${randomUUID()}`;
         await pool.query(
-          `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source, note, icon_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [req.userId, txId, type, marketHashName, priceCentsPerUnit, txDate, source, note || null, iconUrl || null]
+          `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source, note, icon_url, portfolio_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [req.userId, txId, type, marketHashName, priceCentsPerUnit, txDate, source, note || null, iconUrl || null, portfolioId ?? null]
         );
         txIds.push(txId);
       }
 
       await recalculateCostBasis(req.userId!);
+      fetchPriceAsync(marketHashName);
 
       res.json({ success: true, quantity: qty, txIds });
     } catch (err) {
       console.error("[ManualTx] Batch error:", err);
       res.status(500).json({ error: "Failed to add transactions" });
+    }
+  }
+);
+
+/**
+ * PUT /api/transactions/item/replace — Replace all transactions for an item
+ * Deletes all existing transactions for user+item, inserts qty new ones.
+ * Body: { marketHashName, qty, priceCentsPerUnit, type?, date?, portfolioId? }
+ */
+router.put(
+  "/item/replace",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { marketHashName, qty, priceCentsPerUnit, type = "buy", date, portfolioId } = req.body;
+      if (!marketHashName || typeof qty !== "number" || qty < 1 || qty > 100000) {
+        res.status(400).json({ error: "Invalid parameters" }); return;
+      }
+      if (typeof priceCentsPerUnit !== "number" || priceCentsPerUnit < 0) {
+        res.status(400).json({ error: "Invalid price" }); return;
+      }
+      const txDate = date ? new Date(date).toISOString() : new Date().toISOString();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `DELETE FROM transactions WHERE user_id = $1 AND market_hash_name = $2`,
+          [req.userId, marketHashName]
+        );
+        for (let i = 0; i < qty; i++) {
+          const txId = `manual_${randomUUID()}`;
+          await client.query(
+            `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source, portfolio_id)
+             VALUES ($1, $2, $3, $4, $5, $6, 'manual', $7)`,
+            [req.userId, txId, type, marketHashName, priceCentsPerUnit, txDate, portfolioId ?? null]
+          );
+        }
+        await client.query("COMMIT");
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      } finally {
+        client.release();
+      }
+      await recalculateCostBasis(req.userId!);
+      fetchPriceAsync(marketHashName);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[ManualTx] Replace error:", err);
+      res.status(500).json({ error: "Failed to replace transactions" });
     }
   }
 );

@@ -11,7 +11,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/api_client.dart';
 import 'core/cache_service.dart';
 import 'core/push_service.dart';
-import 'core/review_service.dart';
 import 'core/router.dart';
 import 'core/widget_service.dart';
 import 'core/settings_provider.dart';
@@ -38,9 +37,6 @@ Future<void> _trackAppOpen() async {
   final prefs = await SharedPreferences.getInstance();
   final opens = (prefs.getInt('app_open_count') ?? 0) + 1;
   await prefs.setInt('app_open_count', opens);
-  if (opens == 5) {
-    ReviewService.maybeRequestReview();
-  }
 }
 
 class SkinKeeperApp extends ConsumerStatefulWidget {
@@ -116,6 +112,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     if (uri.host == 'account-linked') {
       ref.invalidate(accountsProvider);
       ref.invalidate(inventoryProvider);
+      ref.read(routerProvider).go('/settings/accounts');
       return;
     }
 

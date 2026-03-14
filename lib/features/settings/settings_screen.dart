@@ -410,7 +410,7 @@ class _PushPrefsSection extends ConsumerWidget {
           const Divider(height: 1),
           for (var i = 0; i < _items.length; i++) ...[
             if (i > 0) const Divider(height: 1),
-            SwitchListTile.adaptive(
+            SwitchListTile(
               secondary: Icon(_items[i].$3, color: AppTheme.textSecondary, size: 20),
               title: Text(_items[i].$2, style: const TextStyle(fontSize: 14)),
               value: prefs.get(_items[i].$1),

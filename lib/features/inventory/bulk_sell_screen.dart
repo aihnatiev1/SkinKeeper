@@ -237,6 +237,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
               'assetId': i.assetId,
               'marketHashName': i.marketHashName,
               'priceCents': 0, // quickprice on backend
+              if (i.accountId != null) 'accountId': i.accountId,
             })
         .toList();
 

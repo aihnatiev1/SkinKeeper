@@ -99,7 +99,7 @@
   "alertSource": "Markt",
   "alertSourceAny": "Jeder Markt",
   "alertCooldown": "Abklingzeit",
-  "alertHistory": "Alarmverlauf",
+  "alertHistory": "Benachrichtigungen",
   "alertTriggered": "Ausgelöst",
   "alertActive": "Aktiv",
   "alertPaused": "Pausiert",

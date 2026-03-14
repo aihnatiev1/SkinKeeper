@@ -323,6 +323,42 @@ ALTER TABLE trade_offers ADD CONSTRAINT chk_trade_status
 CREATE INDEX IF NOT EXISTS idx_inventory_items_name ON inventory_items(market_hash_name);
 CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(steam_account_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_price_history_name ON price_history(market_hash_name);
+
+-- 018: Fix FK constraints on steam_accounts to allow account deletion
+ALTER TABLE sell_operations
+  DROP CONSTRAINT IF EXISTS sell_operations_steam_account_id_fkey;
+ALTER TABLE sell_operations
+  ADD CONSTRAINT sell_operations_steam_account_id_fkey
+  FOREIGN KEY (steam_account_id) REFERENCES steam_accounts(id) ON DELETE SET NULL;
+
+ALTER TABLE users
+  DROP CONSTRAINT IF EXISTS users_active_account_id_fkey;
+ALTER TABLE users
+  ADD CONSTRAINT users_active_account_id_fkey
+  FOREIGN KEY (active_account_id) REFERENCES steam_accounts(id) ON DELETE SET NULL;
+
+-- 019: Named portfolios
+CREATE TABLE IF NOT EXISTS portfolios (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       VARCHAR(100) NOT NULL,
+  color      VARCHAR(20) NOT NULL DEFAULT '#6366F1',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolios_user_id ON portfolios(user_id);
+
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS portfolio_id INTEGER REFERENCES portfolios(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_portfolio_id ON transactions(portfolio_id);
+
+-- 020: Per-item account routing for sell operations
+-- Allows a single sell operation to span items from multiple Steam accounts.
+ALTER TABLE sell_operation_items
+  ADD COLUMN IF NOT EXISTS account_id INTEGER REFERENCES steam_accounts(id) ON DELETE SET NULL;
+
+-- 021: marker — backfill trade_offers account_id_from (done in data migration below)
 `;
 
 export async function migrate() {
@@ -381,6 +417,64 @@ export async function migrate() {
     WHERE partner_acc.user_id = to1.user_id
       AND partner_acc.steam_id = to1.partner_steam_id
       AND to1.is_internal = FALSE
+  `);
+
+  // Backfill trade_offer_items.icon_url from inventory_items where missing
+  await pool.query(`
+    UPDATE trade_offer_items toi
+    SET icon_url = ii.icon_url
+    FROM (
+      SELECT DISTINCT ON (market_hash_name) market_hash_name, icon_url
+      FROM inventory_items
+      WHERE icon_url IS NOT NULL
+      ORDER BY market_hash_name, updated_at DESC
+    ) ii
+    WHERE toi.market_hash_name = ii.market_hash_name
+      AND toi.icon_url IS NULL
+  `);
+
+  // Backfill remaining from transactions (covers items no longer in inventory)
+  await pool.query(`
+    UPDATE trade_offer_items toi
+    SET icon_url = t.icon_url
+    FROM (
+      SELECT DISTINCT ON (market_hash_name) market_hash_name, icon_url
+      FROM transactions
+      WHERE icon_url IS NOT NULL
+      ORDER BY market_hash_name
+    ) t
+    WHERE toi.market_hash_name = t.market_hash_name
+      AND toi.icon_url IS NULL
+  `);
+
+  // 021: Backfill trade_offers.account_id_from for historical rows.
+  // Step 1: Undo incorrect backfill — reset account_id_from for received trades
+  // (received trades have account_id_to set; account_id_from=external partner, should stay NULL).
+  // We detect incorrectly backfilled rows: account_id_from = primary account AND account_id_to IS NOT NULL.
+  await pool.query(`
+    UPDATE trade_offers t
+    SET account_id_from = NULL
+    WHERE t.account_id_to IS NOT NULL
+      AND t.is_internal = FALSE
+      AND t.account_id_from = (
+        SELECT sa.id FROM steam_accounts sa
+        WHERE sa.user_id = t.user_id
+        ORDER BY sa.id ASC LIMIT 1
+      )
+  `);
+
+  // Step 2: Backfill only truly unattributed trades (BOTH from and to are NULL).
+  // These are historical sent trades; attribute to primary account.
+  await pool.query(`
+    UPDATE trade_offers t
+    SET account_id_from = (
+      SELECT sa.id FROM steam_accounts sa
+      WHERE sa.user_id = t.user_id
+      ORDER BY sa.id ASC LIMIT 1
+    )
+    WHERE t.account_id_from IS NULL
+      AND t.account_id_to IS NULL
+      AND t.is_internal = FALSE
   `);
 
   console.log("Migrations complete.");

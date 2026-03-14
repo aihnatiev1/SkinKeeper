@@ -32,7 +32,7 @@ class PriceAlert {
       condition: AlertCondition.values.firstWhere(
         (e) => e.name == json['condition'],
       ),
-      threshold: (json['threshold'] as num).toDouble(),
+      threshold: double.parse(json['threshold'].toString()),
       source: AlertSource.values.firstWhere(
         (e) => e.name == (json['source'] ?? 'any'),
         orElse: () => AlertSource.any,
@@ -84,7 +84,7 @@ class AlertHistoryItem {
       alertId: json['alert_id'] as int,
       marketHashName: json['market_hash_name'] as String,
       condition: json['condition'] as String,
-      threshold: (json['threshold'] as num).toDouble(),
+      threshold: double.parse(json['threshold'].toString()),
       source: json['source'] as String,
       priceUsd: (json['price_usd'] as num).toDouble(),
       message: json['message'] as String,

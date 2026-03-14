@@ -170,6 +170,8 @@ router.get("/", authMiddleware, validateQuery(tradesListQuerySchema), async (req
     const status = req.query.status as string | undefined;
     const limit = req.query.limit as unknown as number;
     const offset = req.query.offset as unknown as number;
+    const accountIdParam = req.query.accountId as string | undefined;
+    const accountId = accountIdParam ? parseInt(accountIdParam) : undefined;
 
     // Auto-sync on first page load (fire and forget to avoid slowing response)
     if (offset === 0) {
@@ -178,7 +180,7 @@ router.get("/", authMiddleware, validateQuery(tradesListQuerySchema), async (req
       );
     }
 
-    const result = await listOffers(req.userId!, status, limit, offset);
+    const result = await listOffers(req.userId!, status, limit, offset, accountId);
     res.json(result);
   } catch (err) {
     console.error("List trade offers error:", err);

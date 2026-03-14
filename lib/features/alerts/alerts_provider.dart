@@ -47,9 +47,16 @@ class AlertsNotifier extends AsyncNotifier<List<PriceAlert>> {
   }
 
   Future<void> deleteAlert(int alertId) async {
-    final api = ref.read(apiClientProvider);
-    await api.delete('/alerts/$alertId');
-    ref.invalidateSelf();
+    // Optimistically remove so Dismissible doesn't linger in the tree
+    state = AsyncData(
+      (state.valueOrNull ?? []).where((a) => a.id != alertId).toList(),
+    );
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.delete('/alerts/$alertId');
+    } catch (e) {
+      ref.invalidateSelf(); // revert on error
+    }
   }
 }
 

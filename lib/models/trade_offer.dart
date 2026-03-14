@@ -1,3 +1,5 @@
+import '../core/steam_image.dart';
+
 class TradeOfferItem {
   final int id;
   final String side; // 'give' | 'receive'
@@ -17,10 +19,7 @@ class TradeOfferItem {
     this.priceCents = 0,
   });
 
-  String get fullIconUrl =>
-      iconUrl != null && iconUrl!.isNotEmpty
-          ? 'https://community.steamstatic.com/economy/image/$iconUrl/360fx360f'
-          : '';
+  String get fullIconUrl => SteamImage.url(iconUrl ?? '', size: '360fx360f');
 
   String get displayName {
     if (marketHashName == null) return 'Unknown Item';
@@ -62,6 +61,10 @@ class TradeOffer {
   final String status;
   final bool isQuickTransfer;
   final bool isInternal;
+  final int? accountIdFrom;
+  final int? accountIdTo;
+  final String? accountFromName;
+  final String? accountToName;
   final int valueGiveCents;
   final int valueRecvCents;
   final DateTime createdAt;
@@ -78,6 +81,10 @@ class TradeOffer {
     required this.status,
     this.isQuickTransfer = false,
     this.isInternal = false,
+    this.accountIdFrom,
+    this.accountIdTo,
+    this.accountFromName,
+    this.accountToName,
     this.valueGiveCents = 0,
     this.valueRecvCents = 0,
     required this.createdAt,
@@ -86,6 +93,12 @@ class TradeOffer {
   });
 
   bool get isIncoming => direction == 'incoming';
+
+  /// Display name of our account for external trades. Null for internal trades (show both).
+  String? get ownerAccountName {
+    if (isInternal) return null;
+    return accountFromName ?? accountToName;
+  }
   bool get isPending => status == 'pending' || status == 'awaiting_confirmation' || status == 'on_hold';
 
   List<TradeOfferItem> get giveItems =>
@@ -111,6 +124,10 @@ class TradeOffer {
       status: json['status'].toString(),
       isQuickTransfer: json['isQuickTransfer'] as bool? ?? false,
       isInternal: json['isInternal'] as bool? ?? false,
+      accountIdFrom: (json['accountIdFrom'] as num?)?.toInt(),
+      accountIdTo: (json['accountIdTo'] as num?)?.toInt(),
+      accountFromName: json['accountFromName']?.toString(),
+      accountToName: json['accountToName']?.toString(),
       valueGiveCents: (json['valueGiveCents'] as num?)?.toInt() ?? 0,
       valueRecvCents: (json['valueRecvCents'] as num?)?.toInt() ?? 0,
       createdAt: DateTime.parse(json['createdAt'].toString()),

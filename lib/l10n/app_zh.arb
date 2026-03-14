@@ -99,7 +99,7 @@
   "alertSource": "市场",
   "alertSourceAny": "任何市场",
   "alertCooldown": "冷却时间",
-  "alertHistory": "提醒历史",
+  "alertHistory": "通知",
   "alertTriggered": "已触发",
   "alertActive": "活跃",
   "alertPaused": "已暂停",

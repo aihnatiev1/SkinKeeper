@@ -87,8 +87,8 @@ class _SyncIndicatorState extends State<SyncIndicator> {
               )
             else
               Icon(
-                isStale ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
-                size: 13,
+                Icons.refresh_rounded,
+                size: 14,
                 color: color,
               ),
             const SizedBox(width: 5),

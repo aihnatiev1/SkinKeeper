@@ -283,7 +283,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get alertCooldown => 'Задержка';
 
   @override
-  String get alertHistory => 'История оповещений';
+  String get alertHistory => 'Уведомления';
 
   @override
   String get alertTriggered => 'Сработало';

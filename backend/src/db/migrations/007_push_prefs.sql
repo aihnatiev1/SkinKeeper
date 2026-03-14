@@ -1,0 +1,1 @@
+ALTER TABLE user_devices ADD COLUMN IF NOT EXISTS push_prefs JSONB NOT NULL DEFAULT '{}';

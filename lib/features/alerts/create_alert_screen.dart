@@ -311,6 +311,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                     TextField(
                       controller: _thresholdController,
                       focusNode: _thresholdFocus,
+                      onChanged: (_) => setState(() => _error = null),
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
                       decoration: InputDecoration(

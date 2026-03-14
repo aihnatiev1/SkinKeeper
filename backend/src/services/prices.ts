@@ -329,6 +329,8 @@ export async function getLatestPrices(
 
   // Use LATERAL join to do one fast index-only lookup per item×source
   // instead of scanning millions of rows with DISTINCT ON
+  // Filter price_usd > 0 inside LATERAL so we get last known real price,
+  // not a 0-placeholder that was saved when Steam temporarily returned no price
   const { rows } = await pool.query(
     `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name),
           sources AS (SELECT unnest(ARRAY['skinport','steam','csfloat','dmarket']) AS source)
@@ -339,6 +341,7 @@ export async function getLatestPrices(
        SELECT price_usd FROM price_history ph
        WHERE ph.market_hash_name = n.market_hash_name
          AND ph.source = s.source
+         AND ph.price_usd > 0
        ORDER BY ph.recorded_at DESC
        LIMIT 1
      ) lp ON true`,
@@ -348,7 +351,6 @@ export async function getLatestPrices(
   const result = new Map<string, Record<string, number>>();
   for (const row of rows) {
     const price = parseFloat(row.price_usd);
-    if (price <= 0) continue; // skip placeholder 0-prices
     const existing = result.get(row.market_hash_name) ?? {};
     existing[row.source] = price;
     result.set(row.market_hash_name, existing);
@@ -375,7 +377,8 @@ export async function getPriceHistory(
      WHERE market_hash_name = $1
        AND recorded_at > NOW() - INTERVAL '1 day' * $2
        AND price_usd > 0
-     ORDER BY recorded_at ASC`,
+     ORDER BY recorded_at ASC
+     LIMIT 2000`,
     [marketHashName, days]
   );
   return rows.map((r) => ({

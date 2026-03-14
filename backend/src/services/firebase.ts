@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import { GoogleAuth } from "google-auth-library";
 
 let initialized = false;
 
@@ -14,8 +15,20 @@ export function initFirebase(): void {
   }
 
   try {
+    const sa = JSON.parse(serviceAccount);
+    const auth = new GoogleAuth({
+      credentials: sa,
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
     admin.initializeApp({
-      credential: admin.credential.cert(JSON.parse(serviceAccount)),
+      credential: {
+        getAccessToken: async () => {
+          const client = await auth.getClient();
+          const token = await client.getAccessToken();
+          return { access_token: token.token!, expires_in: 3600 };
+        },
+      },
+      projectId: sa.project_id,
     });
     initialized = true;
     console.log("[Firebase] Admin SDK initialized");

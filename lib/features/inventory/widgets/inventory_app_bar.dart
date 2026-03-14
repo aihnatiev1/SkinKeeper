@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../widgets/account_scope_chip.dart';
 import '../../../widgets/sync_indicator.dart';
 import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
@@ -125,6 +126,8 @@ class InventoryAppBar extends ConsumerWidget {
                     await ref.read(inventoryProvider.notifier).refresh();
                   },
                 ),
+                const SizedBox(width: 8),
+                const AccountScopeChip(),
                 const Spacer(),
                 GestureDetector(
                   onTap: () {

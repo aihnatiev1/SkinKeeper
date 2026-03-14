@@ -44,8 +44,8 @@ app.use((req, _res, next) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/prices", pricesRoutes);
-app.use("/api/portfolio", portfolioRoutes);
 app.use("/api", portfoliosRouter);
+app.use("/api/portfolio", portfolioRoutes);
 app.use("/api/alerts", alertsRoutes);
 app.use("/api/market", marketRoutes);
 app.use("/api/transactions", transactionsRoutes);

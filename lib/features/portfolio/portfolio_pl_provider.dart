@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../models/profit_loss.dart';
 
@@ -15,13 +16,17 @@ class PortfolioPLNotifier extends AsyncNotifier<PortfolioPL> {
   @override
   Future<PortfolioPL> build() {
     ref.watch(selectedPortfolioIdProvider); // re-fetch when portfolio selection changes
+    ref.watch(accountScopeProvider);        // re-fetch when account scope changes
     return _fetch();
   }
 
   Future<PortfolioPL> _fetch() async {
     final api = ref.read(apiClientProvider);
     final portfolioId = ref.read(selectedPortfolioIdProvider);
-    final params = portfolioId != null ? {'portfolioId': portfolioId.toString()} : <String, String>{};
+    final accountScope = ref.read(accountScopeProvider);
+    final params = <String, String>{};
+    if (portfolioId != null) params['portfolioId'] = portfolioId.toString();
+    if (accountScope != null) params['accountId'] = accountScope.toString();
     final res = await api.get('/portfolio/pl', queryParameters: params);
     return PortfolioPL.fromJson(res.data as Map<String, dynamic>);
   }
@@ -57,24 +62,118 @@ final accountsPLProvider = FutureProvider<List<AccountPL>>((ref) async {
       .toList();
 });
 
-// Per-item P/L (premium — returns 403 for free users)
-final itemsPLProvider = FutureProvider<List<ItemPL>>((ref) async {
-  final portfolioId = ref.watch(selectedPortfolioIdProvider);
-  final api = ref.read(apiClientProvider);
-  final params = portfolioId != null ? {'portfolioId': portfolioId.toString()} : <String, String>{};
-  final res = await api.get('/portfolio/pl/items', queryParameters: params);
-  final data = res.data as Map<String, dynamic>;
-  return (data['items'] as List<dynamic>)
-      .map((e) => ItemPL.fromJson(e as Map<String, dynamic>))
-      .toList();
-});
+// Per-item P/L state (supports progressive background loading)
+class ItemsPLState {
+  final List<ItemPL> items;
+  final int total;
+  final bool isLoadingMore;
+
+  const ItemsPLState({
+    required this.items,
+    required this.total,
+    this.isLoadingMore = false,
+  });
+
+  bool get hasMore => items.length < total;
+
+  ItemsPLState copyWith({
+    List<ItemPL>? items,
+    int? total,
+    bool? isLoadingMore,
+  }) =>
+      ItemsPLState(
+        items: items ?? this.items,
+        total: total ?? this.total,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      );
+}
+
+final itemsPLProvider =
+    AsyncNotifierProvider<ItemsPLNotifier, ItemsPLState>(ItemsPLNotifier.new);
+
+class ItemsPLNotifier extends AsyncNotifier<ItemsPLState> {
+  static const _pageSize = 100;
+  int _buildId = 0;
+
+  @override
+  Future<ItemsPLState> build() {
+    ref.watch(selectedPortfolioIdProvider);
+    ref.watch(accountScopeProvider);
+    final myBuildId = ++_buildId;
+    return _fetchFirst(myBuildId);
+  }
+
+  Future<ItemsPLState> _fetchFirst(int buildId) async {
+    final result = await _fetchPage(0);
+    final s = ItemsPLState(
+      items: result.items,
+      total: result.total,
+      isLoadingMore: result.items.length < result.total,
+    );
+    if (s.hasMore) {
+      _fetchRemaining(result.items, result.total, buildId);
+    }
+    return s;
+  }
+
+  void _fetchRemaining(List<ItemPL> loaded, int total, int buildId) async {
+    var allItems = [...loaded];
+    var offset = _pageSize;
+    while (allItems.length < total) {
+      if (_buildId != buildId) return;
+      try {
+        final result = await _fetchPage(offset);
+        if (_buildId != buildId) return;
+        if (result.items.isEmpty) break;
+        allItems = [...allItems, ...result.items];
+        state = AsyncData(ItemsPLState(
+          items: allItems,
+          total: total,
+          isLoadingMore: allItems.length < total,
+        ));
+        offset += _pageSize;
+      } catch (_) {
+        break;
+      }
+    }
+    if (_buildId == buildId) {
+      state = AsyncData(ItemsPLState(
+        items: allItems,
+        total: total,
+        isLoadingMore: false,
+      ));
+    }
+  }
+
+  Future<({List<ItemPL> items, int total})> _fetchPage(int offset) async {
+    final api = ref.read(apiClientProvider);
+    final portfolioId = ref.read(selectedPortfolioIdProvider);
+    final accountScope = ref.read(accountScopeProvider);
+    final params = <String, String>{
+      'limit': '$_pageSize',
+      'offset': '$offset',
+    };
+    if (portfolioId != null) params['portfolioId'] = portfolioId.toString();
+    if (accountScope != null) params['accountId'] = accountScope.toString();
+    final res = await api.get('/portfolio/pl/items', queryParameters: params);
+    final data = res.data as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>)
+        .map((e) => ItemPL.fromJson(e as Map<String, dynamic>))
+        .toList();
+    final total = data['total'] as int;
+    return (items: items, total: total);
+  }
+}
 
 // P/L history for chart (premium)
 final plHistoryProvider =
     FutureProvider.family<List<PLHistoryPoint>, int>((ref, days) async {
+  final accountScope = ref.watch(accountScopeProvider);
   final api = ref.read(apiClientProvider);
+  final params = <String, dynamic>{'days': days};
+  if (accountScope != null) params['accountId'] = accountScope;
   final res =
-      await api.get('/portfolio/pl/history', queryParameters: {'days': days});
+      await api.get('/portfolio/pl/history', queryParameters: params);
   final data = res.data as Map<String, dynamic>;
   return (data['history'] as List<dynamic>)
       .map((e) => PLHistoryPoint.fromJson(e as Map<String, dynamic>))
@@ -102,8 +201,7 @@ final plTabProvider = StateProvider<PlTab>((ref) => PlTab.active);
 final itemPLMapProvider = Provider<Map<String, ItemPL>>((ref) {
   final itemsPL = ref.watch(itemsPLProvider);
   return itemsPL.whenOrNull(
-        data: (items) =>
-            {for (final item in items) item.marketHashName: item},
+        data: (s) => {for (final item in s.items) item.marketHashName: item},
       ) ??
       {};
 });

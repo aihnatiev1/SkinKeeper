@@ -99,7 +99,7 @@
   "alertSource": "Mercado",
   "alertSourceAny": "Qualquer mercado",
   "alertCooldown": "Intervalo",
-  "alertHistory": "Histórico de Alertas",
+  "alertHistory": "Notificações",
   "alertTriggered": "Disparado",
   "alertActive": "Ativo",
   "alertPaused": "Pausado",

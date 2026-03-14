@@ -8,27 +8,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
+import '../settings/accounts_provider.dart';
 import '../../widgets/shared_ui.dart';
+import 'session_provider.dart';
 import 'steam_auth_service.dart';
 import 'widgets/clienttoken_auth_tab.dart';
 
-// ─── Login QR state ──────────────────────────────────────────────────────
+// ─── QR state ────────────────────────────────────────────────────────────
 
-class _LoginQrState {
+class _QrState {
   final String? qrImage;
   final String? nonce;
   final String status; // idle | loading | ready | pending | authenticated | expired | error
   final String? error;
 
-  const _LoginQrState({
+  const _QrState({
     this.qrImage,
     this.nonce,
     this.status = 'idle',
     this.error,
   });
 
-  _LoginQrState copyWith({String? qrImage, String? nonce, String? status, String? error}) =>
-      _LoginQrState(
+  _QrState copyWith({String? qrImage, String? nonce, String? status, String? error}) =>
+      _QrState(
         qrImage: qrImage ?? this.qrImage,
         nonce: nonce ?? this.nonce,
         status: status ?? this.status,
@@ -36,20 +38,22 @@ class _LoginQrState {
       );
 }
 
-final _loginQrProvider =
-    StateNotifierProvider<_LoginQrNotifier, _LoginQrState>((ref) {
-  return _LoginQrNotifier(ref);
-});
+final _qrProvider = StateNotifierProvider<_QrNotifier, _QrState>((ref) => _QrNotifier(ref));
 
-class _LoginQrNotifier extends StateNotifier<_LoginQrState> {
+class _QrNotifier extends StateNotifier<_QrState> {
   final Ref _ref;
-  _LoginQrNotifier(this._ref) : super(const _LoginQrState());
+  _QrNotifier(this._ref) : super(const _QrState());
 
-  Future<void> startQR() async {
+  Future<void> startQR({bool isLinking = false}) async {
     state = state.copyWith(status: 'loading', error: null);
     try {
       final api = _ref.read(apiClientProvider);
-      final response = await api.post('/auth/qr/start');
+      // Linking: use session endpoint (requires JWT, returns accountId on success)
+      // Initial login: use auth endpoint (no JWT required)
+      final endpoint = isLinking
+          ? '/session/qr/start?linkMode=true'
+          : '/auth/qr/start';
+      final response = await api.post(endpoint);
       final data = response.data as Map<String, dynamic>;
       state = state.copyWith(
         qrImage: data['qrImage'] as String?,
@@ -61,22 +65,22 @@ class _LoginQrNotifier extends StateNotifier<_LoginQrState> {
     }
   }
 
-  /// Returns status string. If 'authenticated', also saves JWT.
-  Future<String> pollQR() async {
+  Future<String> pollQR({bool isLinking = false}) async {
     final nonce = state.nonce;
     if (nonce == null) return 'error';
     try {
       final api = _ref.read(apiClientProvider);
-      final response = await api.get('/auth/qr/poll/$nonce');
+      final endpoint = isLinking
+          ? '/session/qr/poll/$nonce?linkMode=true'
+          : '/auth/qr/poll/$nonce';
+      final response = await api.get(endpoint);
       final data = response.data as Map<String, dynamic>;
       final pollStatus = data['status'] as String? ?? 'pending';
       state = state.copyWith(status: pollStatus);
 
-      if (pollStatus == 'authenticated') {
+      if (pollStatus == 'authenticated' && !isLinking) {
         final token = data['token'] as String?;
-        if (token != null) {
-          await api.saveToken(token);
-        }
+        if (token != null) await api.saveToken(token);
       }
 
       return pollStatus;
@@ -85,13 +89,14 @@ class _LoginQrNotifier extends StateNotifier<_LoginQrState> {
     }
   }
 
-  void reset() => state = const _LoginQrState();
+  void reset() => state = const _QrState();
 }
 
 // ─── Login Screen ────────────────────────────────────────────────────────
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  final bool isLinking;
+  const LoginScreen({super.key, this.isLinking = false});
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -107,32 +112,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void initState() {
     super.initState();
     _pageCtrl = PageController();
-    // QR starts only when user switches to that tab
   }
 
   void _onTabChanged(int i) {
     setState(() => _selectedTab = i);
-    _pageCtrl.animateToPage(
-      i,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-    );
+    _pageCtrl.animateToPage(i,
+        duration: const Duration(milliseconds: 1), curve: Curves.linear);
+    _maybeStartQr(i);
+  }
+
+  void _onPageChanged(int i) {
+    setState(() => _selectedTab = i);
+    _maybeStartQr(i);
+  }
+
+  void _maybeStartQr(int i) {
     if (i == 2 && !_qrStarted) {
       _qrStarted = true;
-      ref.read(_loginQrProvider.notifier).startQR().then((_) {
-        if (mounted) _startPolling();
-      });
+      ref.read(_qrProvider.notifier)
+          .startQR(isLinking: widget.isLinking)
+          .then((_) { if (mounted) _startPolling(); });
     }
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      final status = await ref.read(_loginQrProvider.notifier).pollQR();
+      final status = await ref.read(_qrProvider.notifier).pollQR(isLinking: widget.isLinking);
       if (!mounted) return;
       if (status == 'authenticated') {
         _pollTimer?.cancel();
-        ref.invalidate(authStateProvider);
+        if (widget.isLinking) {
+          ref.invalidate(accountsProvider);
+          if (mounted) context.pop();
+        } else {
+          await ref.read(sessionStatusProvider.notifier).refresh();
+          ref.invalidate(authStateProvider);
+          if (!mounted) return;
+          context.canPop() ? context.pop() : context.go('/portfolio');
+        }
       } else if (status == 'expired') {
         _pollTimer?.cancel();
       }
@@ -151,14 +169,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authState = ref.watch(authStateProvider);
     final isLoading = authState.isLoading;
 
-    ref.listen(authStateProvider, (prev, next) {
+    ref.listen(authStateProvider, (_, next) {
       if (next.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Login failed: ${friendlyError(next.error)}'),
-            backgroundColor: AppTheme.loss,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Login failed: ${friendlyError(next.error)}'),
+          backgroundColor: AppTheme.loss,
+        ));
       }
     });
 
@@ -188,8 +204,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               SizedBox(height: canPop ? 8 : 32),
               _buildHeader(),
               const SizedBox(height: 24),
-
-              // Tab bar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: PillTabSelector(
@@ -198,19 +212,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onChanged: _onTabChanged,
                 ),
               ).animate().fadeIn(duration: 400.ms, delay: 400.ms),
-
               Expanded(
                 child: PageView(
                   controller: _pageCtrl,
-                  onPageChanged: _onTabChanged,
+                  onPageChanged: _onPageChanged,
                   children: [
                     _buildBrowserTab(isLoading),
-                    const ClientTokenAuthTab(),
+                    ClientTokenAuthTab(isLinking: widget.isLinking),
                     _buildQrTab(),
                   ],
                 ),
               ),
-
             ],
           ),
         ),
@@ -236,21 +248,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ],
           ),
           child: const Icon(Icons.shield_rounded, size: 40, color: Colors.white),
-        )
-            .animate()
-            .fadeIn(duration: 600.ms)
-            .scale(
+        ).animate().fadeIn(duration: 600.ms).scale(
               begin: const Offset(0.8, 0.8),
               duration: 600.ms,
               curve: Curves.easeOutBack,
             ),
         const SizedBox(height: 20),
-        const Text('SkinKeeper', style: AppTheme.h1)
-            .animate()
-            .fadeIn(duration: 500.ms, delay: 200.ms),
+        Text(
+          widget.isLinking ? 'Link Account' : 'SkinKeeper',
+          style: AppTheme.h1,
+        ).animate().fadeIn(duration: 500.ms, delay: 200.ms),
         const SizedBox(height: 8),
         Text(
-          'Track your CS2 inventory value\nacross all markets',
+          widget.isLinking
+              ? 'Sign in with another Steam account\nto link it to your profile.'
+              : 'Track your CS2 inventory value\nacross all markets',
           textAlign: TextAlign.center,
           style: AppTheme.subtitle.copyWith(height: 1.5),
         ).animate().fadeIn(duration: 500.ms, delay: 350.ms),
@@ -259,39 +271,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildQrTab() {
-    final qrState = ref.watch(_loginQrProvider);
-
+    final qrState = ref.watch(_qrProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
           const SizedBox(height: 8),
-          Text(
-            'Scan with Steam Mobile App',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
+          Text('Scan with Steam Mobile App',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  )),
           const SizedBox(height: 8),
           Text(
             'Open the Steam app → Guard section → scan the QR code below.',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white60,
-                ),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: Colors.white60),
           ),
           const SizedBox(height: 24),
           _buildQrArea(qrState),
           const SizedBox(height: 20),
-          _buildStatusText(qrState),
+          _buildQrStatus(qrState),
           if (qrState.status == 'expired') ...[
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () {
-                ref.read(_loginQrProvider.notifier).startQR().then((_) {
-                  _startPolling();
-                });
+                setState(() => _qrStarted = false);
+                ref.read(_qrProvider.notifier).reset();
+                _onTabChanged(2);
               },
               icon: const Icon(Icons.refresh, size: 20),
               label: const Text('Generate New QR Code'),
@@ -299,9 +309,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               ),
             ),
           ],
@@ -310,78 +320,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildQrArea(_LoginQrState state) {
+  Widget _buildQrArea(_QrState state) {
     if (state.status == 'loading') {
       return Container(
-        width: 220,
-        height: 220,
+        width: 220, height: 220,
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(10),
-          borderRadius: BorderRadius.circular(16),
-        ),
+            color: Colors.white.withAlpha(10),
+            borderRadius: BorderRadius.circular(16)),
         child: const Center(child: CircularProgressIndicator()),
       );
     }
-
     if (state.error != null) {
       return Container(
-        width: 220,
-        height: 220,
+        width: 220, height: 280,
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(10),
-          borderRadius: BorderRadius.circular(16),
-        ),
+            color: Colors.white.withAlpha(10),
+            borderRadius: BorderRadius.circular(16)),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-              const SizedBox(height: 12),
-              Text(
-                'Failed to load QR',
-                style: TextStyle(color: Colors.red[300], fontSize: 14),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                const SizedBox(height: 12),
+                Text('Failed to load QR',
+                    style: TextStyle(color: Colors.red[300], fontSize: 14)),
+                const SizedBox(height: 8),
+                Text(state.error!,
+                    style: TextStyle(color: Colors.red[200], fontSize: 11),
+                    textAlign: TextAlign.center,
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ),
           ),
         ),
       );
     }
-
     if (state.qrImage != null) {
       final raw = state.qrImage!;
       final base64Str = raw.contains(',') ? raw.split(',').last : raw;
       final bytes = base64Decode(base64Str);
-
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
+            color: Colors.white, borderRadius: BorderRadius.circular(16)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Image.memory(bytes, width: 196, height: 196, fit: BoxFit.contain),
         ),
-      )
-          .animate()
-          .fadeIn(duration: 300.ms)
-          .scale(begin: const Offset(0.95, 0.95), duration: 300.ms);
+      ).animate().fadeIn(duration: 300.ms).scale(
+            begin: const Offset(0.95, 0.95), duration: 300.ms);
     }
-
     return Container(
-      width: 220,
-      height: 220,
+      width: 220, height: 220,
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(10),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Center(
-        child: Icon(Icons.qr_code_2, size: 64, color: Colors.white24),
-      ),
+          color: Colors.white.withAlpha(10),
+          borderRadius: BorderRadius.circular(16)),
+      child: const Center(child: Icon(Icons.qr_code_2, size: 64, color: Colors.white24)),
     );
   }
 
-  Widget _buildStatusText(_LoginQrState state) {
+  Widget _buildQrStatus(_QrState state) {
     final (String text, Color color) = switch (state.status) {
       'ready' || 'polling' || 'pending' => ('Waiting for scan...', Colors.white60),
       'authenticated' => ('Authenticated!', const Color(0xFF00E676)),
@@ -389,9 +390,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       'error' => ('Something went wrong', const Color(0xFFFF5252)),
       _ => ('', Colors.transparent),
     };
-
     if (text.isEmpty) return const SizedBox.shrink();
-    return Text(text, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color));
+    return Text(text,
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color));
   }
 
   Widget _buildBrowserTab(bool isLoading) {
@@ -406,19 +407,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             Text(
               'Opens Steam login in your browser.\nAfter signing in, you\'ll be redirected back.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white60,
-                    height: 1.5,
-                  ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.white60, height: 1.5),
             ),
             const SizedBox(height: 32),
             if (isLoading)
               const Padding(
                 padding: EdgeInsets.only(bottom: 24),
                 child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primary),
+                  width: 24, height: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: AppTheme.primary),
                 ),
               ),
             GestureDetector(
@@ -426,7 +427,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ? null
                   : () {
                       HapticFeedback.mediumImpact();
-                      ref.read(authServiceProvider).openSteamLogin();
+                      if (widget.isLinking) {
+                        ref.read(authServiceProvider).openSteamLinkLogin(ref);
+                      } else {
+                        ref.read(authServiceProvider).openSteamLogin();
+                      }
                     },
               child: Container(
                 width: double.infinity,
@@ -448,14 +453,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     Icon(Icons.login_rounded, size: 22, color: Colors.white),
                     SizedBox(width: 12),
-                    Text(
-                      'Sign in with Steam',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                    Text('Sign in with Steam',
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
                   ],
                 ),
               ),

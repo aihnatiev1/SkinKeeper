@@ -9,6 +9,7 @@ interface SellOperationItemInput {
   assetId: string;
   marketHashName: string;
   priceCents: number;
+  accountId?: number;
 }
 
 interface SellOperationItem {
@@ -17,6 +18,7 @@ interface SellOperationItem {
   assetId: string;
   marketHashName: string | null;
   priceCents: number;
+  accountId: number | null;
   status: "queued" | "listing" | "listed" | "failed" | "cancelled";
   errorMessage: string | null;
   requiresConfirmation: boolean;
@@ -80,20 +82,21 @@ export async function createOperation(
     const values: unknown[] = [];
     const placeholders: string[] = [];
     for (let i = 0; i < items.length; i++) {
-      const offset = i * 4;
+      const offset = i * 5;
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`
       );
       values.push(
         operationId,
         items[i].assetId,
         items[i].marketHashName,
-        items[i].priceCents
+        items[i].priceCents,
+        items[i].accountId ?? null
       );
     }
 
     await client.query(
-      `INSERT INTO sell_operation_items (operation_id, asset_id, market_hash_name, price_cents)
+      `INSERT INTO sell_operation_items (operation_id, asset_id, market_hash_name, price_cents, account_id)
        VALUES ${placeholders.join(", ")}`,
       values
     );
@@ -101,8 +104,22 @@ export async function createOperation(
     await client.query("COMMIT");
 
     // Fire and forget — processing runs in the background
-    processOperation(operationId, userId).catch((err) => {
+    processOperation(operationId, userId).catch(async (err) => {
       console.error(`[SellOp ${operationId}] Unhandled processing error:`, err);
+      // Mark operation as failed in DB so client can see the error
+      try {
+        await pool.query(
+          `UPDATE sell_operations SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status != 'completed'`,
+          [operationId]
+        );
+        await pool.query(
+          `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW()
+           WHERE operation_id = $2 AND status = 'queued'`,
+          [err instanceof Error ? err.message : "Unexpected processing error", operationId]
+        );
+      } catch (dbErr) {
+        console.error(`[SellOp ${operationId}] Failed to update DB after crash:`, dbErr);
+      }
     });
 
     return operationId;
@@ -132,20 +149,26 @@ async function processOperation(
       [operationId]
     );
 
-    // Resolve accountId from the operation
+    // Resolve fallback accountId from the operation
     const { rows: opData } = await pool.query(
       `SELECT steam_account_id FROM sell_operations WHERE id = $1`,
       [operationId]
     );
-    const accountId: number = opData[0]?.steam_account_id
+    const fallbackAccountId: number = opData[0]?.steam_account_id
       ?? await SteamSessionService.getActiveAccountId(userId);
 
-    // Validate / refresh session before starting
-    let session = await SteamSessionService.ensureValidSession(accountId);
+    // Session cache — one session per account, fetched lazily
+    const sessionCache = new Map<number, Awaited<ReturnType<typeof SteamSessionService.ensureValidSession>>>();
+    const getSession = async (accountId: number) => {
+      if (!sessionCache.has(accountId)) {
+        sessionCache.set(accountId, await SteamSessionService.ensureValidSession(accountId));
+      }
+      return sessionCache.get(accountId)!;
+    };
 
-    // Load queued items
+    // Load queued items WITH per-item account_id
     const { rows: items } = await pool.query(
-      `SELECT id, asset_id, market_hash_name, price_cents
+      `SELECT id, asset_id, market_hash_name, price_cents, account_id
        FROM sell_operation_items
        WHERE operation_id = $1 AND status = 'queued'
        ORDER BY id`,
@@ -170,8 +193,11 @@ async function processOperation(
         [item.id]
       );
 
+      const itemAccountId: number = item.account_id ?? fallbackAccountId;
+
       try {
-        const result = await sellItem(session, item.asset_id, item.price_cents, accountId);
+        const session = await getSession(itemAccountId);
+        const result = await sellItem(session, item.asset_id, item.price_cents, itemAccountId);
 
         if (result.success) {
           await pool.query(
@@ -201,7 +227,7 @@ async function processOperation(
           );
           consecutiveErrors++;
 
-          // If the error indicates session expiry, try to refresh
+          // If the error indicates session expiry, refresh and update the cache for this account
           const sessionError =
             result.message?.toLowerCase().includes("login") ||
             result.message?.toLowerCase().includes("expired") ||
@@ -209,26 +235,28 @@ async function processOperation(
 
           if (sessionError) {
             try {
-              session = await SteamSessionService.ensureValidSession(accountId);
+              sessionCache.set(itemAccountId, await SteamSessionService.ensureValidSession(itemAccountId));
             } catch {
-              // Session refresh failed — abort remaining items
-              await pool.query(
+              // Session refresh failed for this account — fail all remaining items for it
+              const { rows: queuedItems } = await pool.query(
                 `UPDATE sell_operation_items
                  SET status = 'failed', error_message = 'Session expired and refresh failed', updated_at = NOW()
-                 WHERE operation_id = $1 AND status = 'queued'`,
+                 WHERE operation_id = $1 AND status = 'queued' AND (account_id = $2 OR (account_id IS NULL AND $2 = $3))
+                 RETURNING id`,
+                [operationId, itemAccountId, fallbackAccountId]
+              );
+              if (queuedItems.length > 0) {
+                await pool.query(
+                  `UPDATE sell_operations SET failed = failed + $1 WHERE id = $2`,
+                  [queuedItems.length, operationId]
+                );
+              }
+              // If no other accounts have remaining items, we can break
+              const { rows: stillQueued } = await pool.query(
+                `SELECT COUNT(*) as cnt FROM sell_operation_items WHERE operation_id = $1 AND status = 'queued'`,
                 [operationId]
               );
-              const { rows: remaining } = await pool.query(
-                `SELECT COUNT(*) as cnt FROM sell_operation_items
-                 WHERE operation_id = $1 AND status = 'failed' AND error_message = 'Session expired and refresh failed'`,
-                [operationId]
-              );
-              const abortedCount = parseInt(remaining[0]?.cnt ?? "0", 10);
-              await pool.query(
-                `UPDATE sell_operations SET failed = failed + $1 WHERE id = $2`,
-                [abortedCount, operationId]
-              );
-              break;
+              if (parseInt(stillQueued[0]?.cnt ?? "0", 10) === 0) break;
             }
           }
         }
@@ -303,7 +331,7 @@ export async function getOperation(
 
   const { rows: itemRows } = await pool.query(
     `SELECT id, operation_id, asset_id, market_hash_name, price_cents,
-            status, error_message, requires_confirmation, updated_at
+            account_id, status, error_message, requires_confirmation, updated_at
      FROM sell_operation_items
      WHERE operation_id = $1
      ORDER BY id`,
@@ -316,6 +344,7 @@ export async function getOperation(
     assetId: r.asset_id,
     marketHashName: r.market_hash_name,
     priceCents: r.price_cents,
+    accountId: r.account_id ?? null,
     status: r.status,
     errorMessage: r.error_message,
     requiresConfirmation: r.requires_confirmation,

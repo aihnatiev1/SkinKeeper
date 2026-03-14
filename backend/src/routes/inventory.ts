@@ -219,9 +219,11 @@ router.get(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const result = await inspectItem(req.userId!, req.params.assetId as string);
-      if (!result) {
-        res.status(404).json({ error: "Item not found or no inspect link" });
+      const force = req.query.force === "true";
+      const result = await inspectItem(req.userId!, req.params.assetId as string, force);
+      if ("failed" in result) {
+        const status = result.reason === "no_link" ? 404 : 503;
+        res.status(status).json({ error: result.reason });
         return;
       }
       res.json(result);

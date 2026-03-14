@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/api_client.dart';
 import '../../../core/steam_image.dart';
 import '../../../core/theme.dart';
 import '../../../models/profit_loss.dart';
@@ -29,11 +31,18 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
   /// Pre-fill item name (e.g. from inventory "Log Purchase")
   final String? initialItemName;
   final String? initialIconUrl;
+  final double? initialPriceUsd;
+  final int? initialQty;
+  /// When true: save replaces existing transactions instead of adding new ones
+  final bool editMode;
 
   const AddTransactionSheet({
     super.key,
     this.initialItemName,
     this.initialIconUrl,
+    this.initialPriceUsd,
+    this.initialQty,
+    this.editMode = false,
   });
 
   @override
@@ -83,6 +92,14 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       _selectedItem = widget.initialItemName;
       _selectedIconUrl = widget.initialIconUrl;
     }
+    if (widget.initialPriceUsd != null) {
+      _priceController.text = widget.initialPriceUsd!.toStringAsFixed(2);
+    }
+    if (widget.initialQty != null) {
+      _qtyController.text = widget.initialQty!.toString();
+    }
+    // Pre-select the currently active portfolio
+    _portfolioId = ref.read(selectedPortfolioIdProvider);
   }
 
   @override
@@ -111,32 +128,48 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   double get _totalPrice =>
       (double.tryParse(_priceController.text) ?? 0) * _quantity;
 
+  bool get _isUnchanged =>
+      widget.editMode &&
+      _quantity == (widget.initialQty ?? 1) &&
+      _priceCents == ((widget.initialPriceUsd ?? 0) * 100).round();
+
   Future<void> _save() async {
     if (!_isValid || _saving) return;
+    if (_isUnchanged) { context.pop(); return; }
     setState(() => _saving = true);
 
     try {
-      final service = ref.read(manualTxServiceProvider);
-      final success = await service.addTransaction(
-        marketHashName: _selectedItem!,
-        priceCentsPerUnit: _priceCents,
-        quantity: _quantity,
-        type: _type,
-        date: _date,
-        source: _source,
-        note: _noteController.text.isNotEmpty ? _noteController.text : null,
-        iconUrl: _selectedIconUrl,
-        portfolioId: _portfolioId,
-      );
+      if (widget.editMode) {
+        final api = ref.read(apiClientProvider);
+        await api.put('/transactions/item/replace', data: {
+          'marketHashName': _selectedItem!,
+          'qty': _quantity,
+          'priceCentsPerUnit': _priceCents,
+          'type': _type,
+          if (_portfolioId != null) 'portfolioId': _portfolioId,
+        });
+      } else {
+        final service = ref.read(manualTxServiceProvider);
+        await service.addTransaction(
+          marketHashName: _selectedItem!,
+          priceCentsPerUnit: _priceCents,
+          quantity: _quantity,
+          type: _type,
+          date: _date,
+          source: _source,
+          note: _noteController.text.isNotEmpty ? _noteController.text : null,
+          iconUrl: _selectedIconUrl,
+          portfolioId: _portfolioId,
+        );
+      }
 
-      if (success && mounted) {
+      if (mounted) {
         HapticFeedback.mediumImpact();
         FocusManager.instance.primaryFocus?.unfocus();
-        // Refresh P/L data
         ref.invalidate(portfolioPLProvider);
         ref.invalidate(itemsPLProvider);
         ref.invalidate(portfolioProvider);
-        Navigator.of(context).pop(true);
+        context.pop();
       }
     } catch (e) {
       if (mounted) {
@@ -197,7 +230,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                 ),
                 const Spacer(),
                 GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () => context.pop(),
                   child: Container(
                     width: 32,
                     height: 32,
@@ -255,6 +288,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                     RegExp(r'^\d*\.?\d{0,2}')),
+                                TextInputFormatter.withFunction((old, next) {
+                                  final v = double.tryParse(next.text) ?? 0;
+                                  return v <= 100000 ? next : old;
+                                }),
                               ],
                               onChanged: (_) => setState(() {}),
                             ),
@@ -276,6 +313,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                               prefixIcon: Icons.tag_rounded,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
+                                TextInputFormatter.withFunction((old, next) {
+                                  final v = int.tryParse(next.text) ?? 0;
+                                  return v <= 100000 ? next : old;
+                                }),
                               ],
                               onChanged: (_) => setState(() {}),
                             ),
@@ -405,6 +446,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                     hint: 'e.g. "Bought from friend"',
                     prefixIcon: Icons.notes_rounded,
                     maxLines: 1,
+                    maxLength: 250,
                   ),
                   const SizedBox(height: 24),
 
@@ -412,12 +454,16 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   GradientButton(
                     label: _saving
                         ? 'Saving...'
+                        : widget.editMode
+                            ? (_isUnchanged ? 'No changes' : 'Save changes')
+                            : _type == 'buy'
+                                ? 'Log Purchase'
+                                : 'Log Sale',
+                    icon: widget.editMode
+                        ? Icons.check_rounded
                         : _type == 'buy'
-                            ? 'Log Purchase'
-                            : 'Log Sale',
-                    icon: _type == 'buy'
-                        ? Icons.add_shopping_cart_rounded
-                        : Icons.sell_rounded,
+                            ? Icons.add_shopping_cart_rounded
+                            : Icons.sell_rounded,
                     isLoading: _saving,
                     onPressed: _isValid ? _save : null,
                     gradient: _type == 'buy'
@@ -461,7 +507,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               title: Text('None',
                   style:
                       AppTheme.bodySmall.copyWith(color: AppTheme.textMuted)),
-              onTap: () => Navigator.pop(context, -1), // -1 = clear
+              onTap: () => context.pop(-1), // -1 = clear
               dense: true,
               contentPadding: EdgeInsets.zero,
             ),
@@ -476,7 +522,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                 title: Text(p.name,
                     style: AppTheme.bodySmall
                         .copyWith(color: AppTheme.textPrimary)),
-                onTap: () => Navigator.pop(context, p.id),
+                onTap: () => context.pop(p.id),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -513,6 +559,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     List<TextInputFormatter>? inputFormatters,
     ValueChanged<String>? onChanged,
     int maxLines = 1,
+    int? maxLength,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -526,6 +573,14 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         inputFormatters: inputFormatters,
         onChanged: onChanged,
         maxLines: maxLines,
+        maxLength: maxLength,
+        buildCounter: maxLength != null
+            ? (_, {required currentLength, required isFocused, maxLength}) =>
+                isFocused
+                    ? Text('$currentLength/$maxLength',
+                        style: TextStyle(fontSize: 10, color: AppTheme.textMuted))
+                    : null
+            : null,
         style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w500,

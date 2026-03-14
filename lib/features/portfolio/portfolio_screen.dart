@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/router.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../l10n/app_localizations.dart';
@@ -16,6 +18,7 @@ import '../auth/widgets/session_status_widget.dart';
 import '../purchases/iap_service.dart';
 import 'portfolio_pl_provider.dart';
 import 'portfolio_provider.dart';
+import '../../widgets/account_scope_chip.dart';
 import '../../widgets/glass_sheet.dart';
 import 'widgets/add_transaction_sheet.dart';
 import 'widgets/item_pl_list.dart';
@@ -34,6 +37,19 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowOnboarding());
+  }
+
+  Future<void> _maybeShowOnboarding() async {
+    final done = await ref.read(onboardingCompleteProvider.future);
+    if (!done && mounted) {
+      context.push('/onboarding');
+    }
+  }
 
   void _showAddTransaction(BuildContext context) {
     HapticFeedback.mediumImpact();
@@ -348,6 +364,7 @@ class _PortfolioHeader extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -380,6 +397,7 @@ class _PortfolioHeader extends ConsumerWidget {
                 ],
               ),
               const Spacer(),
+              const AccountScopeChip(),
             ],
           ),
           const SizedBox(height: 12),
@@ -480,27 +498,27 @@ class _StatCards extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
-        _StatCard(
+        Expanded(child: _StatCard(
           label: 'ITEMS',
           value: NumberFormat.decimalPattern().format(data.itemCount),
           sub: 'in inventory',
           accentColor: AppTheme.primary,
           icon: Icons.inventory_2_rounded,
-        ),
+        )),
         const SizedBox(width: 8),
-        _StatCard(
+        Expanded(child: _StatCard(
           label: '24H',
           value: AppTheme.pctText(data.change24hPct),
           sub: AppTheme.pctText(data.change24h),
           accentColor: AppTheme.plColor(data.change24hPct),
-        ),
+        )),
         const SizedBox(width: 8),
-        _StatCard(
+        Expanded(child: _StatCard(
           label: '7D',
           value: AppTheme.pctText(data.change7dPct),
           sub: 'this week',
           accentColor: AppTheme.plColor(data.change7dPct),
-        ),
+        )),
       ],
     );
   }
@@ -530,8 +548,7 @@ class _StatCardState extends State<_StatCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
+    return GestureDetector(
         onTapDown: (_) => setState(() => _hovered = true),
         onTapUp: (_) => setState(() => _hovered = false),
         onTapCancel: () => setState(() => _hovered = false),
@@ -587,7 +604,6 @@ class _StatCardState extends State<_StatCard> {
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -976,21 +992,26 @@ class _ItemsTab extends ConsumerWidget {
     return PremiumGate(
       isPremium: isPremium,
       featureName: 'Per-item profit & loss breakdown',
-      child: itemsPL.when(
-        data: (items) => Column(
-          children: [
-            const _PortfolioSelectorBar(),
-            const SizedBox(height: 8),
-            ItemPLList(items: items).animate().fadeIn(duration: 400.ms),
-          ],
-        ),
-        loading: () => Column(
-          children: List.generate(5, (i) => const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: ShimmerBox(height: 56),
-          )),
-        ),
-        error: (_, _) => Center(child: Text('Failed to load', style: TextStyle(color: AppTheme.textSecondary))),
+      child: Column(
+        children: [
+          const _PortfolioSelectorBar(),
+          const SizedBox(height: 8),
+          itemsPL.when(
+            data: (s) => ItemPLList(items: s.items, isLoadingMore: s.isLoadingMore)
+                .animate()
+                .fadeIn(duration: 400.ms),
+            loading: () => Column(
+              children: List.generate(5, (i) => const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: ShimmerBox(height: 56),
+              )),
+            ),
+            error: (err, _) => Center(child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Error: $err', style: const TextStyle(color: AppTheme.loss, fontSize: 11)),
+            )),
+          ),
+        ],
       ),
     );
   }
@@ -1193,28 +1214,30 @@ class _PortfolioSelectorBar extends ConsumerWidget {
     final portfoliosAsync = ref.watch(portfoliosProvider);
     final selected = ref.watch(selectedPortfolioIdProvider);
 
+    Widget defaultBar() => Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _chip(
+            label: 'All',
+            color: AppTheme.primary,
+            isSelected: true,
+            onTap: () {},
+            onLongPress: null,
+          ),
+          const SizedBox(width: 8),
+          _addButton(context, ref),
+        ],
+      ),
+    );
+
     return portfoliosAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (e, _) => const SizedBox.shrink(),
+      loading: () => defaultBar(),
+      error: (e, _) => defaultBar(),
       data: (portfolios) {
         if (portfolios.isEmpty) {
-          // Show just the "All" chip + "+" button to create first portfolio
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-            child: Row(
-              children: [
-                _chip(
-                  label: 'All',
-                  color: AppTheme.primary,
-                  isSelected: true,
-                  onTap: () {},
-                  onLongPress: null,
-                ),
-                const SizedBox(width: 8),
-                _addButton(context, ref),
-              ],
-            ),
-          );
+          return defaultBar();
         }
         return SizedBox(
           height: 36,

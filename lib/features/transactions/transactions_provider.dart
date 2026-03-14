@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../core/steam_image.dart';
 
@@ -150,6 +151,7 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionItem>> {
 
   @override
   Future<List<TransactionItem>> build() async {
+    ref.watch(accountScopeProvider); // re-fetch when account scope changes
     final items = await _fetch(0);
     return items;
   }
@@ -160,6 +162,7 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionItem>> {
     final item = ref.read(txItemFilterProvider);
     final from = ref.read(txDateFromProvider);
     final to = ref.read(txDateToProvider);
+    final scope = ref.read(accountScopeProvider);
 
     final params = <String, dynamic>{
       'limit': _pageSize,
@@ -169,6 +172,7 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionItem>> {
     if (item != null) params['item'] = item;
     if (from != null) params['from'] = from.toIso8601String();
     if (to != null) params['to'] = to.toIso8601String();
+    if (scope != null) params['accountId'] = scope;
 
     final response = await api.get('/transactions', queryParameters: params);
     _total = (response.data['total'] as num?)?.toInt() ?? 0;
@@ -203,19 +207,27 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionItem>> {
   }
 
   /// Sync transactions from Steam. Pass fullSync: true to force re-fetch all pages.
-  Future<void> sync({bool fullSync = false}) async {
+  /// If an account scope is selected, syncs that specific account instead of the server-side active account.
+  // Returns count of fetched transactions (for snackbar display)
+  Future<int> sync({bool fullSync = false}) async {
     state = const AsyncLoading();
     try {
       final api = ref.read(apiClientProvider);
-      await api.post(
+      final scope = ref.read(accountScopeProvider);
+      final params = <String, dynamic>{};
+      if (fullSync) params['full'] = '1';
+      if (scope != null) params['accountId'] = scope;
+      final response = await api.post(
         '/transactions/sync',
-        queryParameters: fullSync ? {'full': '1'} : null,
-        receiveTimeout: const Duration(minutes: 5),
+        queryParameters: params.isEmpty ? null : params,
+        receiveTimeout: const Duration(minutes: 10),
       );
       _total = 0;
       state = AsyncData(await _fetch(0));
+      return (response.data['fetched'] as num?)?.toInt() ?? 0;
     } catch (e, st) {
       state = AsyncError(e, st);
+      rethrow;
     }
   }
 }
@@ -225,10 +237,12 @@ final txStatsProvider = FutureProvider<TransactionStats>((ref) async {
   final api = ref.read(apiClientProvider);
   final from = ref.read(txDateFromProvider);
   final to = ref.read(txDateToProvider);
+  final scope = ref.watch(accountScopeProvider);
 
   final params = <String, dynamic>{};
   if (from != null) params['from'] = from.toIso8601String();
   if (to != null) params['to'] = to.toIso8601String();
+  if (scope != null) params['accountId'] = scope;
 
   final response = await api.get('/transactions/stats', queryParameters: params);
   return TransactionStats.fromJson(response.data as Map<String, dynamic>);

@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
+import '../../core/review_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/trade_offer.dart';
+import '../inventory/inventory_provider.dart';
 import 'trades_provider.dart';
 
 class TradeDetailScreen extends ConsumerWidget {
@@ -410,11 +412,13 @@ class _TradeDetailBody extends ConsumerWidget {
     HapticFeedback.mediumImpact();
     try {
       await ref.read(tradesProvider.notifier).acceptOffer(offer.id);
+      ReviewService.maybeRequestReview();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Trade accepted')),
         );
         ref.invalidate(tradeDetailProvider(offer.id));
+        ref.read(inventoryProvider.notifier).refresh();
       }
     } catch (e) {
       if (context.mounted) {
@@ -434,6 +438,7 @@ class _TradeDetailBody extends ConsumerWidget {
           const SnackBar(content: Text('Trade declined')),
         );
         ref.invalidate(tradeDetailProvider(offer.id));
+        ref.read(inventoryProvider.notifier).refresh();
       }
     } catch (e) {
       if (context.mounted) {
@@ -453,6 +458,7 @@ class _TradeDetailBody extends ConsumerWidget {
           const SnackBar(content: Text('Offer cancelled')),
         );
         ref.invalidate(tradeDetailProvider(offer.id));
+        ref.read(inventoryProvider.notifier).refresh();
       }
     } catch (e) {
       if (context.mounted) {

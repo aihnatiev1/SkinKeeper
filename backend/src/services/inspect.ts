@@ -24,25 +24,33 @@ export interface InspectResult {
   charms: CharmInfo[];
 }
 
+export interface InspectFailure {
+  failed: true;
+  reason: "no_link" | "rate_limited" | "api_error";
+}
+
 /**
  * Fetch item details (float, stickers, charms) via CSFloat inspect API.
  * Uses the public endpoint: https://api.csfloat.com/?url=<inspect_link>
  */
 export async function fetchInspectData(
   inspectLink: string
-): Promise<InspectResult | null> {
+): Promise<InspectResult | InspectFailure> {
   try {
     const { data } = await axios.get("https://api.csfloat.com/", {
       params: { url: inspectLink },
       headers: {
-        Origin: "https://csfloat.com",
-        Referer: "https://csfloat.com/",
+        "User-Agent": "Mozilla/5.0 (compatible; SkinKeeper/1.0)",
+        Accept: "application/json",
       },
       timeout: 15000,
     });
 
     const info = data.iteminfo;
-    if (!info) return null;
+    if (!info) {
+      console.warn("[Inspect] CSFloat returned no iteminfo:", JSON.stringify(data).slice(0, 200));
+      return { failed: true, reason: "api_error" };
+    }
 
     const stickers: StickerInfo[] = (info.stickers ?? []).map((s: any) => ({
       slot: s.slot,
@@ -67,12 +75,14 @@ export async function fetchInspectData(
       charms,
     };
   } catch (err: any) {
-    if (err.response?.status === 429) {
-      console.warn("[Inspect] CSFloat rate limited");
-    } else {
-      console.warn(`[Inspect] Failed: ${err.message}`);
+    const status = err.response?.status;
+    const body = JSON.stringify(err.response?.data ?? {}).slice(0, 200);
+    if (status === 429) {
+      console.warn(`[Inspect] CSFloat rate limited (429)`);
+      return { failed: true, reason: "rate_limited" };
     }
-    return null;
+    console.warn(`[Inspect] CSFloat failed: status=${status ?? "no-response"} msg=${err.message} body=${body}`);
+    return { failed: true, reason: "api_error" };
   }
 }
 
@@ -80,10 +90,14 @@ export async function fetchInspectData(
  * Inspect an item and update DB with float/stickers/charms.
  * Returns cached data if inspected within the last 24 hours.
  */
+const INSPECT_CACHE_MS = 24 * 60 * 60 * 1000; // 24h for success
+const INSPECT_FAIL_CACHE_MS = 60 * 60 * 1000;  // 1h for failure (avoid hammering CSFloat)
+
 export async function inspectItem(
   userId: number,
-  assetId: string
-): Promise<InspectResult | null> {
+  assetId: string,
+  force = false
+): Promise<InspectResult | InspectFailure> {
   // Get item with inspect link, verify ownership
   const { rows } = await pool.query(
     `SELECT i.id, i.inspect_link, i.float_value, i.paint_seed, i.paint_index, i.stickers, i.charms, i.inspected_at
@@ -93,14 +107,16 @@ export async function inspectItem(
     [userId, assetId]
   );
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return { failed: true, reason: "no_link" };
 
   const item = rows[0];
 
-  // Return cached if inspected within 24h
-  if (item.inspected_at) {
+  if (!item.inspect_link) return { failed: true, reason: "no_link" };
+
+  if (!force && item.inspected_at) {
     const age = Date.now() - new Date(item.inspected_at).getTime();
-    if (age < 24 * 60 * 60 * 1000 && item.float_value != null) {
+    // Return cached success
+    if (age < INSPECT_CACHE_MS && item.float_value != null) {
       return {
         floatValue: parseFloat(item.float_value),
         paintSeed: item.paint_seed ?? 0,
@@ -109,14 +125,24 @@ export async function inspectItem(
         charms: item.charms ?? [],
       };
     }
+    // Throttle failures in background context: don't re-hit CSFloat within 1h
+    if (age < INSPECT_FAIL_CACHE_MS && item.float_value == null) {
+      return { failed: true, reason: "rate_limited" };
+    }
   }
 
-  if (!item.inspect_link) return null;
-
   const result = await fetchInspectData(item.inspect_link);
-  if (!result) return null;
 
-  // Update DB
+  if ("failed" in result) {
+    // Cache the failure timestamp so we don't hammer CSFloat
+    await pool.query(
+      `UPDATE inventory_items SET inspected_at = NOW() WHERE id = $1`,
+      [item.id]
+    );
+    return result;
+  }
+
+  // Update DB with success
   await pool.query(
     `UPDATE inventory_items
      SET float_value = $1, paint_seed = $2, paint_index = $3,
@@ -149,7 +175,7 @@ export async function batchInspect(
     const batch = assetIds.slice(i, i + concurrency);
     const promises = batch.map(async (assetId) => {
       const result = await inspectItem(userId, assetId);
-      if (result) results.set(assetId, result);
+      if (!("failed" in result)) results.set(assetId, result);
     });
     await Promise.all(promises);
     // Small delay between batches to stay under rate limit

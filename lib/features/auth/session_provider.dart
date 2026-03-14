@@ -161,6 +161,11 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
       final data = response.data as Map<String, dynamic>;
       final pollStatus = data['status'] as String? ?? 'pending';
 
+      if (pollStatus == 'authenticated') {
+        final token = data['token'] as String?;
+        if (token != null) await api.saveToken(token);
+      }
+
       state = state.copyWith(status: pollStatus);
       return pollStatus;
     } catch (e) {

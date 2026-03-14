@@ -186,34 +186,76 @@ export async function fetchSteamTransactions(
   };
 }
 
-// Save transactions to DB
+// Save transactions to DB (batch INSERT for performance)
 export async function saveTransactions(
   userId: number,
   transactions: Transaction[],
   steamAccountId?: number
-): Promise<void> {
-  if (transactions.length === 0) return;
+): Promise<number> {
+  if (transactions.length === 0) return 0;
 
-  for (const tx of transactions) {
-    await pool.query(
-      `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, partner_steam_id, icon_url, source, steam_account_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'steam', $9)
-       ON CONFLICT (user_id, tx_id) DO UPDATE SET
-         icon_url = COALESCE(transactions.icon_url, EXCLUDED.icon_url),
-         steam_account_id = COALESCE(transactions.steam_account_id, EXCLUDED.steam_account_id)`,
-      [
-        userId,
-        tx.id,
-        tx.type,
-        tx.marketHashName,
-        tx.price,
-        tx.date,
-        tx.partnerSteamId,
-        tx.iconUrl ?? null,
-        steamAccountId ?? null,
-      ]
-    );
-  }
+  // Batch insert using unnest for maximum performance
+  const txIds = transactions.map(tx => tx.id);
+  const types = transactions.map(tx => tx.type);
+  const names = transactions.map(tx => tx.marketHashName);
+  const prices = transactions.map(tx => tx.price);
+  const dates = transactions.map(tx => tx.date);
+  const partners = transactions.map(tx => tx.partnerSteamId ?? null);
+  const icons = transactions.map(tx => tx.iconUrl ?? null);
+  const accountIds = transactions.map(() => steamAccountId ?? null);
+
+  const { rowCount } = await pool.query(
+    `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, partner_steam_id, icon_url, source, steam_account_id)
+     SELECT $1, unnest($2::text[]), unnest($3::text[]), unnest($4::text[]),
+            unnest($5::int[]), unnest($6::timestamptz[]), unnest($7::text[]),
+            unnest($8::text[]), 'steam', unnest($9::int[])
+     ON CONFLICT (user_id, tx_id) DO UPDATE SET
+       icon_url = COALESCE(transactions.icon_url, EXCLUDED.icon_url),
+       steam_account_id = EXCLUDED.steam_account_id`,
+    [
+      userId,
+      txIds,
+      types,
+      names,
+      prices,
+      dates,
+      partners,
+      icons,
+      accountIds,
+    ]
+  );
+
+  return rowCount ?? 0;
+}
+
+// Get the most recent transaction date for incremental sync
+export async function getLatestTxDate(
+  userId: number,
+  steamAccountId?: number
+): Promise<Date | null> {
+  const { rows } = await pool.query(
+    `SELECT MAX(tx_date) AS latest FROM transactions
+     WHERE user_id = $1 AND source = 'steam'
+     ${steamAccountId ? 'AND steam_account_id = $2' : ''}`,
+    steamAccountId ? [userId, steamAccountId] : [userId]
+  );
+  return rows[0]?.latest ? new Date(rows[0].latest) : null;
+}
+
+// Check how many of the given tx_ids already exist in DB for a specific account
+export async function countExistingTxIds(
+  userId: number,
+  txIds: string[],
+  steamAccountId?: number
+): Promise<number> {
+  if (txIds.length === 0) return 0;
+  const { rows } = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM transactions
+     WHERE user_id = $1 AND tx_id = ANY($2::text[])
+     ${steamAccountId ? 'AND steam_account_id = $3' : ''}`,
+    steamAccountId ? [userId, txIds, steamAccountId] : [userId, txIds]
+  );
+  return parseInt(rows[0].cnt);
 }
 
 // Get unified transaction history (market buy/sell + trades)
@@ -226,15 +268,26 @@ export async function getTransactions(
     dateTo?: string;
     limit?: number;
     offset?: number;
+    accountId?: number;
   }
 ): Promise<{ transactions: any[]; total: number }> {
   const limit = filters.limit ?? 50;
   const offset = filters.offset ?? 0;
 
   // Build market transactions conditions
-  const txConditions = ["t.user_id = $1"];
+  // Only show Steam market history in the transactions feed;
+  // manual/csv entries only affect P/L calculations
+  const txConditions = ["t.user_id = $1", "t.source = 'steam'"];
   const params: any[] = [userId];
   let idx = 2;
+  let accountIdIdx = 0; // track param index for trade WHERE reuse
+
+  if (filters.accountId) {
+    accountIdIdx = idx;
+    txConditions.push(`t.steam_account_id = $${idx}`);
+    params.push(filters.accountId);
+    idx++;
+  }
 
   if (filters.type && filters.type !== "trade") {
     txConditions.push(`t.type = $${idx}`);
@@ -242,7 +295,9 @@ export async function getTransactions(
     idx++;
   }
 
+  let itemIdx = 0;
   if (filters.marketHashName) {
+    itemIdx = idx;
     txConditions.push(`t.market_hash_name = $${idx}`);
     params.push(filters.marketHashName);
     idx++;
@@ -268,10 +323,10 @@ export async function getTransactions(
 
   const txWhere = txConditions.join(" AND ");
 
-  // Trade subquery with item counts
+  // Trade subquery — aggregate item counts + first icon + item summary
   const tradeSelect = `
     SELECT to2.id::text AS id, 'trade'::text AS type,
-      COALESCE(to2.partner_name, 'Trade #' || to2.steam_offer_id) AS market_hash_name,
+      COALESCE(NULLIF(agg.item_summary, ''), to2.partner_name, 'Trade #' || to2.steam_offer_id) AS market_hash_name,
       0 AS price_cents,
       to2.created_at AS date,
       to2.partner_steam_id,
@@ -279,13 +334,31 @@ export async function getTransactions(
       to2.status AS trade_status,
       to2.value_give_cents,
       to2.value_recv_cents,
-      (SELECT COUNT(*) FROM trade_offer_items ti WHERE ti.offer_id = to2.id AND ti.side = 'give')::int AS give_count,
-      (SELECT COUNT(*) FROM trade_offer_items ti WHERE ti.offer_id = to2.id AND ti.side = 'receive')::int AS recv_count,
-      (SELECT COALESCE(SUM(ti.price_cents), 0) FROM trade_offer_items ti WHERE ti.offer_id = to2.id AND ti.side = 'give')::int AS give_total,
-      (SELECT COALESCE(SUM(ti.price_cents), 0) FROM trade_offer_items ti WHERE ti.offer_id = to2.id AND ti.side = 'receive')::int AS recv_total,
-      NULL::text AS icon_url,
+      COALESCE(agg.give_count, 0)::int AS give_count,
+      COALESCE(agg.recv_count, 0)::int AS recv_count,
+      COALESCE(agg.give_total, 0)::int AS give_total,
+      COALESCE(agg.recv_total, 0)::int AS recv_total,
+      agg.first_icon AS icon_url,
+      NULL::text AS note,
       to2.is_internal
-    FROM trade_offers to2`;
+    FROM trade_offers to2
+    LEFT JOIN (
+      SELECT ti.offer_id,
+        COUNT(*) FILTER (WHERE ti.side = 'give') AS give_count,
+        COUNT(*) FILTER (WHERE ti.side = 'receive') AS recv_count,
+        COALESCE(SUM(ti.price_cents) FILTER (WHERE ti.side = 'give'), 0) AS give_total,
+        COALESCE(SUM(ti.price_cents) FILTER (WHERE ti.side = 'receive'), 0) AS recv_total,
+        (ARRAY_AGG(ti.icon_url ORDER BY ti.price_cents DESC) FILTER (WHERE ti.icon_url IS NOT NULL))[1] AS first_icon,
+        CASE
+          WHEN COUNT(*) FILTER (WHERE ti.market_hash_name IS NOT NULL) = 0 THEN NULL
+          WHEN COUNT(*) FILTER (WHERE ti.market_hash_name IS NOT NULL) = 1
+            THEN (ARRAY_AGG(ti.market_hash_name) FILTER (WHERE ti.market_hash_name IS NOT NULL))[1]
+          ELSE (ARRAY_AGG(ti.market_hash_name) FILTER (WHERE ti.market_hash_name IS NOT NULL))[1]
+            || ' +' || (COUNT(*) FILTER (WHERE ti.market_hash_name IS NOT NULL) - 1)::text
+        END AS item_summary
+      FROM trade_offer_items ti
+      GROUP BY ti.offer_id
+    ) agg ON agg.offer_id = to2.id`;
 
   const marketSelect = `
     SELECT t.tx_id AS id, t.type, t.market_hash_name, t.price_cents, t.tx_date AS date,
@@ -293,7 +366,7 @@ export async function getTransactions(
       NULL::int AS value_give_cents, NULL::int AS value_recv_cents,
       NULL::int AS give_count, NULL::int AS recv_count,
       NULL::int AS give_total, NULL::int AS recv_total,
-      t.icon_url,
+      t.icon_url, t.note,
       FALSE AS is_internal
     FROM transactions t`;
 
@@ -303,8 +376,19 @@ export async function getTransactions(
   // Build trade conditions
   const buildTradeWhere = () => {
     const conds = [`to2.user_id = $1`];
+    if (accountIdIdx) {
+      // Show trades where this account is sender OR receiver
+      conds.push(`(to2.account_id_from = $${accountIdIdx} OR to2.account_id_to = $${accountIdIdx})`);
+    }
     if (dateFromIdx) conds.push(`to2.created_at >= $${dateFromIdx}::timestamptz`);
     if (dateToIdx) conds.push(`to2.created_at <= $${dateToIdx}::timestamptz`);
+    if (itemIdx) {
+      // Filter trades that contain this item on either side
+      conds.push(`EXISTS (
+        SELECT 1 FROM trade_offer_items ti
+        WHERE ti.offer_id = to2.id AND ti.market_hash_name = $${itemIdx}
+      )`);
+    }
     return conds.join(" AND ");
   };
 
@@ -333,33 +417,29 @@ export async function getTransactions(
 
   params.push(limit, offset);
 
-  const countResult = await pool.query(countQuery, params.slice(0, -2));
-  const { rows } = await pool.query(query, params);
+  // Run count + main query in parallel
+  const [countResult, { rows }] = await Promise.all([
+    pool.query(countQuery, params.slice(0, -2)),
+    pool.query(query, params),
+  ]);
 
   // Fetch current prices for all unique market_hash_names (market buy/sell only)
   const marketNames = [
     ...new Set(
       rows
-        .filter((r) => r.type === "buy" || r.type === "sell")
-        .map((r) => r.market_hash_name)
+        .filter((r: any) => r.type === "buy" || r.type === "sell")
+        .map((r: any) => r.market_hash_name)
     ),
   ];
   const priceMap =
     marketNames.length > 0 ? await getLatestPrices(marketNames) : new Map();
 
   return {
-    transactions: rows.map((r) => {
+    transactions: rows.map((r: any) => {
       const prices = priceMap.get(r.market_hash_name);
-      // Best price: highest of all sources (best for selling)
+      // Steam price — consistent with inventory and portfolio
       const currentPriceCents = prices
-        ? Math.round(
-            Math.max(
-              prices.steam ?? 0,
-              prices.skinport ?? 0,
-              prices.csfloat ?? 0,
-              prices.dmarket ?? 0
-            ) * 100
-          )
+        ? Math.round((prices.steam ?? prices.skinport ?? 0) * 100)
         : null;
 
       return {
@@ -378,6 +458,7 @@ export async function getTransactions(
         give_total: r.give_total,
         recv_total: r.recv_total,
         icon_url: r.icon_url,
+        note: r.note ?? null,
         current_price_cents: currentPriceCents,
         is_internal: r.is_internal ?? false,
       };
@@ -403,7 +484,8 @@ export async function getTransactionItems(
 export async function getTransactionStats(
   userId: number,
   dateFrom?: string,
-  dateTo?: string
+  dateTo?: string,
+  accountId?: number
 ): Promise<{
   totalBought: number;
   totalSold: number;
@@ -415,9 +497,15 @@ export async function getTransactionStats(
   topBought: Array<{ name: string; count: number; total: number }>;
   topSold: Array<{ name: string; count: number; total: number }>;
 }> {
-  const conditions = ["user_id = $1"];
+  const conditions = ["user_id = $1", "source = 'steam'"];
   const params: any[] = [userId];
   let idx = 2;
+
+  if (accountId) {
+    conditions.push(`steam_account_id = $${idx}`);
+    params.push(accountId);
+    idx++;
+  }
 
   if (dateFrom) {
     conditions.push(`tx_date >= $${idx}`);
@@ -430,53 +518,66 @@ export async function getTransactionStats(
 
   const where = conditions.join(" AND ");
 
-  const { rows: stats } = await pool.query(
-    `SELECT type, COUNT(*) as count, SUM(price_cents) as total
-     FROM transactions
-     WHERE ${where}
-     GROUP BY type`,
-    params
-  );
-
-  const buyRow = stats.find((s) => s.type === "buy");
-  const sellRow = stats.find((s) => s.type === "sell");
-
-  // Trade stats (exclude internal transfers)
+  // Trade stats query (exclude internal transfers)
   const tradeConditions = ["user_id = $1", "is_internal = FALSE"];
   const tradeParams: any[] = [userId];
+  let tradeIdx = 2;
+  if (accountId) {
+    tradeConditions.push(`(account_id_from = $${tradeIdx} OR account_id_to = $${tradeIdx})`);
+    tradeParams.push(accountId);
+    tradeIdx++;
+  }
   if (dateFrom) {
-    tradeConditions.push(`created_at >= $2`);
+    tradeConditions.push(`created_at >= $${tradeIdx}`);
     tradeParams.push(dateFrom);
-    tradeConditions.push(`created_at <= $3`);
+    tradeIdx++;
+    tradeConditions.push(`created_at <= $${tradeIdx}`);
     tradeParams.push(dateTo ?? new Date().toISOString());
+    tradeIdx++;
   }
   const tradeWhere = tradeConditions.join(" AND ");
 
-  const { rows: tradeStats } = await pool.query(
-    `SELECT COUNT(*) as count,
-            COALESCE(SUM(value_give_cents + value_recv_cents), 0) as total_value
-     FROM trade_offers
-     WHERE ${tradeWhere}`,
-    tradeParams
-  );
+  // Run all 4 queries in parallel
+  const [
+    { rows: stats },
+    { rows: tradeStats },
+    { rows: topBought },
+    { rows: topSold },
+  ] = await Promise.all([
+    pool.query(
+      `SELECT type, COUNT(*) as count, SUM(price_cents) as total
+       FROM transactions
+       WHERE ${where}
+       GROUP BY type`,
+      params
+    ),
+    pool.query(
+      `SELECT COUNT(*) as count,
+              COALESCE(SUM(value_give_cents + value_recv_cents), 0) as total_value
+       FROM trade_offers
+       WHERE ${tradeWhere}`,
+      tradeParams
+    ),
+    pool.query(
+      `SELECT market_hash_name as name, COUNT(*) as count, SUM(price_cents) as total
+       FROM transactions
+       WHERE ${where} AND type = 'buy'
+       GROUP BY market_hash_name
+       ORDER BY total DESC LIMIT 10`,
+      params
+    ),
+    pool.query(
+      `SELECT market_hash_name as name, COUNT(*) as count, SUM(price_cents) as total
+       FROM transactions
+       WHERE ${where} AND type = 'sell'
+       GROUP BY market_hash_name
+       ORDER BY total DESC LIMIT 10`,
+      params
+    ),
+  ]);
 
-  const { rows: topBought } = await pool.query(
-    `SELECT market_hash_name as name, COUNT(*) as count, SUM(price_cents) as total
-     FROM transactions
-     WHERE ${where} AND type = 'buy'
-     GROUP BY market_hash_name
-     ORDER BY total DESC LIMIT 10`,
-    params
-  );
-
-  const { rows: topSold } = await pool.query(
-    `SELECT market_hash_name as name, COUNT(*) as count, SUM(price_cents) as total
-     FROM transactions
-     WHERE ${where} AND type = 'sell'
-     GROUP BY market_hash_name
-     ORDER BY total DESC LIMIT 10`,
-    params
-  );
+  const buyRow = stats.find((s) => s.type === "buy");
+  const sellRow = stats.find((s) => s.type === "sell");
 
   return {
     totalBought: parseInt(buyRow?.count ?? "0"),

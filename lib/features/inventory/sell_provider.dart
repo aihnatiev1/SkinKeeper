@@ -109,6 +109,7 @@ class SellOperationItem {
   final String assetId;
   final String marketHashName;
   final int priceCents;
+  final int? accountId;
   final SellItemStatus status;
   final String? errorMessage;
   final bool requiresConfirmation;
@@ -117,6 +118,7 @@ class SellOperationItem {
     required this.assetId,
     required this.marketHashName,
     required this.priceCents,
+    this.accountId,
     this.status = SellItemStatus.queued,
     this.errorMessage,
     this.requiresConfirmation = false,
@@ -127,6 +129,7 @@ class SellOperationItem {
       assetId: json['assetId'] as String,
       marketHashName: json['marketHashName'] as String,
       priceCents: json['priceCents'] as int? ?? 0,
+      accountId: json['accountId'] as int?,
       status: _parseStatus(json['status'] as String?),
       errorMessage: json['errorMessage'] as String?,
       requiresConfirmation: json['requiresConfirmation'] as bool? ?? false,

@@ -227,11 +227,7 @@ router.post(
   validateBody(sellOperationSchema),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { items, accountId } = req.body;
-
-      // Resolve account
-      const resolvedAccountId = accountId
-        ?? await SteamSessionService.getActiveAccountId(req.userId!);
+      const { items } = req.body;
 
       // Check daily volume limit
       const volume = await getDailyVolume(req.userId!);
@@ -246,10 +242,17 @@ router.post(
         return;
       }
 
-      // Validate session for this specific account
-      await SteamSessionService.ensureValidSession(resolvedAccountId);
+      // Pre-validate sessions for all unique accounts referenced by items.
+      // Falls back to active account for items without explicit accountId.
+      const activeAccountId = await SteamSessionService.getActiveAccountId(req.userId!);
+      const accountIds = new Set<number>(
+        items.map((i: { accountId?: number }) => i.accountId ?? activeAccountId)
+      );
+      await Promise.all(
+        [...accountIds].map((id) => SteamSessionService.ensureValidSession(id))
+      );
 
-      const operationId = await createOperation(req.userId!, items, resolvedAccountId);
+      const operationId = await createOperation(req.userId!, items, activeAccountId);
 
       res.json({
         operationId,
@@ -337,6 +340,163 @@ router.get(
     } catch (err) {
       console.error("Volume check error:", err);
       res.status(500).json({ error: "Failed to check sell volume" });
+    }
+  }
+);
+
+// ─── Market Listings ──────────────────────────────────────────────────────
+
+/** Fetch webTradeEligibility cookie required for Steam market pages. */
+async function getEligibilityCookie(
+  steamLoginSecure: string,
+  sessionId: string
+): Promise<string | null> {
+  try {
+    const resp = await axios.get(
+      "https://steamcommunity.com/market/eligibilitycheck/?goto=%2F",
+      {
+        headers: {
+          Cookie: `steamLoginSecure=${steamLoginSecure}; sessionid=${sessionId}`,
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+        maxRedirects: 0,
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+    for (const c of (resp.headers["set-cookie"] as string[] | undefined) ?? []) {
+      const match = c.match(/webTradeEligibility=([^;]+)/);
+      if (match) return match[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+/** Fetch listings for a single account. Returns [] on session errors (for multi-account aggregation). */
+async function fetchListingsForAccount(
+  accountId: number,
+  accountName: string | null,
+  start = 0,
+  count = 100
+): Promise<object[]> {
+  const session = await SteamSessionService.getSession(accountId);
+  if (!session?.steamLoginSecure) return [];
+
+  const isValid = await SteamSessionService.validateSession(session);
+  if (!isValid) return [];
+
+  const eligibility = await getEligibilityCookie(session.steamLoginSecure, session.sessionId);
+  let cookieHeader = `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`;
+  if (eligibility) cookieHeader += `; webTradeEligibility=${eligibility}`;
+
+  let data: Record<string, unknown>;
+  try {
+    const response = await axios.get("https://steamcommunity.com/market/mylistings", {
+      params: { norender: 1, start, count },
+      headers: {
+        Cookie: cookieHeader,
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      },
+      timeout: 15000,
+    });
+    data = response.data as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+
+  if (!data?.success) return [];
+
+  const assets =
+    (((data.assets as Record<string, unknown>)?.["730"] as Record<string, unknown>)?.["2"] as
+      Record<string, Record<string, unknown>>) ?? {};
+
+  const rawListings = [
+    ...((data.listings as unknown[]) ?? []).map((l) => ({ ...(l as object), _state: "active" })),
+    ...((data.listings_to_confirm as unknown[]) ?? []).map((l) => ({ ...(l as object), _state: "to_confirm" })),
+    ...((data.listings_on_hold as unknown[]) ?? []).map((l) => ({ ...(l as object), _state: "on_hold" })),
+  ];
+
+  const rawMapped = rawListings.map((listing) => {
+    const l = listing as Record<string, unknown>;
+    const asset = l.asset as Record<string, unknown> | undefined;
+    const assetId = asset?.id as string | undefined;
+    const desc: Record<string, unknown> = assetId ? (assets[assetId] ?? {}) : {};
+    return {
+      listingId: l.listingid as string,
+      assetId,
+      accountId,
+      accountName,
+      state: l._state as string,
+      marketHashName: (desc.market_hash_name as string | undefined) ?? (l.hashname as string | undefined) ?? null,
+      name: (desc.name as string | undefined) ?? null,
+      iconUrl: (desc.icon_url as string | undefined) ?? null,
+      sellerPrice: (l.original_price as number) ?? 0,
+      buyerPrice: (l.price as number) ?? 0,
+      currencyId: (l.currencyid as number) ?? 1,
+      timeCreated: (l.time_created as number) ?? 0,
+    };
+  });
+
+  // Convert prices to USD cents
+  const walletInfo = await getWalletInfo(accountId);
+  const rate = walletInfo?.rate ?? null;
+  return rawMapped.map((l) => {
+    if (!rate || rate === 1 || l.currencyId === 1) return l;
+    return {
+      ...l,
+      sellerPrice: Math.round(l.sellerPrice / rate),
+      buyerPrice: Math.round(l.buyerPrice / rate),
+      currencyId: 1,
+    };
+  });
+}
+
+/**
+ * GET /api/market/listings
+ * Fetch the user's active Steam Market listings.
+ * Without accountId (or accountId=all): aggregates all linked accounts.
+ * With accountId=N: fetches only that account.
+ */
+router.get(
+  "/listings",
+  authMiddleware,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const paramId = parseInt(req.query.accountId as string);
+      const start = parseInt(req.query.start as string) || 0;
+      const count = Math.min(parseInt(req.query.count as string) || 100, 100);
+
+      if (paramId && !isNaN(paramId)) {
+        // Single account mode
+        const { rows } = await pool.query(
+          "SELECT id, display_name FROM steam_accounts WHERE id = $1 AND user_id = $2",
+          [paramId, req.userId]
+        );
+        if (!rows[0]) {
+          res.status(404).json({ error: "Account not found" });
+          return;
+        }
+        const listings = await fetchListingsForAccount(paramId, rows[0].display_name, start, count);
+        res.json({ listings, totalCount: listings.length, start });
+      } else {
+        // All accounts mode: fetch in parallel, skip accounts without active sessions
+        const { rows: accounts } = await pool.query(
+          "SELECT id, display_name FROM steam_accounts WHERE user_id = $1",
+          [req.userId]
+        );
+        const results = await Promise.all(
+          accounts.map((a: { id: number; display_name: string }) =>
+            fetchListingsForAccount(a.id, a.display_name, 0, 100)
+          )
+        );
+        const listings = results.flat();
+        res.json({ listings, totalCount: listings.length, start: 0 });
+      }
+    } catch (err) {
+      next(err);
     }
   }
 );

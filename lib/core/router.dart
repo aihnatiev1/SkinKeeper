@@ -63,23 +63,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggedIn = auth.valueOrNull != null;
       final isLoading = auth.isLoading;
       final isOnLogin = state.matchedLocation == '/login';
-      final isOnOnboarding = state.matchedLocation == '/onboarding';
       final isOnSession = state.matchedLocation == '/session';
 
-      if (isLoading) return null;
+      if (isLoading) return '/loading';
       if (!isLoggedIn && !isOnLogin) return '/login';
 
-      // First-launch onboarding redirect
-      if (isLoggedIn && !isOnOnboarding) {
-        final onboarding = ref.read(onboardingCompleteProvider);
-        final done = onboarding.valueOrNull;
-        if (done == false) return '/onboarding';
-      }
-
-      if (isLoggedIn && isOnLogin) return '/portfolio';
+      final isOnLoading = state.matchedLocation == '/loading';
+      if (isLoggedIn && (isOnLogin || isOnLoading)) return '/portfolio';
 
       // Force to session screen when Steam session needs reauth
-      if (isLoggedIn && !isOnSession && !isOnLogin && !isOnOnboarding) {
+      if (isLoggedIn && !isOnSession && !isOnLogin) {
         final session = ref.read(sessionStatusProvider);
         final needsReauth = session.valueOrNull?.needsReauth ?? false;
         if (needsReauth) return '/session';
@@ -89,8 +82,20 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(
+        path: '/loading',
+        builder: (_, _) => const _LoadingScreen(),
+      ),
+      GoRoute(
         path: '/login',
         builder: (_, _) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/session',
+        builder: (_, _) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/link-account',
+        builder: (_, _) => const LoginScreen(isLinking: true),
       ),
       GoRoute(
         path: '/onboarding',
@@ -155,10 +160,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const LinkedAccountsScreen(),
           ),
           GoRoute(
-            path: '/session',
-            builder: (_, _) => const LoginScreen(),
-          ),
-          GoRoute(
             path: '/premium',
             builder: (_, _) => const PaywallScreen(),
           ),
@@ -184,5 +185,30 @@ class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(Ref ref) {
     ref.listen(authStateProvider, (_, _) => notifyListeners());
     ref.listen(sessionStatusProvider, (_, _) => notifyListeners());
+  }
+}
+
+class _LoadingScreen extends StatelessWidget {
+  const _LoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF1A0A35), Color(0xFF0A0E1A)],
+          ),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF8B5CF6),
+            strokeWidth: 2.5,
+          ),
+        ),
+      ),
+    );
   }
 }

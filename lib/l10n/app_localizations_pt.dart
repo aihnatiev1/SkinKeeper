@@ -283,7 +283,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get alertCooldown => 'Intervalo';
 
   @override
-  String get alertHistory => 'Histórico de Alertas';
+  String get alertHistory => 'Notificações';
 
   @override
   String get alertTriggered => 'Disparado';

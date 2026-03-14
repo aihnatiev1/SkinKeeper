@@ -37,6 +37,10 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
   @override
   void dispose() {
     _pageCtrl.dispose();
+    // Reset link mode so next session re-auth doesn't think it's linking
+    if (widget.linkMode) {
+      ref.read(sessionLinkModeProvider.notifier).state = false;
+    }
     super.dispose();
   }
 

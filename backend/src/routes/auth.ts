@@ -300,38 +300,41 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
 
     const isLastAccount = accounts.length <= 1;
 
-    // Delete (CASCADE handles inventory_items)
+    // Must clear/update active_account_id BEFORE deleting due to FK constraint
+    if (isLastAccount) {
+      await pool.query(
+        `UPDATE users SET active_account_id = NULL WHERE id = $1`,
+        [req.userId]
+      );
+    } else {
+      // If this account is active, switch to another before deleting
+      const { rows: userRow } = await pool.query(
+        `SELECT active_account_id FROM users WHERE id = $1`,
+        [req.userId]
+      );
+      if (userRow[0]?.active_account_id === accountId) {
+        const { rows: remaining } = await pool.query(
+          `SELECT id FROM steam_accounts WHERE user_id = $1 AND id != $2 ORDER BY added_at LIMIT 1`,
+          [req.userId, accountId]
+        );
+        if (remaining.length > 0) {
+          await pool.query(
+            `UPDATE users SET active_account_id = $1 WHERE id = $2`,
+            [remaining[0].id, req.userId]
+          );
+        }
+      }
+    }
+
+    // Now safe to delete (CASCADE handles inventory_items)
     await pool.query(
       `DELETE FROM steam_accounts WHERE id = $1 AND user_id = $2`,
       [accountId, req.userId]
     );
 
     if (isLastAccount) {
-      // Clear active account — frontend should redirect to login
-      await pool.query(
-        `UPDATE users SET active_account_id = NULL WHERE id = $1`,
-        [req.userId]
-      );
       res.json({ success: true, lastAccountRemoved: true });
       return;
-    }
-
-    // If deleted account was active, switch to first remaining
-    const { rows: userRow } = await pool.query(
-      `SELECT active_account_id FROM users WHERE id = $1`,
-      [req.userId]
-    );
-    if (userRow[0]?.active_account_id === accountId) {
-      const { rows: remaining } = await pool.query(
-        `SELECT id FROM steam_accounts WHERE user_id = $1 ORDER BY added_at LIMIT 1`,
-        [req.userId]
-      );
-      if (remaining.length > 0) {
-        await pool.query(
-          `UPDATE users SET active_account_id = $1 WHERE id = $2`,
-          [remaining[0].id, req.userId]
-        );
-      }
     }
 
     res.json({ success: true });
@@ -361,6 +364,22 @@ router.get("/accounts/:accountId/session/status", authMiddleware, async (req: Au
   } catch (err) {
     console.error("Account session status error:", err);
     res.status(500).json({ error: "Failed to check session status" });
+  }
+});
+
+// ─── QR Link (Authenticated) ────────────────────────────────────────────
+// Start QR session for linking a new account to an existing user.
+router.post("/qr/start-link", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await SteamSessionService.startQRSession(0);
+    const pending = (SteamSessionService as any).pendingSessions.get(result.nonce);
+    if (pending) {
+      pending.linkUserId = req.userId;
+    }
+    res.json(result);
+  } catch (err) {
+    console.error("QR start-link error:", err);
+    res.status(500).json({ error: "Failed to start QR link session" });
   }
 });
 
@@ -400,6 +419,29 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
 
     if (pending.status !== "authenticated" || !pending.cookies) {
       res.json({ status: "pending" });
+      return;
+    }
+
+    // Link mode: add to existing user's accounts
+    if (pending.linkUserId) {
+      const steamId = SteamSessionService.extractSteamIdFromCookie(
+        pending.cookies.steamLoginSecure
+      );
+      if (!steamId) {
+        res.status(400).json({ error: "Could not extract Steam ID" });
+        return;
+      }
+      const profile = await getSteamProfile(steamId);
+      const { rows: saRows } = await pool.query(
+        `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4
+         RETURNING id`,
+        [pending.linkUserId, steamId, profile.personaname, profile.avatarfull]
+      );
+      await SteamSessionService.saveSession(saRows[0].id, pending.cookies);
+      (SteamSessionService as any).pendingSessions.delete(nonce);
+      res.json({ status: "account-linked", steamId });
       return;
     }
 

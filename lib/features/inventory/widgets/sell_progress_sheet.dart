@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/review_service.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
@@ -48,6 +49,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
               'assetId': i.assetId,
               'marketHashName': i.marketHashName,
               'priceCents': i.priceCents,
+              if (i.accountId != null) 'accountId': i.accountId,
             })
         .toList();
     if (failedItems.isEmpty) return;
@@ -459,7 +461,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
                 ref.read(inventoryProvider.notifier).refresh();
                 ref.read(selectionProvider.notifier).clear();
                 ref.read(sellOperationProvider.notifier).reset();
-                Navigator.pop(context);
+                context.pop();
                 // Prompt for review after successful sell
                 if (operation.succeeded > 0) {
                   ReviewService.maybeRequestReview();
@@ -494,7 +496,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
       child: ElevatedButton(
         onPressed: () {
           ref.read(sellOperationProvider.notifier).reset();
-          Navigator.pop(context);
+          context.pop();
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.surface,

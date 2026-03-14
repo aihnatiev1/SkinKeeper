@@ -163,38 +163,36 @@ class ItemCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color:
-                                  AppTheme.plColor(itemPL!.totalProfitCents),
+                              color: AppTheme.plColor(itemPL!.totalProfitCents),
                             ),
                           ),
                         ),
-                      // Info button
+                      // Info button — smaller in compact
                       GestureDetector(
-                          onTap: onInfoTap,
-                          behavior: HitTestBehavior.opaque,
-                          child: Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                width: 1,
-                              ),
+                        onTap: onInfoTap,
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          width: compact ? 16 : 22,
+                          height: compact ? 16 : 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: compact ? 0.12 : 0.2),
+                              width: 0.8,
                             ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              'i',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-
-                                color: Colors.white.withValues(alpha: 0.4),
-                                height: 1,
-                              ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'i',
+                            style: TextStyle(
+                              fontSize: compact ? 9 : 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.35),
+                              height: 1,
                             ),
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ),
@@ -292,6 +290,30 @@ class ItemCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                      // Account badge — full in normal, 1-letter dot in compact
+                      if (showAccountBadge && item.accountId != null)
+                        compact
+                            ? Positioned(
+                                bottom: 4,
+                                right: 5,
+                                child: GestureDetector(
+                                  onTap: onAccountBadgeTap,
+                                  child: _AccountLetterDot(
+                                    name: item.accountName,
+                                  ),
+                                ),
+                              )
+                            : Positioned(
+                                top: 4,
+                                left: 6,
+                                child: GestureDetector(
+                                  onTap: onAccountBadgeTap,
+                                  child: _AccountNameBadge(
+                                    accountName: item.accountName,
+                                    compact: false,
+                                  ),
+                                ),
+                              ),
                       // Stickers + charm row (only for weapons)
                       if (!compact && !item.isNonWeapon &&
                           (item.stickers.isNotEmpty || item.charms.isNotEmpty))
@@ -334,6 +356,15 @@ class ItemCard extends StatelessWidget {
 
                 // ── Footer ──
                 _FooterSection(item: item, compact: compact),
+                // ── Float bar (full-width strip at bottom) ──
+                if (!item.isNonWeapon && item.wearShort != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+                    child: _MiniFloatBar(
+                      floatValue: item.floatValue,
+                      wearShort: item.wearShort!,
+                    ),
+                  ),
               ],
             ),
 
@@ -365,38 +396,6 @@ class ItemCard extends StatelessWidget {
                 ),
               ),
 
-            // ── Account badge (bottom-left corner) ──
-            if (showAccountBadge && item.accountId != null)
-              Positioned(
-                bottom: 4,
-                left: 4,
-                child: GestureDetector(
-                  onTap: onAccountBadgeTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppTheme.surface,
-                        width: 1.5,
-                      ),
-                      color: AppTheme.primary.withValues(alpha: 0.85),
-                    ),
-                    child: ClipOval(
-                      child: item.accountAvatarUrl != null && item.accountAvatarUrl!.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: item.accountAvatarUrl!,
-                            fit: BoxFit.cover,
-                            placeholder: (_, url) => _AccountInitial(item.accountName),
-                            errorWidget: (_, url, err) => _AccountInitial(item.accountName),
-                          )
-                        : _AccountInitial(item.accountName),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -404,23 +403,68 @@ class ItemCard extends StatelessWidget {
   }
 }
 
-// ─── Account Initial ─────────────────────────────────────────────────
-class _AccountInitial extends StatelessWidget {
+// ─── Account Name Badge (3D square style) ────────────────────────────
+class _AccountNameBadge extends StatelessWidget {
   final String? accountName;
-  const _AccountInitial(this.accountName);
+  final bool compact;
+  const _AccountNameBadge({required this.accountName, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
-    final initial = (accountName ?? '?').isNotEmpty
-        ? accountName![0].toUpperCase()
-        : '?';
-    return Center(
+    final name = accountName ?? '?';
+    final display = name.length > 12 ? '${name.substring(0, 12)}…' : name;
+    const color = AppTheme.primary;
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 4 : 5,
+        vertical: compact ? 1 : 2,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
+      ),
       child: Text(
-        initial,
+        display,
+        style: TextStyle(
+          fontSize: compact ? 8 : 9,
+          fontWeight: FontWeight.w700,
+          color: AppTheme.primaryLight,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Account Letter Dot (compact mode) ───────────────────────────────
+class _AccountLetterDot extends StatelessWidget {
+  final String? name;
+  const _AccountLetterDot({this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final letter = (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
+    return Container(
+      width: 14,
+      height: 14,
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.25),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppTheme.primary.withValues(alpha: 0.5),
+          width: 0.5,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
         style: const TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
+          fontSize: 8,
+          fontWeight: FontWeight.w800,
+          color: AppTheme.primaryLight,
+          height: 1,
         ),
       ),
     );
@@ -492,11 +536,6 @@ class _FooterSection extends StatelessWidget {
               _WearPill(wear: item.wearShort!, compact: true),
           ],
         ),
-        if (item.floatValue != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: _MiniFloatBar(floatValue: item.floatValue!),
-          ),
       ],
     );
   }
@@ -545,27 +584,20 @@ class _FooterSection extends StatelessWidget {
               _WearPill(wear: item.wearShort!),
           ],
         ),
-        // Float value + mini bar
+        // Float value text
         if (item.floatValue != null)
           Padding(
             padding: const EdgeInsets.only(top: 3),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.floatValue!.toStringAsFixed(7),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'monospace',
-                    letterSpacing: 0.3,
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                const SizedBox(height: 3),
-                _MiniFloatBar(floatValue: item.floatValue!),
-              ],
+            child: Text(
+              item.floatValue!.toStringAsFixed(7),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'monospace',
+                letterSpacing: 0.3,
+                color: Colors.white.withValues(alpha: 0.6),
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
       ],
@@ -610,16 +642,33 @@ class _WearPill extends StatelessWidget {
 }
 
 // ─── Mini Float Bar (inline on card) ─────────────────────────────────
+// Smooth gradient bar (green→yellow→red) with a white marker.
+// Always shows for items with wearShort.
+// floatValue known  → precise bright marker
+// floatValue null   → approximate marker at zone midpoint (dim)
 class _MiniFloatBar extends StatelessWidget {
-  final double floatValue;
+  final double? floatValue;
+  final String wearShort;
 
-  const _MiniFloatBar({required this.floatValue});
+  const _MiniFloatBar({required this.wearShort, this.floatValue});
+
+  static const _zoneMids = {
+    'FN': 0.035,
+    'MW': 0.110,
+    'FT': 0.265,
+    'WW': 0.415,
+    'BS': 0.725,
+  };
+
+  double get _markerPos =>
+      floatValue?.clamp(0.0, 1.0) ?? _zoneMids[wearShort] ?? 0.5;
 
   @override
   Widget build(BuildContext context) {
-    final clamped = floatValue.clamp(0.0, 1.0);
+    final pos = _markerPos;
+    final isPrecise = floatValue != null;
     return SizedBox(
-      height: 3,
+      height: 4,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final w = constraints.maxWidth;
@@ -627,7 +676,7 @@ class _MiniFloatBar extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
             child: Stack(
               children: [
-                // Smooth gradient track: green → yellow → red
+                // Smooth gradient track
                 Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
@@ -643,22 +692,25 @@ class _MiniFloatBar extends StatelessWidget {
                     color: Colors.black.withValues(alpha: 0.45),
                   ),
                 ),
-                // Position indicator
+                // Marker
                 Positioned(
-                  left: (clamped * w - 1).clamp(0.0, w - 2),
+                  left: (pos * w - 1).clamp(0.0, w - 2),
                   top: 0,
                   bottom: 0,
                   child: Container(
                     width: 2,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Colors.white
+                          .withValues(alpha: isPrecise ? 1.0 : 0.5),
                       borderRadius: BorderRadius.circular(1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          blurRadius: 2,
-                        ),
-                      ],
+                      boxShadow: isPrecise
+                          ? [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                blurRadius: 2,
+                              ),
+                            ]
+                          : null,
                     ),
                   ),
                 ),
