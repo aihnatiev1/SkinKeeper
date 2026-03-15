@@ -163,15 +163,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final token = await ref.read(authServiceProvider).authenticateWithSteam();
       if (!mounted) return;
-      if (token != null) {
-        final api = ref.read(apiClientProvider);
-        await api.saveToken(token);
-        ref.invalidate(authStateProvider);
-      }
+      final api = ref.read(apiClientProvider);
+      await api.saveToken(token!);
+      // Force fetch user and navigate
+      ref.invalidate(authStateProvider);
+      await ref.read(authStateProvider.future);
+      if (mounted) context.go('/portfolio');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: $e')),
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Login Error'),
+            content: Text('$e'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            ],
+          ),
         );
       }
     } finally {
