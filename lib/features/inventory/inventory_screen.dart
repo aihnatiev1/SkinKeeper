@@ -7,6 +7,7 @@ import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
 import '../purchases/iap_service.dart';
+import 'inventory_provider.dart';
 import 'inventory_selection_provider.dart';
 import 'sell_provider.dart';
 import 'widgets/glass_bottom_sheet.dart';
@@ -101,6 +102,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             isOpen: _searchOpen,
             onClose: () => setState(() => _searchOpen = false),
           ),
+          const _InventoryStatsAndFilters(),
           const InventoryGrid(),
           if (isSelecting)
             SelectionTray(
@@ -137,6 +139,115 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               },
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _InventoryStatsAndFilters extends ConsumerWidget {
+  const _InventoryStatsAndFilters();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summary = ref.watch(inventorySummaryProvider);
+    final currency = ref.watch(currencyProvider);
+    final activeCategory = ref.watch(categoryProvider);
+
+    return Column(
+      children: [
+        // ── Summary Bar ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Row(
+            children: [
+              _statItem('Items', summary.count.toString()),
+              const SizedBox(width: 16),
+              _statItem('Value', currency.format(summary.totalValue)),
+              const Spacer(),
+              // Optional: Sync indicator or small sync button
+              Text(
+                'Market Prices (Buff/Steam)',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: AppTheme.textMuted.withValues(alpha: 0.5),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Category Chips ──
+        SizedBox(
+          height: 38,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _categoryChip(ref, InventoryCategory.all, 'All', Icons.grid_view_rounded),
+              _categoryChip(ref, InventoryCategory.knives, 'Knives', Icons.colorize_rounded),
+              _categoryChip(ref, InventoryCategory.weapons, 'Weapons', Icons.gps_fixed_rounded),
+              _categoryChip(ref, InventoryCategory.stickers, 'Stickers', Icons.sell_rounded),
+              _categoryChip(ref, InventoryCategory.containers, 'Containers', Icons.inventory_2_rounded),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _statItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+            color: AppTheme.textDisabled,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _categoryChip(WidgetRef ref, InventoryCategory category, String label, IconData icon) {
+    final isSelected = ref.watch(categoryProvider) == category;
+    final color = isSelected ? AppTheme.primary : Colors.white.withValues(alpha: 0.05);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) => ref.read(categoryProvider.notifier).state = category,
+        backgroundColor: Colors.white.withValues(alpha: 0.03),
+        selectedColor: AppTheme.primary.withValues(alpha: 0.2),
+        checkmarkColor: AppTheme.primary,
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          color: isSelected ? Colors.white : AppTheme.textSecondary,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(
+            color: isSelected ? AppTheme.primary.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.05),
+            width: 1,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
       ),
     );
   }
