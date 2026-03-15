@@ -41,8 +41,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final uri = state.uri;
 
-      // Custom URL schemes are handled by main.dart deep link handler, not GoRouter
-      if (uri.scheme == 'skinkeeper') return state.matchedLocation.isEmpty ? '/login' : state.matchedLocation;
+      // Custom URL schemes handled by main.dart, not GoRouter.
+      // Return /login as safe landing — refreshListenable will redirect to
+      // /portfolio automatically once setUser() fires.
+      if (uri.scheme != 'http' && uri.scheme != 'https' && uri.scheme.isNotEmpty) {
+        return '/login';
+      }
 
       final auth = ref.read(authStateProvider);
       final isOnLogin = state.matchedLocation == '/login';
