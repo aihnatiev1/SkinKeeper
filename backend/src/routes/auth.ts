@@ -18,7 +18,7 @@ setInterval(() => {
 
 // GET /api/auth/steam/poll/:nonce — App polls this after opening Steam login
 router.get("/steam/poll/:nonce", async (req: Request, res: Response) => {
-  const nonce = req.params.nonce;
+  const nonce = req.params.nonce as string;
   const entry = pendingLogins.get(nonce);
   if (!entry) {
     res.json({ status: "pending" });
