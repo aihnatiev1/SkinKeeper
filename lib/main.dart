@@ -111,7 +111,12 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     _linkSub = _appLinks.uriLinkStream.listen(_handleDeepLink);
   }
 
+  Uri? _lastHandledDeepLink;
+
   void _handleDeepLink(Uri uri) {
+    // Deduplicate — initial link + stream can fire for same URL
+    if (_lastHandledDeepLink == uri) return;
+    _lastHandledDeepLink = uri;
     dev.log('Deep link received: $uri', name: 'DeepLink');
     print('DEEPLINK: $uri');
 

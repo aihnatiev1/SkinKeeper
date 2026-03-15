@@ -45,15 +45,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (uri.scheme == 'skinkeeper') return null;
 
       final auth = ref.read(authStateProvider);
-      final isLoggedIn = auth.valueOrNull != null;
-      final isLoading = auth.isLoading;
       final isOnLogin = state.matchedLocation == '/login';
+      final isOnLoading = state.matchedLocation == '/loading';
       final isOnSession = state.matchedLocation == '/session';
 
-      if (isLoading) return '/loading';
-      if (!isLoggedIn && !isOnLogin) return '/login';
+      // Stay on loading if already there, go to loading if not
+      if (auth.isLoading) return isOnLoading ? null : '/loading';
 
-      final isOnLoading = state.matchedLocation == '/loading';
+      final isLoggedIn = auth.valueOrNull != null;
+
+      if (!isLoggedIn && !isOnLogin) return '/login';
       if (isLoggedIn && (isOnLogin || isOnLoading)) return '/portfolio';
 
       // Force to session screen when Steam session needs reauth

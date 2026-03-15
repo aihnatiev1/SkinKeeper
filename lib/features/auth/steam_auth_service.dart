@@ -50,6 +50,16 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
     }
   }
 
+  /// Set authenticated user directly (used by deep link handler)
+  void setUser(SteamUser user) {
+    state = AsyncData(user);
+  }
+
+  /// Clear user state (used by logout)
+  void clearUser() {
+    state = const AsyncData(null);
+  }
+
   Future<void> logout() async {
     final api = ref.read(apiClientProvider);
     await PushService.unregister(api);
