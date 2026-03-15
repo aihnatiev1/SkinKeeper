@@ -107,6 +107,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   late final PageController _pageCtrl;
   Timer? _pollTimer;
   bool _qrStarted = false;
+  String? _steamNonce;
+  bool _steamPolling = false;
 
   @override
   void initState() {
@@ -159,7 +161,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _startSteamLoginWithPolling() async {
     final nonce = await ref.read(authServiceProvider).openSteamLogin();
-    onSteamLoginNonce?.call(nonce);
+    if (mounted) setState(() => _steamNonce = nonce);
+  }
+
+  Future<void> _completeSteamLogin() async {
+    if (_steamNonce == null) return;
+    setState(() => _steamPolling = true);
+    final api = ref.read(apiClientProvider);
+    for (var i = 0; i < 10; i++) {
+      if (!mounted) return;
+      final token = await SteamAuthService.pollLogin(api, _steamNonce!);
+      if (token != null) {
+        _steamNonce = null;
+        await api.saveToken(token);
+        ref.invalidate(authStateProvider);
+        // Don't navigate — router will handle it when authState updates
+        return;
+      }
+      await Future.delayed(const Duration(seconds: 1));
+    }
+    if (mounted) {
+      setState(() => _steamPolling = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Login timed out. Try again.')),
+      );
+    }
   }
 
   @override
@@ -427,46 +453,82 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       strokeWidth: 2.5, color: AppTheme.primary),
                 ),
               ),
-            GestureDetector(
-              onTap: isLoading
-                  ? null
-                  : () {
-                      HapticFeedback.mediumImpact();
-                      if (widget.isLinking) {
-                        ref.read(authServiceProvider).openSteamLinkLogin(ref);
-                      } else {
-                        _startSteamLoginWithPolling();
-                      }
-                    },
-              child: Container(
-                width: double.infinity,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1B2838),
-                  borderRadius: BorderRadius.circular(AppTheme.r16),
-                  border: Border.all(color: const Color(0xFF2A475E)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1B2838).withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+            if (_steamNonce != null && !_steamPolling)
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  _completeSteamLogin();
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(AppTheme.r16),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_outline, size: 22, color: Colors.white),
+                      SizedBox(width: 12),
+                      Text("I've signed in — Continue",
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white)),
+                    ],
+                  ),
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.login_rounded, size: 22, color: Colors.white),
-                    SizedBox(width: 12),
-                    Text('Sign in with Steam',
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
-                  ],
+              )
+            else if (_steamPolling)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: SizedBox(
+                  width: 28, height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primary),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: isLoading
+                    ? null
+                    : () {
+                        HapticFeedback.mediumImpact();
+                        if (widget.isLinking) {
+                          ref.read(authServiceProvider).openSteamLinkLogin(ref);
+                        } else {
+                          _startSteamLoginWithPolling();
+                        }
+                      },
+                child: Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B2838),
+                    borderRadius: BorderRadius.circular(AppTheme.r16),
+                    border: Border.all(color: const Color(0xFF2A475E)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF1B2838).withValues(alpha: 0.4),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.login_rounded, size: 22, color: Colors.white),
+                      SizedBox(width: 12),
+                      Text('Sign in with Steam',
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white)),
+                    ],
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
