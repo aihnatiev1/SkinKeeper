@@ -46,17 +46,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/portfolio';
       }
 
-      // Intercept deep link: skinkeeper://auth?token=XXX
+      // Deep link auth is handled by _handleDeepLink in main.dart
       if (uri.scheme == 'skinkeeper' && uri.host == 'auth') {
-        final token = uri.queryParameters['token'];
-        if (token != null) {
-          dev.log('Auth deep link intercepted, saving token', name: 'Router');
-          // Save token and refresh auth state asynchronously
-          ref.read(apiClientProvider).saveToken(token).then((_) {
-            ref.invalidate(authStateProvider);
-          });
-        }
-        return '/portfolio';
+        return null; // Let main.dart handle it
       }
 
       final auth = ref.read(authStateProvider);
