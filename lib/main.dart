@@ -150,13 +150,12 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       await api.saveToken(token);
       print('AUTH: token saved, fetching user...');
       final resp = await api.get('/auth/me');
-      print('AUTH: user fetched, navigating...');
+      print('AUTH: user fetched, setting auth state...');
       final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
-      ref.read(authStateProvider.notifier).state = AsyncData(user);
-      // Wait for state to propagate through widget tree before navigating
-      await Future.delayed(const Duration(milliseconds: 200));
-      ref.read(routerProvider).go('/portfolio');
-      print('AUTH: done!');
+      // setUser triggers authStateProvider change → refreshListenable notifies
+      // → GoRouter redirect fires → sees isLoggedIn=true → navigates to /portfolio
+      ref.read(authStateProvider.notifier).setUser(user);
+      print('AUTH: done — router will redirect automatically');
     } catch (e) {
       print('AUTH ERROR: $e');
     }

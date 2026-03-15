@@ -41,15 +41,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final uri = state.uri;
 
-      // Intercept deep link: skinkeeper://portfolio (from home screen widget)
-      if (uri.scheme == 'skinkeeper' && uri.host == 'portfolio') {
-        return '/portfolio';
-      }
-
-      // Deep link auth is handled by _handleDeepLink in main.dart
-      if (uri.scheme == 'skinkeeper') {
-        return '/login';
-      }
+      // Skip redirect for custom URL schemes — handled by main.dart deep link handler
+      if (uri.scheme == 'skinkeeper') return null;
 
       final auth = ref.read(authStateProvider);
       final isLoggedIn = auth.valueOrNull != null;
