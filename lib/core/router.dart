@@ -47,8 +47,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // Deep link auth is handled by _handleDeepLink in main.dart
-      if (uri.scheme == 'skinkeeper' && uri.host == 'auth') {
-        return null; // Let main.dart handle it
+      if (uri.scheme == 'skinkeeper') {
+        return '/login';
       }
 
       final auth = ref.read(authStateProvider);
