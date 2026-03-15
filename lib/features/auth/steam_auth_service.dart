@@ -82,18 +82,17 @@ class SteamAuthService {
     final uri = Uri.parse(AppConstants.steamOpenIdUrl)
         .replace(queryParameters: params);
 
-    try {
-      final result = await FlutterWebAuth2.authenticate(
-        url: uri.toString(),
-        callbackUrlScheme: 'skinkeeper',
-      );
-      // result = skinkeeper://auth?token=JWT or skinkeeper://auth?error=...
-      final callbackUri = Uri.parse(result);
-      return callbackUri.queryParameters['token'];
-    } catch (e) {
-      dev.log('Steam auth cancelled or failed: $e', name: 'SteamAuth');
-      return null;
-    }
+    final result = await FlutterWebAuth2.authenticate(
+      url: uri.toString(),
+      callbackUrlScheme: 'skinkeeper',
+    );
+    // result = skinkeeper://auth?token=JWT or skinkeeper://auth?error=...
+    final callbackUri = Uri.parse(result);
+    final token = callbackUri.queryParameters['token'];
+    final error = callbackUri.queryParameters['error'];
+    if (error != null) throw Exception('Steam login failed: $error');
+    if (token == null) throw Exception('No token in callback: $result');
+    return token;
   }
 
   /// Open Steam login for linking a new account.
