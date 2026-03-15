@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
+import '../purchases/iap_service.dart';
 import '../portfolio/widgets/add_transaction_sheet.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
@@ -390,6 +391,11 @@ class _PLSection extends ConsumerWidget {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
+                  final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
+                  if (!isPremium) {
+                    context.push('/premium');
+                    return;
+                  }
                   showGlassSheet(
                     context,
                     _AddPurchaseSheet(
@@ -970,16 +976,21 @@ class _SellActions extends ConsumerWidget {
 }
 
 // ── Log Purchase Button ──────────────────────────────────────────
-class _LogPurchaseButton extends StatelessWidget {
+class _LogPurchaseButton extends ConsumerWidget {
   final InventoryItem item;
 
   const _LogPurchaseButton({required this.item});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
+        final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
+        if (!isPremium) {
+          context.push('/premium');
+          return;
+        }
         showGlassSheet(
           context,
           AddTransactionSheet(

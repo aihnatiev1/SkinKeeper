@@ -63,19 +63,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
 
-      // 3. Перевірка сесії (REAUTH)
-      final needsReauth = sessionData?.needsReauth ?? false;
-
-      // Якщо потрібна реавторизація і ми не на сторінці сесії/логіну
-      if (needsReauth) {
-        if (isOnSession || isOnLogin) return null;
-        return '/session';
-      }
-
-      // 4. Якщо залогінені і сесія ок, але ми на сервісних екранах - на головну
-      if (isOnLogin || isOnLoading || isOnSession) {
+      // 3. Якщо залогінені, але ми на сервісних екранах - на головну
+      if (isOnLogin || isOnLoading) {
         return '/portfolio';
       }
+
+      // Session reauth is NOT forced — user can browse with public data.
+      // Sell/trade/sync features check session status themselves.
 
       return null;
     },
