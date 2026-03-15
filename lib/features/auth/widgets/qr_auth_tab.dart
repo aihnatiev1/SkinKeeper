@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme.dart';
 import '../session_provider.dart';
 import '../../settings/accounts_provider.dart';
@@ -18,6 +21,7 @@ class QrAuthTab extends ConsumerStatefulWidget {
 class _QrAuthTabState extends ConsumerState<QrAuthTab> {
   Timer? _pollTimer;
   String? _authedAccountName;
+  bool _showQr = false;
 
   @override
   void initState() {
@@ -94,72 +98,181 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
   @override
   Widget build(BuildContext context) {
     final qrState = ref.watch(qrAuthProvider);
+    final isPolling = qrState.status == 'ready' || qrState.status == 'pending' || qrState.status == 'polling';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'Scan with Steam Mobile App',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Open the Steam app on your phone, go to the guard section, and scan the QR code below.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white60,
-                ),
-          ),
-          const SizedBox(height: 32),
-
-          // QR image area
-          _buildQrArea(qrState),
-
-          const SizedBox(height: 24),
-
-          // Status text
-          _buildStatusText(qrState),
-
-          // Wrong account — re-scan option
-          if (qrState.status == 'authenticated' && _authedAccountName != null) ...[
-            const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: _rescan,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Wrong account? Scan again'),
-              style: TextButton.styleFrom(foregroundColor: AppTheme.textSecondary),
-            ),
-          ],
-
-          if (qrState.status == 'expired') ...[
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-                ref.read(qrAuthProvider.notifier).startQR().then((_) {
-                  _startPolling();
-                });
-              },
-              icon: const Icon(Icons.refresh, size: 20),
-              label: const Text('Generate New QR Code'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
-                ),
-              ),
-            ),
-          ],
-        ],
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 400),
+        child: _showQr ? _buildQrView(qrState) : _buildAppView(qrState, isPolling),
       ),
+    );
+  }
+
+  Widget _buildAppView(QrAuthState qrState, bool isPolling) {
+    return Column(
+      key: const ValueKey('app_view'),
+      children: [
+        const SizedBox(height: 20),
+        // Large Steam Icon
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: const Color(0xFF171a21),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primary.withValues(alpha: 0.2),
+                blurRadius: 20,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Center(
+            child: Image.network(
+              'https://community.akamai.steamstatic.com/public/shared/images/responsive/header_logo.png',
+              height: 40,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(height: 32),
+        const Text(
+          'Confirm in Steam App',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Open your official Steam app to authorize this session securely.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.white.withValues(alpha: 0.5),
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 40),
+
+        if (qrState.loading)
+          const Center(
+            child: Column(
+              children: [
+                CircularProgressIndicator(color: AppTheme.primary),
+                SizedBox(height: 16),
+                Text('Generating Steam link...', style: TextStyle(color: Colors.white70)),
+              ],
+            ),
+          )
+        else if (qrState.error != null)
+          Center(
+            child: Column(
+              children: [
+                const Icon(Icons.error_outline, color: AppTheme.loss, size: 48),
+                const SizedBox(height: 16),
+                Text('Failed to start session: ${qrState.error}', 
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => _rescan(),
+                  child: const Text('Try Again'),
+                ),
+              ],
+            ),
+          )
+        else if (qrState.qrUrl != null && qrState.status != 'authenticated') ...[
+          ElevatedButton(
+            onPressed: () async {
+              final uri = Uri.parse(qrState.qrUrl!);
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+              HapticFeedback.mediumImpact();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 56),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 8,
+              shadowColor: AppTheme.primary.withValues(alpha: 0.4),
+            ),
+            child: const Text('Open Steam App', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 24),
+          if (isPolling)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                const SizedBox(width: 12),
+                Text(
+                  'Waiting for confirmation in Steam...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.primaryLight.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
+        ],
+
+        if (qrState.status == 'expired') ...[
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () => _rescan(),
+            icon: const Icon(Icons.refresh, size: 20),
+            label: const Text('Refresh Link'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.surface,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 60),
+        TextButton(
+          onPressed: () => setState(() => _showQr = true),
+          child: Text(
+            'Need to scan a QR instead?',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 13),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQrView(QrAuthState qrState) {
+    return Column(
+      key: const ValueKey('qr_view'),
+      children: [
+        const SizedBox(height: 16),
+        const Text(
+          'Scan QR Code',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Use the Steam Mobile App to scan this code.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14, color: Colors.white60),
+        ),
+        const SizedBox(height: 32),
+        _buildQrArea(qrState),
+        const SizedBox(height: 32),
+        _buildStatusText(qrState),
+        const SizedBox(height: 24),
+        TextButton(
+          onPressed: () => setState(() => _showQr = false),
+          child: const Text('Back to App Direct Link'),
+        ),
+      ],
     );
   }
 

@@ -29,6 +29,9 @@ final groupingEnabledProvider = StateProvider<bool>((ref) => true);
 final wearFilterProvider = StateProvider<String?>((ref) => null);
 final tradableOnlyProvider = StateProvider<bool>((ref) => false);
 
+enum InventoryCategory { all, knives, weapons, stickers, containers }
+final categoryProvider = StateProvider<InventoryCategory>((ref) => InventoryCategory.all);
+
 /// A group of identical items (same marketHashName)
 class ItemGroup {
   final String marketHashName;
@@ -107,6 +110,7 @@ final groupedInventoryProvider = Provider<AsyncValue<List<ItemGroup>>>((ref) {
 final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
   final inventory = ref.watch(inventoryProvider);
   final sort = ref.watch(sortOptionProvider);
+  final category = ref.watch(categoryProvider);
   final query = ref.watch(searchQueryProvider).toLowerCase();
   final hideNoPrice = ref.watch(hideNoPriceProvider);
   final wearFilter = ref.watch(wearFilterProvider);
@@ -114,6 +118,27 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
 
   return inventory.whenData((items) {
     var filtered = items.where((item) {
+      // 1. Category Filter
+      final name = item.marketHashName;
+      switch (category) {
+        case InventoryCategory.all:
+          break;
+        case InventoryCategory.knives:
+          if (!name.contains('★')) return false;
+          break;
+        case InventoryCategory.weapons:
+          // Not a knife, not a sticker, not a case
+          if (name.contains('★') || name.contains('Sticker |') || name.contains('Case') || name.contains('Capsule') || item.isNonWeapon) return false;
+          break;
+        case InventoryCategory.stickers:
+          if (!name.contains('Sticker |')) return false;
+          break;
+        case InventoryCategory.containers:
+          if (!name.contains('Case') && !name.contains('Capsule') && !name.contains('Package')) return false;
+          break;
+      }
+
+      // 2. Search & Detail Filters
       if (hideNoPrice && item.prices.isEmpty) return false;
       if (wearFilter != null && item.wearShort != wearFilter) return false;
       if (tradableOnly && !item.tradable) return false;
@@ -247,3 +272,17 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     }
   }
 }
+
+class InventorySummary {
+  final int count;
+  final double totalValue;
+  const InventorySummary({required this.count, required this.totalValue});
+}
+
+final inventorySummaryProvider = Provider<InventorySummary>((ref) {
+  final items = ref.watch(filteredInventoryProvider).valueOrNull ?? [];
+  final totalValue =
+      items.fold<double>(0, (sum, item) => sum + (item.bestPrice ?? 0));
+  return InventorySummary(count: items.length, totalValue: totalValue);
+});
+

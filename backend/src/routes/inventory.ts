@@ -40,8 +40,22 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     const names = [...new Set(items.map((i) => i.market_hash_name))];
     const priceMap = await getLatestPrices(names);
 
+    const parseJSON = (val: any) => {
+      if (!val) return [];
+      if (typeof val === "string") {
+        try {
+          return JSON.parse(val);
+        } catch (_) {
+          return [];
+        }
+      }
+      return val;
+    };
+
     const enriched = items.map((item) => ({
       ...item,
+      stickers: parseJSON(item.stickers),
+      charms: parseJSON(item.charms),
       prices: priceMap.get(item.market_hash_name) ?? {},
     }));
 

@@ -126,8 +126,10 @@ class ItemCard extends StatelessWidget {
                     children: [
                       // Price
                       Expanded(
-                        child: item.steamPrice != null
-                            ? Text(
+                        child: Row(
+                          children: [
+                            if (item.steamPrice != null)
+                              Text(
                                 currency?.format(item.steamPrice!) ??
                                     '\$${item.steamPrice!.toStringAsFixed(2)}',
                                 style: TextStyle(
@@ -141,8 +143,16 @@ class ItemCard extends StatelessWidget {
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                              )
-                            : const SizedBox.shrink(),
+                              ),
+                            if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
+                              const SizedBox(width: 6),
+                              _ArbitrageBadge(
+                                steamPrice: item.steamPrice!,
+                                buffPrice: item.prices['buff']!,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                       // P/L badge
                       if (!compact &&
@@ -356,15 +366,6 @@ class ItemCard extends StatelessWidget {
 
                 // ── Footer ──
                 _FooterSection(item: item, compact: compact),
-                // ── Float bar (full-width strip at bottom) ──
-                if (!item.isNonWeapon && item.wearShort != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-                    child: _MiniFloatBar(
-                      floatValue: item.floatValue,
-                      wearShort: item.wearShort!,
-                    ),
-                  ),
               ],
             ),
 
@@ -536,6 +537,14 @@ class _FooterSection extends StatelessWidget {
               _WearPill(wear: item.wearShort!, compact: true),
           ],
         ),
+        if (item.floatValue != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, right: 4),
+            child: _MiniFloatBar(
+              floatValue: item.floatValue,
+              wearShort: item.wearShort!,
+            ),
+          ),
       ],
     );
   }
@@ -585,7 +594,7 @@ class _FooterSection extends StatelessWidget {
           ],
         ),
         // Float value text
-        if (item.floatValue != null)
+        if (item.floatValue != null) ...[
           Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Text(
@@ -600,6 +609,12 @@ class _FooterSection extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 6),
+          _MiniFloatBar(
+            floatValue: item.floatValue,
+            wearShort: item.wearShort!,
+          ),
+        ],
       ],
     );
   }
@@ -642,82 +657,114 @@ class _WearPill extends StatelessWidget {
 }
 
 // ─── Mini Float Bar (inline on card) ─────────────────────────────────
-// Smooth gradient bar (green→yellow→red) with a white marker.
-// Always shows for items with wearShort.
-// floatValue known  → precise bright marker
-// floatValue null   → approximate marker at zone midpoint (dim)
+// Segmented bar with colors matching quality zones.
 class _MiniFloatBar extends StatelessWidget {
   final double? floatValue;
   final String wearShort;
 
   const _MiniFloatBar({required this.wearShort, this.floatValue});
 
-  static const _zoneMids = {
-    'FN': 0.035,
-    'MW': 0.110,
-    'FT': 0.265,
-    'WW': 0.415,
-    'BS': 0.725,
-  };
+  @override
+  Widget build(BuildContext context) {
+    if (floatValue == null) return const SizedBox.shrink();
+    final pos = floatValue!.clamp(0.0, 1.0);
 
-  double get _markerPos =>
-      floatValue?.clamp(0.0, 1.0) ?? _zoneMids[wearShort] ?? 0.5;
+    return Column(
+      children: [
+        Container(
+          height: 4,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(2),
+            color: Colors.white.withValues(alpha: 0.05),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              return Stack(
+                children: [
+                  // Wear segments
+                  Row(
+                    children: [
+                      _buildSegment(0.07, const Color(0xFF10B981)), // FN
+                      _buildSegment(0.08, const Color(0xFF06B6D4)), // MW
+                      _buildSegment(0.23, const Color(0xFF3B82F6)), // FT
+                      _buildSegment(0.07, const Color(0xFFF59E0B)), // WW
+                      _buildSegment(0.55, const Color(0xFFEF4444)), // BS
+                    ],
+                  ),
+                  // Marker
+                  Positioned(
+                    left: (pos * w - 1.5).clamp(0.0, w - 3),
+                    top: -1,
+                    bottom: -1,
+                    child: Container(
+                      width: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            blurRadius: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSegment(double flex, Color color) {
+    return Expanded(
+      flex: (flex * 1000).toInt(),
+      child: Container(
+        height: 4,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Arbitrage Badge ──────────────────────────────────────────────────
+class _ArbitrageBadge extends StatelessWidget {
+  final double steamPrice;
+  final double buffPrice;
+
+  const _ArbitrageBadge({required this.steamPrice, required this.buffPrice});
 
   @override
   Widget build(BuildContext context) {
-    final pos = _markerPos;
-    final isPrecise = floatValue != null;
-    return SizedBox(
-      height: 4,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: Stack(
-              children: [
-                // Smooth gradient track
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0xFF10B981),
-                        Color(0xFFF59E0B),
-                        Color(0xFFEF4444),
-                      ],
-                      stops: [0.0, 0.45, 1.0],
-                    ),
-                  ),
-                  foregroundDecoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                  ),
-                ),
-                // Marker
-                Positioned(
-                  left: (pos * w - 1).clamp(0.0, w - 2),
-                  top: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 2,
-                    decoration: BoxDecoration(
-                      color: Colors.white
-                          .withValues(alpha: isPrecise ? 1.0 : 0.5),
-                      borderRadius: BorderRadius.circular(1),
-                      boxShadow: isPrecise
-                          ? [
-                              BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.5),
-                                blurRadius: 2,
-                              ),
-                            ]
-                          : null,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+    if (steamPrice <= 0) return const SizedBox.shrink();
+    // Buff price is usually lower than Steam.
+    // We show how much cheaper it is on Buff (e.g. -25%)
+    final diff = ((buffPrice / steamPrice) - 1) * 100;
+    if (diff.abs() < 1) return const SizedBox.shrink();
+
+    final color = diff < -15 ? const Color(0xFF10B981) : AppTheme.textDisabled;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 0.5),
+      ),
+      child: Text(
+        'BUFF ${diff > 0 ? '+' : ''}${diff.toStringAsFixed(0)}%',
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
       ),
     );
   }
@@ -805,7 +852,15 @@ class _RareBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const color = Color(0xFFF59E0B); // amber
+    final color = switch (reason) {
+      'Blue Gem' => const Color(0xFF3B82F6),
+      'Ruby' => const Color(0xFFEF4444),
+      'Sapphire' => const Color(0xFF06B6D4),
+      'Emerald' => const Color(0xFF10B981),
+      'Black Pearl' => const Color(0xFF9B59B6),
+      _ => const Color(0xFFF59E0B), // amber for others
+    };
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
@@ -822,12 +877,12 @@ class _RareBadge extends StatelessWidget {
           const RarityGem(size: 9, glow: false),
           const SizedBox(width: 3),
           Text(
-            reason,
-            style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
+            reason.toUpperCase(),
+            style: TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w900,
               color: color,
-              letterSpacing: 0.3,
+              letterSpacing: 0.5,
             ),
           ),
         ],

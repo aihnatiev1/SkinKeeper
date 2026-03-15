@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../settings/accounts_provider.dart';
@@ -18,20 +19,23 @@ import 'widgets/clienttoken_auth_tab.dart';
 
 class _QrState {
   final String? qrImage;
+  final String? qrUrl;
   final String? nonce;
   final String status; // idle | loading | ready | pending | authenticated | expired | error
   final String? error;
 
   const _QrState({
     this.qrImage,
+    this.qrUrl,
     this.nonce,
     this.status = 'idle',
     this.error,
   });
 
-  _QrState copyWith({String? qrImage, String? nonce, String? status, String? error}) =>
+  _QrState copyWith({String? qrImage, String? qrUrl, String? nonce, String? status, String? error}) =>
       _QrState(
         qrImage: qrImage ?? this.qrImage,
+        qrUrl: qrUrl ?? this.qrUrl,
         nonce: nonce ?? this.nonce,
         status: status ?? this.status,
         error: error,
@@ -57,6 +61,7 @@ class _QrNotifier extends StateNotifier<_QrState> {
       final data = response.data as Map<String, dynamic>;
       state = state.copyWith(
         qrImage: data['qrImage'] as String?,
+        qrUrl: data['qrUrl'] as String?,
         nonce: data['nonce'] as String?,
         status: 'ready',
       );
@@ -103,7 +108,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  int _selectedTab = 0; // 0 = Login, 1 = Webtoken, 2 = QR
+  int _selectedTab = 0; // 0 = Steam App, 1 = Browser, 2 = Advanced
   late final PageController _pageCtrl;
   Timer? _pollTimer;
   bool _qrStarted = false;
@@ -113,12 +118,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void initState() {
     super.initState();
     _pageCtrl = PageController();
+    // Start QR by default if it's the first tab
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeStartQr(0);
+    });
   }
 
   void _onTabChanged(int i) {
     setState(() => _selectedTab = i);
     _pageCtrl.animateToPage(i,
-        duration: const Duration(milliseconds: 1), curve: Curves.linear);
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
     _maybeStartQr(i);
   }
 
@@ -128,7 +137,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _maybeStartQr(int i) {
-    if (i == 2 && !_qrStarted) {
+    if (i == 0 && !_qrStarted) {
       _qrStarted = true;
       ref.read(_qrProvider.notifier)
           .startQR(isLinking: widget.isLinking)
@@ -212,7 +221,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: PillTabSelector(
-                  tabs: const ['Login', 'Webtoken', 'QR'],
+                  tabs: const ['Steam App', 'Browser', 'Advanced'],
                   selected: _selectedTab,
                   onChanged: _onTabChanged,
                 ),
@@ -222,9 +231,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   controller: _pageCtrl,
                   onPageChanged: _onPageChanged,
                   children: [
+                    _buildQrTab(),
                     _buildBrowserTab(isLoading),
                     ClientTokenAuthTab(isLinking: widget.isLinking),
-                    _buildQrTab(),
                   ],
                 ),
               ),
@@ -277,49 +286,200 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildQrTab() {
     final qrState = ref.watch(_qrProvider);
+    final isPolling = qrState.status == 'ready' || qrState.status == 'pending';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          const SizedBox(height: 8),
-          Text('Scan with Steam Mobile App',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  )),
-          const SizedBox(height: 8),
-          Text(
-            'Open the Steam app → Guard section → scan the QR code below.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: Colors.white60),
-          ),
-          const SizedBox(height: 24),
-          _buildQrArea(qrState),
           const SizedBox(height: 20),
-          _buildQrStatus(qrState),
+          // Large Steam Icon
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: const Color(0xFF171a21),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withValues(alpha: 0.2),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Image.network(
+                'https://community.akamai.steamstatic.com/public/shared/images/responsive/header_logo.png',
+                height: 40,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text(
+            'Confirm in Steam App',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'We will open the official Steam app on this device for a secure, password-less login.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.5),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 40),
+
+          if (qrState.loading)
+            const Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(color: AppTheme.primary),
+                  SizedBox(height: 16),
+                  Text('Generating Steam link...', 
+                      style: TextStyle(color: Colors.white70)),
+                ],
+              ),
+            )
+          else if (qrState.error != null)
+            Center(
+              child: Column(
+                children: [
+                  const Icon(Icons.error_outline, color: AppTheme.loss, size: 48),
+                  const SizedBox(height: 16),
+                  Text('Failed to start session: ${qrState.error}', 
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => ref.read(qrAuthProvider.notifier).startQR(),
+                    child: const Text('Try Again'),
+                  ),
+                ],
+              ),
+            )
+          else if (qrState.qrUrl != null && qrState.status != 'authenticated') ...[
+            ElevatedButton(
+              onPressed: () async {
+                final uri = Uri.parse(qrState.qrUrl!);
+                // Use externalApplication to ensure Safari handles redirects for Steam app
+                await launchUrl(uri,
+                    mode: LaunchMode.externalApplication);
+                HapticFeedback.mediumImpact();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                elevation: 8,
+                shadowColor: AppTheme.primary.withValues(alpha: 0.4),
+              ),
+              child: const Text(
+                'Open Steam App',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(height: 24),
+            if (isPolling)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Waiting for confirmation in Steam...',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.primaryLight.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
+          ],
+
           if (qrState.status == 'expired') ...[
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () {
                 setState(() => _qrStarted = false);
                 ref.read(_qrProvider.notifier).reset();
-                _onTabChanged(2);
+                _maybeStartQr(0);
               },
               icon: const Icon(Icons.refresh, size: 20),
-              label: const Text('Generate New QR Code'),
+              label: const Text('Refresh Link'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
+                backgroundColor: AppTheme.surface,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               ),
             ),
           ],
+
+          const SizedBox(height: 60),
+          // Fallback to QR
+          TextButton(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => Dialog(
+                  backgroundColor: AppTheme.surface,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Scan QR Code',
+                            style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white)),
+                        const SizedBox(height: 8),
+                        const Text(
+                            'Use this if you are logging in from another device',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 12, color: AppTheme.textMuted)),
+                        const SizedBox(height: 24),
+                        _buildQrArea(qrState),
+                        const SizedBox(height: 24),
+                        TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close')),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+            child: Text(
+              'Using another device? Show QR Code',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.3),
+                fontSize: 13,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -410,12 +570,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const Icon(Icons.open_in_browser, size: 64, color: Colors.white24),
             const SizedBox(height: 20),
             Text(
-              'Opens Steam login in your browser.\nAfter signing in, you\'ll be redirected back.',
+              'Sign in via official Steam website.\nSafe, but does not support market history.',
               textAlign: TextAlign.center,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
                   ?.copyWith(color: Colors.white60, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.info_outline, size: 14, color: AppTheme.warning),
+                  const SizedBox(width: 8),
+                  Text(
+                    'No transaction or P&L data available',
+                    style: TextStyle(
+                        color: AppTheme.warning.withValues(alpha: 0.9),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 32),
             if (isLoading)

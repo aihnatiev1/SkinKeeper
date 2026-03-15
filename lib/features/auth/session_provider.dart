@@ -86,6 +86,7 @@ class SessionStatusNotifier extends AsyncNotifier<SessionStatus> {
 
 class QrAuthState {
   final String? qrImage;
+  final String? qrUrl;
   final String? nonce;
   final String status; // 'idle' | 'loading' | 'ready' | 'polling' | 'authenticated' | 'expired' | 'error'
   final bool loading;
@@ -93,6 +94,7 @@ class QrAuthState {
 
   const QrAuthState({
     this.qrImage,
+    this.qrUrl,
     this.nonce,
     this.status = 'idle',
     this.loading = false,
@@ -101,6 +103,7 @@ class QrAuthState {
 
   QrAuthState copyWith({
     String? qrImage,
+    String? qrUrl,
     String? nonce,
     String? status,
     bool? loading,
@@ -108,6 +111,7 @@ class QrAuthState {
   }) {
     return QrAuthState(
       qrImage: qrImage ?? this.qrImage,
+      qrUrl: qrUrl ?? this.qrUrl,
       nonce: nonce ?? this.nonce,
       status: status ?? this.status,
       loading: loading ?? this.loading,
@@ -136,6 +140,7 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
       final data = response.data as Map<String, dynamic>;
       state = state.copyWith(
         qrImage: data['qrImage'] as String?,
+        qrUrl: data['qrUrl'] as String?,
         nonce: data['nonce'] as String?,
         status: 'ready',
         loading: false,

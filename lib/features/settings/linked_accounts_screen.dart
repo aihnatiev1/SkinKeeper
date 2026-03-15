@@ -253,7 +253,7 @@ class _LinkAccountButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final blocked = !isPremium && accountCount >= 1;
+    final blocked = !isPremium && accountCount >= 2;
 
     return GradientButton(
       label: 'Link New Account',

@@ -115,14 +115,27 @@ export async function inspectItem(
 
   if (!force && item.inspected_at) {
     const age = Date.now() - new Date(item.inspected_at).getTime();
+
+    const parseJSON = (val: any) => {
+      if (!val) return [];
+      if (typeof val === "string") {
+        try {
+          return JSON.parse(val);
+        } catch (_) {
+          return [];
+        }
+      }
+      return val;
+    };
+
     // Return cached success
     if (age < INSPECT_CACHE_MS && item.float_value != null) {
       return {
         floatValue: parseFloat(item.float_value),
         paintSeed: item.paint_seed ?? 0,
         paintIndex: item.paint_index ?? 0,
-        stickers: item.stickers ?? [],
-        charms: item.charms ?? [],
+        stickers: parseJSON(item.stickers),
+        charms: parseJSON(item.charms),
       };
     }
     // Throttle failures in background context: don't re-hit CSFloat within 1h
@@ -152,8 +165,8 @@ export async function inspectItem(
       result.floatValue,
       result.paintSeed,
       result.paintIndex,
-      JSON.stringify(result.stickers),
-      JSON.stringify(result.charms),
+      result.stickers,
+      result.charms,
       item.id,
     ]
   );

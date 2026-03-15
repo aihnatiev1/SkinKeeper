@@ -97,7 +97,7 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: PillTabSelector(
-                tabs: const ['Quick Auth', 'Manual'],
+                tabs: const ['Steam App', 'Advanced'],
                 selected: _selectedTab,
                 onChanged: (i) {
                   setState(() => _selectedTab = i);
@@ -246,14 +246,28 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.open_in_browser, size: 20, color: Colors.white),
-                            SizedBox(width: 8),
-                            Text(
-                              'Sign in via Steam Browser',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            SizedBox(width: 12),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Sign in via Steam Browser',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  'No market history access',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),

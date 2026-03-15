@@ -266,7 +266,7 @@ router.get("/accounts", authMiddleware, async (req: AuthRequest, res: Response) 
 
     res.json({
       accounts: enriched,
-      maxAccounts: isPremium ? null : 1,
+      maxAccounts: isPremium ? null : 2,
       isPremium,
     });
   } catch (err) {
@@ -289,10 +289,10 @@ router.post("/accounts/link", authMiddleware, async (req: AuthRequest, res: Resp
         `SELECT COUNT(*)::int as cnt FROM steam_accounts WHERE user_id = $1`,
         [req.userId]
       );
-      if (countRow[0].cnt >= 1) {
+      if (countRow[0].cnt >= 2) {
         res.status(403).json({
           error: "premium_required",
-          message: "Upgrade to Premium to link multiple Steam accounts",
+          message: "Upgrade to Premium to link more than 2 Steam accounts",
         });
         return;
       }

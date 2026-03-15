@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/steam_image.dart';
 
@@ -288,6 +289,21 @@ class InventoryItem {
   }
 
   factory InventoryItem.fromJson(Map<String, dynamic> json) {
+    // Robust parsing for stickers/charms as they might arrive as JSON strings from the API
+    List<dynamic> parseList(dynamic val) {
+      if (val == null) return [];
+      if (val is List) return val;
+      if (val is String && val.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(val);
+          if (decoded is List) return decoded;
+        } catch (_) {
+          return [];
+        }
+      }
+      return [];
+    }
+
     return InventoryItem(
       assetId: json['asset_id'] as String,
       marketHashName: json['market_hash_name'] as String,
@@ -313,14 +329,12 @@ class InventoryItem {
       accountSteamId: json['account_steam_id'] as String?,
       accountName: json['account_name'] as String?,
       accountAvatarUrl: json['account_avatar_url'] as String?,
-      stickers: (json['stickers'] as List<dynamic>?)
-              ?.map((e) => StickerInfo.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
-      charms: (json['charms'] as List<dynamic>?)
-              ?.map((e) => CharmInfo.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      stickers: parseList(json['stickers'])
+          .map((e) => StickerInfo.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      charms: parseList(json['charms'])
+          .map((e) => CharmInfo.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }

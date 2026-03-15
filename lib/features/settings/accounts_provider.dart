@@ -14,8 +14,9 @@ import '../transactions/transactions_provider.dart';
 
 class PremiumRequiredException implements Exception {
   const PremiumRequiredException();
+
   @override
-  String toString() => 'Upgrade to Premium to link multiple Steam accounts';
+  String toString() => 'Upgrade to Premium to link more than 2 Steam accounts';
 }
 
 final accountsProvider =

@@ -317,7 +317,7 @@ export class SteamSessionService {
    */
   static async startQRSession(
     accountId: number
-  ): Promise<{ qrImage: string; nonce: string }> {
+  ): Promise<{ qrImage: string; qrUrl: string; nonce: string }> {
     const loginSession = new LoginSession(EAuthTokenPlatformType.WebBrowser);
     const startResult = await loginSession.startWithQR();
 
@@ -326,6 +326,7 @@ export class SteamSessionService {
     }
 
     const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
+    const qrUrl = startResult.qrChallengeUrl;
     const nonce = crypto.randomUUID();
 
     const pending: PendingSession = {
@@ -356,7 +357,7 @@ export class SteamSessionService {
     });
 
     this.pendingSessions.set(nonce, pending);
-    return { qrImage, nonce };
+    return { qrImage, qrUrl, nonce };
   }
 
   /**
