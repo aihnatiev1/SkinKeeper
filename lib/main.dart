@@ -54,8 +54,6 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   StreamSubscription<void>? _sessionExpiredSub;
   StreamSubscription<void>? _tokenExpiredSub;
   bool _pushInitialized = false;
-  String? _steamLoginNonce;
-
   @override
   void initState() {
     super.initState();
@@ -63,7 +61,6 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     _appLinks = AppLinks();
     _initDeepLinks();
     _initDeepLinkChannel();
-    onSteamLoginNonce = setSteamLoginNonce;
     _sessionExpiredSub = sessionExpiredController.stream.listen((_) {
       _showSessionExpiredDialog();
     });
@@ -81,32 +78,10 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     });
   }
 
-  /// Called by LoginScreen when Steam login opens Safari
-  void setSteamLoginNonce(String nonce) => _steamLoginNonce = nonce;
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       WidgetService.pushCachedToWidget();
-      if (_steamLoginNonce != null) {
-        _pollSteamLogin();
-      }
-    }
-  }
-
-  Future<void> _pollSteamLogin() async {
-    final nonce = _steamLoginNonce;
-    if (nonce == null) return;
-    final api = ref.read(apiClientProvider);
-    for (var i = 0; i < 5; i++) {
-      final token = await SteamAuthService.pollLogin(api, nonce);
-      if (token != null) {
-        _steamLoginNonce = null;
-        await api.saveToken(token);
-        ref.invalidate(authStateProvider);
-        return;
-      }
-      await Future.delayed(const Duration(seconds: 2));
     }
   }
 
