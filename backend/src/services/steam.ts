@@ -1,4 +1,5 @@
 import axios from "axios";
+import { steamRateLimit } from "./prices.js";
 
 const STEAM_API_KEY = () => process.env.STEAM_API_KEY!;
 
@@ -225,6 +226,7 @@ async function fetchInventoryContext(
     let data: any;
     for (let retry = 0; retry < 3; retry++) {
       try {
+        await steamRateLimit();
         const resp = await axios.get(
           `https://steamcommunity.com/inventory/${steamId}/730/${contextId}`,
           { params, timeout: 15000, headers }

@@ -152,12 +152,17 @@ class AdaptiveCrawler {
     return null;
   }
 
+  private jitter(ms: number): number {
+    // ±25% random jitter to avoid detectable patterns
+    return ms + ms * 0.25 * (Math.random() * 2 - 1);
+  }
+
   private async tick(): Promise<void> {
     // If rate limited, wait
     if (Date.now() < this.pausedUntil) {
       const waitMs = this.pausedUntil - Date.now();
       console.log(`[${this.config.name}] Rate limited, resuming in ${Math.ceil(waitMs / 1000)}s`);
-      this.timer = setTimeout(() => this.tick(), waitMs + 1000);
+      this.timer = setTimeout(() => this.tick(), this.jitter(waitMs + 1000));
       return;
     }
 
@@ -225,7 +230,7 @@ class AdaptiveCrawler {
     }
 
     updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
-    this.timer = setTimeout(() => this.tick(), this.currentInterval);
+    this.timer = setTimeout(() => this.tick(), this.jitter(this.currentInterval));
   }
 
   start(delayMs = 5000): void {
@@ -241,11 +246,28 @@ class AdaptiveCrawler {
   }
 }
 
+// ─── Global Steam Rate Limiter ───────────────────────────────────────────
+// All requests to steamcommunity.com share this queue to prevent
+// inventory fetches and price crawler from fighting each other.
+
+let steamLastRequestAt = 0;
+const STEAM_MIN_GAP_MS = 3000; // minimum 3s between any two Steam requests
+
+export async function steamRateLimit(): Promise<void> {
+  const now = Date.now();
+  const gap = now - steamLastRequestAt;
+  if (gap < STEAM_MIN_GAP_MS) {
+    await new Promise((r) => setTimeout(r, STEAM_MIN_GAP_MS - gap));
+  }
+  steamLastRequestAt = Date.now();
+}
+
 // ─── Steam Market ────────────────────────────────────────────────────────
 
 export async function fetchSteamMarketPrice(
   marketHashName: string
 ): Promise<number | null> {
+  await steamRateLimit();
   const { data } = await axios.get(
     "https://steamcommunity.com/market/priceoverview/",
     {
@@ -266,12 +288,12 @@ export async function fetchSteamMarketPrice(
 const steamCrawler = new AdaptiveCrawler(
   {
     name: "Steam",
-    minIntervalMs: 3000,        // fastest: 1 req / 3s
-    maxIntervalMs: 60_000,      // slowest: 1 req / 60s
-    startIntervalMs: 3500,      // start: 1 req / 3.5s
-    backoffFactor: 2,           // double interval on 429
-    cooldownFactor: 0.85,       // 15% faster after streak
-    successesBeforeSpeedup: 5,  // 5 successes to speed up
+    minIntervalMs: 5000,        // fastest: 1 req / 5s (~12/min — safe zone)
+    maxIntervalMs: 120_000,     // slowest: 1 req / 2min
+    startIntervalMs: 8000,      // start conservatively: 1 req / 8s
+    backoffFactor: 2.5,         // aggressive backoff on 429
+    cooldownFactor: 0.95,       // only 5% faster per streak (slow ramp)
+    successesBeforeSpeedup: 20, // need 20 clean successes to speed up
     refreshAgeMs: 30 * 60_000,  // refresh after 30 min
   },
   "steam",
