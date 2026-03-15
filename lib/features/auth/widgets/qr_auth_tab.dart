@@ -35,7 +35,7 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       final status = await ref.read(qrAuthProvider.notifier).pollQR();
       if (!mounted) return;
       if (status == 'authenticated') {
