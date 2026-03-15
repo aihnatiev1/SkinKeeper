@@ -53,6 +53,11 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
 
   void _showAddTransaction(BuildContext context) {
     HapticFeedback.mediumImpact();
+    final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
+    if (!isPremium) {
+      context.push('/premium');
+      return;
+    }
     showGlassSheet(context, const AddTransactionSheet());
   }
 
