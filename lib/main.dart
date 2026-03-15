@@ -153,6 +153,8 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       print('AUTH: user fetched, navigating...');
       final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
       ref.read(authStateProvider.notifier).state = AsyncData(user);
+      // Wait for state to propagate through widget tree before navigating
+      await Future.delayed(const Duration(milliseconds: 200));
       ref.read(routerProvider).go('/portfolio');
       print('AUTH: done!');
     } catch (e) {
