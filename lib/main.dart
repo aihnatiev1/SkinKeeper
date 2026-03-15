@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as dev;
+import 'package:flutter/services.dart';
 
 import 'package:app_links/app_links.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -60,6 +61,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     WidgetsBinding.instance.addObserver(this);
     _appLinks = AppLinks();
     _initDeepLinks();
+    _initDeepLinkChannel();
     _sessionExpiredSub = sessionExpiredController.stream.listen((_) {
       _showSessionExpiredDialog();
     });
@@ -89,6 +91,17 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     }
   }
 
+  void _initDeepLinkChannel() {
+    const channel = MethodChannel('app.skinkeeper.store/deep_link');
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'onLink') {
+        final url = call.arguments as String?;
+        print('CHANNEL DEEPLINK: $url');
+        if (url != null) _handleDeepLink(Uri.parse(url));
+      }
+    });
+  }
+
   Future<void> _initDeepLinks() async {
     // Handle link that launched the app (cold start)
     try {
@@ -104,6 +117,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
 
   void _handleDeepLink(Uri uri) {
     dev.log('Deep link received: $uri', name: 'DeepLink');
+    print('DEEPLINK: $uri');
 
     // skinkeeper://portfolio (from home screen widget tap)
     if (uri.host == 'portfolio') {
