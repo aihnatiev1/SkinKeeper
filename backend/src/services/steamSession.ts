@@ -326,7 +326,23 @@ export class SteamSessionService {
     }
 
     const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
-    const qrUrl = startResult.qrChallengeUrl;
+    
+    // Resolve the s.team redirect to get the direct steamcommunity.com link
+    // This ensures the Steam app opens the "Approve" screen instead of the "Scanner"
+    let qrUrl = startResult.qrChallengeUrl;
+    try {
+      const axios = require('axios');
+      const response = await axios.get(qrUrl, {
+        maxRedirects: 0,
+        validateStatus: (status: number) => status >= 300 && status < 400,
+      });
+      if (response.headers.location) {
+        qrUrl = response.headers.location;
+      }
+    } catch (e) {
+      console.error('Failed to resolve QR redirect:', e);
+    }
+
     const nonce = crypto.randomUUID();
 
     const pending: PendingSession = {
