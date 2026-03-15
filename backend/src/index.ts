@@ -31,6 +31,19 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+// Apple App Site Association for Universal Links
+app.get("/.well-known/apple-app-site-association", (_req, res) => {
+  res.json({
+    applinks: {
+      apps: [],
+      details: [{
+        appIDs: ["QTLQ56U8D2.app.skinkeeper.store"],
+        components: [{ "/": "/auth/callback*" }]
+      }]
+    }
+  });
+});
+
 // Legal pages (no auth required)
 app.use("/legal", legalRoutes);
 

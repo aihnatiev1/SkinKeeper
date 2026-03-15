@@ -23,14 +23,20 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   canceled: <Ban size={14} className="text-muted" />,
 };
 
+function cents(v: number) { return v / 100; }
+
 export default function TradesPage() {
   const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
   const [offset, setOffset] = useState(0);
   const { data, isLoading } = useTrades(activeTab, 20, offset);
   const syncTrades = useSyncTrades();
 
-  const trades = data?.trades || [];
+  // Backend returns { offers, total, hasMore }
+  const trades = data?.offers || [];
   const total = data?.total || 0;
+
+  const giveItems = (trade: typeof trades[0]) => trade.items.filter((i) => i.side === 'give');
+  const recvItems = (trade: typeof trades[0]) => trade.items.filter((i) => i.side === 'receive');
 
   return (
     <div>
@@ -78,96 +84,82 @@ export default function TradesPage() {
           <PageLoader />
         ) : trades.length === 0 ? (
           <div className="text-center text-muted py-20">
-            <ArrowLeftRight size={40} className="mx-auto mb-3 opacity-50" />
+            <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-50">
+              <path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="m16 21 4-4-4-4" /><path d="M20 17H4" />
+            </svg>
             <p>No trades found</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {trades.map((trade) => (
-              <motion.div
-                key={trade.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-surface rounded-xl border border-border p-4 hover:border-primary/20 transition-colors"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={trade.partner_avatar}
-                      alt=""
-                      className="w-8 h-8 rounded-full"
-                    />
-                    <div>
-                      <span className="text-sm font-medium">{trade.partner_name}</span>
-                      <div className="flex items-center gap-1.5 text-xs text-muted">
-                        {STATUS_ICONS[trade.status]}
-                        <span className="capitalize">{trade.status.replace(/_/g, ' ')}</span>
+            {trades.map((trade) => {
+              const give = giveItems(trade);
+              const recv = recvItems(trade);
+              return (
+                <motion.div
+                  key={trade.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-surface rounded-xl border border-border p-4 hover:border-primary/20 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span className="text-sm font-medium">{trade.partnerName || trade.partnerSteamId}</span>
+                        <div className="flex items-center gap-1.5 text-xs text-muted">
+                          {STATUS_ICONS[trade.status]}
+                          <span className="capitalize">{trade.status.replace(/_/g, ' ')}</span>
+                          {trade.isInternal && <span className="text-accent ml-1">internal</span>}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <span className="text-xs text-muted">
-                    {formatRelativeTime(trade.created_at)}
-                  </span>
-                </div>
-
-                {/* Items */}
-                <div className="flex items-center gap-4">
-                  {/* Giving */}
-                  <div className="flex-1">
-                    <div className="text-xs text-muted mb-2 flex items-center gap-1">
-                      <ArrowUp size={12} className="text-loss" /> Giving
-                    </div>
-                    <div className="flex gap-1 flex-wrap">
-                      {trade.items_to_give.slice(0, 6).map((item, i) => (
-                        <img
-                          key={i}
-                          src={getItemIconUrl(item.icon_url)}
-                          alt={item.market_hash_name}
-                          title={item.market_hash_name}
-                          className="w-12 h-9 object-contain bg-surface-light rounded p-1"
-                        />
-                      ))}
-                      {trade.items_to_give.length > 6 && (
-                        <span className="flex items-center justify-center w-12 h-9 bg-surface-light rounded text-xs text-muted">
-                          +{trade.items_to_give.length - 6}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-loss mt-1">
-                      {formatPrice(trade.give_value)}
-                    </p>
+                    <span className="text-xs text-muted">
+                      {formatRelativeTime(trade.createdAt)}
+                    </span>
                   </div>
 
-                  <ArrowRight size={20} className="text-muted shrink-0" />
+                  {/* Items */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="text-xs text-muted mb-2 flex items-center gap-1">
+                        <ArrowUp size={12} className="text-loss" /> Giving
+                      </div>
+                      <div className="flex gap-1 flex-wrap">
+                        {give.slice(0, 6).map((item) => {
+                          const url = getItemIconUrl(item.iconUrl);
+                          return url ? (
+                            <img key={item.id} src={url} alt={item.marketHashName || ''} title={item.marketHashName || ''} className="w-12 h-9 object-contain bg-surface-light rounded p-1" />
+                          ) : null;
+                        })}
+                        {give.length > 6 && (
+                          <span className="flex items-center justify-center w-12 h-9 bg-surface-light rounded text-xs text-muted">+{give.length - 6}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-loss mt-1">{formatPrice(cents(trade.valueGiveCents))}</p>
+                    </div>
 
-                  {/* Receiving */}
-                  <div className="flex-1">
-                    <div className="text-xs text-muted mb-2 flex items-center gap-1">
-                      <ArrowDown size={12} className="text-profit" /> Receiving
+                    <ArrowRight size={20} className="text-muted shrink-0" />
+
+                    <div className="flex-1">
+                      <div className="text-xs text-muted mb-2 flex items-center gap-1">
+                        <ArrowDown size={12} className="text-profit" /> Receiving
+                      </div>
+                      <div className="flex gap-1 flex-wrap">
+                        {recv.slice(0, 6).map((item) => {
+                          const url = getItemIconUrl(item.iconUrl);
+                          return url ? (
+                            <img key={item.id} src={url} alt={item.marketHashName || ''} title={item.marketHashName || ''} className="w-12 h-9 object-contain bg-surface-light rounded p-1" />
+                          ) : null;
+                        })}
+                        {recv.length > 6 && (
+                          <span className="flex items-center justify-center w-12 h-9 bg-surface-light rounded text-xs text-muted">+{recv.length - 6}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-profit mt-1">{formatPrice(cents(trade.valueRecvCents))}</p>
                     </div>
-                    <div className="flex gap-1 flex-wrap">
-                      {trade.items_to_receive.slice(0, 6).map((item, i) => (
-                        <img
-                          key={i}
-                          src={getItemIconUrl(item.icon_url)}
-                          alt={item.market_hash_name}
-                          title={item.market_hash_name}
-                          className="w-12 h-9 object-contain bg-surface-light rounded p-1"
-                        />
-                      ))}
-                      {trade.items_to_receive.length > 6 && (
-                        <span className="flex items-center justify-center w-12 h-9 bg-surface-light rounded text-xs text-muted">
-                          +{trade.items_to_receive.length - 6}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-profit mt-1">
-                      {formatPrice(trade.receive_value)}
-                    </p>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </div>
         )}
 
@@ -195,13 +187,5 @@ export default function TradesPage() {
         )}
       </div>
     </div>
-  );
-}
-
-function ArrowLeftRight({ size, className }: { size: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="m16 21 4-4-4-4" /><path d="M20 17H4" />
-    </svg>
   );
 }

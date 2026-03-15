@@ -15,7 +15,8 @@ import type {
 } from './types';
 import { useAuthStore } from './store';
 
-// Auth
+// ─── Auth ──────────────────────────────────────────────────────────────
+
 export function useMe() {
   const setUser = useAuthStore((s) => s.setUser);
   return useQuery({
@@ -52,7 +53,8 @@ export function useSwitchAccount() {
   });
 }
 
-// Portfolio
+// ─── Portfolio ─────────────────────────────────────────────────────────
+
 export function usePortfolioSummary() {
   return useQuery({
     queryKey: ['portfolio', 'summary'],
@@ -74,8 +76,8 @@ export function usePLItems(page = 1, limit = 50) {
   return useQuery({
     queryKey: ['portfolio', 'pl', 'items', page],
     queryFn: () =>
-      api.get<{ items: PLItem[]; total: number }>(
-        `/portfolio/pl/items?page=${page}&limit=${limit}`
+      api.get<{ items: PLItem[]; total: number; offset: number; limit: number }>(
+        `/portfolio/pl/items?offset=${(page - 1) * limit}&limit=${limit}`
       ),
     enabled: !!user?.is_premium,
   });
@@ -91,11 +93,12 @@ export function usePLHistory(days = 30) {
   });
 }
 
-// Inventory
+// ─── Inventory ─────────────────────────────────────────────────────────
+
 export function useInventory() {
   return useQuery({
     queryKey: ['inventory'],
-    queryFn: () => api.get<{ items: InventoryItem[] }>('/inventory'),
+    queryFn: () => api.get<{ items: InventoryItem[]; count: number }>('/inventory'),
     select: (data) => data.items,
   });
 }
@@ -111,7 +114,8 @@ export function useRefreshInventory() {
   });
 }
 
-// Trades
+// ─── Trades ────────────────────────────────────────────────────────────
+
 export function useTrades(status?: string, limit = 20, offset = 0) {
   return useQuery({
     queryKey: ['trades', status, limit, offset],
@@ -120,7 +124,7 @@ export function useTrades(status?: string, limit = 20, offset = 0) {
       if (status) params.set('status', status);
       params.set('limit', String(limit));
       params.set('offset', String(offset));
-      return api.get<{ trades: TradeOffer[]; total: number }>(
+      return api.get<{ offers: TradeOffer[]; total: number; hasMore: boolean }>(
         `/trades?${params}`
       );
     },
@@ -130,12 +134,13 @@ export function useTrades(status?: string, limit = 20, offset = 0) {
 export function useSyncTrades() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post('/trades/sync'),
+    mutationFn: () => api.post<{ synced: number }>('/trades/sync'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['trades'] }),
   });
 }
 
-// Transactions
+// ─── Transactions ──────────────────────────────────────────────────────
+
 export function useTransactions(filters?: {
   type?: string;
   item?: string;
@@ -150,7 +155,7 @@ export function useTransactions(filters?: {
       if (filters?.item) params.set('item', filters.item);
       if (filters?.from) params.set('from', filters.from);
       if (filters?.to) params.set('to', filters.to);
-      return api.get<{ transactions: Transaction[] }>(
+      return api.get<{ transactions: Transaction[]; total: number }>(
         `/transactions?${params}`
       );
     },
@@ -173,7 +178,8 @@ export function useSyncTransactions() {
   });
 }
 
-// Alerts
+// ─── Alerts ────────────────────────────────────────────────────────────
+
 export function useAlerts() {
   return useQuery({
     queryKey: ['alerts'],
@@ -185,7 +191,7 @@ export function useAlerts() {
 export function useCreateAlert() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (alert: { market_hash_name: string; target_price: number; direction: 'above' | 'below' }) =>
+    mutationFn: (alert: { market_hash_name: string; threshold: number; condition: string; source: string }) =>
       api.post('/alerts', alert),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
   });

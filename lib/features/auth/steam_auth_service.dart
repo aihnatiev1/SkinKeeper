@@ -60,15 +60,9 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
 }
 
 class SteamAuthService {
-  String generateNonce() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final rng = Random.secure();
-    return List.generate(24, (_) => chars[rng.nextInt(chars.length)]).join();
-  }
-
-  /// Open Steam login in Safari with nonce for polling
-  Future<void> openSteamWithNonce(String nonce) async {
-    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback?nonce=$nonce';
+  /// Open Steam login in Safari — callback redirects via Universal Link
+  Future<void> openSteamLogin() async {
+    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback';
     final returnUri = Uri.parse(returnTo);
     final realm =
         '${returnUri.scheme}://${returnUri.host}${returnUri.hasPort ? ':${returnUri.port}' : ''}/';

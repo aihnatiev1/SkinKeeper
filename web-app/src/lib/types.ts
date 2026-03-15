@@ -1,141 +1,197 @@
+// ─── Auth ──────────────────────────────────────────────────────────────
+// GET /api/auth/me — flat object, snake_case
 export interface User {
-  id: number;
   steam_id: string;
   display_name: string;
   avatar_url: string;
   is_premium: boolean;
+  premium_until: string | null;
   active_account_id: number | null;
-  created_at: string;
+  account_count: number;
 }
 
+// GET /api/auth/accounts — camelCase
 export interface SteamAccount {
   id: number;
   steamId: string;
   displayName: string;
   avatarUrl: string;
-  sessionStatus: 'valid' | 'expiring' | 'expired' | 'none';
   isActive: boolean;
+  sessionStatus: 'valid' | 'expiring' | 'expired' | 'none';
+  addedAt: string;
 }
 
-export interface InventoryItem {
-  id: number;
-  asset_id: string;
-  market_hash_name: string;
-  icon_url: string;
-  name_color: string;
-  rarity: string;
-  wear: string | null;
-  float_value: number | null;
-  tradable: boolean;
-  trade_ban_until: string | null;
-  prices: Record<string, number>;
-  stickers: Sticker[];
-  account_id: number;
-  account_name?: string;
-}
-
-export interface Sticker {
-  name: string;
-  icon_url: string;
-  wear?: number;
-}
-
+// ─── Portfolio ─────────────────────────────────────────────────────────
+// GET /api/portfolio/summary — snake_case
 export interface PortfolioSummary {
   total_value: number;
-  item_count: number;
   change_24h: number;
   change_24h_pct: number;
   change_7d: number;
   change_7d_pct: number;
+  item_count: number;
   history: { date: string; value: number }[];
 }
 
+// GET /api/portfolio/pl — camelCase, cents
 export interface ProfitLoss {
-  total_invested: number;
-  total_current: number;
-  total_pl: number;
-  total_pl_pct: number;
+  totalInvestedCents: number;
+  totalEarnedCents: number;
+  realizedProfitCents: number;
+  unrealizedProfitCents: number;
+  totalProfitCents: number;
+  totalProfitPct: number;
+  holdingCount: number;
+  totalCurrentValueCents: number;
 }
 
+// GET /api/portfolio/pl/items — camelCase, cents
 export interface PLItem {
-  market_hash_name: string;
-  icon_url: string;
-  quantity: number;
-  avg_cost: number;
-  current_price: number;
-  total_cost: number;
-  total_current: number;
-  pl: number;
-  pl_pct: number;
+  marketHashName: string;
+  avgBuyPriceCents: number;
+  totalQuantityBought: number;
+  totalSpentCents: number;
+  totalQuantitySold: number;
+  totalEarnedCents: number;
+  currentHolding: number;
+  realizedProfitCents: number;
+  unrealizedProfitCents: number;
+  currentPriceCents: number;
+  totalProfitCents: number;
+  profitPct: number;
+  updatedAt: string;
+  iconUrl: string | null;
 }
 
+// GET /api/portfolio/pl/history
 export interface PLHistory {
   date: string;
-  value: number;
-  cost: number;
-  pl: number;
+  totalInvestedCents: number;
+  totalCurrentValueCents: number;
+  cumulativeProfitCents: number;
+  realizedProfitCents: number;
+  unrealizedProfitCents: number;
 }
 
-export interface TradeOffer {
-  id: number;
-  steam_offer_id: string;
-  partner_steam_id: string;
-  partner_name: string;
-  partner_avatar: string;
-  status: string;
-  message: string;
-  items_to_give: TradeItem[];
-  items_to_receive: TradeItem[];
-  give_value: number;
-  receive_value: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TradeItem {
+// ─── Inventory ─────────────────────────────────────────────────────────
+// GET /api/inventory — snake_case
+export interface InventoryItem {
   asset_id: string;
   market_hash_name: string;
   icon_url: string;
-  price: number | null;
+  wear: string | null;
+  float_value: number | null;
+  rarity: string | null;
+  rarity_color: string | null;
+  tradable: boolean;
+  trade_ban_until: string | null;
+  inspect_link: string | null;
+  paint_seed: number | null;
+  paint_index: number | null;
+  stickers: unknown | null;
+  charms: unknown | null;
+  account_steam_id: string;
+  account_id: number;
+  account_name: string;
+  account_avatar_url: string;
+  prices: Record<string, number>;
 }
 
-export interface Transaction {
+// ─── Trades ────────────────────────────────────────────────────────────
+// GET /api/trades — camelCase
+export interface TradeOffer {
+  id: string;
+  direction: 'incoming' | 'outgoing';
+  steamOfferId: string | null;
+  partnerSteamId: string;
+  partnerName: string | null;
+  message: string | null;
+  status: string;
+  isQuickTransfer: boolean;
+  isInternal: boolean;
+  accountIdFrom: number | null;
+  accountIdTo: number | null;
+  accountFromName: string | null;
+  accountToName: string | null;
+  valueGiveCents: number;
+  valueRecvCents: number;
+  createdAt: string;
+  updatedAt: string;
+  items: TradeItem[];
+}
+
+export interface TradeItem {
   id: number;
-  type: 'buy' | 'sell';
+  side: 'give' | 'receive';
+  assetId: string;
+  marketHashName: string | null;
+  iconUrl: string | null;
+  floatValue: number | null;
+  priceCents: number;
+}
+
+// GET /api/trades/friends — camelCase, mapped by backend
+export interface SteamFriend {
+  steamId: string;
+  personaName: string;
+  avatarUrl: string;
+  profileUrl: string;
+  onlineStatus: string; // "offline" | "online" | "busy" | "away" | "snooze" | "looking_to_trade" | "looking_to_play"
+}
+
+// GET /api/trades/accounts — snake_case
+export interface TradeAccount {
+  id: number;
+  steam_id: string;
+  display_name: string;
+  avatar_url: string;
+  has_trade_token: boolean;
+}
+
+// GET /api/trades/partner-inventory/:steamId — returns TradeItem[]
+export interface PartnerInventoryItem {
+  assetId: string;
+  marketHashName?: string;
+  iconUrl?: string;
+  floatValue?: number;
+  priceCents?: number;
+}
+
+// ─── Transactions ──────────────────────────────────────────────────────
+// GET /api/transactions — snake_case
+export interface Transaction {
+  id: string;
+  type: 'buy' | 'sell' | 'trade';
   market_hash_name: string;
-  icon_url: string;
   price: number;
-  quantity: number;
   date: string;
-  source: string;
+  icon_url: string | null;
+  partner_steam_id: string | null;
+  trade_direction: 'incoming' | 'outgoing' | null;
+  current_price_cents: number | null;
+  is_internal: boolean;
 }
 
+// GET /api/transactions/stats — camelCase, cents
 export interface TransactionStats {
-  total_bought: number;
-  total_sold: number;
-  buy_count: number;
-  sell_count: number;
+  totalBought: number;
+  totalSold: number;
+  totalTraded: number;
+  spentCents: number;
+  earnedCents: number;
+  profitCents: number;
 }
 
+// ─── Alerts ────────────────────────────────────────────────────────────
+// GET /api/alerts — snake_case
 export interface Alert {
   id: number;
   market_hash_name: string;
-  icon_url: string;
-  target_price: number;
-  direction: 'above' | 'below';
-  active: boolean;
-  triggered_at: string | null;
+  condition: string;
+  threshold: number;
+  source: string;
+  is_active: boolean;
+  cooldown_minutes: number;
+  last_triggered_at: string | null;
   created_at: string;
-}
-
-export interface PriceData {
-  source: string;
-  price_usd: number;
-  recorded_at: string;
-}
-
-export interface PriceHistory {
-  date: string;
-  price: number;
-  source: string;
 }

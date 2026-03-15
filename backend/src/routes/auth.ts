@@ -7,6 +7,23 @@ import { SteamSessionService } from "../services/steamSession.js";
 
 const router = Router();
 
+// Universal Link callback — iOS opens the app, web fallback saves to localStorage
+router.get("/callback", (req: Request, res: Response) => {
+  const token = req.query.token as string | undefined;
+  const error = req.query.error as string | undefined;
+  // If iOS Universal Link works, the app opens and this page never loads.
+  // If it doesn't, show a page that tries skinkeeper:// as fallback.
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SkinKeeper</title></head>
+<body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+${token ? `<h2>✅ Login successful</h2><p style="color:#999">Opening SkinKeeper...</p>
+<script>window.location='skinkeeper://auth?token=${encodeURIComponent(token)}';</script>
+<p style="margin-top:20px"><a href="skinkeeper://auth?token=${encodeURIComponent(token)}" style="color:#8b5cf6">Tap here to open SkinKeeper</a></p>`
+: `<h2 style="color:#ff5252">Login failed</h2><p>${error || 'Unknown error'}</p>`}
+</div></body></html>`);
+});
+
 // In-memory store for pending Steam login results (nonce → token)
 const pendingLogins = new Map<string, { token?: string; error?: string }>();
 
@@ -105,18 +122,19 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    // Fallback: deep link redirect
-    const deepLink = `skinkeeper://auth?token=${encodeURIComponent(token)}`;
-    res.redirect(deepLink);
+    // Universal Link redirect — iOS intercepts this HTTPS URL and opens the app
+    const baseUrl = process.env.BASE_URL || "https://api.skinkeeper.store";
+    res.redirect(`${baseUrl}/auth/callback?token=${encodeURIComponent(token)}`);
   } catch (err) {
     console.error("Steam callback error:", err);
     const nonce = (req.query as any).nonce;
     if (nonce) {
       pendingLogins.set(nonce, { error: "auth_failed" });
-      res.send(`<html><body style="background:#0a0e1a;color:#ff5252;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>Login failed</h2><p>Closing window...</p></div><script>setTimeout(function(){window.close()},1500);</script></body></html>`);
+      res.send(`<html><body style="background:#0a0e1a;color:#ff5252;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>Login failed</h2><p>Return to SkinKeeper and try again</p></div></body></html>`);
       return;
     }
-    res.redirect("skinkeeper://auth?error=auth_failed");
+    const baseUrl = process.env.BASE_URL || "https://api.skinkeeper.store";
+    res.redirect(`${baseUrl}/auth/callback?error=auth_failed`);
   }
 });
 

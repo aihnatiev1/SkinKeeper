@@ -155,7 +155,7 @@ export default function InventoryPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             {filtered.map((item) => {
               const price = item.prices?.steam || item.prices?.skinport || 0;
-              const rarityColor = RARITY_COLORS[item.rarity] || '#64748B';
+              const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
               return (
                 <motion.div
                   key={item.asset_id}

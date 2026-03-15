@@ -10,6 +10,8 @@ import { useState } from 'react';
 
 type TxFilter = 'all' | 'buy' | 'sell';
 
+function cents(v: number) { return v / 100; }
+
 export default function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState<TxFilter>('all');
   const [search, setSearch] = useState('');
@@ -24,13 +26,13 @@ export default function TransactionsPage() {
     <div>
       <Header title="Transaction History" />
       <div className="p-6 space-y-4">
-        {/* Stats */}
+        {/* Stats — camelCase, cents */}
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Total Bought" value={formatPrice(stats.total_bought)} icon={<ShoppingCart size={18} />} />
-            <StatCard label="Total Sold" value={formatPrice(stats.total_sold)} icon={<Tag size={18} />} />
-            <StatCard label="Buy Txns" value={String(stats.buy_count)} />
-            <StatCard label="Sell Txns" value={String(stats.sell_count)} />
+            <StatCard label="Spent" value={formatPrice(cents(stats.spentCents))} icon={<ShoppingCart size={18} />} />
+            <StatCard label="Earned" value={formatPrice(cents(stats.earnedCents))} icon={<Tag size={18} />} />
+            <StatCard label="Buy Txns" value={String(stats.totalBought)} />
+            <StatCard label="Sell Txns" value={String(stats.totalSold)} />
           </div>
         )}
 
@@ -89,49 +91,46 @@ export default function TransactionsPage() {
                   <th className="px-4 py-3 font-medium">Item</th>
                   <th className="px-4 py-3 font-medium">Type</th>
                   <th className="px-4 py-3 font-medium text-right">Price</th>
-                  <th className="px-4 py-3 font-medium text-right">Qty</th>
                   <th className="px-4 py-3 font-medium text-right">Date</th>
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((tx) => (
-                  <tr
-                    key={tx.id}
-                    className="border-b border-border/50 hover:bg-surface-light transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={getItemIconUrl(tx.icon_url)}
-                          alt=""
-                          className="w-10 h-7 object-contain"
-                        />
-                        <span className="truncate max-w-[250px]">
-                          {tx.market_hash_name}
+                {transactions.map((tx) => {
+                  const iconUrl = getItemIconUrl(tx.icon_url);
+                  return (
+                    <tr
+                      key={tx.id}
+                      className="border-b border-border/50 hover:bg-surface-light transition-colors"
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-3">
+                          {iconUrl && (
+                            <img src={iconUrl} alt="" className="w-10 h-7 object-contain" />
+                          )}
+                          <span className="truncate max-w-[250px]">{tx.market_hash_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full',
+                            tx.type === 'buy' ? 'bg-profit/10 text-profit'
+                              : tx.type === 'sell' ? 'bg-loss/10 text-loss'
+                              : 'bg-accent/10 text-accent'
+                          )}
+                        >
+                          {tx.type === 'buy' ? 'Buy' : tx.type === 'sell' ? 'Sell' : 'Trade'}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full',
-                          tx.type === 'buy'
-                            ? 'bg-profit/10 text-profit'
-                            : 'bg-loss/10 text-loss'
-                        )}
-                      >
-                        {tx.type === 'buy' ? 'Buy' : 'Sell'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-medium">
-                      {formatPrice(tx.price)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">{tx.quantity}</td>
-                    <td className="px-4 py-2.5 text-right text-muted">
-                      {formatDate(tx.date)}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-medium">
+                        {formatPrice(cents(tx.price))}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-muted">
+                        {formatDate(tx.date)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -158,65 +158,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
   }
 
-  String? _pendingNonce;
-
   Future<void> _openSteamLogin() async {
-    final service = ref.read(authServiceProvider);
-    final nonce = service.generateNonce();
-    setState(() => _pendingNonce = nonce);
-    await service.openSteamWithNonce(nonce);
-  }
-
-  Future<void> _completeLogin() async {
-    if (_pendingNonce == null) return;
-    setState(() => _steamLoading = true);
-    try {
-      final api = ref.read(apiClientProvider);
-      String? token;
-      // Poll up to 10 times
-      for (var i = 0; i < 10; i++) {
-        final resp = await api.get('/auth/steam/poll/${_pendingNonce!}');
-        final data = resp.data as Map<String, dynamic>;
-        if (data['status'] == 'authenticated') {
-          token = data['token'] as String;
-          break;
-        }
-        await Future.delayed(const Duration(seconds: 1));
-      }
-      if (!mounted) return;
-      if (token == null) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Login timeout'),
-            content: const Text('Steam login not completed. Try again.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-            ],
-          ),
-        );
-        return;
-      }
-      await api.saveToken(token);
-      ref.invalidate(authStateProvider);
-      await ref.read(authStateProvider.future);
-      if (mounted) context.go('/portfolio');
-    } catch (e) {
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Login Error'),
-            content: Text('$e'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-            ],
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() { _steamLoading = false; _pendingNonce = null; });
-    }
+    await ref.read(authServiceProvider).openSteamLogin();
   }
 
   @override
@@ -485,14 +428,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
             GestureDetector(
-              onTap: (isLoading || _steamLoading)
+              onTap: isLoading
                   ? null
                   : () {
                       HapticFeedback.mediumImpact();
                       if (widget.isLinking) {
                         ref.read(authServiceProvider).openSteamLinkLogin(ref);
-                      } else if (_pendingNonce != null) {
-                        _completeLogin();
                       } else {
                         _openSteamLogin();
                       }
@@ -515,17 +456,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (_steamLoading)
-                      const SizedBox(
-                        width: 22, height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    else
-                      Icon(_pendingNonce != null ? Icons.check_circle_outline : Icons.login_rounded,
-                          size: 22, color: Colors.white),
+                    const Icon(Icons.login_rounded, size: 22, color: Colors.white),
                     const SizedBox(width: 12),
-                    Text(_pendingNonce != null ? 'I signed in — Continue' : 'Sign in with Steam',
-                        style: const TextStyle(
+                    const Text('Sign in with Steam',
+                        style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
                             color: Colors.white)),

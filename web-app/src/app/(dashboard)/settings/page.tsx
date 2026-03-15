@@ -5,7 +5,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useAccounts, useSwitchAccount } from '@/lib/hooks';
 import { authApi } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { Crown, LogOut, User, Monitor, Globe, CreditCard, Link2, Check } from 'lucide-react';
+import { Crown, LogOut, Globe, CreditCard, Link2, Check } from 'lucide-react';
 import { CURRENCY_SYMBOLS } from '@/lib/constants';
 
 export default function SettingsPage() {
@@ -28,11 +28,13 @@ export default function SettingsPage() {
         {user && (
           <div className="bg-surface rounded-xl border border-border p-6">
             <div className="flex items-center gap-4">
-              <img
-                src={user.avatar_url}
-                alt={user.display_name}
-                className="w-16 h-16 rounded-full"
-              />
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt={user.display_name} className="w-16 h-16 rounded-full" />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-2xl font-bold text-primary">
+                  {user.display_name?.[0] || '?'}
+                </div>
+              )}
               <div>
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   {user.display_name}
@@ -48,7 +50,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Linked Accounts */}
+        {/* Linked Accounts — camelCase from /auth/accounts */}
         <div className="bg-surface rounded-xl border border-border">
           <div className="px-6 py-4 border-b border-border flex items-center gap-2">
             <Link2 size={18} className="text-muted" />
@@ -108,7 +110,7 @@ export default function SettingsPage() {
                 className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                   currency === code
                     ? 'bg-primary/10 border-primary text-primary'
-                    : 'border-border text-muted hover:text-foreground hover:border-border'
+                    : 'border-border text-muted hover:text-foreground'
                 }`}
               >
                 {symbol} {code}

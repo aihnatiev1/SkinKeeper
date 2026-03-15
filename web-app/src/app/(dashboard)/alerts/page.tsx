@@ -31,38 +31,33 @@ export default function AlertsPage() {
                 layout
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: -20 }}
                 className="bg-surface rounded-xl border border-border p-4 flex items-center gap-4"
               >
-                <img
-                  src={getItemIconUrl(alert.icon_url)}
-                  alt=""
-                  className="w-14 h-10 object-contain"
-                />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
                     {alert.market_hash_name}
                   </p>
                   <div className="flex items-center gap-1.5 text-xs text-muted mt-0.5">
-                    {alert.direction === 'above' ? (
+                    {alert.condition === 'above' ? (
                       <TrendingUp size={12} className="text-profit" />
                     ) : (
                       <TrendingDown size={12} className="text-loss" />
                     )}
                     <span>
-                      {alert.direction === 'above' ? 'Above' : 'Below'}{' '}
-                      {formatPrice(alert.target_price)}
+                      {alert.condition === 'above' ? 'Above' : 'Below'}{' '}
+                      {formatPrice(alert.threshold / 100)}
                     </span>
+                    <span className="text-muted">({alert.source})</span>
                   </div>
                 </div>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full ${
-                    alert.active
+                    alert.is_active
                       ? 'bg-profit/10 text-profit'
                       : 'bg-muted/10 text-muted'
                   }`}
                 >
-                  {alert.active ? 'Active' : 'Triggered'}
+                  {alert.is_active ? 'Active' : 'Triggered'}
                 </span>
                 <button
                   onClick={() => deleteAlert.mutate(alert.id)}

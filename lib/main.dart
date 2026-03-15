@@ -132,21 +132,22 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     // skinkeeper://auth?token=XXX or skinkeeper://auth?error=XXX
     if (uri.host == 'auth') {
       final token = uri.queryParameters['token'];
-      final error = uri.queryParameters['error'];
+      if (token != null) _handleAuthToken(token);
+    }
 
-      if (token != null) {
-        _handleAuthToken(token);
-      } else if (error != null) {
-        dev.log('Auth error from deep link: $error', name: 'DeepLink');
-      }
+    // Universal Link: https://api.skinkeeper.store/auth/callback?token=XXX
+    if (uri.host == 'api.skinkeeper.store' && uri.path == '/auth/callback') {
+      final token = uri.queryParameters['token'];
+      if (token != null) _handleAuthToken(token);
     }
   }
 
   Future<void> _handleAuthToken(String token) async {
     final api = ref.read(apiClientProvider);
     await api.saveToken(token);
-    // Re-fetch user — this triggers router redirect to portfolio
     ref.invalidate(authStateProvider);
+    await ref.read(authStateProvider.future);
+    ref.read(routerProvider).go('/portfolio');
   }
 
   @override
