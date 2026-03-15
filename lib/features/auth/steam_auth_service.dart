@@ -9,6 +9,9 @@ import '../../core/constants.dart';
 import '../../core/push_service.dart';
 import '../../models/user.dart';
 
+/// Set by _SkinKeeperAppState, called by LoginScreen to register nonce
+void Function(String nonce)? setSteamNonce;
+
 final authServiceProvider = Provider<SteamAuthService>((ref) {
   return SteamAuthService();
 });

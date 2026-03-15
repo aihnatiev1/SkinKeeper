@@ -54,6 +54,8 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   StreamSubscription<void>? _sessionExpiredSub;
   StreamSubscription<void>? _tokenExpiredSub;
   bool _pushInitialized = false;
+  String? _steamNonce;
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +63,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     _appLinks = AppLinks();
     _initDeepLinks();
     _initDeepLinkChannel();
+    setSteamNonce = (nonce) => _steamNonce = nonce;
     _sessionExpiredSub = sessionExpiredController.stream.listen((_) {
       _showSessionExpiredDialog();
     });
@@ -82,7 +85,28 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       WidgetService.pushCachedToWidget();
+      if (_steamNonce != null) _completeSteamLogin();
     }
+  }
+
+  Future<void> _completeSteamLogin() async {
+    final nonce = _steamNonce;
+    if (nonce == null) return;
+    final api = ref.read(apiClientProvider);
+    for (var i = 0; i < 10; i++) {
+      try {
+        final resp = await api.get('/auth/steam/poll/$nonce');
+        final data = resp.data as Map<String, dynamic>;
+        if (data['status'] == 'authenticated') {
+          _steamNonce = null;
+          await api.saveToken(data['token'] as String);
+          ref.invalidate(authStateProvider);
+          return;
+        }
+      } catch (_) {}
+      await Future.delayed(const Duration(seconds: 1));
+    }
+    _steamNonce = null;
   }
 
   void _initDeepLinkChannel() {
