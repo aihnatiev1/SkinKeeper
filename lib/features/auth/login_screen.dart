@@ -336,13 +336,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           const SizedBox(height: 40),
 
-          if (qrState.loading)
+          if (qrState.status == 'loading')
             const Center(
               child: Column(
                 children: [
                   CircularProgressIndicator(color: AppTheme.primary),
                   SizedBox(height: 16),
-                  Text('Generating Steam link...', 
+                  Text('Generating Steam link...',
                       style: TextStyle(color: Colors.white70)),
                 ],
               ),
