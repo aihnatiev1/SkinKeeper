@@ -102,7 +102,8 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with WidgetsBindingObserver {
   int _selectedTab = 0; // 0 = Login, 1 = Webtoken, 2 = QR
   late final PageController _pageCtrl;
   Timer? _pollTimer;
@@ -113,6 +114,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void initState() {
     super.initState();
     _pageCtrl = PageController();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _pendingNonce != null && !_steamLoading) {
+      _completeLogin();
+    }
   }
 
   void _onTabChanged(int i) {
@@ -221,6 +230,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     _pageCtrl.dispose();
     super.dispose();
