@@ -120,21 +120,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _steamNonce != null) {
-      // App returned from Safari — poll immediately
-      _pollSteamNonce();
+      _pollSteamNonce(retries: 5);
     }
   }
 
-  Future<void> _pollSteamNonce() async {
-    if (_steamNonce == null) return;
+  Future<void> _pollSteamNonce({int retries = 1}) async {
+    if (_steamNonce == null || !mounted) return;
     final api = ref.read(apiClientProvider);
     final token = await SteamAuthService.pollLogin(api, _steamNonce!);
     if (!mounted) return;
     if (token != null) {
-      _pollTimer?.cancel();
       _steamNonce = null;
       await api.saveToken(token);
       ref.invalidate(authStateProvider);
+      return;
+    }
+    // Token not ready yet — retry
+    if (retries > 0) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) _pollSteamNonce(retries: retries - 1);
     }
   }
 

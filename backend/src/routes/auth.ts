@@ -96,23 +96,23 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       { expiresIn: "30d" }
     );
 
-    // Check if this is a polling-based login (nonce in return_to)
-    const returnTo = params["openid.return_to"] || "";
-    const nonceMatch = returnTo.match(/[?&]nonce=([a-zA-Z0-9]+)/);
-    if (nonceMatch) {
-      pendingLogins.set(nonceMatch[1], { token });
-      res.send(`<html><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>✅ Login successful</h2><p>Return to SkinKeeper app</p></div></body></html>`);
+    // Polling-based login: nonce comes as direct query param
+    const nonce = params.nonce;
+    if (nonce) {
+      console.log(`[Auth] Storing token for nonce: ${nonce.substring(0, 8)}...`);
+      pendingLogins.set(nonce, { token });
+      res.send(`<html><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="font-size:28px">✅</h2><h2>Login successful</h2><p style="color:#999;margin-top:12px">Return to SkinKeeper app</p></div></body></html>`);
       return;
     }
 
+    // Fallback: deep link redirect
     const deepLink = `skinkeeper://auth?token=${encodeURIComponent(token)}`;
     res.redirect(deepLink);
   } catch (err) {
     console.error("Steam callback error:", err);
-    const returnTo = (req.query as any)["openid.return_to"] || "";
-    const nonceMatch = returnTo.match(/[?&]nonce=([a-zA-Z0-9]+)/);
-    if (nonceMatch) {
-      pendingLogins.set(nonceMatch[1], { error: "auth_failed" });
+    const nonce = (req.query as any).nonce;
+    if (nonce) {
+      pendingLogins.set(nonce, { error: "auth_failed" });
       res.send(`<html><body style="background:#0a0e1a;color:#ff5252;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>Login failed</h2><p>Return to SkinKeeper and try again</p></div></body></html>`);
       return;
     }
