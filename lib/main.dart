@@ -114,16 +114,14 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   Uri? _lastHandledDeepLink;
 
   void _handleDeepLink(Uri uri) {
-    // Deduplicate — initial link + stream can fire for same URL
     if (_lastHandledDeepLink == uri) return;
     _lastHandledDeepLink = uri;
-    dev.log('Deep link received: $uri', name: 'DeepLink');
-    print('DEEPLINK: $uri');
+
+    debugPrint('DEEPLINK: $uri');
 
     // skinkeeper://portfolio (from home screen widget tap)
     if (uri.host == 'portfolio') {
-      final router = ref.read(routerProvider);
-      router.go('/portfolio');
+      ref.read(routerProvider).go('/portfolio');
       return;
     }
 
@@ -135,34 +133,35 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       return;
     }
 
-    // skinkeeper://auth?token=XXX or skinkeeper://auth?error=XXX
-    if (uri.host == 'auth') {
-      final token = uri.queryParameters['token'];
-      if (token != null) _handleAuthToken(token);
-    }
+    // Auth callback — skinkeeper://auth?token=XXX or https://api.skinkeeper.store/auth/callback?token=XXX
+    final token = uri.queryParameters['token'];
+    final isAuthCallback =
+        uri.host == 'auth' ||
+        (uri.host == 'api.skinkeeper.store' && uri.path == '/auth/callback');
 
-    // Universal Link: https://api.skinkeeper.store/auth/callback?token=XXX
-    if (uri.host == 'api.skinkeeper.store' && uri.path == '/auth/callback') {
-      final token = uri.queryParameters['token'];
-      if (token != null) _handleAuthToken(token);
+    if (isAuthCallback && token != null) {
+      _handleAuthToken(token);
     }
   }
 
   Future<void> _handleAuthToken(String token) async {
     try {
-      print('AUTH: saving token...');
+      debugPrint('AUTH: saving token...');
       final api = ref.read(apiClientProvider);
       await api.saveToken(token);
-      print('AUTH: token saved, fetching user...');
+
+      debugPrint('AUTH: token saved, fetching user...');
       final resp = await api.get('/auth/me');
-      print('AUTH: user fetched, setting auth state...');
+
+      debugPrint('AUTH: user fetched, setting auth state...');
       final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
-      // setUser triggers authStateProvider change → refreshListenable notifies
-      // → GoRouter redirect fires → sees isLoggedIn=true → navigates to /portfolio
       ref.read(authStateProvider.notifier).setUser(user);
-      print('AUTH: done — router will redirect automatically');
-    } catch (e) {
-      print('AUTH ERROR: $e');
+
+      debugPrint('AUTH: done');
+    } catch (e, st) {
+      debugPrint('AUTH ERROR: $e');
+      debugPrint('$st');
+      ref.read(authStateProvider.notifier).clearUser();
     }
   }
 

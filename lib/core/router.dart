@@ -1,27 +1,26 @@
-import 'dart:developer' as dev;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../core/api_client.dart';
-import '../features/auth/login_screen.dart';
+
 import '../features/auth/steam_auth_service.dart';
+import '../features/auth/login_screen.dart';
 import '../features/auth/session_provider.dart';
-import '../features/inventory/inventory_screen.dart';
+import '../features/onboarding/onboarding_screen.dart';
 import '../features/portfolio/portfolio_screen.dart';
-import '../features/transactions/transactions_screen.dart';
-import '../features/settings/settings_screen.dart';
+import '../features/inventory/inventory_screen.dart';
 import '../features/inventory/item_detail_screen.dart';
 import '../features/inventory/bulk_sell_screen.dart';
 import '../features/trades/trades_screen.dart';
 import '../features/trades/trade_detail_screen.dart';
 import '../features/trades/create_trade_screen.dart';
+import '../features/transactions/transactions_screen.dart';
+import '../features/settings/settings_screen.dart';
+import '../features/settings/linked_accounts_screen.dart';
 import '../features/purchases/paywall_screen.dart';
 import '../features/alerts/alerts_screen.dart';
 import '../features/alerts/create_alert_screen.dart';
-import '../features/onboarding/onboarding_screen.dart';
-import '../features/settings/linked_accounts_screen.dart';
 import '../models/inventory_item.dart';
+import '../models/user.dart';
 import '../widgets/app_shell.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -31,41 +30,68 @@ final onboardingCompleteProvider = FutureProvider<bool>((ref) async {
   return isOnboardingComplete();
 });
 
+final routerRefreshNotifierProvider = Provider<_RouterRefreshNotifier>((ref) {
+  final notifier = _RouterRefreshNotifier(ref);
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authNotifier = _AuthChangeNotifier(ref);
+  final refreshNotifier = ref.watch(routerRefreshNotifierProvider);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/portfolio',
-    refreshListenable: authNotifier,
+    initialLocation: '/loading',
+    refreshListenable: refreshNotifier,
+    debugLogDiagnostics: true,
     redirect: (context, state) {
-      final uri = state.uri;
-
-      // Custom URL schemes handled by main.dart, not GoRouter.
-      // Return /login as safe landing — refreshListenable will redirect to
-      // /portfolio automatically once setUser() fires.
-      if (uri.scheme != 'http' && uri.scheme != 'https' && uri.scheme.isNotEmpty) {
-        return '/login';
-      }
-
       final auth = ref.read(authStateProvider);
-      final isOnLogin = state.matchedLocation == '/login';
-      final isOnLoading = state.matchedLocation == '/loading';
-      final isOnSession = state.matchedLocation == '/session';
+      final session = ref.read(sessionStatusProvider);
 
-      // Stay on loading if already there, go to loading if not
-      if (auth.isLoading) return isOnLoading ? null : '/loading';
+      final location = state.matchedLocation;
+      final isOnLoading = location == '/loading';
+      final isOnLogin = location == '/login';
+      final isOnSession = location == '/session';
+      final isOnLinkAccount = location == '/link-account';
+      final isOnOnboarding = location == '/onboarding';
+
+      debugPrint(
+        'REDIRECT | uri=${state.uri} '
+        'matched=$location '
+        'authLoading=${auth.isLoading} '
+        'authValue=${auth.valueOrNull} '
+        'sessionLoading=${session.isLoading} '
+        'needsReauth=${session.valueOrNull?.needsReauth}',
+      );
+
+      if (auth.isLoading) {
+        return isOnLoading ? null : '/loading';
+      }
 
       final isLoggedIn = auth.valueOrNull != null;
 
-      if (!isLoggedIn && !isOnLogin) return '/login';
-      if (isLoggedIn && (isOnLogin || isOnLoading)) return '/portfolio';
+      if (!isLoggedIn) {
+        if (isOnLogin || isOnLoading || isOnLinkAccount) {
+          return null;
+        }
+        return '/login';
+      }
 
-      // Force to session screen when Steam session needs reauth
-      if (isLoggedIn && !isOnSession && !isOnLogin) {
-        final session = ref.read(sessionStatusProvider);
-        final needsReauth = session.valueOrNull?.needsReauth ?? false;
-        if (needsReauth) return '/session';
+      final needsReauth = session.valueOrNull?.needsReauth ?? false;
+      if (needsReauth && !isOnSession) {
+        return '/session';
+      }
+
+      if (isOnLogin || isOnLoading) {
+        return '/portfolio';
+      }
+
+      if (isOnSession && !needsReauth) {
+        return '/portfolio';
+      }
+
+      if (isOnOnboarding) {
+        return null;
       }
 
       return null;
@@ -168,13 +194,30 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
     ],
+    errorBuilder: (context, state) {
+      debugPrint('ROUTER ERROR | uri=${state.uri} error=${state.error}');
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A0E1A),
+        body: Center(
+          child: Text('Route error: ${state.uri}',
+              style: const TextStyle(color: Colors.white)),
+        ),
+      );
+    },
   );
 });
 
-class _AuthChangeNotifier extends ChangeNotifier {
-  _AuthChangeNotifier(Ref ref) {
-    ref.listen(authStateProvider, (_, _) => notifyListeners());
-    ref.listen(sessionStatusProvider, (_, _) => notifyListeners());
+class _RouterRefreshNotifier extends ChangeNotifier {
+  _RouterRefreshNotifier(Ref ref) {
+    ref.listen<AsyncValue<SteamUser?>>(authStateProvider, (previous, next) {
+      debugPrint('ROUTER REFRESH auth | $previous -> $next');
+      notifyListeners();
+    });
+
+    ref.listen(sessionStatusProvider, (previous, next) {
+      debugPrint('ROUTER REFRESH session | $previous -> $next');
+      notifyListeners();
+    });
   }
 }
 
