@@ -30,24 +30,16 @@ final onboardingCompleteProvider = FutureProvider<bool>((ref) async {
   return isOnboardingComplete();
 });
 
-final routerRefreshNotifierProvider = Provider<_RouterRefreshNotifier>((ref) {
-  final notifier = _RouterRefreshNotifier(ref);
-  ref.onDispose(notifier.dispose);
-  return notifier;
-});
-
 final routerProvider = Provider<GoRouter>((ref) {
-  final refreshNotifier = ref.watch(routerRefreshNotifierProvider);
+  // ref.watch ensures router rebuilds when auth/session state changes
+  final auth = ref.watch(authStateProvider);
+  final session = ref.watch(sessionStatusProvider);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/loading',
-    refreshListenable: refreshNotifier,
     debugLogDiagnostics: true,
     redirect: (context, state) {
-      final auth = ref.read(authStateProvider);
-      final session = ref.read(sessionStatusProvider);
-
       final location = state.matchedLocation;
       final isOnLoading = location == '/loading';
       final isOnLogin = location == '/login';
@@ -97,100 +89,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/loading',
-        builder: (_, _) => const _LoadingScreen(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (_, _) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/session',
-        builder: (_, _) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/link-account',
-        builder: (_, _) => const LoginScreen(isLinking: true),
-      ),
-      GoRoute(
-        path: '/onboarding',
-        builder: (_, _) => const OnboardingScreen(),
-      ),
+      GoRoute(path: '/loading', builder: (_, _) => const _LoadingScreen()),
+      GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/session', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/link-account', builder: (_, _) => const LoginScreen(isLinking: true)),
+      GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (_, _, child) => AppShell(child: child),
         routes: [
-          GoRoute(
-            path: '/portfolio',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: PortfolioScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/inventory',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: InventoryScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/inventory/item-detail',
-            builder: (_, state) => ItemDetailScreen(
-              item: state.extra! as InventoryItem,
-            ),
-          ),
-          GoRoute(
-            path: '/inventory/bulk-sell',
-            builder: (_, _) => const BulkSellScreen(),
-          ),
-          GoRoute(
-            path: '/trades',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: TradesScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/trades/create',
-            builder: (_, _) => const CreateTradeScreen(),
-          ),
-          GoRoute(
-            path: '/trades/:id',
-            builder: (_, state) => TradeDetailScreen(
-              offerId: state.pathParameters['id']!,
-            ),
-          ),
-          GoRoute(
-            path: '/transactions',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: TransactionsScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/settings',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: SettingsScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/settings/accounts',
-            builder: (_, _) => const LinkedAccountsScreen(),
-          ),
-          GoRoute(
-            path: '/premium',
-            builder: (_, _) => const PaywallScreen(),
-          ),
-          GoRoute(
-            path: '/alerts',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: AlertsScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/alerts/create',
-            builder: (_, state) => CreateAlertScreen(
-              marketHashName: state.extra as String?,
-            ),
-          ),
+          GoRoute(path: '/portfolio', pageBuilder: (_, _) => const NoTransitionPage(child: PortfolioScreen())),
+          GoRoute(path: '/inventory', pageBuilder: (_, _) => const NoTransitionPage(child: InventoryScreen())),
+          GoRoute(path: '/inventory/item-detail', builder: (_, state) => ItemDetailScreen(item: state.extra! as InventoryItem)),
+          GoRoute(path: '/inventory/bulk-sell', builder: (_, _) => const BulkSellScreen()),
+          GoRoute(path: '/trades', pageBuilder: (_, _) => const NoTransitionPage(child: TradesScreen())),
+          GoRoute(path: '/trades/create', builder: (_, _) => const CreateTradeScreen()),
+          GoRoute(path: '/trades/:id', builder: (_, state) => TradeDetailScreen(offerId: state.pathParameters['id']!)),
+          GoRoute(path: '/transactions', pageBuilder: (_, _) => const NoTransitionPage(child: TransactionsScreen())),
+          GoRoute(path: '/settings', pageBuilder: (_, _) => const NoTransitionPage(child: SettingsScreen())),
+          GoRoute(path: '/settings/accounts', builder: (_, _) => const LinkedAccountsScreen()),
+          GoRoute(path: '/premium', builder: (_, _) => const PaywallScreen()),
+          GoRoute(path: '/alerts', pageBuilder: (_, _) => const NoTransitionPage(child: AlertsScreen())),
+          GoRoute(path: '/alerts/create', builder: (_, state) => CreateAlertScreen(marketHashName: state.extra as String?)),
         ],
       ),
     ],
@@ -199,27 +119,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       return Scaffold(
         backgroundColor: const Color(0xFF0A0E1A),
         body: Center(
-          child: Text('Route error: ${state.uri}',
-              style: const TextStyle(color: Colors.white)),
+          child: Text('Route error: ${state.uri}', style: const TextStyle(color: Colors.white)),
         ),
       );
     },
   );
 });
-
-class _RouterRefreshNotifier extends ChangeNotifier {
-  _RouterRefreshNotifier(Ref ref) {
-    ref.listen<AsyncValue<SteamUser?>>(authStateProvider, (previous, next) {
-      debugPrint('ROUTER REFRESH auth | $previous -> $next');
-      notifyListeners();
-    });
-
-    ref.listen(sessionStatusProvider, (previous, next) {
-      debugPrint('ROUTER REFRESH session | $previous -> $next');
-      notifyListeners();
-    });
-  }
-}
 
 class _LoadingScreen extends StatelessWidget {
   const _LoadingScreen();

@@ -119,11 +119,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
 
     debugPrint('DEEPLINK: $uri');
 
-    // skinkeeper://portfolio (from home screen widget tap)
-    if (uri.host == 'portfolio') {
-      ref.read(routerProvider).go('/portfolio');
-      return;
-    }
+    // skinkeeper://portfolio — no manual go(), router handles via auth state
 
     // skinkeeper://account-linked?steamId=XXX (from backend redirect after linking)
     if (uri.host == 'account-linked') {
