@@ -327,14 +327,13 @@ export class SteamSessionService {
 
     const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
     
-    // Direct Deep Link for Steam App
-    // Converting https://s.team/q/1/XXX to steammobile://q/1/XXX
-    // This is the most reliable way to open the "Approve Login" screen directly.
+    // Convert s.team/q/ to steamcommunity.com/auth/confirm/
+    // This path is recognized by the Steam app as a direct "Approve Login" request.
     let qrUrl = startResult.qrChallengeUrl;
-    if (qrUrl.startsWith('https://s.team/q/')) {
-      qrUrl = qrUrl.replace('https://s.team/q/', 'steammobile://q/');
+    if (qrUrl.contains('s.team/q/')) {
+      qrUrl = qrUrl.replace('https://s.team/q/', 'https://steamcommunity.com/auth/confirm/');
     }
-    console.log('[QR Auth] Generated Deep Link:', qrUrl);
+    console.log('[QR Auth] Generated Approval Link:', qrUrl);
 
     const nonce = crypto.randomUUID();
 
