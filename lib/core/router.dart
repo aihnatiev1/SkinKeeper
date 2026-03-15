@@ -40,32 +40,49 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final auth = ref.read(authStateProvider);
+      final session = ref.read(sessionStatusProvider);
+
       final location = state.matchedLocation;
       final isOnLoading = location == '/loading';
       final isOnLogin = location == '/login';
       final isOnSession = location == '/session';
       final isOnLinkAccount = location == '/link-account';
 
-      if (auth.isLoading) return isOnLoading ? null : '/loading';
+      // 1. Якщо хоча б один критичний провайдер вантажиться - йдемо на лоадер
+      if (auth.isLoading || session.isLoading) {
+        if (isOnLoading || isOnLogin || isOnSession) return null;
+        return '/loading';
+      }
 
-      final isLoggedIn = auth.valueOrNull != null;
+      final user = auth.valueOrNull;
+      final sessionData = session.valueOrNull;
 
-      if (!isLoggedIn) {
-        if (isOnLogin || isOnLoading || isOnLinkAccount) return null;
+      // 2. Логіка для неавторизованого користувача
+      if (user == null) {
+        if (isOnLogin || isOnLoading || isOnLinkAccount || isOnSession) return null;
         return '/login';
       }
 
-      if (isOnLogin || isOnLoading) return '/portfolio';
+      // 3. Перевірка сесії (REAUTH)
+      final needsReauth = sessionData?.needsReauth ?? false;
 
-      final needsReauth = ref.read(sessionStatusProvider).valueOrNull?.needsReauth ?? false;
-      if (needsReauth && !isOnSession && !isOnLogin) return '/session';
-      if (isOnSession && !needsReauth) return '/portfolio';
+      // Якщо потрібна реавторизація і ми не на сторінці сесії/логіну
+      if (needsReauth) {
+        if (isOnSession || isOnLogin) return null;
+        return '/session';
+      }
+
+      // 4. Якщо залогінені і сесія ок, але ми на сервісних екранах - на головну
+      if (isOnLogin || isOnLoading || isOnSession) {
+        return '/portfolio';
+      }
 
       return null;
     },
     routes: [
       GoRoute(path: '/loading', builder: (_, _) => const _LoadingScreen()),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      // Використовуємо LoginScreen для сесії, але з розумінням контексту
       GoRoute(path: '/session', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/link-account', builder: (_, _) => const LoginScreen(isLinking: true)),
       GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),
@@ -90,7 +107,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
     errorBuilder: (context, state) {
-      debugPrint('ROUTER ERROR | uri=${state.uri} error=${state.error}');
       return Scaffold(
         backgroundColor: const Color(0xFF0A0E1A),
         body: Center(child: Text('Route error: ${state.uri}', style: const TextStyle(color: Colors.white))),
@@ -101,13 +117,15 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(Ref ref) {
-    ref.listen<AsyncValue<SteamUser?>>(authStateProvider, (_, next) {
-      debugPrint('ROUTER REFRESH auth -> $next');
-      notifyListeners();
+    ref.listen<AsyncValue<SteamUser?>>(authStateProvider, (prev, next) {
+      if (prev?.valueOrNull != next.valueOrNull) {
+        notifyListeners();
+      }
     });
-    ref.listen(sessionStatusProvider, (_, next) {
-      debugPrint('ROUTER REFRESH session -> $next');
-      notifyListeners();
+    ref.listen(sessionStatusProvider, (prev, next) {
+      if (prev?.valueOrNull?.needsReauth != next.valueOrNull?.needsReauth) {
+        notifyListeners();
+      }
     });
   }
 }
@@ -119,7 +137,11 @@ class _LoadingScreen extends StatelessWidget {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF1A0A35), Color(0xFF0A0E1A)]),
+          gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1A0A35), Color(0xFF0A0E1A)]
+          ),
         ),
         child: const Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6), strokeWidth: 2.5)),
       ),
