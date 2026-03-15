@@ -102,6 +102,6 @@ class SteamAuthService {
     dev.log('return_to: $returnTo', name: 'SteamAuth');
     dev.log('realm: $realm', name: 'SteamAuth');
 
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
   }
 }
