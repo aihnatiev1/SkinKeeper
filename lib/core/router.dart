@@ -41,8 +41,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final uri = state.uri;
 
-      // Skip redirect for custom URL schemes — handled by main.dart deep link handler
-      if (uri.scheme == 'skinkeeper') return null;
+      // Custom URL schemes are handled by main.dart deep link handler, not GoRouter
+      if (uri.scheme == 'skinkeeper') return state.matchedLocation.isEmpty ? '/login' : state.matchedLocation;
 
       final auth = ref.read(authStateProvider);
       final isOnLogin = state.matchedLocation == '/login';
