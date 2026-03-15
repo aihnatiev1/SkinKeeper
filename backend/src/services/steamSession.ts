@@ -325,6 +325,8 @@ export class SteamSessionService {
       throw new Error("No QR challenge URL returned from Steam");
     }
 
+    const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
+
     // Convert s.team/q/ to steamcommunity.com/auth/confirm/
     // This path is recognized by the Steam app as a direct "Approve Login" request.
     let qrUrl = startResult.qrChallengeUrl;
