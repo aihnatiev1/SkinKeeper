@@ -341,6 +341,12 @@ export class SteamSessionService {
       if (response.headers.location) {
         qrUrl = response.headers.location;
         console.log('[QR Auth] Resolved Redirect URL:', qrUrl);
+        
+        // Convert the final URL to steammobile scheme to force the app to handle it correctly
+        if (qrUrl.includes('steampowered.com/about/qrlogin')) {
+          qrUrl = qrUrl.replace('https://store.steampowered.com/', 'steammobile://');
+          console.log('[QR Auth] Final steammobile URL:', qrUrl);
+        }
       } else {
         console.log('[QR Auth] No location header found in redirect');
       }
