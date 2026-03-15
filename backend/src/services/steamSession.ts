@@ -381,6 +381,14 @@ export class SteamSessionService {
       return { status: "expired" };
     }
 
+    // Explicitly poll Steam to update status and trigger the 'authenticated' event
+    try {
+      await pending.loginSession.pollResult();
+    } catch (e: any) {
+      // Just log, the 'error' or 'timeout' event will update pending.status
+      console.log(`[QR Poll] pollResult failed or pending: ${e.message}`);
+    }
+
     if (pending.status === "authenticated" && pending.cookies) {
       await this.saveSession(accountId, pending.cookies);
       const refreshToken = pending.loginSession.refreshToken;
