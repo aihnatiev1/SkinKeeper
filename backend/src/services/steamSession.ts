@@ -325,12 +325,10 @@ export class SteamSessionService {
       throw new Error("No QR challenge URL returned from Steam");
     }
 
-    const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
-    
     // Convert s.team/q/ to steamcommunity.com/auth/confirm/
     // This path is recognized by the Steam app as a direct "Approve Login" request.
     let qrUrl = startResult.qrChallengeUrl;
-    if (qrUrl.contains('s.team/q/')) {
+    if (qrUrl.includes('s.team/q/')) {
       qrUrl = qrUrl.replace('https://s.team/q/', 'https://steamcommunity.com/auth/confirm/');
     }
     console.log('[QR Auth] Generated Approval Link:', qrUrl);
@@ -382,10 +380,10 @@ export class SteamSessionService {
 
     // Explicitly poll Steam to update status and trigger the 'authenticated' event
     try {
-      await pending.loginSession.pollResult();
+      pending.loginSession.forcePoll();
     } catch (e: any) {
       // Just log, the 'error' or 'timeout' event will update pending.status
-      console.log(`[QR Poll] pollResult failed or pending: ${e.message}`);
+      console.log(`[QR Poll] forcePoll failed or pending: ${e.message}`);
     }
 
     if (pending.status === "authenticated" && pending.cookies) {
