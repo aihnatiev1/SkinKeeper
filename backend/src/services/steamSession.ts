@@ -327,38 +327,14 @@ export class SteamSessionService {
 
     const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
     
-    // Resolve the s.team redirect to get the direct steamcommunity.com link
-    // This ensures the Steam app opens the "Approve" screen instead of the "Scanner"
+    // Direct Deep Link for Steam App
+    // Converting https://s.team/q/1/XXX to steammobile://q/1/XXX
+    // This is the most reliable way to open the "Approve Login" screen directly.
     let qrUrl = startResult.qrChallengeUrl;
-    console.log('[QR Auth] Original s.team URL:', qrUrl);
-    try {
-      // Use axios with timeout and followRedirect: false to capture the redirect location
-      const response = await axios.get(qrUrl, {
-        maxRedirects: 0,
-        timeout: 5000,
-        validateStatus: (status: number) => status >= 300 && status < 400,
-      });
-      if (response.headers.location) {
-        qrUrl = response.headers.location;
-        console.log('[QR Auth] Resolved Redirect URL:', qrUrl);
-        
-        // Convert the final URL to steammobile scheme to force the app to handle it correctly
-        if (qrUrl.includes('steampowered.com/about/qrlogin')) {
-          qrUrl = qrUrl.replace('https://store.steampowered.com/', 'steammobile://');
-          console.log('[QR Auth] Final steammobile URL:', qrUrl);
-        }
-      } else {
-        console.log('[QR Auth] No location header found in redirect');
-      }
-    } catch (e: any) {
-      console.error('[QR Auth] Failed to resolve QR redirect:', e.message);
-      // Fallback: if we can't resolve, try converting s.team URL to steammobile scheme
-      // to see if the Steam app handles it better (opens confirmation directly)
-      if (qrUrl.startsWith('https://s.team/q/')) {
-        qrUrl = qrUrl.replace('https://s.team/q/', 'steammobile://q/');
-        console.log('[QR Auth] Using Fallback steammobile:// URL:', qrUrl);
-      }
+    if (qrUrl.startsWith('https://s.team/q/')) {
+      qrUrl = qrUrl.replace('https://s.team/q/', 'steammobile://q/');
     }
+    console.log('[QR Auth] Generated Deep Link:', qrUrl);
 
     const nonce = crypto.randomUUID();
 
