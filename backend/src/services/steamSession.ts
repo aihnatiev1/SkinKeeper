@@ -327,15 +327,10 @@ export class SteamSessionService {
 
     const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
 
-    // Extract the challenge ID from https://s.team/q/1/XXXXXXXX
-    // and convert it to a direct mobile command: steammobile://login/approve?challenge=XXXXXXXX
-    let qrUrl = startResult.qrChallengeUrl;
-    const match = qrUrl.match(/\/q\/1\/(\d+)/);
-    if (match && match[1]) {
-      // Use explicit concatenation to be 100% sure the '?' is there
-      qrUrl = 'steammobile://login/approve?challenge=' + match[1];
-    }
-    console.log('[QR Auth] Generated Direct App Command:', qrUrl);
+    // Use the original s.team URL — on iOS it opens via Universal Links
+    // directly to the Steam approve screen (steammobile://login/approve doesn't work on iOS)
+    const qrUrl = startResult.qrChallengeUrl;
+    console.log('[QR Auth] QR URL:', qrUrl);
 
     const nonce = crypto.randomUUID();
 
