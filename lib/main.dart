@@ -17,6 +17,7 @@ import 'core/widget_service.dart';
 import 'core/settings_provider.dart';
 import 'core/theme.dart';
 import 'features/auth/steam_auth_service.dart';
+import 'models/user.dart';
 import 'features/inventory/inventory_provider.dart';
 import 'features/settings/accounts_provider.dart';
 import 'firebase_options.dart';
@@ -143,11 +144,20 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   }
 
   Future<void> _handleAuthToken(String token) async {
-    final api = ref.read(apiClientProvider);
-    await api.saveToken(token);
-    ref.invalidate(authStateProvider);
-    await ref.read(authStateProvider.future);
-    ref.read(routerProvider).go('/portfolio');
+    try {
+      print('AUTH: saving token...');
+      final api = ref.read(apiClientProvider);
+      await api.saveToken(token);
+      print('AUTH: token saved, fetching user...');
+      final resp = await api.get('/auth/me');
+      print('AUTH: user fetched, navigating...');
+      final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
+      ref.read(authStateProvider.notifier).state = AsyncData(user);
+      ref.read(routerProvider).go('/portfolio');
+      print('AUTH: done!');
+    } catch (e) {
+      print('AUTH ERROR: $e');
+    }
   }
 
   @override
