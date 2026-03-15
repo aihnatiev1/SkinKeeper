@@ -161,7 +161,11 @@ async function processOperation(
     const sessionCache = new Map<number, Awaited<ReturnType<typeof SteamSessionService.ensureValidSession>>>();
     const getSession = async (accountId: number) => {
       if (!sessionCache.has(accountId)) {
-        sessionCache.set(accountId, await SteamSessionService.ensureValidSession(accountId));
+        const session = await SteamSessionService.ensureValidSession(accountId);
+        if (!session) {
+          throw new Error("Steam session not available. Please authenticate your Steam session in Settings.");
+        }
+        sessionCache.set(accountId, session);
       }
       return sessionCache.get(accountId)!;
     };

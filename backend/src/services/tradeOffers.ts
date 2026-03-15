@@ -628,6 +628,9 @@ export async function createAndSendOffer(
 
   // Send to Steam first — retry once with forced refresh on session error
   let session = await getValidSession(accountId);
+  if (!session) {
+    throw new SessionExpiredError("Steam session not available. Please authenticate your Steam session in Settings.");
+  }
   let steamOfferId: string;
   try {
     ({ offerId: steamOfferId } = await sendSteamTradeOffer(
