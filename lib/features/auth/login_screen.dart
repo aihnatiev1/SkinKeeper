@@ -102,50 +102,16 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen>
-    with WidgetsBindingObserver {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   int _selectedTab = 0; // 0 = Login, 1 = Webtoken, 2 = QR
   late final PageController _pageCtrl;
   Timer? _pollTimer;
-  String? _steamNonce;
   bool _qrStarted = false;
 
   @override
   void initState() {
     super.initState();
     _pageCtrl = PageController();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _steamNonce != null) {
-      _pollSteamNonce(retries: 5);
-    }
-  }
-
-  Future<void> _pollSteamNonce({int retries = 5}) async {
-    if (_steamNonce == null || !mounted) return;
-    final api = ref.read(apiClientProvider);
-    final token = await SteamAuthService.pollLogin(api, _steamNonce!);
-    if (!mounted) return;
-    if (token != null) {
-      _steamNonce = null;
-      await api.saveToken(token);
-      ref.invalidate(authStateProvider);
-      // Wait for auth to fully complete before navigating
-      try {
-        final user = await ref.read(authStateProvider.future);
-        if (mounted && user != null) {
-          context.go('/portfolio');
-        }
-      } catch (_) {}
-      return;
-    }
-    if (retries > 0) {
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) _pollSteamNonce(retries: retries - 1);
-    }
   }
 
   void _onTabChanged(int i) {
@@ -193,12 +159,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _startSteamLoginWithPolling() async {
     final nonce = await ref.read(authServiceProvider).openSteamLogin();
-    _steamNonce = nonce;
+    onSteamLoginNonce?.call(nonce);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     _pageCtrl.dispose();
     super.dispose();

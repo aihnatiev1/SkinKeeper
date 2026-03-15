@@ -9,8 +9,8 @@ import '../../core/constants.dart';
 import '../../core/push_service.dart';
 import '../../models/user.dart';
 
-/// Provider that tracks current login nonce for polling
-final loginNonceProvider = StateProvider<String?>((ref) => null);
+/// Global callback set by _SkinKeeperAppState to receive nonce
+void Function(String nonce)? onSteamLoginNonce;
 
 final authServiceProvider = Provider<SteamAuthService>((ref) {
   return SteamAuthService();
