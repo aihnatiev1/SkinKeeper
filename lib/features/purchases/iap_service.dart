@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../../core/api_client.dart';
@@ -129,6 +130,41 @@ class IAPService {
 
   Future<bool> buyMonthly() => _buy(_kMonthlyId);
   Future<bool> buyYearly() => _buy(_kYearlyId);
+
+  /// DEV ONLY — instantly activates premium without real purchase
+  Future<void> mockPurchase({bool yearly = true}) async {
+    assert(kDebugMode, 'mockPurchase() only available in debug mode');
+    try {
+      final api = _ref.read(apiClientProvider);
+      final res = await api.post('/purchases/mock', data: {
+        'productId': yearly ? _kYearlyId : _kMonthlyId,
+      });
+      final data = res.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        _ref.read(premiumProvider.notifier).setPremium(true);
+        _ref.invalidate(authStateProvider);
+        dev.log('Mock premium activated!', name: 'IAP');
+      }
+    } catch (e) {
+      dev.log('Mock purchase failed: $e', name: 'IAP');
+      rethrow;
+    }
+  }
+
+  /// DEV ONLY — revokes premium to test free-tier gating
+  Future<void> mockRevoke() async {
+    assert(kDebugMode, 'mockRevoke() only available in debug mode');
+    try {
+      final api = _ref.read(apiClientProvider);
+      await api.post('/purchases/mock-revoke');
+      _ref.read(premiumProvider.notifier).setPremium(false);
+      _ref.invalidate(authStateProvider);
+      dev.log('Mock premium revoked!', name: 'IAP');
+    } catch (e) {
+      dev.log('Mock revoke failed: $e', name: 'IAP');
+      rethrow;
+    }
+  }
 
   Future<bool> _buy(String productId) async {
     final product = _products.where((p) => p.id == productId).firstOrNull;

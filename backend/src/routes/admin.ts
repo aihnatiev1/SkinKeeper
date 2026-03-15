@@ -560,4 +560,34 @@ router.get("/job-health", requireAdminSecret, (_req: Request, res: Response) => 
   res.json(getJobHealth());
 });
 
+// POST /api/admin/set-premium/:userId — manually set premium (for testing release builds)
+// Body: { premium: true/false, days?: number }
+router.post("/set-premium/:userId", requireAdminSecret, async (req: Request, res: Response) => {
+  const userId = parseInt(req.params.userId as string, 10);
+  if (isNaN(userId)) {
+    res.status(400).json({ error: "Invalid userId" });
+    return;
+  }
+
+  const premium = req.body.premium !== false; // default true
+  const days = parseInt(req.body.days, 10) || 365;
+
+  if (premium) {
+    const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    await pool.query(
+      `UPDATE users SET is_premium = TRUE, premium_until = $2 WHERE id = $1`,
+      [userId, until]
+    );
+    console.log(`[Admin] User ${userId} set to premium for ${days} days`);
+    res.json({ success: true, userId, isPremium: true, premiumUntil: until });
+  } else {
+    await pool.query(
+      `UPDATE users SET is_premium = FALSE, premium_until = NULL WHERE id = $1`,
+      [userId]
+    );
+    console.log(`[Admin] User ${userId} premium revoked`);
+    res.json({ success: true, userId, isPremium: false });
+  }
+});
+
 export default router;

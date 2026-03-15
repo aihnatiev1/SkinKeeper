@@ -1,0 +1,57 @@
+const PROXY_BASE = '/api/proxy';
+
+class ApiError extends Error {
+  constructor(public status: number, message: string, public code?: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${PROXY_BASE}${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ message: res.statusText }));
+    throw new ApiError(res.status, body.message || res.statusText, body.code);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+export const api = {
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+};
+
+// Auth-specific calls (not proxied — go to Next.js API routes)
+export const authApi = {
+  setSession: (token: string) =>
+    fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }),
+  clearSession: () =>
+    fetch('/api/auth/session', { method: 'DELETE' }),
+  getSession: () =>
+    fetch('/api/auth/session').then(r => r.json()) as Promise<{ authenticated: boolean }>,
+};
+
+export { ApiError };

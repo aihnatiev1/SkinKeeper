@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -124,6 +125,10 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                   color: AppTheme.textMuted,
                 ),
               ),
+            ],
+            if (kDebugMode) ...[
+              const SizedBox(height: 20),
+              _buildDebugButtons(),
             ],
             const SizedBox(height: 24),
           ],
@@ -313,6 +318,118 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
       );
     }
 
+    if (mounted) setState(() => _purchasing = false);
+  }
+
+  Widget _buildDebugButtons() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(AppTheme.r16),
+        color: Colors.orange.withValues(alpha: 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🛠 DEBUG',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _purchasing ? null : () => _mockActivate(yearly: true),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.orange),
+                    foregroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: const Text('Mock PRO Yearly', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _purchasing ? null : () => _mockActivate(yearly: false),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.orange),
+                    foregroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: const Text('Mock PRO Monthly', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: _purchasing ? null : _mockRevoke,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: Colors.red.withValues(alpha: 0.6)),
+                foregroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              child: const Text('Revoke PRO (test free tier)', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _mockActivate({required bool yearly}) async {
+    setState(() => _purchasing = true);
+    try {
+      final iap = ref.read(iapServiceProvider);
+      await iap.mockPurchase(yearly: yearly);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('[DEV] PRO ${yearly ? 'Yearly' : 'Monthly'} activated!'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('[DEV] Mock failed: $e')),
+        );
+      }
+    }
+    if (mounted) setState(() => _purchasing = false);
+  }
+
+  Future<void> _mockRevoke() async {
+    setState(() => _purchasing = true);
+    try {
+      final iap = ref.read(iapServiceProvider);
+      await iap.mockRevoke();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('[DEV] PRO revoked — now testing free tier'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('[DEV] Revoke failed: $e')),
+        );
+      }
+    }
     if (mounted) setState(() => _purchasing = false);
   }
 

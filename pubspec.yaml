@@ -33,6 +33,7 @@ dependencies:
   firebase_core: ^4.5.0
   firebase_messaging: ^16.1.2
   csv: ^6.0.0
+  flutter_web_auth_2: ^5.0.1
 
 dev_dependencies:
   flutter_test:

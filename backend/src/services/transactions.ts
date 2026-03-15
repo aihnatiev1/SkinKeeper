@@ -326,7 +326,7 @@ export async function getTransactions(
   // Trade subquery — aggregate item counts + first icon + item summary
   const tradeSelect = `
     SELECT to2.id::text AS id, 'trade'::text AS type,
-      COALESCE(NULLIF(agg.item_summary, ''), to2.partner_name, 'Trade #' || to2.steam_offer_id) AS market_hash_name,
+      COALESCE(NULLIF(agg.item_summary, ''), to2.partner_name, 'Trade #' || to2.steam_offer_id, 'Trade') AS market_hash_name,
       0 AS price_cents,
       to2.created_at AS date,
       to2.partner_steam_id,

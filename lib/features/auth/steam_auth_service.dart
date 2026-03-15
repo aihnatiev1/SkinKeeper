@@ -1,16 +1,13 @@
 import 'dart:developer' as dev;
-import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../core/constants.dart';
 import '../../core/push_service.dart';
 import '../../models/user.dart';
-
-/// Global callback set by _SkinKeeperAppState to receive nonce
-void Function(String nonce)? onSteamLoginNonce;
 
 final authServiceProvider = Provider<SteamAuthService>((ref) {
   return SteamAuthService();
@@ -30,7 +27,6 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
     try {
       dev.log('Token found, fetching /auth/me', name: 'Auth');
       final response = await api.get('/auth/me');
-      dev.log('Got user: ${response.data}', name: 'Auth');
       return SteamUser.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       dev.log('Auth/me failed: $e', name: 'Auth');
@@ -38,7 +34,6 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
       return null;
     }
   }
-
 
   Future<void> loginWithSteamCallback(Map<String, String> params) async {
     state = const AsyncLoading();
@@ -65,32 +60,10 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
 }
 
 class SteamAuthService {
-  /// Open Steam login for linking a new account (uses backend link endpoint).
-  Future<void> openSteamLinkLogin(WidgetRef ref) async {
-    try {
-      final api = ref.read(apiClientProvider);
-      final response = await api.post('/auth/accounts/link');
-      final data = response.data as Map<String, dynamic>;
-      final url = data['url'] as String?;
-      if (url != null) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      dev.log('Link login failed: $e', name: 'SteamAuth');
-    }
-  }
-
-  /// Generate a random nonce for polling-based login
-  static String _generateNonce() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final rng = Random.secure();
-    return List.generate(24, (_) => chars[rng.nextInt(chars.length)]).join();
-  }
-
-  /// Open Steam login and return the nonce for polling
-  Future<String> openSteamLogin() async {
-    final nonce = _generateNonce();
-    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback?nonce=$nonce';
+  /// Steam login using ASWebAuthenticationSession (iOS) / Custom Tabs (Android).
+  /// Returns JWT token on success, null on cancel.
+  Future<String?> authenticateWithSteam() async {
+    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback';
     final returnUri = Uri.parse(returnTo);
     final realm =
         '${returnUri.scheme}://${returnUri.host}${returnUri.hasPort ? ':${returnUri.port}' : ''}/';
@@ -109,20 +82,32 @@ class SteamAuthService {
     final uri = Uri.parse(AppConstants.steamOpenIdUrl)
         .replace(queryParameters: params);
 
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-    return nonce;
+    try {
+      final result = await FlutterWebAuth2.authenticate(
+        url: uri.toString(),
+        callbackUrlScheme: 'skinkeeper',
+      );
+      // result = skinkeeper://auth?token=JWT or skinkeeper://auth?error=...
+      final callbackUri = Uri.parse(result);
+      return callbackUri.queryParameters['token'];
+    } catch (e) {
+      dev.log('Steam auth cancelled or failed: $e', name: 'SteamAuth');
+      return null;
+    }
   }
 
-  /// Poll backend for login result
-  static Future<String?> pollLogin(ApiClient api, String nonce) async {
+  /// Open Steam login for linking a new account.
+  Future<void> openSteamLinkLogin(WidgetRef ref) async {
     try {
-      final resp = await api.get('/auth/steam/poll/$nonce');
-      final data = resp.data as Map<String, dynamic>;
-      if (data['status'] == 'authenticated') return data['token'] as String;
-      if (data['status'] == 'error') throw Exception(data['error']);
+      final api = ref.read(apiClientProvider);
+      final response = await api.post('/auth/accounts/link');
+      final data = response.data as Map<String, dynamic>;
+      final url = data['url'] as String?;
+      if (url != null) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      }
     } catch (e) {
-      dev.log('Poll error: $e', name: 'SteamAuth');
+      dev.log('Link login failed: $e', name: 'SteamAuth');
     }
-    return null;
   }
 }

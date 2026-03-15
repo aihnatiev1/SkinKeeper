@@ -2,11 +2,13 @@ import { Router, Response } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import {
   PRODUCT_IDS,
+  PRODUCTS,
   verifyAppleReceipt,
   verifyGoogleReceipt,
   activatePremium,
   getSubscriptionStatus,
 } from "../services/purchases.js";
+import { pool } from "../db/pool.js";
 
 const router = Router();
 
@@ -124,5 +126,50 @@ router.post(
     }
   }
 );
+
+// POST /api/purchases/mock — DEV ONLY: activate premium without real purchase
+// POST /api/purchases/mock-revoke — DEV ONLY: revoke premium
+if (process.env.NODE_ENV !== "production") {
+  router.post(
+    "/mock",
+    authMiddleware,
+    async (req: AuthRequest, res: Response) => {
+      const productId = (req.body.productId as string) || PRODUCTS.yearly;
+      const expiresDate = new Date(
+        Date.now() +
+          (productId === PRODUCTS.yearly
+            ? 365 * 24 * 60 * 60 * 1000
+            : 30 * 24 * 60 * 60 * 1000)
+      );
+
+      await activatePremium(req.userId!, "apple", {
+        valid: true,
+        productId,
+        transactionId: `mock_${Date.now()}_${req.userId}`,
+        purchaseDate: new Date(),
+        expiresDate,
+      });
+
+      console.log(
+        `[Purchase:mock] User ${req.userId} mock-activated ${productId}`
+      );
+      const status = await getSubscriptionStatus(req.userId!);
+      res.json({ success: true, subscription: status });
+    }
+  );
+
+  router.post(
+    "/mock-revoke",
+    authMiddleware,
+    async (req: AuthRequest, res: Response) => {
+      await pool.query(
+        `UPDATE users SET is_premium = FALSE, premium_until = NULL WHERE id = $1`,
+        [req.userId]
+      );
+      console.log(`[Purchase:mock] User ${req.userId} mock-revoked premium`);
+      res.json({ success: true });
+    }
+  );
+}
 
 export default router;
