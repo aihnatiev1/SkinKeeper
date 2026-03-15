@@ -31,60 +31,35 @@ final onboardingCompleteProvider = FutureProvider<bool>((ref) async {
 });
 
 final routerProvider = Provider<GoRouter>((ref) {
-  // ref.watch ensures router rebuilds when auth/session state changes
-  final auth = ref.watch(authStateProvider);
-  final session = ref.watch(sessionStatusProvider);
+  final refreshNotifier = _RouterRefreshNotifier(ref);
+  ref.onDispose(refreshNotifier.dispose);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/loading',
-    debugLogDiagnostics: true,
+    initialLocation: '/portfolio',
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
+      final auth = ref.read(authStateProvider);
       final location = state.matchedLocation;
       final isOnLoading = location == '/loading';
       final isOnLogin = location == '/login';
       final isOnSession = location == '/session';
       final isOnLinkAccount = location == '/link-account';
-      final isOnOnboarding = location == '/onboarding';
 
-      debugPrint(
-        'REDIRECT | uri=${state.uri} '
-        'matched=$location '
-        'authLoading=${auth.isLoading} '
-        'authValue=${auth.valueOrNull} '
-        'sessionLoading=${session.isLoading} '
-        'needsReauth=${session.valueOrNull?.needsReauth}',
-      );
-
-      if (auth.isLoading) {
-        return isOnLoading ? null : '/loading';
-      }
+      if (auth.isLoading) return isOnLoading ? null : '/loading';
 
       final isLoggedIn = auth.valueOrNull != null;
 
       if (!isLoggedIn) {
-        if (isOnLogin || isOnLoading || isOnLinkAccount) {
-          return null;
-        }
+        if (isOnLogin || isOnLoading || isOnLinkAccount) return null;
         return '/login';
       }
 
-      final needsReauth = session.valueOrNull?.needsReauth ?? false;
-      if (needsReauth && !isOnSession) {
-        return '/session';
-      }
+      if (isOnLogin || isOnLoading) return '/portfolio';
 
-      if (isOnLogin || isOnLoading) {
-        return '/portfolio';
-      }
-
-      if (isOnSession && !needsReauth) {
-        return '/portfolio';
-      }
-
-      if (isOnOnboarding) {
-        return null;
-      }
+      final needsReauth = ref.read(sessionStatusProvider).valueOrNull?.needsReauth ?? false;
+      if (needsReauth && !isOnSession && !isOnLogin) return '/session';
+      if (isOnSession && !needsReauth) return '/portfolio';
 
       return null;
     },
@@ -118,34 +93,35 @@ final routerProvider = Provider<GoRouter>((ref) {
       debugPrint('ROUTER ERROR | uri=${state.uri} error=${state.error}');
       return Scaffold(
         backgroundColor: const Color(0xFF0A0E1A),
-        body: Center(
-          child: Text('Route error: ${state.uri}', style: const TextStyle(color: Colors.white)),
-        ),
+        body: Center(child: Text('Route error: ${state.uri}', style: const TextStyle(color: Colors.white))),
       );
     },
   );
 });
 
+class _RouterRefreshNotifier extends ChangeNotifier {
+  _RouterRefreshNotifier(Ref ref) {
+    ref.listen<AsyncValue<SteamUser?>>(authStateProvider, (_, next) {
+      debugPrint('ROUTER REFRESH auth -> $next');
+      notifyListeners();
+    });
+    ref.listen(sessionStatusProvider, (_, next) {
+      debugPrint('ROUTER REFRESH session -> $next');
+      notifyListeners();
+    });
+  }
+}
+
 class _LoadingScreen extends StatelessWidget {
   const _LoadingScreen();
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A0A35), Color(0xFF0A0E1A)],
-          ),
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF1A0A35), Color(0xFF0A0E1A)]),
         ),
-        child: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF8B5CF6),
-            strokeWidth: 2.5,
-          ),
-        ),
+        child: const Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6), strokeWidth: 2.5)),
       ),
     );
   }

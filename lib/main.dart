@@ -152,8 +152,15 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       debugPrint('AUTH: user fetched, setting auth state...');
       final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
       ref.read(authStateProvider.notifier).setUser(user);
-
-      debugPrint('AUTH: done');
+      debugPrint('AUTH: setUser done, scheduling navigation...');
+      // Explicit navigation as safety net after state propagates
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final auth = ref.read(authStateProvider);
+        debugPrint('AUTH POST-FRAME: isLoggedIn=${auth.valueOrNull != null}');
+        if (auth.valueOrNull != null) {
+          ref.read(routerProvider).go('/portfolio');
+        }
+      });
     } catch (e, st) {
       debugPrint('AUTH ERROR: $e');
       debugPrint('$st');
