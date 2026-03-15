@@ -133,6 +133,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _steamNonce = null;
       await api.saveToken(token);
       ref.invalidate(authStateProvider);
+      if (mounted) context.go('/portfolio');
       return;
     }
     // Token not ready yet — retry
