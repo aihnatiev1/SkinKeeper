@@ -80,8 +80,12 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Push latest cached portfolio data to widget on foreground resume
       WidgetService.pushCachedToWidget();
+      // Fallback: iOS sometimes delivers URL via getInitialLink on resume
+      // instead of uriLinkStream (observed on iOS 26 beta)
+      _appLinks.getInitialLink().then((uri) {
+        if (uri != null) _handleDeepLink(uri);
+      }).catchError((_) {});
     }
   }
 
