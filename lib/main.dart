@@ -55,6 +55,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   StreamSubscription<void>? _tokenExpiredSub;
   bool _pushInitialized = false;
   String? _steamNonce;
+  Timer? _steamPollTimer;
 
   @override
   void initState() {
@@ -63,7 +64,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     _appLinks = AppLinks();
     _initDeepLinks();
     _initDeepLinkChannel();
-    setSteamNonce = (nonce) => _steamNonce = nonce;
+    setSteamNonce = _startSteamPolling;
     _sessionExpiredSub = sessionExpiredController.stream.listen((_) {
       _showSessionExpiredDialog();
     });
@@ -85,30 +86,34 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       WidgetService.pushCachedToWidget();
-      if (_steamNonce != null) _completeSteamLogin();
     }
   }
 
-  Future<void> _completeSteamLogin() async {
+  void _startSteamPolling(String nonce) {
+    _steamNonce = nonce;
+    _steamPollTimer?.cancel();
+    _steamPollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollOnce());
+  }
+
+  Future<void> _pollOnce() async {
     final nonce = _steamNonce;
-    if (nonce == null) return;
-    final api = ref.read(apiClientProvider);
-    for (var i = 0; i < 10; i++) {
-      try {
-        final resp = await api.get('/auth/steam/poll/$nonce');
-        final data = resp.data as Map<String, dynamic>;
-        if (data['status'] == 'authenticated') {
-          _steamNonce = null;
-          await api.saveToken(data['token'] as String);
-          ref.invalidate(authStateProvider);
-          await ref.read(authStateProvider.future);
-          ref.read(routerProvider).go('/portfolio');
-          return;
-        }
-      } catch (_) {}
-      await Future.delayed(const Duration(seconds: 1));
+    if (nonce == null) {
+      _steamPollTimer?.cancel();
+      return;
     }
-    _steamNonce = null;
+    try {
+      final api = ref.read(apiClientProvider);
+      final resp = await api.get('/auth/steam/poll/$nonce');
+      final data = resp.data as Map<String, dynamic>;
+      if (data['status'] == 'authenticated') {
+        _steamPollTimer?.cancel();
+        _steamNonce = null;
+        await api.saveToken(data['token'] as String);
+        ref.invalidate(authStateProvider);
+        await ref.read(authStateProvider.future);
+        ref.read(routerProvider).go('/portfolio');
+      }
+    } catch (_) {}
   }
 
   void _initDeepLinkChannel() {
