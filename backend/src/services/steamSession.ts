@@ -332,9 +332,10 @@ export class SteamSessionService {
     let qrUrl = startResult.qrChallengeUrl;
     console.log('[QR Auth] Original s.team URL:', qrUrl);
     try {
-      const axios = require('axios');
+      // Use axios with timeout and followRedirect: false to capture the redirect location
       const response = await axios.get(qrUrl, {
         maxRedirects: 0,
+        timeout: 5000,
         validateStatus: (status: number) => status >= 300 && status < 400,
       });
       if (response.headers.location) {
@@ -345,6 +346,12 @@ export class SteamSessionService {
       }
     } catch (e: any) {
       console.error('[QR Auth] Failed to resolve QR redirect:', e.message);
+      // Fallback: if we can't resolve, try converting s.team URL to steammobile scheme
+      // to see if the Steam app handles it better (opens confirmation directly)
+      if (qrUrl.startsWith('https://s.team/q/')) {
+        qrUrl = qrUrl.replace('https://s.team/q/', 'steammobile://q/');
+        console.log('[QR Auth] Using Fallback steammobile:// URL:', qrUrl);
+      }
     }
 
     const nonce = crypto.randomUUID();
