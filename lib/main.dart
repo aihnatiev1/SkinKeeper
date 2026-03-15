@@ -19,6 +19,7 @@ import 'core/theme.dart';
 import 'features/auth/steam_auth_service.dart';
 import 'models/user.dart';
 import 'features/inventory/inventory_provider.dart';
+import 'features/portfolio/portfolio_provider.dart';
 import 'features/settings/accounts_provider.dart';
 import 'firebase_options.dart';
 
@@ -152,15 +153,10 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       debugPrint('AUTH: user fetched, setting auth state...');
       final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
       ref.read(authStateProvider.notifier).setUser(user);
-      debugPrint('AUTH: setUser done, scheduling navigation...');
-      // Explicit navigation as safety net after state propagates
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final auth = ref.read(authStateProvider);
-        debugPrint('AUTH POST-FRAME: isLoggedIn=${auth.valueOrNull != null}');
-        if (auth.valueOrNull != null) {
-          ref.read(routerProvider).go('/portfolio');
-        }
-      });
+      // Invalidate all data providers so they fetch fresh data for this user
+      ref.invalidate(inventoryProvider);
+      ref.invalidate(portfolioProvider);
+      debugPrint('AUTH: done, providers invalidated');
     } catch (e, st) {
       debugPrint('AUTH ERROR: $e');
       debugPrint('$st');
