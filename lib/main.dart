@@ -101,6 +101,8 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
           _steamNonce = null;
           await api.saveToken(data['token'] as String);
           ref.invalidate(authStateProvider);
+          await ref.read(authStateProvider.future);
+          ref.read(routerProvider).go('/portfolio');
           return;
         }
       } catch (_) {}
