@@ -124,7 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
   }
 
-  Future<void> _pollSteamNonce({int retries = 1}) async {
+  Future<void> _pollSteamNonce({int retries = 5}) async {
     if (_steamNonce == null || !mounted) return;
     final api = ref.read(apiClientProvider);
     final token = await SteamAuthService.pollLogin(api, _steamNonce!);
@@ -133,10 +133,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _steamNonce = null;
       await api.saveToken(token);
       ref.invalidate(authStateProvider);
-      if (mounted) context.go('/portfolio');
+      // Wait for auth to fully complete before navigating
+      try {
+        final user = await ref.read(authStateProvider.future);
+        if (mounted && user != null) {
+          context.go('/portfolio');
+        }
+      } catch (_) {}
       return;
     }
-    // Token not ready yet — retry
     if (retries > 0) {
       await Future.delayed(const Duration(seconds: 2));
       if (mounted) _pollSteamNonce(retries: retries - 1);
