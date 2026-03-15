@@ -1,4 +1,5 @@
 import 'dart:developer' as dev;
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +8,9 @@ import '../../core/cache_service.dart';
 import '../../core/constants.dart';
 import '../../core/push_service.dart';
 import '../../models/user.dart';
+
+/// Provider that tracks current login nonce for polling
+final loginNonceProvider = StateProvider<String?>((ref) => null);
 
 final authServiceProvider = Provider<SteamAuthService>((ref) {
   return SteamAuthService();
@@ -76,10 +80,17 @@ class SteamAuthService {
     }
   }
 
-  Future<void> openSteamLogin() async {
-    // Steam OpenID requires http(s) return_to — use backend as intermediary
-    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback';
-    // Realm must match the return_to scheme+host (with trailing slash)
+  /// Generate a random nonce for polling-based login
+  static String _generateNonce() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final rng = Random.secure();
+    return List.generate(24, (_) => chars[rng.nextInt(chars.length)]).join();
+  }
+
+  /// Open Steam login and return the nonce for polling
+  Future<String> openSteamLogin() async {
+    final nonce = _generateNonce();
+    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback?nonce=$nonce';
     final returnUri = Uri.parse(returnTo);
     final realm =
         '${returnUri.scheme}://${returnUri.host}${returnUri.hasPort ? ':${returnUri.port}' : ''}/';
@@ -98,10 +109,20 @@ class SteamAuthService {
     final uri = Uri.parse(AppConstants.steamOpenIdUrl)
         .replace(queryParameters: params);
 
-    dev.log('Steam login URL: $uri', name: 'SteamAuth');
-    dev.log('return_to: $returnTo', name: 'SteamAuth');
-    dev.log('realm: $realm', name: 'SteamAuth');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    return nonce;
+  }
 
-    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+  /// Poll backend for login result
+  static Future<String?> pollLogin(ApiClient api, String nonce) async {
+    try {
+      final resp = await api.get('/auth/steam/poll/$nonce');
+      final data = resp.data as Map<String, dynamic>;
+      if (data['status'] == 'authenticated') return data['token'] as String;
+      if (data['status'] == 'error') throw Exception(data['error']);
+    } catch (e) {
+      dev.log('Poll error: $e', name: 'SteamAuth');
+    }
+    return null;
   }
 }

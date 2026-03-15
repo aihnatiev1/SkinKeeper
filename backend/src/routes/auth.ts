@@ -7,6 +7,36 @@ import { SteamSessionService } from "../services/steamSession.js";
 
 const router = Router();
 
+// In-memory store for pending Steam login results (nonce → token)
+const pendingLogins = new Map<string, { token?: string; error?: string }>();
+
+// Cleanup old entries every 5 minutes
+setInterval(() => {
+  // Just clear all — they expire quickly anyway
+  if (pendingLogins.size > 100) pendingLogins.clear();
+}, 5 * 60 * 1000);
+
+// GET /api/auth/steam/poll/:nonce — App polls this after opening Steam login
+router.get("/steam/poll/:nonce", async (req: Request, res: Response) => {
+  const nonce = req.params.nonce;
+  const entry = pendingLogins.get(nonce);
+  if (!entry) {
+    res.json({ status: "pending" });
+    return;
+  }
+  if (entry.token) {
+    pendingLogins.delete(nonce);
+    res.json({ status: "authenticated", token: entry.token });
+    return;
+  }
+  if (entry.error) {
+    pendingLogins.delete(nonce);
+    res.json({ status: "error", error: entry.error });
+    return;
+  }
+  res.json({ status: "pending" });
+});
+
 // GET /api/auth/steam/callback
 // Steam redirects here after OpenID login — verify, create JWT, redirect to app deep link
 router.get("/steam/callback", async (req: Request, res: Response) => {
@@ -66,10 +96,26 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       { expiresIn: "30d" }
     );
 
+    // Check if this is a polling-based login (nonce in return_to)
+    const returnTo = params["openid.return_to"] || "";
+    const nonceMatch = returnTo.match(/[?&]nonce=([a-zA-Z0-9]+)/);
+    if (nonceMatch) {
+      pendingLogins.set(nonceMatch[1], { token });
+      res.send(`<html><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>✅ Login successful</h2><p>Return to SkinKeeper app</p></div></body></html>`);
+      return;
+    }
+
     const deepLink = `skinkeeper://auth?token=${encodeURIComponent(token)}`;
     res.redirect(deepLink);
   } catch (err) {
     console.error("Steam callback error:", err);
+    const returnTo = (req.query as any)["openid.return_to"] || "";
+    const nonceMatch = returnTo.match(/[?&]nonce=([a-zA-Z0-9]+)/);
+    if (nonceMatch) {
+      pendingLogins.set(nonceMatch[1], { error: "auth_failed" });
+      res.send(`<html><body style="background:#0a0e1a;color:#ff5252;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>Login failed</h2><p>Return to SkinKeeper and try again</p></div></body></html>`);
+      return;
+    }
     res.redirect("skinkeeper://auth?error=auth_failed");
   }
 });

@@ -157,6 +157,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
   }
 
+  Future<void> _startSteamLoginWithPolling() async {
+    final nonce = await ref.read(authServiceProvider).openSteamLogin();
+    final api = ref.read(apiClientProvider);
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      final token = await SteamAuthService.pollLogin(api, nonce);
+      if (!mounted) return;
+      if (token != null) {
+        _pollTimer?.cancel();
+        await api.saveToken(token);
+        ref.invalidate(authStateProvider);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
@@ -430,7 +445,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       if (widget.isLinking) {
                         ref.read(authServiceProvider).openSteamLinkLogin(ref);
                       } else {
-                        ref.read(authServiceProvider).openSteamLogin();
+                        _startSteamLoginWithPolling();
                       }
                     },
               child: Container(
