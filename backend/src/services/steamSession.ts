@@ -332,7 +332,8 @@ export class SteamSessionService {
     let qrUrl = startResult.qrChallengeUrl;
     const match = qrUrl.match(/\/q\/1\/(\d+)/);
     if (match && match[1]) {
-      qrUrl = `steammobile://login/approve?challenge=${match[1]}`;
+      // Use explicit concatenation to be 100% sure the '?' is there
+      qrUrl = 'steammobile://login/approve?challenge=' + match[1];
     }
     console.log('[QR Auth] Generated Direct App Command:', qrUrl);
 
