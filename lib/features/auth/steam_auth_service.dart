@@ -1,7 +1,7 @@
 import 'dart:developer' as dev;
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
@@ -60,10 +60,15 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
 }
 
 class SteamAuthService {
-  /// Steam login using ASWebAuthenticationSession (iOS) / Custom Tabs (Android).
-  /// Returns JWT token on success, null on cancel.
-  Future<String?> authenticateWithSteam() async {
-    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback';
+  String generateNonce() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final rng = Random.secure();
+    return List.generate(24, (_) => chars[rng.nextInt(chars.length)]).join();
+  }
+
+  /// Open Steam login in Safari with nonce for polling
+  Future<void> openSteamWithNonce(String nonce) async {
+    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback?nonce=$nonce';
     final returnUri = Uri.parse(returnTo);
     final realm =
         '${returnUri.scheme}://${returnUri.host}${returnUri.hasPort ? ':${returnUri.port}' : ''}/';
@@ -82,17 +87,7 @@ class SteamAuthService {
     final uri = Uri.parse(AppConstants.steamOpenIdUrl)
         .replace(queryParameters: params);
 
-    final result = await FlutterWebAuth2.authenticate(
-      url: uri.toString(),
-      callbackUrlScheme: 'skinkeeper',
-    );
-    // result = skinkeeper://auth?token=JWT or skinkeeper://auth?error=...
-    final callbackUri = Uri.parse(result);
-    final token = callbackUri.queryParameters['token'];
-    final error = callbackUri.queryParameters['error'];
-    if (error != null) throw Exception('Steam login failed: $error');
-    if (token == null) throw Exception('No token in callback: $result');
-    return token;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   /// Open Steam login for linking a new account.
