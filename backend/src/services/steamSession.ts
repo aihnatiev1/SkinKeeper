@@ -327,10 +327,13 @@ export class SteamSessionService {
 
     const qrImage = await QRCode.toDataURL(startResult.qrChallengeUrl);
 
-    // Use the original s.team URL — on iOS it opens via Universal Links
-    // directly to the Steam approve screen (steammobile://login/approve doesn't work on iOS)
-    const qrUrl = startResult.qrChallengeUrl;
-    console.log('[QR Auth] QR URL:', qrUrl);
+    // Convert s.team/q/ to steamcommunity.com/auth/confirm/
+    // This path is recognized by the Steam app as a direct "Approve Login" request.
+    let qrUrl = startResult.qrChallengeUrl;
+    if (qrUrl.includes('s.team/q/')) {
+      qrUrl = qrUrl.replace('https://s.team/q/', 'https://steamcommunity.com/auth/confirm/');
+    }
+    console.log('[QR Auth] Generated Approval Link:', qrUrl);
 
     const nonce = crypto.randomUUID();
 
