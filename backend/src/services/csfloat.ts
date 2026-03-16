@@ -1,4 +1,5 @@
 import axios from "axios";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { AdaptiveCrawler, savePrices } from "./prices.js";
 
 interface CSFloatListing {
@@ -10,9 +11,27 @@ interface CSFloatListing {
   };
 }
 
+// Reusable proxy agents (created once, reused across requests)
+let primaryAgent: HttpsProxyAgent<string> | null = null;
+let fallbackAgent: HttpsProxyAgent<string> | null = null;
+
+export function getCSFloatProxyAgent(): HttpsProxyAgent<string> | null {
+  const proxyUrl = process.env.CSFLOAT_PROXY_URL;
+  if (!proxyUrl) return null;
+  if (!primaryAgent) primaryAgent = new HttpsProxyAgent(proxyUrl);
+  return primaryAgent;
+}
+
+function getCSFloatFallbackAgent(): HttpsProxyAgent<string> | null {
+  const proxyUrl = process.env.CSFLOAT_PROXY_FALLBACK;
+  if (!proxyUrl) return null;
+  if (!fallbackAgent) fallbackAgent = new HttpsProxyAgent(proxyUrl);
+  return fallbackAgent;
+}
+
 /**
  * Fetch the lowest listing price for a single item on CSFloat.
- * Returns price in USD (cents / 100) or null if unavailable.
+ * Routes through proxy to avoid IP bans.
  */
 async function fetchCSFloatItemPrice(
   marketHashName: string
@@ -20,38 +39,63 @@ async function fetchCSFloatItemPrice(
   const apiKey = process.env.CSFLOAT_API_KEY;
   if (!apiKey) return null;
 
-  const { data } = await axios.get<{ data: CSFloatListing[] }>(
-    "https://csfloat.com/api/v1/listings",
-    {
-      params: {
-        market_hash_name: marketHashName,
-        sort_by: "lowest_price",
-        limit: 1,
-      },
-      headers: { Authorization: apiKey },
-      timeout: 10000,
-    }
-  );
-
-  const listings = data.data;
-  if (listings && listings.length > 0) {
-    return listings[0].price / 100;
+  const agent = getCSFloatProxyAgent();
+  const requestConfig: any = {
+    params: {
+      market_hash_name: marketHashName,
+      sort_by: "lowest_price",
+      limit: 1,
+    },
+    headers: { Authorization: apiKey },
+    timeout: 15000,
+  };
+  if (agent) {
+    requestConfig.httpsAgent = agent;
+    requestConfig.proxy = false; // disable axios built-in proxy
   }
-  return null;
+
+  try {
+    const { data } = await axios.get<{ data: CSFloatListing[] }>(
+      "https://csfloat.com/api/v1/listings",
+      requestConfig
+    );
+    const listings = data.data;
+    if (listings && listings.length > 0) {
+      return listings[0].price / 100;
+    }
+    return null;
+  } catch (err: any) {
+    const status = err?.response?.status;
+    // If primary proxy gets 429, try fallback
+    if (status === 429) {
+      const fb = getCSFloatFallbackAgent();
+      if (fb) {
+        try {
+          const { data } = await axios.get<{ data: CSFloatListing[] }>(
+            "https://csfloat.com/api/v1/listings",
+            { ...requestConfig, httpsAgent: fb }
+          );
+          const listings = data.data;
+          if (listings && listings.length > 0) return listings[0].price / 100;
+          return null;
+        } catch { /* fallback also failed */ }
+      }
+    }
+    throw err;
+  }
 }
 
-// CSFloat has strict rate limits — very conservative settings to avoid IP bans.
-// Free tier: ~1000 req/day ≈ 1 req per 90s average
+// Conservative crawler settings to stay under CSFloat rate limits
 const csfloatCrawler = new AdaptiveCrawler(
   {
     name: "CSFloat",
-    minIntervalMs: 30_000,       // fastest: 1 req / 30s
-    maxIntervalMs: 3600_000,     // slowest: 1 req / 1 hour
-    startIntervalMs: 90_000,     // start: 1 req / 90s (~960/day budget)
-    backoffFactor: 3,            // triple interval on 429
-    cooldownFactor: 0.95,        // only 5% faster after streak
-    successesBeforeSpeedup: 20,  // need 20 clean successes to speed up
-    refreshAgeMs: 4 * 3600_000,  // refresh after 4 hours
+    minIntervalMs: 30_000,
+    maxIntervalMs: 3600_000,
+    startIntervalMs: 90_000,
+    backoffFactor: 3,
+    cooldownFactor: 0.95,
+    successesBeforeSpeedup: 20,
+    refreshAgeMs: 4 * 3600_000,
   },
   "csfloat",
   fetchCSFloatItemPrice
@@ -63,7 +107,8 @@ export function startCSFloatCrawler(): void {
     console.warn("[CSFloat] CSFLOAT_API_KEY not set, crawler disabled");
     return;
   }
-  // Delay first request by 60s to let other crawlers settle
+  const proxy = process.env.CSFLOAT_PROXY_URL ? " (via proxy)" : " (direct)";
+  console.log(`[CSFloat] Starting crawler${proxy}`);
   csfloatCrawler.start(60_000);
 }
 
@@ -71,7 +116,6 @@ export function stopCSFloatCrawler(): void {
   csfloatCrawler.stop();
 }
 
-// Keep for backward compat (no longer used in cron)
 export async function fetchCSFloatPrices(
   _marketHashNames: string[]
 ): Promise<Map<string, number>> {
