@@ -41,7 +41,11 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowOnboarding());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowOnboarding();
+      // Eagerly warm up P/L data so it's ready when the widget renders
+      ref.read(portfolioPLProvider);
+    });
   }
 
   Future<void> _maybeShowOnboarding() async {
@@ -116,7 +120,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: _PillTabs(
-                  tabs: const ['Value', 'P/L', 'Items'],
+                  tabs: const ['Value', 'Profit', 'Items'],
                   selected: tab,
                   onChanged: (i) {
                     HapticFeedback.selectionClick();
@@ -258,7 +262,7 @@ class _PLQuickSummary extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'TOTAL P/L',
+                      'TOTAL PROFIT',
                       style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
@@ -778,7 +782,34 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
   @override
   Widget build(BuildContext context) {
     final currency = ref.watch(currencyProvider);
-    if (widget.history.length < 2) return const SizedBox.shrink();
+    if (widget.history.length < 2) {
+      return SizedBox(
+        width: double.infinity,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.025),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.show_chart_rounded, size: 40,
+                  color: Colors.white.withValues(alpha: 0.15)),
+              const SizedBox(height: 12),
+              Text('Not enough data yet',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.5))),
+              const SizedBox(height: 6),
+              Text('Your portfolio value chart will appear once we have a few days of price data.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.3), height: 1.4)),
+            ],
+          ),
+        ),
+      );
+    }
 
     final spots = widget.history.asMap().entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.value))
