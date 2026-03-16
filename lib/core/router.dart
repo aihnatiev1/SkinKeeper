@@ -46,7 +46,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isOnLoading = location == '/loading';
       final isOnLogin = location == '/login';
       final isOnSession = location == '/session';
-      final isOnLinkAccount = location == '/link-account';
 
       // 1. Якщо хоча б один критичний провайдер вантажиться - йдемо на лоадер
       if (auth.isLoading || session.isLoading) {
@@ -55,11 +54,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       final user = auth.valueOrNull;
-      final sessionData = session.valueOrNull;
 
       // 2. Логіка для неавторизованого користувача
       if (user == null) {
-        if (isOnLogin || isOnLoading || isOnLinkAccount || isOnSession) return null;
+        if (isOnLogin) return null;
         return '/login';
       }
 

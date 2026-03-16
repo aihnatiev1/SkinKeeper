@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/api_client.dart';
 import '../../../core/theme.dart';
 import '../session_provider.dart';
 import '../../settings/accounts_provider.dart';
@@ -21,7 +21,6 @@ class QrAuthTab extends ConsumerStatefulWidget {
 class _QrAuthTabState extends ConsumerState<QrAuthTab> {
   Timer? _pollTimer;
   String? _authedAccountName;
-  bool _showQr = false;
 
   @override
   void initState() {
@@ -35,7 +34,7 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       final status = await ref.read(qrAuthProvider.notifier).pollQR();
       if (!mounted) return;
       if (status == 'authenticated') {
@@ -49,12 +48,10 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
         }
         if (!mounted) return;
 
-        // Get authenticated account name for confirmation
         final sessionStatus = ref.read(sessionStatusProvider).valueOrNull;
         final accountName = sessionStatus?.activeAccountName;
         setState(() => _authedAccountName = accountName);
 
-        // Auto-navigate back after brief delay so user sees confirmation
         Future.delayed(const Duration(seconds: 2), () {
           if (!mounted) return;
           _navigateBack(linkMode);
@@ -89,6 +86,37 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
     });
   }
 
+  Future<void> _openSteamApp(String? qrUrl) async {
+    if (qrUrl == null) return;
+
+    try {
+      final uri = Uri.parse(qrUrl);
+      final segments = uri.pathSegments;
+      if (segments.isEmpty) return;
+
+      final clientId = segments.last;
+
+      // 1. Try direct deep link to confirmation screen
+      final deepLink =
+          Uri.parse('steammobile://open/login/confirm?client_id=$clientId');
+
+      if (await canLaunchUrl(deepLink)) {
+        await launchUrl(deepLink, mode: LaunchMode.externalApplication);
+      } else {
+        // 2. Fallback to opening the URL via steam://openurl/
+        final fallbackLink = Uri.parse('steam://openurl/$qrUrl');
+        if (await canLaunchUrl(fallbackLink)) {
+          await launchUrl(fallbackLink, mode: LaunchMode.externalApplication);
+        } else {
+          // 3. Last resort: open in browser (which should trigger universal link)
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error launching Steam app: $e');
+    }
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
@@ -98,120 +126,121 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
   @override
   Widget build(BuildContext context) {
     final qrState = ref.watch(qrAuthProvider);
-    final isPolling = qrState.status == 'ready' || qrState.status == 'pending' || qrState.status == 'polling';
+    final isPolling = qrState.status == 'ready' ||
+        qrState.status == 'pending' ||
+        qrState.status == 'polling';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 400),
-        child: _showQr ? _buildQrView(qrState) : _buildAppView(qrState, isPolling),
-      ),
-    );
-  }
-
-  Widget _buildAppView(QrAuthState qrState, bool isPolling) {
-    return Column(
-      key: const ValueKey('app_view'),
-      children: [
-        const SizedBox(height: 20),
-        // Large Steam Icon
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            color: const Color(0xFF171a21),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.2),
-                blurRadius: 20,
-                spreadRadius: 5,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Text(
+            'One-Tap Login',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Approve login directly in Steam app',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 13, color: Colors.white.withValues(alpha: 0.4)),
+          ),
+          const SizedBox(height: 20),
+          if (qrState.status != 'authenticated' &&
+              qrState.status != 'expired') ...[
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: qrState.qrUrl == null ? null : () => _openSteamApp(qrState.qrUrl),
+                icon: qrState.qrUrl == null 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
+                  : Image.asset('assets/app_icon.png', width: 24, height: 24, errorBuilder: (_, _, _) => const Icon(Icons.bolt)),
+                label: Text(
+                  qrState.qrUrl == null ? 'Loading session...' : 'Open Steam & Approve',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
               ),
-            ],
-          ),
-          child: Center(
-            child: Image.network(
-              'https://community.akamai.steamstatic.com/public/shared/images/responsive/header_logo.png',
-              height: 40,
-              color: Colors.white,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '— OR —',
+              style: TextStyle(fontSize: 11, color: Colors.white24),
+            ),
+            const SizedBox(height: 16),
+          ],
+          Text(
+            'Scan QR Code',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.6),
             ),
           ),
-        ),
-        const SizedBox(height: 32),
-        const Text(
-          'Confirm in Steam App',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Open your official Steam app to authorize this session securely.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.white.withValues(alpha: 0.5),
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 40),
-
-        if (qrState.loading)
-          const Center(
-            child: Column(
-              children: [
-                CircularProgressIndicator(color: AppTheme.primary),
-                SizedBox(height: 16),
-                Text('Generating Steam link...', style: TextStyle(color: Colors.white70)),
-              ],
+          const SizedBox(height: 12),
+          _buildQrArea(qrState),
+          const SizedBox(height: 20),
+          if (qrState.status == 'authenticated') ...[
+            const Icon(Icons.check_circle, color: Color(0xFF00E676), size: 32),
+            const SizedBox(height: 8),
+            Text(
+              _authedAccountName != null
+                  ? 'Authenticated as $_authedAccountName'
+                  : 'Authenticated!',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF00E676),
+              ),
             ),
-          )
-        else if (qrState.error != null)
-          Center(
-            child: Column(
-              children: [
-                const Icon(Icons.error_outline, color: AppTheme.loss, size: 48),
-                const SizedBox(height: 16),
-                Text('Failed to start session: ${qrState.error}', 
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => _rescan(),
-                  child: const Text('Try Again'),
-                ),
-              ],
+            const SizedBox(height: 4),
+            const Text('Redirecting...',
+                style: TextStyle(fontSize: 12, color: Colors.white38)),
+          ] else if (qrState.status == 'expired') ...[
+            const Text(
+              'QR code expired',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.loss),
             ),
-          )
-        else if (qrState.qrUrl != null && qrState.status != 'authenticated') ...[
-          ElevatedButton(
-            onPressed: () async {
-              final uri = Uri.parse(qrState.qrUrl!);
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-              HapticFeedback.mediumImpact();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 56),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              elevation: 8,
-              shadowColor: AppTheme.primary.withValues(alpha: 0.4),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _rescan,
+              icon: const Icon(Icons.refresh, size: 20),
+              label: const Text('Refresh'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.surface,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
             ),
-            child: const Text('Open Steam App', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
-          const SizedBox(height: 24),
-          if (isPolling)
+          ] else if (isPolling) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppTheme.primary),
+                ),
                 const SizedBox(width: 12),
                 Text(
-                  'Waiting for confirmation in Steam...',
+                  'Waiting for confirmation...',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -220,57 +249,58 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
                 ),
               ],
             ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
-        ],
-
-        if (qrState.status == 'expired') ...[
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () => _rescan(),
-            icon: const Icon(Icons.refresh, size: 20),
-            label: const Text('Refresh Link'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.surface,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ],
+          const SizedBox(height: 24),
+          // Instructions
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+            child: Column(
+              children: [
+                _buildStep('1', 'Open Steam app on another device'),
+                const SizedBox(height: 10),
+                _buildStep('2', 'Go to Steam Guard (shield icon)'),
+                const SizedBox(height: 10),
+                _buildStep('3', 'Scan this QR code'),
+              ],
             ),
           ),
         ],
-
-        const SizedBox(height: 60),
-        TextButton(
-          onPressed: () => setState(() => _showQr = true),
-          child: Text(
-            'Need to scan a QR instead?',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 13),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildQrView(QrAuthState qrState) {
-    return Column(
-      key: const ValueKey('qr_view'),
+  Widget _buildStep(String number, String text) {
+    return Row(
       children: [
-        const SizedBox(height: 16),
-        const Text(
-          'Scan QR Code',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(number,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primary,
+                )),
+          ),
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Use the Steam Mobile App to scan this code.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, color: Colors.white60),
-        ),
-        const SizedBox(height: 32),
-        _buildQrArea(qrState),
-        const SizedBox(height: 32),
-        _buildStatusText(qrState),
-        const SizedBox(height: 24),
-        TextButton(
-          onPressed: () => setState(() => _showQr = false),
-          child: const Text('Back to App Direct Link'),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(text,
+              style: TextStyle(
+                fontSize: 13.5,
+                color: Colors.white.withValues(alpha: 0.7),
+                height: 1.3,
+              )),
         ),
       ],
     );
@@ -279,8 +309,8 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
   Widget _buildQrArea(QrAuthState state) {
     if (state.loading) {
       return Container(
-        width: 240,
-        height: 240,
+        width: 220,
+        height: 220,
         decoration: BoxDecoration(
           color: Colors.white.withAlpha(10),
           borderRadius: BorderRadius.circular(16),
@@ -291,8 +321,8 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
 
     if (state.error != null) {
       return Container(
-        width: 280,
-        height: 280,
+        width: 220,
+        height: 240,
         decoration: BoxDecoration(
           color: Colors.white.withAlpha(10),
           borderRadius: BorderRadius.circular(16),
@@ -303,20 +333,21 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                const Icon(Icons.error_outline,
+                    color: Colors.redAccent, size: 48),
                 const SizedBox(height: 12),
-                Text(
-                  'Failed to load QR code',
-                  style: TextStyle(color: Colors.red[300], fontSize: 14),
-                ),
+                Text('Failed to load QR',
+                    style: TextStyle(color: Colors.red[300], fontSize: 14, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text(
-                  state.error!,
-                  style: TextStyle(color: Colors.red[200], fontSize: 11),
-                  textAlign: TextAlign.center,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(friendlyError(state.error),
+                    style: TextStyle(color: Colors.red[200], fontSize: 12),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 4),
+                Text(state.error!.toString(),
+                    style: TextStyle(color: Colors.white24, fontSize: 9),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -325,7 +356,6 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
     }
 
     if (state.qrImage != null) {
-      // Decode base64 data URI: strip "data:image/png;base64," prefix
       final raw = state.qrImage!;
       final base64Str = raw.contains(',') ? raw.split(',').last : raw;
       final bytes = base64Decode(base64Str);
@@ -340,67 +370,24 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
           borderRadius: BorderRadius.circular(8),
           child: Image.memory(
             bytes,
-            width: 216,
-            height: 216,
+            width: 196,
+            height: 196,
             fit: BoxFit.contain,
           ),
         ),
-      );
+      ).animate().fadeIn(duration: 300.ms).scale(
+          begin: const Offset(0.95, 0.95), duration: 300.ms);
     }
 
     return Container(
-      width: 240,
-      height: 240,
+      width: 220,
+      height: 220,
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(10),
         borderRadius: BorderRadius.circular(16),
       ),
       child: const Center(
         child: Icon(Icons.qr_code_2, size: 64, color: Colors.white24),
-      ),
-    );
-  }
-
-  Widget _buildStatusText(QrAuthState state) {
-    if (state.status == 'authenticated') {
-      final name = _authedAccountName;
-      return Column(
-        children: [
-          const Icon(Icons.check_circle, color: Color(0xFF00E676), size: 28),
-          const SizedBox(height: 8),
-          Text(
-            name != null ? 'Authenticated as $name' : 'Authenticated!',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF00E676),
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Redirecting...',
-            style: TextStyle(fontSize: 12, color: Colors.white38),
-          ),
-        ],
-      );
-    }
-
-    final (String text, Color color) = switch (state.status) {
-      'ready' || 'polling' => ('Waiting for scan...', Colors.white60),
-      'pending' => ('Waiting for scan...', Colors.white60),
-      'expired' => ('QR code expired', const Color(0xFFFF5252)),
-      'error' => ('Something went wrong', const Color(0xFFFF5252)),
-      _ => ('', Colors.transparent),
-    };
-
-    if (text.isEmpty) return const SizedBox.shrink();
-
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-        color: color,
       ),
     );
   }

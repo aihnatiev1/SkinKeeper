@@ -9,7 +9,6 @@ import '../../widgets/shared_ui.dart';
 import 'steam_auth_service.dart';
 import 'session_provider.dart';
 import 'widgets/qr_auth_tab.dart';
-import 'widgets/credentials_auth_tab.dart';
 import 'widgets/clienttoken_auth_tab.dart';
 import 'widgets/session_status_widget.dart';
 
@@ -37,7 +36,6 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
   @override
   void dispose() {
     _pageCtrl.dispose();
-    // Reset link mode so next session re-auth doesn't think it's linking
     if (widget.linkMode) {
       ref.read(sessionLinkModeProvider.notifier).state = false;
     }
@@ -46,7 +44,6 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Set linkMode in provider so child tabs can access it
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(sessionLinkModeProvider.notifier).state = widget.linkMode;
     });
@@ -61,8 +58,8 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-            // Custom header
+          children: [
+            // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
               child: Row(
@@ -93,15 +90,17 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
                 ],
               ),
             ),
-            // Custom pill tabs
+            // Pill tabs: Token, Browser, QR
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: PillTabSelector(
-                tabs: const ['Steam App', 'Advanced'],
+                tabs: const ['Token', 'Browser', 'QR Code'],
                 selected: _selectedTab,
                 onChanged: (i) {
                   setState(() => _selectedTab = i);
-                  _pageCtrl.animateToPage(i, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+                  _pageCtrl.animateToPage(i,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic);
                 },
               ),
             ),
@@ -111,11 +110,11 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 color: AppTheme.accent.withValues(alpha: 0.08),
-                child: Row(
+                child: const Row(
                   children: [
-                    const Icon(Icons.person_add, color: AppTheme.accent, size: 18),
-                    const SizedBox(width: 10),
-                    const Expanded(
+                    Icon(Icons.person_add, color: AppTheme.accent, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
                       child: Text(
                         'Sign in with a different Steam account to link it.',
                         style: TextStyle(
@@ -153,7 +152,7 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
                 ),
               ).animate().fadeIn(duration: 300.ms),
 
-            // First-time info banner about session lifetime
+            // First-time info banner
             if (_showInfoBanner)
               Container(
                 width: double.infinity,
@@ -208,73 +207,10 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
                 controller: _pageCtrl,
                 onPageChanged: (i) => setState(() => _selectedTab = i),
                 children: [
-                  // Quick Auth — QR code (fastest)
+                  const ClientTokenAuthTab(),
+                  _BrowserTab(linkMode: widget.linkMode),
                   const QrAuthTab(),
-                  // Manual — credentials + token in single scroll
-                  _ManualAuthTab(),
                 ],
-              ),
-            ),
-
-            // Steam browser login button at bottom
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF171A21),
-                      borderRadius: BorderRadius.circular(AppTheme.r16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.06),
-                      ),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          if (widget.linkMode) {
-                            ref.read(authServiceProvider).openSteamLinkLogin(ref);
-                          } else {
-                            ref.read(authServiceProvider).openSteamLogin();
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(AppTheme.r16),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.open_in_browser, size: 20, color: Colors.white),
-                            SizedBox(width: 12),
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Sign in via Steam Browser',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  'No market history access',
-                                  style: TextStyle(
-                                    color: Colors.white54,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               ),
             ),
           ],
@@ -284,39 +220,92 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
   }
 }
 
-/// Manual auth tab — credentials login + client token in one scrollable view
-class _ManualAuthTab extends StatelessWidget {
+/// Browser login tab — opens Steam OpenID in Safari
+class _BrowserTab extends ConsumerWidget {
+  final bool linkMode;
+  const _BrowserTab({required this.linkMode});
+
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // Client token section (fastest — just paste)
-          const ClientTokenAuthTab(),
-          // Divider
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                const Expanded(child: Divider(color: AppTheme.border)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'OR',
-                    style: TextStyle(
-                      color: AppTheme.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const Expanded(child: Divider(color: AppTheme.border)),
-              ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.open_in_browser, size: 64, color: Colors.white24),
+            const SizedBox(height: 20),
+            Text(
+              'Sign in via official Steam website.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.white60, height: 1.5),
             ),
-          ),
-          // Credentials section
-          const CredentialsAuthTab(),
-        ],
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.info_outline, size: 14, color: AppTheme.warning),
+                  const SizedBox(width: 8),
+                  Text(
+                    'No transaction or P&L data available',
+                    style: TextStyle(
+                        color: AppTheme.warning.withValues(alpha: 0.9),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            GestureDetector(
+              onTap: () {
+                if (linkMode) {
+                  ref.read(authServiceProvider).openSteamLinkLogin(ref);
+                } else {
+                  ref.read(authServiceProvider).openSteamLogin();
+                }
+              },
+              child: Container(
+                width: double.infinity,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B2838),
+                  borderRadius: BorderRadius.circular(AppTheme.r16),
+                  border: Border.all(color: const Color(0xFF2A475E)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1B2838).withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.login_rounded, size: 22, color: Colors.white),
+                    SizedBox(width: 12),
+                    Text('Sign in with Steam',
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

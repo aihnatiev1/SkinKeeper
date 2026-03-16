@@ -135,8 +135,11 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
     try {
       final api = _ref.read(apiClientProvider);
       final linkMode = _ref.read(sessionLinkModeProvider);
-      final query = linkMode ? '?linkMode=true' : '';
-      final response = await api.post('/session/qr/start$query');
+      
+      // Correct endpoint based on mode
+      final endpoint = linkMode ? '/session/qr/start?linkMode=true' : '/auth/qr/start';
+      
+      final response = await api.post(endpoint);
       final data = response.data as Map<String, dynamic>;
       state = state.copyWith(
         qrImage: data['qrImage'] as String?,
@@ -161,8 +164,13 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
     try {
       final api = _ref.read(apiClientProvider);
       final linkMode = _ref.read(sessionLinkModeProvider);
-      final query = linkMode ? '?linkMode=true' : '';
-      final response = await api.get('/session/qr/poll/$nonce$query');
+      
+      // Correct endpoint based on mode
+      final endpoint = linkMode 
+          ? '/session/qr/poll/$nonce?linkMode=true' 
+          : '/auth/qr/poll/$nonce';
+          
+      final response = await api.get(endpoint);
       final data = response.data as Map<String, dynamic>;
       final pollStatus = data['status'] as String? ?? 'pending';
 
@@ -332,10 +340,25 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
     try {
       final api = _ref.read(apiClientProvider);
       final linkMode = _ref.read(sessionLinkModeProvider);
-      final query = linkMode ? '?linkMode=true' : '';
-      await api.post('/session/token$query', data: {
+      final hasToken = await api.hasToken();
+
+      // Use /auth/token for initial login (no JWT), /session/token when already authed
+      final endpoint = linkMode
+          ? '/session/token?linkMode=true'
+          : hasToken
+              ? '/session/token'
+              : '/auth/token';
+
+      final response = await api.post(endpoint, data: {
         'steamLoginSecure': steamLoginSecure,
       });
+
+      // Save JWT from initial login
+      if (!hasToken && !linkMode) {
+        final data = response.data as Map<String, dynamic>;
+        final token = data['token'] as String?;
+        if (token != null) await api.saveToken(token);
+      }
 
       state = state.copyWith(
         status: 'authenticated',
