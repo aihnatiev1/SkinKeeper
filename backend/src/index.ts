@@ -22,7 +22,7 @@ import legalRoutes from "./routes/legal.js";
 import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const app = express();
 const PORT = process.env.PORT || 3000;

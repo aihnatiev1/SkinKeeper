@@ -6,6 +6,7 @@ import { pool } from "../db/pool.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import { fetchSteamInventory } from "../services/steam.js";
 import { getCacheStats } from "../utils/cacheRegistry.js";
+import { getInspectCircuitState } from "../services/inspect.js";
 
 const router = Router();
 
@@ -557,7 +558,7 @@ router.get("/cache-stats", requireAdminSecret, (_req: Request, res: Response) =>
 
 // GET /api/admin/job-health — cron job health status
 router.get("/job-health", requireAdminSecret, (_req: Request, res: Response) => {
-  res.json(getJobHealth());
+  res.json({ ...getJobHealth(), inspectCircuit: getInspectCircuitState() });
 });
 
 // POST /api/admin/set-premium/:userId — manually set premium (for testing release builds)

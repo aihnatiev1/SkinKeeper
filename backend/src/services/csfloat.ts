@@ -40,17 +40,18 @@ async function fetchCSFloatItemPrice(
   return null;
 }
 
-// CSFloat has strict rate limits — start slow, adapt
+// CSFloat has strict rate limits — very conservative settings to avoid IP bans.
+// Free tier: ~1000 req/day ≈ 1 req per 90s average
 const csfloatCrawler = new AdaptiveCrawler(
   {
     name: "CSFloat",
-    minIntervalMs: 3000,         // fastest: 1 req / 3s
-    maxIntervalMs: 120_000,      // slowest: 1 req / 2min
-    startIntervalMs: 5000,       // start: 1 req / 5s
-    backoffFactor: 2.5,          // aggressive backoff
-    cooldownFactor: 0.9,         // 10% faster after streak
-    successesBeforeSpeedup: 8,   // 8 successes to speed up
-    refreshAgeMs: 60 * 60_000,   // refresh after 1 hour
+    minIntervalMs: 30_000,       // fastest: 1 req / 30s
+    maxIntervalMs: 3600_000,     // slowest: 1 req / 1 hour
+    startIntervalMs: 90_000,     // start: 1 req / 90s (~960/day budget)
+    backoffFactor: 3,            // triple interval on 429
+    cooldownFactor: 0.95,        // only 5% faster after streak
+    successesBeforeSpeedup: 20,  // need 20 clean successes to speed up
+    refreshAgeMs: 4 * 3600_000,  // refresh after 4 hours
   },
   "csfloat",
   fetchCSFloatItemPrice
@@ -62,7 +63,8 @@ export function startCSFloatCrawler(): void {
     console.warn("[CSFloat] CSFLOAT_API_KEY not set, crawler disabled");
     return;
   }
-  csfloatCrawler.start(8000);
+  // Delay first request by 60s to let other crawlers settle
+  csfloatCrawler.start(60_000);
 }
 
 export function stopCSFloatCrawler(): void {

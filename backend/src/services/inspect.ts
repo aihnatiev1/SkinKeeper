@@ -26,23 +26,72 @@ export interface InspectResult {
 
 export interface InspectFailure {
   failed: true;
-  reason: "no_link" | "rate_limited" | "api_error";
+  reason: "no_link" | "rate_limited" | "api_error" | "circuit_open";
+}
+
+// ─── Circuit Breaker ────────────────────────────────────────────────────
+// After N consecutive 429s, stop all inspect requests for a cooldown period.
+const CIRCUIT_BREAKER = {
+  consecutive429s: 0,
+  threshold: 5,              // open circuit after 5 consecutive 429s
+  cooldownMs: 30 * 60_000,  // 30 min cooldown
+  openUntil: 0,
+};
+
+function isCircuitOpen(): boolean {
+  if (CIRCUIT_BREAKER.openUntil > Date.now()) return true;
+  if (CIRCUIT_BREAKER.openUntil > 0 && Date.now() >= CIRCUIT_BREAKER.openUntil) {
+    // Circuit just closed — reset
+    console.log("[Inspect] Circuit breaker closed, resuming requests");
+    CIRCUIT_BREAKER.openUntil = 0;
+    CIRCUIT_BREAKER.consecutive429s = 0;
+  }
+  return false;
+}
+
+function recordInspect429(): void {
+  CIRCUIT_BREAKER.consecutive429s++;
+  if (CIRCUIT_BREAKER.consecutive429s >= CIRCUIT_BREAKER.threshold) {
+    CIRCUIT_BREAKER.openUntil = Date.now() + CIRCUIT_BREAKER.cooldownMs;
+    console.warn(`[Inspect] Circuit breaker OPEN — ${CIRCUIT_BREAKER.consecutive429s} consecutive 429s. Pausing for ${CIRCUIT_BREAKER.cooldownMs / 60_000}min until ${new Date(CIRCUIT_BREAKER.openUntil).toISOString()}`);
+  }
+}
+
+function recordInspectSuccess(): void {
+  CIRCUIT_BREAKER.consecutive429s = 0;
+}
+
+export function getInspectCircuitState() {
+  return {
+    consecutive429s: CIRCUIT_BREAKER.consecutive429s,
+    isOpen: isCircuitOpen(),
+    openUntil: CIRCUIT_BREAKER.openUntil > 0 ? new Date(CIRCUIT_BREAKER.openUntil).toISOString() : null,
+  };
 }
 
 /**
  * Fetch item details (float, stickers, charms) via CSFloat inspect API.
- * Uses the public endpoint: https://api.csfloat.com/?url=<inspect_link>
+ * Uses API key from env for higher rate limits.
  */
 export async function fetchInspectData(
   inspectLink: string
 ): Promise<InspectResult | InspectFailure> {
+  if (isCircuitOpen()) {
+    return { failed: true, reason: "circuit_open" };
+  }
+
   try {
+    const apiKey = process.env.CSFLOAT_API_KEY;
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+    if (apiKey) {
+      headers["Authorization"] = apiKey;
+    }
+
     const { data } = await axios.get("https://api.csfloat.com/", {
       params: { url: inspectLink },
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; SkinKeeper/1.0)",
-        Accept: "application/json",
-      },
+      headers,
       timeout: 15000,
     });
 
@@ -67,6 +116,8 @@ export async function fetchInspectData(
       image: k.icon_url ?? k.image ?? "",
     }));
 
+    recordInspectSuccess();
+
     return {
       floatValue: info.floatvalue,
       paintSeed: info.paintseed,
@@ -78,7 +129,10 @@ export async function fetchInspectData(
     const status = err.response?.status;
     const body = JSON.stringify(err.response?.data ?? {}).slice(0, 200);
     if (status === 429) {
-      console.warn(`[Inspect] CSFloat rate limited (429)`);
+      recordInspect429();
+      if (!isCircuitOpen()) {
+        console.warn(`[Inspect] CSFloat 429 (${CIRCUIT_BREAKER.consecutive429s}/${CIRCUIT_BREAKER.threshold})`);
+      }
       return { failed: true, reason: "rate_limited" };
     }
     console.warn(`[Inspect] CSFloat failed: status=${status ?? "no-response"} msg=${err.message} body=${body}`);
@@ -91,13 +145,18 @@ export async function fetchInspectData(
  * Returns cached data if inspected within the last 24 hours.
  */
 const INSPECT_CACHE_MS = 24 * 60 * 60 * 1000; // 24h for success
-const INSPECT_FAIL_CACHE_MS = 60 * 60 * 1000;  // 1h for failure (avoid hammering CSFloat)
+const INSPECT_FAIL_CACHE_MS = 2 * 60 * 60 * 1000;  // 2h for failure
 
 export async function inspectItem(
   userId: number,
   assetId: string,
   force = false
 ): Promise<InspectResult | InspectFailure> {
+  // Circuit breaker check — don't even hit DB if circuit is open (unless cached)
+  if (isCircuitOpen() && !force) {
+    return { failed: true, reason: "circuit_open" };
+  }
+
   // Get item with inspect link, verify ownership
   const { rows } = await pool.query(
     `SELECT i.id, i.inspect_link, i.float_value, i.paint_seed, i.paint_index, i.stickers, i.charms, i.inspected_at
@@ -138,7 +197,7 @@ export async function inspectItem(
         charms: parseJSON(item.charms),
       };
     }
-    // Throttle failures in background context: don't re-hit CSFloat within 1h
+    // Throttle failures: don't re-hit CSFloat within 2h
     if (age < INSPECT_FAIL_CACHE_MS && item.float_value == null) {
       return { failed: true, reason: "rate_limited" };
     }
@@ -175,24 +234,35 @@ export async function inspectItem(
 }
 
 /**
- * Batch inspect items with concurrency. CSFloat tolerates ~3 parallel reqs.
+ * Batch inspect items. Respects circuit breaker, concurrency=1 to be gentle.
  */
 export async function batchInspect(
   userId: number,
   assetIds: string[],
-  concurrency = 2
+  concurrency = 1
 ): Promise<Map<string, InspectResult>> {
   const results = new Map<string, InspectResult>();
   let rateLimited = 0;
   let errors = 0;
   let success = 0;
 
+  if (isCircuitOpen()) {
+    console.log(`[BatchInspect] Skipped for user ${userId}: circuit breaker open until ${new Date(CIRCUIT_BREAKER.openUntil).toISOString()}`);
+    return results;
+  }
+
   for (let i = 0; i < assetIds.length; i += concurrency) {
+    // Re-check circuit breaker each batch
+    if (isCircuitOpen()) {
+      console.warn(`[BatchInspect] Circuit opened mid-batch. ${success} ok, ${rateLimited} rate-limited.`);
+      break;
+    }
+
     const batch = assetIds.slice(i, i + concurrency);
     const promises = batch.map(async (assetId) => {
       const result = await inspectItem(userId, assetId);
       if ("failed" in result) {
-        if (result.reason === "rate_limited") rateLimited++;
+        if (result.reason === "rate_limited" || result.reason === "circuit_open") rateLimited++;
         else errors++;
       } else {
         success++;
@@ -201,15 +271,15 @@ export async function batchInspect(
     });
     await Promise.all(promises);
 
-    // If rate limited, stop early — no point hammering CSFloat
-    if (rateLimited > 3) {
-      console.warn(`[BatchInspect] Stopping early: ${rateLimited} rate limits hit. ${success} succeeded, ${errors} errors.`);
+    // Stop early on rate limits
+    if (rateLimited > 2) {
+      console.warn(`[BatchInspect] Stopping early: ${rateLimited} rate limits. ${success} succeeded, ${errors} errors.`);
       break;
     }
 
-    // Longer delay between batches to stay under rate limit
+    // 3s delay between requests to be gentle
     if (i + concurrency < assetIds.length) {
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 3000));
     }
   }
 

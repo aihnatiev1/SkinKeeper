@@ -103,6 +103,7 @@ class AdaptiveCrawler {
   private config: AdaptiveLimiterConfig;
   private currentInterval: number;
   private consecutiveSuccesses = 0;
+  private consecutive429s = 0;
   private pausedUntil = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private source: string;
@@ -190,7 +191,8 @@ class AdaptiveCrawler {
 
       recordSuccess(this.source, 1);
 
-      // Success — track and maybe speed up
+      // Success — reset 429 counter and track speedup
+      this.consecutive429s = 0;
       this.consecutiveSuccesses++;
       if (this.consecutiveSuccesses >= this.config.successesBeforeSpeedup) {
         this.currentInterval = Math.max(
@@ -204,6 +206,9 @@ class AdaptiveCrawler {
       const status = err?.response?.status ?? err?.status;
       if (status === 429 || err?.retryAfter) {
         record429(this.source);
+        this.consecutive429s++;
+        this.consecutiveSuccesses = 0;
+
         const retryAfter = err.retryAfter
           ?? parseInt(err.response?.headers?.["retry-after"] || "0", 10);
 
@@ -212,7 +217,17 @@ class AdaptiveCrawler {
           this.config.maxIntervalMs,
           Math.floor(this.currentInterval * this.config.backoffFactor)
         );
-        this.consecutiveSuccesses = 0;
+
+        // Circuit breaker: after 5 consecutive 429s, pause for 1 hour
+        if (this.consecutive429s >= 5) {
+          const pauseMs = 60 * 60_000; // 1 hour
+          this.pausedUntil = Date.now() + pauseMs;
+          this.currentInterval = this.config.maxIntervalMs;
+          console.warn(`[${this.config.name}] Circuit breaker: ${this.consecutive429s} consecutive 429s — pausing 1h until ${new Date(this.pausedUntil).toISOString()}`);
+          this.timer = setTimeout(() => this.tick(), pauseMs + 1000);
+          updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
+          return;
+        }
 
         if (retryAfter > 0) {
           this.pausedUntil = Date.now() + retryAfter * 1000;
@@ -222,7 +237,7 @@ class AdaptiveCrawler {
           return;
         }
 
-        console.log(`[${this.config.name}] 429 — interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
+        console.log(`[${this.config.name}] 429 (${this.consecutive429s}/5) — interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
       } else {
         recordFailure(this.source, err.message || String(err));
         console.error(`[${this.config.name}] Error:`, err.message || err);
