@@ -96,6 +96,14 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
     };
   }
 
+  String? get _currentPriceHint {
+    if (_selectedItem == null) return null;
+    final inventory = ref.read(inventoryProvider).valueOrNull ?? [];
+    final item = inventory.where((e) => e.marketHashName == _selectedItem).firstOrNull;
+    if (item == null || item.steamPrice == null) return null;
+    return item.steamPrice!.toStringAsFixed(2);
+  }
+
   void _clearItem() {
     setState(() {
       _selectedItem = null;
@@ -292,7 +300,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                         ),
                         const SizedBox(width: 8),
                         _ConditionPill(
-                          label: '% change',
+                          label: 'changes by %',
                           icon: Icons.percent,
                           selected:
                               _condition == AlertCondition.changePct,
@@ -333,7 +341,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                         ),
                         hintText: _condition == AlertCondition.changePct
                             ? '5.0'
-                            : '100.00',
+                            : _currentPriceHint ?? '0.00',
                         hintStyle: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
@@ -361,7 +369,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
 
                     // ── Market source ──
                     const Text(
-                      'From',
+                      'Price source',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -369,61 +377,57 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [AlertSource.any, AlertSource.steam, AlertSource.skinport, AlertSource.csfloat, AlertSource.dmarket].map((s) {
-                          final selected = _source == s;
-                          final (label, color) = switch (s) {
-                            AlertSource.steam =>
-                              ('Steam', AppTheme.steamBlue),
-                            AlertSource.skinport =>
-                              ('Skinport', AppTheme.skinportGreen),
-                            AlertSource.csfloat =>
-                              ('CSFloat', AppTheme.csfloatOrange),
-                            AlertSource.dmarket =>
-                              ('DMarket', AppTheme.dmarketPurple),
-                            AlertSource.any =>
-                              ('Any', AppTheme.primary),
-                          };
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: GestureDetector(
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                setState(() => _source = s);
-                              },
-                              child: AnimatedContainer(
-                                duration: 200.ms,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: selected
-                                      ? color.withValues(alpha: 0.15)
-                                      : AppTheme.surface,
-                                  borderRadius:
-                                      BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: selected
-                                        ? color.withValues(alpha: 0.5)
-                                        : AppTheme.border,
-                                  ),
-                                ),
-                                child: Text(
-                                  label,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: selected
-                                        ? color
-                                        : AppTheme.textMuted,
-                                  ),
-                                ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [AlertSource.any, AlertSource.steam, AlertSource.skinport, AlertSource.csfloat, AlertSource.dmarket].map((s) {
+                        final selected = _source == s;
+                        final (label, color) = switch (s) {
+                          AlertSource.steam =>
+                            ('Steam', AppTheme.steamBlue),
+                          AlertSource.skinport =>
+                            ('Skinport', AppTheme.skinportGreen),
+                          AlertSource.csfloat =>
+                            ('CSFloat', AppTheme.csfloatOrange),
+                          AlertSource.dmarket =>
+                            ('DMarket', AppTheme.dmarketPurple),
+                          AlertSource.any =>
+                            ('Any', AppTheme.primary),
+                        };
+                        return GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _source = s);
+                          },
+                          child: AnimatedContainer(
+                            duration: 200.ms,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? color.withValues(alpha: 0.15)
+                                  : AppTheme.surface,
+                              borderRadius:
+                                  BorderRadius.circular(20),
+                              border: Border.all(
+                                color: selected
+                                    ? color.withValues(alpha: 0.5)
+                                    : AppTheme.border,
                               ),
                             ),
-                          );
-                        }).toList(),
-                      ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: selected
+                                    ? color
+                                    : AppTheme.textMuted,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
 
                     const SizedBox(height: 20),
@@ -443,7 +447,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Advanced',
+                            'More options',
                             style: TextStyle(
                               fontSize: 13,
                               color: AppTheme.textMuted,
@@ -529,7 +533,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
             SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                 child: GestureDetector(
                   onTap: _loading ? null : _submit,
                   child: AnimatedContainer(
@@ -623,7 +627,7 @@ class _SelectedItemChip extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: AppTheme.profit,
               ),
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),

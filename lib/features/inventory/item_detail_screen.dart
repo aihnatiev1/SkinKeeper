@@ -386,7 +386,7 @@ class _PLSection extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text('PROFIT / LOSS', style: AppTheme.label),
+              Text('PROFIT', style: AppTheme.label),
               const Spacer(),
               GestureDetector(
                 onTap: () {
@@ -437,12 +437,12 @@ class _PLSection extends ConsumerWidget {
             _plRow('Holding', '${itemPL.currentHolding} items'),
             Divider(height: 20, color: AppTheme.divider),
             _plRow(
-              'Unrealized P/L',
+              'Unrealized Profit',
               currency.formatWithSign(itemPL.unrealizedProfit),
               valueColor: AppTheme.plColor(itemPL.unrealizedProfitCents),
             ),
             _plRow(
-              'Realized P/L',
+              'Realized Profit',
               currency.formatWithSign(itemPL.realizedProfit),
               valueColor: AppTheme.plColor(itemPL.realizedProfitCents),
             ),
@@ -459,7 +459,7 @@ class _PLSection extends ConsumerWidget {
             const SizedBox(height: AppTheme.s12),
             Center(
               child: Text(
-                'No purchase data yet.\nAdd your buy price to track P/L.',
+                'No purchase data yet.\nAdd what you paid to track profit.',
                 textAlign: TextAlign.center,
                 style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
               ),
@@ -1016,7 +1016,7 @@ class _LogPurchaseButton extends ConsumerWidget {
                 size: 16, color: AppTheme.profit),
             SizedBox(width: 8),
             Text(
-              'Log Purchase',
+              'Add What You Paid',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,

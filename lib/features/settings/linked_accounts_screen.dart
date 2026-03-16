@@ -92,10 +92,10 @@ class _AccountCard extends ConsumerWidget {
 
   String _statusLabel() {
     switch (account.sessionStatus) {
-      case 'valid': return 'Session Active';
-      case 'expiring': return 'Session Expiring';
-      case 'expired': return 'Session Expired';
-      default: return 'No Session';
+      case 'valid': return 'Logged in';
+      case 'expiring': return 'Login expiring soon';
+      case 'expired': return 'Login expired';
+      default: return 'Not connected';
     }
   }
 
@@ -139,7 +139,7 @@ class _AccountCard extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (account.isActive) ...[
+                        if (account.isActive && totalAccounts > 1) ...[
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -190,7 +190,7 @@ class _AccountCard extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.vpn_key, size: 16),
-                  label: Text(account.isActive ? 'Re-auth' : 'Auth'),
+                  label: Text(account.isActive ? 'Reconnect' : 'Sign in'),
                   onPressed: () => context.push('/session'),
                 ),
               ),
@@ -256,7 +256,7 @@ class _LinkAccountButton extends ConsumerWidget {
     final blocked = !isPremium && accountCount >= 2;
 
     return GradientButton(
-      label: 'Link New Account',
+      label: 'Add Steam Account',
       icon: Icons.add,
       height: 48,
       onPressed: () {

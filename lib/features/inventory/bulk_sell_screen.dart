@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
 import '../../widgets/glass_sheet.dart';
@@ -287,7 +288,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                   ),
                   const Expanded(
                     child: Text(
-                      'Bulk Quick Sale',
+                      'Sell Multiple Items',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -371,8 +372,8 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
             ),
           ),
 
-          // Bottom bar
-          if (_hasSelection) _buildBottomBar(),
+          // Bottom bar (always visible so CTA is discoverable)
+          _buildBottomBar(),
         ],
       )),
           ],
@@ -399,7 +400,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
             activeColor: AppTheme.warning,
           ),
           Text(
-            'Select All (${_groups.length} groups)',
+            'Select All',
             style: AppTheme.bodySmall.copyWith(color: AppTheme.textPrimary),
           ),
           const Spacer(),
@@ -417,8 +418,9 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
 
   Widget _buildGroupTile(_ItemGroup group) {
     final s = _sel[group.marketHashName]!;
+    final currency = ref.watch(currencyProvider);
     final priceStr = group.estimatedPrice != null
-        ? '\$${group.estimatedPrice!.toStringAsFixed(2)}'
+        ? currency.format(group.estimatedPrice!)
         : '—';
 
     return Column(
@@ -439,7 +441,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                             height: 22,
                             decoration: BoxDecoration(
                               color: AppTheme.primary,
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(5),
                             ),
                             child: const Icon(Icons.check_rounded,
                                 size: 14, color: Colors.white),
@@ -448,7 +450,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                             width: 22,
                             height: 22,
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(5),
                               border: Border.all(
                                 color: Colors.white.withValues(alpha: 0.2),
                                 width: 1.5,
@@ -610,8 +612,8 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Selected items preview
-          SizedBox(
+          // Selected items preview (only when items selected)
+          if (_hasSelection) SizedBox(
             height: 62,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
@@ -700,7 +702,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
               },
             ),
           ),
-          const SizedBox(height: 10),
+          if (_hasSelection) const SizedBox(height: 10),
           // Summary + sell button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -712,17 +714,20 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Selling $_totalSellCount items',
+                        _hasSelection
+                            ? 'Selling $_totalSellCount items'
+                            : 'Select items to sell',
                         style: AppTheme.title,
                       ),
-                      Text(
-                        '~\$${_totalValue.toStringAsFixed(2)}',
-                        style: AppTheme.mono.copyWith(
-                          fontSize: 13,
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.bold,
+                      if (_hasSelection)
+                        Text(
+                          '~${ref.watch(currencyProvider).format(_totalValue)}',
+                          style: AppTheme.mono.copyWith(
+                            fontSize: 13,
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

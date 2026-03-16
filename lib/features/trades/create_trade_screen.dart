@@ -134,7 +134,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
   }
 
   String get _stepTitle => switch (_step) {
-        0 => 'Choose Friend',
+        0 => 'Send To',
         1 => 'Select Items',
         2 => 'Review Trade',
         _ => '',
@@ -446,7 +446,14 @@ class _FriendPickerStep extends ConsumerWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Text(
+            'Choose who to trade with',
+            style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
           child: TextField(
             controller: searchCtrl,
             decoration: InputDecoration(
@@ -468,13 +475,19 @@ class _FriendPickerStep extends ConsumerWidget {
               valueListenable: searchCtrl,
               builder: (context, _, _) {
                 final query = searchCtrl.text.toLowerCase();
-                final filtered = query.isEmpty
+                var filtered = query.isEmpty
                     ? friends
                     : friends
                         .where((f) =>
                             f.personaName.toLowerCase().contains(query) ||
                             f.steamId.contains(query))
                         .toList();
+                // Sort: online first, then offline
+                filtered = [...filtered]..sort((a, b) {
+                  final aOnline = a.isOnline ? 0 : 1;
+                  final bOnline = b.isOnline ? 0 : 1;
+                  return aOnline.compareTo(bOnline);
+                });
 
                 if (filtered.isEmpty) {
                   return Center(
@@ -549,55 +562,60 @@ class _FriendTile extends StatelessWidget {
       _ => AppTheme.textMuted,
     };
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      decoration: AppTheme.glass(radius: AppTheme.r16),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-        onTap: onTap,
-        leading: Stack(
-          children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: AppTheme.surface,
-              backgroundImage: CachedNetworkImageProvider(friend.avatarUrl),
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: AppTheme.bg, width: 2),
+    final isOffline = !friend.isOnline;
+
+    return Opacity(
+      opacity: isOffline ? 0.5 : 1.0,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+        decoration: AppTheme.glass(radius: AppTheme.r16),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          onTap: onTap,
+          leading: Stack(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: AppTheme.surface,
+                backgroundImage: CachedNetworkImageProvider(friend.avatarUrl),
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: AppTheme.bg, width: 2),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        title: Text(
-          friend.personaName,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: friend.isLookingToTrade
-            ? const Text('Looking to Trade',
-                style: TextStyle(fontSize: 11, color: AppTheme.profit))
-            : Text(
-                friend.isOnline ? 'Online' : 'Offline',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: friend.isOnline
-                      ? AppTheme.accent
-                      : AppTheme.textDisabled,
+            ],
+          ),
+          title: Text(
+            friend.personaName,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: friend.isLookingToTrade
+              ? const Text('Looking to Trade',
+                  style: TextStyle(fontSize: 11, color: AppTheme.profit))
+              : Text(
+                  friend.isOnline ? 'Online' : 'Offline',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: friend.isOnline
+                        ? AppTheme.accent
+                        : AppTheme.textDisabled,
+                  ),
                 ),
-              ),
-        trailing:
-            const Icon(Icons.chevron_right, size: 20, color: AppTheme.textDisabled),
+          trailing:
+              Icon(Icons.chevron_right, size: 20, color: AppTheme.textSecondary),
+        ),
       ),
     );
   }
@@ -688,21 +706,23 @@ class _ItemExchangeStepState extends State<_ItemExchangeStep> {
 
     // If still one side empty, show confirmation dialog
     if (giveEmpty || recvEmpty) {
-      final emptySide = giveEmpty ? 'give' : 'get';
+      final msg = giveEmpty
+          ? "You haven't selected any items to give."
+          : "You haven't selected any items to receive.";
       showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppTheme.surface,
-          title: const Text('One side is empty'),
-          content: Text('You have no items on the $emptySide side. Continue anyway?'),
+          title: Text(giveEmpty ? 'Nothing to give' : 'Nothing requested'),
+          content: Text('$msg Continue anyway?'),
           actions: [
             TextButton(
               onPressed: () => ctx.pop(false),
-              child: const Text('No'),
+              child: const Text('Go Back'),
             ),
             TextButton(
               onPressed: () => ctx.pop(true),
-              child: const Text('Yes'),
+              child: const Text('Continue Anyway'),
             ),
           ],
         ),
@@ -767,13 +787,13 @@ class _ItemExchangeStepState extends State<_ItemExchangeStep> {
               const Spacer(),
               // Item limit counters per side
               _SideLimitBadge(
-                label: 'G',
+                label: 'Give',
                 count: widget.giveAssetIds.length,
                 color: AppTheme.loss,
               ),
               const SizedBox(width: 4),
               _SideLimitBadge(
-                label: 'R',
+                label: 'Get',
                 count: widget.recvAssetIds.length,
                 color: AppTheme.profit,
               ),
@@ -1258,7 +1278,7 @@ class _StickyTradeBarState extends State<_StickyTradeBar> {
                       children: [
                         Text(
                           hasSelection
-                              ? '$total items selected'
+                              ? '$total ${total == 1 ? 'item' : 'items'} selected'
                               : 'No items selected',
                           style: TextStyle(
                             fontSize: 14,

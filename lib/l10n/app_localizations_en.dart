@@ -209,7 +209,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get endDate => 'End Date';
 
   @override
-  String get steamSession => 'Steam Session';
+  String get steamSession => 'Steam Account';
 
   @override
   String get sessionValid => 'Session active';
@@ -412,10 +412,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signOut => 'Sign Out';
 
   @override
-  String get connected => 'Connected';
+  String get connected => 'Logged in';
 
   @override
-  String get notConfigured => 'Not configured';
+  String get notConfigured => 'Not connected';
 
   @override
   String get checking => 'Checking...';

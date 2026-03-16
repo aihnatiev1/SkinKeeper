@@ -180,22 +180,39 @@ export async function inspectItem(
 export async function batchInspect(
   userId: number,
   assetIds: string[],
-  concurrency = 3
+  concurrency = 2
 ): Promise<Map<string, InspectResult>> {
   const results = new Map<string, InspectResult>();
+  let rateLimited = 0;
+  let errors = 0;
+  let success = 0;
 
   for (let i = 0; i < assetIds.length; i += concurrency) {
     const batch = assetIds.slice(i, i + concurrency);
     const promises = batch.map(async (assetId) => {
       const result = await inspectItem(userId, assetId);
-      if (!("failed" in result)) results.set(assetId, result);
+      if ("failed" in result) {
+        if (result.reason === "rate_limited") rateLimited++;
+        else errors++;
+      } else {
+        success++;
+        results.set(assetId, result);
+      }
     });
     await Promise.all(promises);
-    // Small delay between batches to stay under rate limit
+
+    // If rate limited, stop early — no point hammering CSFloat
+    if (rateLimited > 3) {
+      console.warn(`[BatchInspect] Stopping early: ${rateLimited} rate limits hit. ${success} succeeded, ${errors} errors.`);
+      break;
+    }
+
+    // Longer delay between batches to stay under rate limit
     if (i + concurrency < assetIds.length) {
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 800));
     }
   }
 
+  console.log(`[BatchInspect] Done for user ${userId}: ${success} ok, ${rateLimited} rate-limited, ${errors} errors (of ${assetIds.length} total)`);
   return results;
 }

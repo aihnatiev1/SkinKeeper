@@ -242,7 +242,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                           return Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: Text(
-                              '\$${value.toStringAsFixed(value < 10 ? 2 : 0)}',
+                              '\$${value < 10 ? value.toStringAsFixed(2) : NumberFormat('#,##0', 'en_US').format(value.round())}',
                               style: AppTheme.captionSmall.copyWith(
                                 color: AppTheme.textDisabled,
                                 fontFeatures: const [FontFeature.tabularFigures()],

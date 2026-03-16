@@ -130,7 +130,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               const SizedBox(height: 20),
               _buildDebugButtons(),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 80),
           ],
         ),
       )),
@@ -171,17 +171,50 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
       decoration: AppTheme.glass(),
       child: Column(
         children: [
+          // Column headers
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                const Expanded(flex: 3, child: SizedBox.shrink()),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'Free',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'PRO',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           _featureRow('Steam price tracking', true, true),
           _featureRow('Inventory management', true, true),
           _featureRow('Trade history sync', true, true),
           _featureRow('Up to 5 price alerts', true, true),
           _featureRow('Up to 2 Steam accounts', true, true),
           const Divider(height: 24),
-          _featureRow('Multi-source pricing', false, true),
-          _featureRow('Portfolio P/L & charts', false, true),
-          _featureRow('Per-item P/L breakdown', false, true),
+          _featureRow('DMarket, Skinport & more prices', false, true),
+          _featureRow('Portfolio profit & charts', false, true),
+          _featureRow('Per-item profit breakdown', false, true),
           _featureRow('Up to 20 price alerts', false, true),
-          _featureRow('Bulk sell items', false, true),
+          _featureRow('Sell multiple items at once', false, true),
           _featureRow('Unlimited accounts', false, true),
           _featureRow('CSV/Excel export', false, true),
         ],

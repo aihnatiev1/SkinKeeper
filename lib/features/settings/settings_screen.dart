@@ -34,7 +34,7 @@ class SettingsScreen extends ConsumerWidget {
       backgroundColor: AppTheme.bg,
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
           children: [
             // Custom header
             Padding(
@@ -370,13 +370,13 @@ class SettingsScreen extends ConsumerWidget {
 
 class _PushPrefsSection extends ConsumerWidget {
   static const _items = <(PushPref, String, IconData)>[
-    (PushPref.tradeIncoming, 'New incoming trades', Icons.call_received_rounded),
+    (PushPref.tradeIncoming, 'Incoming trade offers', Icons.call_received_rounded),
     (PushPref.tradeAccepted, 'Trade accepted', Icons.check_circle_outline),
     (PushPref.priceAlerts, 'Price alerts', Icons.trending_up_rounded),
     (PushPref.tradeDeclined, 'Trade declined', Icons.cancel_outlined),
     (PushPref.tradeCancelled, 'Trade cancelled', Icons.block_rounded),
-    (PushPref.tradeBanExpired, 'Trade ban expired', Icons.lock_open_rounded),
-    (PushPref.sessionExpired, 'Session expired', Icons.vpn_key_off_rounded),
+    (PushPref.tradeBanExpired, 'Items now tradable', Icons.lock_open_rounded),
+    (PushPref.sessionExpired, 'Steam login expired', Icons.vpn_key_off_rounded),
   ];
 
   @override

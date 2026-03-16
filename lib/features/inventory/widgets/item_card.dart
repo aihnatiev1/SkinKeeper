@@ -129,20 +129,22 @@ class ItemCard extends StatelessWidget {
                         child: Row(
                           children: [
                             if (item.steamPrice != null)
-                              Text(
-                                currency?.format(item.steamPrice!) ??
-                                    '\$${item.steamPrice!.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: compact ? 10 : 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white.withValues(alpha: 0.85),
-                                  letterSpacing: compact ? -0.3 : -0.3,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ],
+                              Flexible(
+                                child: Text(
+                                  currency?.format(item.steamPrice!) ??
+                                      '\$${item.steamPrice!.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: compact ? 10 : 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    letterSpacing: compact ? -0.3 : -0.3,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
                               const SizedBox(width: 6),
@@ -621,6 +623,14 @@ class _FooterSection extends StatelessWidget {
 }
 
 // ─── Wear Pill ───────────────────────────────────────────────────────
+const _wearFullNames = <String, String>{
+  'FN': 'Factory New',
+  'MW': 'Minimal Wear',
+  'FT': 'Field-Tested',
+  'WW': 'Well-Worn',
+  'BS': 'Battle-Scarred',
+};
+
 class _WearPill extends StatelessWidget {
   final String wear;
   final bool compact;
@@ -630,6 +640,7 @@ class _WearPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _wearPillColors[wear] ?? AppTheme.textMuted;
+    final label = compact ? wear : (_wearFullNames[wear] ?? wear);
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 4 : 6,
@@ -644,7 +655,7 @@ class _WearPill extends StatelessWidget {
         ),
       ),
       child: Text(
-        wear,
+        label,
         style: TextStyle(
           fontSize: compact ? 9 : 11,
           fontWeight: FontWeight.w800,

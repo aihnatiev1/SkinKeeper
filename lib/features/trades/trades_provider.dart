@@ -59,7 +59,26 @@ final tradesProvider =
 
 class TradesNotifier extends AutoDisposeAsyncNotifier<TradesState> {
   @override
-  Future<TradesState> build() => _fetchPage(0);
+  Future<TradesState> build() async {
+    final result = await _fetchPage(0);
+
+    // Auto-sync from Steam in background
+    Future.microtask(() async {
+      try {
+        final api = ref.read(apiClientProvider);
+        await api.post('/trades/sync');
+        // Refresh with fresh data from DB
+        final fresh = await _fetchPage(0);
+        if (state.hasValue) {
+          state = AsyncData(fresh);
+        }
+      } catch (_) {
+        // Sync failed silently — user can retry manually
+      }
+    });
+
+    return result;
+  }
 
   Future<TradesState> _fetchPage(int offset, {int? accountId}) async {
     final api = ref.read(apiClientProvider);

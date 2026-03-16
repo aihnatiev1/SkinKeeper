@@ -153,6 +153,30 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionItem>> {
   Future<List<TransactionItem>> build() async {
     ref.watch(accountScopeProvider); // re-fetch when account scope changes
     final items = await _fetch(0);
+
+    // Auto-sync from Steam in background
+    Future.microtask(() async {
+      try {
+        final api = ref.read(apiClientProvider);
+        final scope = ref.read(accountScopeProvider);
+        final params = <String, dynamic>{};
+        if (scope != null) params['accountId'] = scope;
+        await api.post(
+          '/transactions/sync',
+          queryParameters: params.isEmpty ? null : params,
+          receiveTimeout: const Duration(minutes: 10),
+        );
+        // Refresh with fresh data from DB
+        _total = 0;
+        final fresh = await _fetch(0);
+        if (state.hasValue) {
+          state = AsyncData(fresh);
+        }
+      } catch (_) {
+        // Sync failed silently — user can retry manually
+      }
+    });
+
     return items;
   }
 
