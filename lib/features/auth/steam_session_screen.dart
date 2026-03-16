@@ -94,7 +94,7 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: PillTabSelector(
-                tabs: const ['Token', 'Browser', 'QR Code'],
+                tabs: const ['Full Access', 'Browser', 'QR Code'],
                 selected: _selectedTab,
                 onChanged: (i) {
                   setState(() => _selectedTab = i);

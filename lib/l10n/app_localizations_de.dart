@@ -412,10 +412,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get signOut => 'Sign Out';
 
   @override
-  String get connected => 'Connected';
+  String get connected => 'Logged in';
 
   @override
-  String get notConfigured => 'Not configured';
+  String get notConfigured => 'Not connected';
 
   @override
   String get checking => 'Checking...';

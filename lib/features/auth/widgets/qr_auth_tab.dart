@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api_client.dart';
 import '../../../core/theme.dart';
 import '../session_provider.dart';
@@ -86,37 +85,6 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
     });
   }
 
-  Future<void> _openSteamApp(String? qrUrl) async {
-    if (qrUrl == null) return;
-
-    try {
-      final uri = Uri.parse(qrUrl);
-      final segments = uri.pathSegments;
-      if (segments.isEmpty) return;
-
-      final clientId = segments.last;
-
-      // 1. Try direct deep link to confirmation screen
-      final deepLink =
-          Uri.parse('steammobile://open/login/confirm?client_id=$clientId');
-
-      if (await canLaunchUrl(deepLink)) {
-        await launchUrl(deepLink, mode: LaunchMode.externalApplication);
-      } else {
-        // 2. Fallback to opening the URL via steam://openurl/
-        final fallbackLink = Uri.parse('steam://openurl/$qrUrl');
-        if (await canLaunchUrl(fallbackLink)) {
-          await launchUrl(fallbackLink, mode: LaunchMode.externalApplication);
-        } else {
-          // 3. Last resort: open in browser (which should trigger universal link)
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error launching Steam app: $e');
-    }
-  }
-
   @override
   void dispose() {
     _pollTimer?.cancel();
@@ -134,9 +102,21 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
+          // Full access badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00E676).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text('Full access — trades, history & more',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                    color: const Color(0xFF00E676).withValues(alpha: 0.8))),
+          ),
+          const SizedBox(height: 14),
           Text(
-            'One-Tap Login',
+            'Scan with Steam Guard',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -144,52 +124,13 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Approve login directly in Steam app',
+            'Have a friend or second device? Open Steam app\nand scan this code with Steam Guard.',
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontSize: 13, color: Colors.white.withValues(alpha: 0.4)),
+                fontSize: 13, color: Colors.white.withValues(alpha: 0.4),
+                height: 1.4),
           ),
           const SizedBox(height: 20),
-          if (qrState.status != 'authenticated' &&
-              qrState.status != 'expired') ...[
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton.icon(
-                onPressed: qrState.qrUrl == null ? null : () => _openSteamApp(qrState.qrUrl),
-                icon: qrState.qrUrl == null 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
-                  : Image.asset('assets/app_icon.png', width: 24, height: 24, errorBuilder: (_, _, _) => const Icon(Icons.bolt)),
-                label: Text(
-                  qrState.qrUrl == null ? 'Loading session...' : 'Open Steam & Approve',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '— OR —',
-              style: TextStyle(fontSize: 11, color: Colors.white24),
-            ),
-            const SizedBox(height: 16),
-          ],
-          Text(
-            'Scan QR Code',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
           _buildQrArea(qrState),
           const SizedBox(height: 20),
           if (qrState.status == 'authenticated') ...[

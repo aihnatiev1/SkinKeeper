@@ -24,10 +24,10 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
   final _tokenController = TextEditingController();
   StateController<bool>? _sessionLinkModeNotifier;
 
-  // Flow state
-  int _step = 1; // 1 = log in to Steam, 2 = copy token
+  int _step = 1; // 1 = sign in, 2 = grab session
   bool _waitingForReturn = false;
-  String? _autoStatus; // null | 'detecting' | 'found' | 'not_found' | 'not_logged_in'
+  String? _autoStatus;
+  bool _showManualPaste = false;
 
   @override
   void initState() {
@@ -57,16 +57,12 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
     if (state == AppLifecycleState.resumed && _waitingForReturn) {
       _waitingForReturn = false;
       if (_step == 1) {
-        // Returned from Steam login — advance to step 2
         setState(() => _step = 2);
       } else if (_step == 2) {
-        // Returned from token page — try to read clipboard
         _tryAutoFillFromClipboard();
       }
     }
   }
-
-  // ─── Step 1: Open Steam login ─────────────────────────────────────────
 
   Future<void> _openSteamLogin() async {
     setState(() {
@@ -79,8 +75,6 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
     );
   }
 
-  // ─── Step 2: Open token page ──────────────────────────────────────────
-
   Future<void> _openTokenPage() async {
     setState(() {
       _waitingForReturn = true;
@@ -92,27 +86,25 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
     );
   }
 
-  // ─── Auto-fill from clipboard ─────────────────────────────────────────
-
   Future<void> _tryAutoFillFromClipboard() async {
     setState(() => _autoStatus = 'detecting');
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim() ?? '';
       if (text.isEmpty) {
-        setState(() => _autoStatus = 'not_found');
-        return;
-      }
-
-      // Check for logged_in: false
-      if (_isNotLoggedInJson(text)) {
         setState(() {
-          _autoStatus = 'not_logged_in';
-          _step = 1; // Go back to step 1
+          _autoStatus = 'not_found';
+          _showManualPaste = true;
         });
         return;
       }
-
+      if (_isNotLoggedInJson(text)) {
+        setState(() {
+          _autoStatus = 'not_logged_in';
+          _step = 1;
+        });
+        return;
+      }
       final token = _extractToken(text);
       if (token != null) {
         _tokenController.text = token;
@@ -121,10 +113,16 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
         if (!mounted) return;
         _handleSubmit();
       } else {
-        setState(() => _autoStatus = 'not_found');
+        setState(() {
+          _autoStatus = 'not_found';
+          _showManualPaste = true;
+        });
       }
     } catch (_) {
-      setState(() => _autoStatus = 'not_found');
+      setState(() {
+        _autoStatus = 'not_found';
+        _showManualPaste = true;
+      });
     }
   }
 
@@ -137,12 +135,7 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
     }
   }
 
-  /// Extract steamLoginSecure from various clipboard formats:
-  /// 1. JSON from clientjstoken: {"steamid":"765...","token":"eyA..."}
-  /// 2. Raw steamLoginSecure: 765...%7C%7CeyA...
-  /// 3. Raw with pipes: 765...||eyA...
   String? _extractToken(String text) {
-    // Try JSON first (clientjstoken page response)
     try {
       final json = jsonDecode(text) as Map<String, dynamic>;
       final steamId = json['steamid'] as String?;
@@ -153,32 +146,17 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
           token.isNotEmpty) {
         return '$steamId%7C%7C$token';
       }
-    } catch (_) {
-      // Not JSON
-    }
-
-    // Already a steamLoginSecure value
+    } catch (_) {}
     if (text.contains('%7C%7C') && text.length > 50) return text;
     if (text.contains('||') && RegExp(r'^7656\d{13}\|\|').hasMatch(text)) {
       return text.replaceFirst('||', '%7C%7C');
     }
-
     return null;
   }
 
-  // ─── Submit ───────────────────────────────────────────────────────────
-
   Future<void> _handleSubmit() async {
     final raw = _tokenController.text.trim();
-    if (raw.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Paste the token first'),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
-      return;
-    }
+    if (raw.isEmpty) return;
     if (_isNotLoggedInJson(raw)) {
       setState(() {
         _autoStatus = 'not_logged_in';
@@ -191,12 +169,9 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
     await ref.read(clientTokenAuthProvider.notifier).submitToken(token);
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final tokenState = ref.watch(clientTokenAuthProvider);
-    final theme = Theme.of(context);
 
     ref.listen<ClientTokenAuthState>(clientTokenAuthProvider, (prev, next) {
       if (next.status == 'authenticated') {
@@ -205,7 +180,7 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
           SnackBar(
             content: Text(linkMode
                 ? 'New account linked successfully!'
-                : 'Steam session connected'),
+                : 'Connected! Loading your data...'),
             backgroundColor: const Color(0xFF00E676),
           ),
         );
@@ -213,13 +188,12 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
           ref.invalidate(accountsProvider);
           if (context.canPop()) context.pop();
         } else {
-          // Invalidate auth — router will auto-redirect to /portfolio
           ref.invalidate(authStateProvider);
         }
       } else if (next.status == 'error' && next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Token failed: ${friendlyError(next.error)}'),
+            content: Text('Connection failed: ${friendlyError(next.error)}'),
             backgroundColor: AppTheme.loss,
           ),
         );
@@ -231,162 +205,181 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
 
-          // Explanation
-          Text(
-            'For full access to trades, market history and P&L — complete these two steps:',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.white.withValues(alpha: 0.5),
-              height: 1.5,
+          // ── What you'll unlock ─────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This unlocks:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _featureChip('Market History'),
+                    const SizedBox(width: 8),
+                    _featureChip('Trades'),
+                    const SizedBox(width: 8),
+                    _featureChip('Profit & Loss'),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // ── Step 1: Log in to Steam ──────────────────────────────
-          _StepButton(
+          // ── Step 1 ─────────────────────────────────────────────
+          _StepCard(
             step: 1,
             currentStep: _step,
-            label: 'Log in to Steam',
-            subtitle: 'Sign in to your account in the browser',
-            icon: Icons.login_rounded,
+            title: 'Sign in to Steam',
+            description: 'We\'ll open Steam in your browser.\nLog in with your account.',
+            buttonLabel: 'Open Steam',
+            buttonIcon: Icons.open_in_new_rounded,
             onTap: tokenState.loading ? null : _openSteamLogin,
           ),
 
           const SizedBox(height: 12),
 
-          // ── Step 2: Copy token ───────────────────────────────────
-          _StepButton(
+          // ── Step 2 ─────────────────────────────────────────────
+          _StepCard(
             step: 2,
             currentStep: _step,
-            label: 'Copy Token',
-            subtitle: 'We\'ll open a page with your session data — just Select All and Copy',
-            icon: Icons.content_copy_rounded,
+            title: 'Grab your session',
+            description: 'We\'ll open a special page.\nJust tap Select All → Copy and come back.',
+            buttonLabel: 'Open & Copy',
+            buttonIcon: Icons.content_copy_rounded,
             onTap: _step >= 2 && !tokenState.loading ? _openTokenPage : null,
           ),
 
           const SizedBox(height: 16),
 
-          // ── Status messages ──────────────────────────────────────
+          // ── Status ─────────────────────────────────────────────
           if (_autoStatus != null) _buildStatusBanner(),
 
-          // ── Example of what the page looks like ──────────────────
-          if (_step >= 2 && _autoStatus == null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          // ── Manual paste (hidden by default) ───────────────────
+          if (_showManualPaste || _tokenController.text.isNotEmpty) ...[
+            GestureDetector(
+              onTap: () => setState(() => _showManualPaste = !_showManualPaste),
+              child: Row(
                 children: [
+                  Icon(Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: Colors.white.withValues(alpha: 0.3)),
+                  const SizedBox(width: 6),
                   Text(
-                    'You\'ll see text like this — select all and copy it:',
+                    'Having trouble? Paste manually',
                     style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.3),
                       fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '{"logged_in":true,"steamid":"7656...","token":"eyA..."}',
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.45),
-                      ),
                     ),
                   ),
                 ],
               ),
             ),
-
-          const SizedBox(height: 20),
-
-          // ── Manual paste fallback ────────────────────────────────
-          Text(
-            'Or paste manually:',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _tokenController,
-            enabled: !tokenState.loading,
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText: 'Paste JSON or token here...',
-              hintStyle: const TextStyle(color: AppTheme.textDisabled, fontSize: 13),
-              filled: true,
-              fillColor: AppTheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: AppTheme.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: AppTheme.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-              ),
-              contentPadding: const EdgeInsets.all(16),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.content_paste_rounded,
-                    size: 20, color: AppTheme.textMuted),
-                onPressed: () async {
-                  final data = await Clipboard.getData(Clipboard.kTextPlain);
-                  if (data?.text != null) {
-                    _tokenController.text = data!.text!.trim();
-                    setState(() {});
-                  }
-                },
-              ),
-            ),
-            style: const TextStyle(
-              color: Colors.white,
-              fontFamily: 'monospace',
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              onPressed: tokenState.loading ? null : _handleSubmit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: theme.colorScheme.primary.withAlpha(80),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _tokenController,
+              enabled: !tokenState.loading,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Paste here...',
+                hintStyle: const TextStyle(
+                    color: AppTheme.textDisabled, fontSize: 13),
+                filled: true,
+                fillColor: AppTheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppTheme.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppTheme.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.all(14),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.content_paste_rounded,
+                      size: 18, color: AppTheme.textMuted),
+                  onPressed: () async {
+                    final data =
+                        await Clipboard.getData(Clipboard.kTextPlain);
+                    if (data?.text != null) {
+                      _tokenController.text = data!.text!.trim();
+                      setState(() {});
+                    }
+                  },
                 ),
               ),
-              child: tokenState.loading
-                  ? const SizedBox(
-                      width: 22, height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                    )
-                  : const Text('Submit',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              style: const TextStyle(
+                color: Colors.white,
+                fontFamily: 'monospace',
+                fontSize: 12,
+              ),
             ),
-          ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: tokenState.loading ? null : _handleSubmit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor:
+                      AppTheme.primary.withValues(alpha: 0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: tokenState.loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white),
+                      )
+                    : const Text('Connect',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _featureChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.primary.withValues(alpha: 0.9),
+        ),
       ),
     );
   }
@@ -403,19 +396,20 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
         bgColor = AppTheme.primary.withValues(alpha: 0.06);
         textColor = AppTheme.primary;
         icon = Icons.hourglass_empty;
-        message = 'Checking clipboard...';
+        message = 'Reading your clipboard...';
         action = null;
       case 'found':
         bgColor = const Color(0xFF00E676).withValues(alpha: 0.08);
         textColor = const Color(0xFF00E676);
         icon = Icons.check_circle;
-        message = 'Token detected! Connecting...';
+        message = 'Session found! Connecting your account...';
         action = null;
       case 'not_logged_in':
         bgColor = AppTheme.loss.withValues(alpha: 0.08);
         textColor = AppTheme.loss;
         icon = Icons.error_outline;
-        message = 'You\'re not logged into Steam yet. Tap "Log in to Steam" first, sign in, then come back and tap "Copy Token".';
+        message =
+            'Looks like you\'re not signed in to Steam yet. Sign in first, then try again.';
         action = Padding(
           padding: const EdgeInsets.only(top: 10),
           child: GestureDetector(
@@ -424,7 +418,8 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
               _openSteamLogin();
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: const Color(0xFF1B2838),
                 borderRadius: BorderRadius.circular(8),
@@ -433,9 +428,10 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.login_rounded, size: 16, color: Colors.white),
+                  Icon(Icons.open_in_new_rounded,
+                      size: 16, color: Colors.white),
                   SizedBox(width: 8),
-                  Text('Log in to Steam',
+                  Text('Open Steam',
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -445,11 +441,12 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
             ),
           ),
         );
-      default: // not_found
+      default:
         bgColor = AppTheme.warning.withValues(alpha: 0.08);
         textColor = AppTheme.warning;
         icon = Icons.info_outline;
-        message = 'Token not found in clipboard. Paste manually below.';
+        message =
+            'Couldn\'t detect automatically. Try pasting manually below.';
         action = null;
     }
 
@@ -471,7 +468,8 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
                   padding: const EdgeInsets.only(top: 1),
                   child: _autoStatus == 'detecting'
                       ? SizedBox(
-                          width: 14, height: 14,
+                          width: 14,
+                          height: 14,
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: textColor),
                         )
@@ -483,7 +481,7 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
                     message,
                     style: TextStyle(
                       color: textColor,
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w500,
                       height: 1.4,
                     ),
@@ -499,115 +497,158 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
   }
 }
 
-// ─── Step Button Widget ─────────────────────────────────────────────────
+// ─── Step Card ──────────────────────────────────────────────────────────
 
-class _StepButton extends StatelessWidget {
+class _StepCard extends StatelessWidget {
   final int step;
   final int currentStep;
-  final String label;
-  final String subtitle;
-  final IconData icon;
+  final String title;
+  final String description;
+  final String buttonLabel;
+  final IconData buttonIcon;
   final VoidCallback? onTap;
 
-  const _StepButton({
+  const _StepCard({
     required this.step,
     required this.currentStep,
-    required this.label,
-    required this.subtitle,
-    required this.icon,
+    required this.title,
+    required this.description,
+    required this.buttonLabel,
+    required this.buttonIcon,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isActive = step <= currentStep;
     final isDone = step < currentStep;
     final isCurrent = step == currentStep;
+    final isLocked = step > currentStep;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: isCurrent
-              ? const Color(0xFF1B2838)
-              : isDone
-                  ? const Color(0xFF00E676).withValues(alpha: 0.06)
-                  : Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isCurrent
-                ? const Color(0xFF2A475E)
-                : isDone
-                    ? const Color(0xFF00E676).withValues(alpha: 0.2)
-                    : Colors.white.withValues(alpha: 0.06),
-          ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDone
+            ? const Color(0xFF00E676).withValues(alpha: 0.04)
+            : isCurrent
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.white.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDone
+              ? const Color(0xFF00E676).withValues(alpha: 0.15)
+              : isCurrent
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.white.withValues(alpha: 0.04),
         ),
-        child: Row(
-          children: [
-            // Step number / check
-            Container(
-              width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: isDone
-                    ? const Color(0xFF00E676).withValues(alpha: 0.15)
-                    : isCurrent
-                        ? AppTheme.primary.withValues(alpha: 0.15)
-                        : Colors.white.withValues(alpha: 0.05),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: isDone
-                    ? const Icon(Icons.check, size: 16, color: Color(0xFF00E676))
-                    : Text(
-                        '$step',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: isCurrent
-                              ? AppTheme.primary
-                              : Colors.white.withValues(alpha: 0.3),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Step indicator
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: isDone
+                      ? const Color(0xFF00E676).withValues(alpha: 0.15)
+                      : isCurrent
+                          ? AppTheme.primary.withValues(alpha: 0.15)
+                          : Colors.white.withValues(alpha: 0.05),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: isDone
+                      ? const Icon(Icons.check,
+                          size: 16, color: Color(0xFF00E676))
+                      : Text(
+                          '$step',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isCurrent
+                                ? AppTheme.primary
+                                : Colors.white.withValues(alpha: 0.25),
+                          ),
                         ),
-                      ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isLocked
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : Colors.white,
+                ),
+              ),
+              if (isDone) ...[
+                const Spacer(),
+                Text(
+                  'Done',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF00E676).withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (!isDone) ...[
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.only(left: 40),
+              child: Text(
+                description,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isLocked
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : Colors.white.withValues(alpha: 0.5),
+                  height: 1.5,
+                ),
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.3),
+            if (isCurrent) ...[
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.only(left: 40),
+                child: GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B2838),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF2A475E)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(buttonIcon, size: 16, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Text(
+                          buttonLabel,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isActive
-                          ? Colors.white.withValues(alpha: 0.5)
-                          : Colors.white.withValues(alpha: 0.2),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-            Icon(
-              icon,
-              size: 20,
-              color: isActive
-                  ? Colors.white.withValues(alpha: 0.6)
-                  : Colors.white.withValues(alpha: 0.15),
-            ),
+            ],
           ],
-        ),
+        ],
       ),
     );
   }

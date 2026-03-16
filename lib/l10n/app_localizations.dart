@@ -505,7 +505,7 @@ abstract class AppLocalizations {
   /// No description provided for @steamSession.
   ///
   /// In en, this message translates to:
-  /// **'Steam Session'**
+  /// **'Steam Account'**
   String get steamSession;
 
   /// No description provided for @sessionValid.
@@ -901,13 +901,13 @@ abstract class AppLocalizations {
   /// No description provided for @connected.
   ///
   /// In en, this message translates to:
-  /// **'Connected'**
+  /// **'Logged in'**
   String get connected;
 
   /// No description provided for @notConfigured.
   ///
   /// In en, this message translates to:
-  /// **'Not configured'**
+  /// **'Not connected'**
   String get notConfigured;
 
   /// No description provided for @checking.

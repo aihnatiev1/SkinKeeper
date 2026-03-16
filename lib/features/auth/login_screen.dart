@@ -103,7 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: PillTabSelector(
-                  tabs: const ['Token', 'Browser', 'QR Code'],
+                  tabs: const ['Full Access', 'Browser', 'QR Code'],
                   selected: _selectedTab,
                   onChanged: _onTabChanged,
                 ),
@@ -169,97 +169,113 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   // ─── Browser tab ─────────────────────────────────────────────────────
 
   Widget _buildBrowserTab(bool isLoading) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.open_in_browser, size: 64, color: Colors.white24),
-            const SizedBox(height: 20),
-            Text(
-              'Sign in via official Steam website.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Colors.white60, height: 1.5),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          // What you get
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00E676).withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF00E676).withValues(alpha: 0.1)),
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, size: 16,
+                        color: const Color(0xFF00E676).withValues(alpha: 0.7)),
+                    const SizedBox(width: 8),
+                    Text('What you get:',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.6))),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('Inventory tracking, real-time prices, portfolio value',
+                    style: TextStyle(fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.5), height: 1.4)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // What you don't get
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16,
+                        color: AppTheme.warning.withValues(alpha: 0.7)),
+                    const SizedBox(width: 8),
+                    Text('Not included:',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.6))),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('Trades, market history, profit tracking.\nUse "Full Access" tab for these features.',
+                    style: TextStyle(fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.5), height: 1.4)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Quick and safe — uses official Steam OpenID.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12,
+                  color: Colors.white.withValues(alpha: 0.3))),
+          const SizedBox(height: 28),
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 24),
+              child: SizedBox(width: 24, height: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: AppTheme.primary)),
+            ),
+          GestureDetector(
+            onTap: isLoading
+                ? null
+                : () {
+                    HapticFeedback.mediumImpact();
+                    if (widget.isLinking) {
+                      ref.read(authServiceProvider).openSteamLinkLogin(ref);
+                    } else {
+                      _openSteamLogin();
+                    }
+                  },
+            child: Container(
+              width: double.infinity,
+              height: 56,
               decoration: BoxDecoration(
-                color: AppTheme.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+                color: const Color(0xFF1B2838),
+                borderRadius: BorderRadius.circular(AppTheme.r16),
+                border: Border.all(color: const Color(0xFF2A475E)),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.info_outline, size: 14, color: AppTheme.warning),
-                  const SizedBox(width: 8),
-                  Text(
-                    'No transaction or P&L data available',
-                    style: TextStyle(
-                        color: AppTheme.warning.withValues(alpha: 0.9),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600),
-                  ),
+                  Icon(Icons.login_rounded, size: 22, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text('Sign in with Steam',
+                      style: TextStyle(fontSize: 16,
+                          fontWeight: FontWeight.w600, color: Colors.white)),
                 ],
               ),
             ),
-            const SizedBox(height: 32),
-            if (isLoading)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 24),
-                child: SizedBox(
-                  width: 24, height: 24,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2.5, color: AppTheme.primary),
-                ),
-              ),
-            GestureDetector(
-              onTap: isLoading
-                  ? null
-                  : () {
-                      HapticFeedback.mediumImpact();
-                      if (widget.isLinking) {
-                        ref.read(authServiceProvider).openSteamLinkLogin(ref);
-                      } else {
-                        _openSteamLogin();
-                      }
-                    },
-              child: Container(
-                width: double.infinity,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1B2838),
-                  borderRadius: BorderRadius.circular(AppTheme.r16),
-                  border: Border.all(color: const Color(0xFF2A475E)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1B2838).withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.login_rounded, size: 22, color: Colors.white),
-                    SizedBox(width: 12),
-                    Text('Sign in with Steam',
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

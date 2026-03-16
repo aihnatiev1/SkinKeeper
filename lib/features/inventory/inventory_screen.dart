@@ -185,7 +185,7 @@ class _InventoryStatsAndFilters extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
               _categoryChip(ref, InventoryCategory.all, 'All', Icons.grid_view_rounded),
-              _categoryChip(ref, InventoryCategory.knives, 'Knives', Icons.colorize_rounded),
+              _categoryChip(ref, InventoryCategory.knives, 'Knives & Gloves', Icons.colorize_rounded),
               _categoryChip(ref, InventoryCategory.weapons, 'Weapons', Icons.gps_fixed_rounded),
               _categoryChip(ref, InventoryCategory.stickers, 'Stickers', Icons.sell_rounded),
               _categoryChip(ref, InventoryCategory.containers, 'Containers', Icons.inventory_2_rounded),

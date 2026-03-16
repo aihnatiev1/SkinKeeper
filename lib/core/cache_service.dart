@@ -116,12 +116,12 @@ class CacheService {
   /// Human-readable label: "Just now", "12m ago", "3h ago", "2d ago", etc.
   static String get lastSyncLabel {
     final ls = lastSync;
-    if (ls == null) return 'Never synced';
+    if (ls == null) return 'Not synced yet';
     final diff = DateTime.now().difference(ls);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
+    if (diff.inMinutes < 1) return 'Updated just now';
+    if (diff.inMinutes < 60) return 'Updated ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Updated ${diff.inHours}h ago';
+    return 'Updated ${diff.inDays}d ago';
   }
 
   // ─── Flags ──────────────────────────────────────────────────────

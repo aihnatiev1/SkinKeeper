@@ -26,7 +26,7 @@ class CurrencyInfo {
     return '$prefix$symbol${_groupThousands(converted.abs().toStringAsFixed(decimals))}';
   }
 
-  /// Insert thin space (\u2009) as thousands separator: 15860.47 → 15 860.47
+  /// Insert comma as thousands separator: 15860.47 → 15,860.47
   static String _groupThousands(String formatted) {
     final parts = formatted.split('.');
     final intPart = parts[0];
@@ -35,7 +35,7 @@ class CurrencyInfo {
     if (start == 1) buf.write('-');
     final digits = intPart.substring(start);
     for (var i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) buf.write('\u2009');
+      if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
       buf.write(digits[i]);
     }
     if (parts.length > 1) {

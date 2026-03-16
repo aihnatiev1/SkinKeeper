@@ -24,7 +24,7 @@ interface PendingSession {
   cookies?: SteamSession;
 }
 
-const PENDING_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 export class SteamSessionService {
   private static pendingSessions = new Map<string, PendingSession>();
