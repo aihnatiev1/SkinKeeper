@@ -40,15 +40,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final auth = ref.read(authStateProvider);
-      final session = ref.read(sessionStatusProvider);
 
       final location = state.matchedLocation;
       final isOnLoading = location == '/loading';
       final isOnLogin = location == '/login';
       final isOnSession = location == '/session';
 
-      // 1. Якщо хоча б один критичний провайдер вантажиться - йдемо на лоадер
-      if (auth.isLoading || session.isLoading) {
+      // 1. Якщо auth вантажиться — чекаємо (session не блокує)
+      if (auth.isLoading) {
         if (isOnLoading || isOnLogin || isOnSession) return null;
         return '/loading';
       }

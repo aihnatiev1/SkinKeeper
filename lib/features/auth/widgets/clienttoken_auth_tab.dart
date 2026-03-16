@@ -201,13 +201,6 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
     ref.listen<ClientTokenAuthState>(clientTokenAuthProvider, (prev, next) {
       if (next.status == 'authenticated') {
         final linkMode = ref.read(sessionLinkModeProvider);
-        if (linkMode) {
-          ref.invalidate(accountsProvider);
-        } else {
-          // Invalidate auth state so router picks up the new user
-          ref.invalidate(authStateProvider);
-          ref.read(sessionStatusProvider.notifier).refresh();
-        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(linkMode
@@ -216,10 +209,12 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
             backgroundColor: const Color(0xFF00E676),
           ),
         );
-        if (GoRouter.of(context).canPop()) {
-          context.pop();
+        if (linkMode) {
+          ref.invalidate(accountsProvider);
+          if (context.canPop()) context.pop();
         } else {
-          context.go('/portfolio');
+          // Invalidate auth — router will auto-redirect to /portfolio
+          ref.invalidate(authStateProvider);
         }
       } else if (next.status == 'error' && next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
