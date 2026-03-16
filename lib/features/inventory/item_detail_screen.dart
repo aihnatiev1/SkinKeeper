@@ -290,13 +290,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 300.ms),
 
-            const SizedBox(height: AppTheme.s10),
-
-            // ── Log Purchase shortcut ──
-            _LogPurchaseButton(item: item)
-                .animate()
-                .fadeIn(duration: 400.ms, delay: 350.ms),
-
             const SizedBox(height: AppTheme.s16),
 
             // ── Cross-market prices ──
