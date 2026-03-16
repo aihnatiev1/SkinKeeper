@@ -27,14 +27,14 @@ export interface InspectResult {
 
 export interface InspectFailure {
   failed: true;
-  reason: "no_link" | "rate_limited" | "api_error" | "circuit_open" | "not_listed";
+  reason: "no_link" | "rate_limited" | "api_error" | "circuit_open";
 }
 
 // ─── Circuit Breaker ────────────────────────────────────────────────────
 const CIRCUIT_BREAKER = {
   consecutive429s: 0,
-  threshold: 5,
-  cooldownMs: 30 * 60_000,
+  threshold: 3,
+  cooldownMs: 60 * 60_000,  // 1 hour cooldown
   openUntil: 0,
 };
 
@@ -69,37 +69,30 @@ export function getInspectCircuitState() {
 }
 
 /**
- * Fetch float/stickers/charms via CSFloat Listings API (through proxy).
- * The old api.csfloat.com inspect endpoint blocks bots globally,
- * so we use the listings API which returns full item data including float.
+ * Fetch item details (float, stickers, charms) via CSFloat inspect API.
+ * Uses the user's exact inspect link — returns the actual item's data.
+ * Routes through proxy if available.
  *
- * Note: this returns data from a listing of the same skin type, not the user's exact item.
- * Float value from listing is representative for price reference but not the user's exact float.
- * For user's exact float, we'd need the inspect API to be unblocked.
+ * NOTE: api.csfloat.com currently blocks bots globally.
+ * The circuit breaker will quickly open and stop wasting requests.
+ * When CSFloat lifts the ban, this will auto-recover.
  */
 export async function fetchInspectData(
-  inspectLink: string,
-  marketHashName?: string
+  inspectLink: string
 ): Promise<InspectResult | InspectFailure> {
   if (isCircuitOpen()) {
     return { failed: true, reason: "circuit_open" };
   }
 
-  const apiKey = process.env.CSFLOAT_API_KEY;
-  if (!apiKey || !marketHashName) {
-    return { failed: true, reason: "not_listed" };
-  }
-
-  const agent = getCSFloatProxyAgent();
-
   try {
+    const apiKey = process.env.CSFLOAT_API_KEY;
+    const agent = getCSFloatProxyAgent();
     const config: any = {
-      params: {
-        market_hash_name: marketHashName,
-        sort_by: "lowest_price",
-        limit: 5,
+      params: { url: inspectLink },
+      headers: {
+        Accept: "application/json",
+        ...(apiKey ? { Authorization: apiKey } : {}),
       },
-      headers: { Authorization: apiKey },
       timeout: 15000,
     };
     if (agent) {
@@ -107,28 +100,15 @@ export async function fetchInspectData(
       config.proxy = false;
     }
 
-    const { data } = await axios.get("https://csfloat.com/api/v1/listings", config);
+    const { data } = await axios.get("https://api.csfloat.com/", config);
 
-    const listings = data?.data;
-    if (!listings || listings.length === 0) {
-      return { failed: true, reason: "not_listed" };
+    const info = data.iteminfo;
+    if (!info) {
+      console.warn("[Inspect] CSFloat returned no iteminfo:", JSON.stringify(data).slice(0, 200));
+      return { failed: true, reason: "api_error" };
     }
 
-    // Try to match by asset_id from inspect link
-    const assetMatch = inspectLink.match(/A(\d+)D/);
-    const targetAssetId = assetMatch?.[1];
-
-    let item = listings[0]?.item;
-    if (targetAssetId) {
-      const exactMatch = listings.find((l: any) => l.item?.asset_id === targetAssetId);
-      if (exactMatch) item = exactMatch.item;
-    }
-
-    if (!item || item.float_value == null) {
-      return { failed: true, reason: "not_listed" };
-    }
-
-    const stickers: StickerInfo[] = (item.stickers ?? []).map((s: any) => ({
+    const stickers: StickerInfo[] = (info.stickers ?? []).map((s: any) => ({
       slot: s.slot,
       sticker_id: s.stickerId ?? s.sticker_id,
       name: s.name ?? "",
@@ -136,7 +116,7 @@ export async function fetchInspectData(
       image: s.icon_url ?? s.image ?? "",
     }));
 
-    const charms: CharmInfo[] = (item.keychains ?? []).map((k: any) => ({
+    const charms: CharmInfo[] = (info.keychains ?? []).map((k: any) => ({
       slot: k.slot ?? 0,
       pattern: k.pattern ?? 0,
       name: k.name ?? "",
@@ -144,11 +124,12 @@ export async function fetchInspectData(
     }));
 
     recordInspectSuccess();
+    console.log(`[Inspect] Success: float=${info.floatvalue} stickers=${stickers.length} charms=${charms.length}`);
 
     return {
-      floatValue: item.float_value,
-      paintSeed: item.paint_seed ?? 0,
-      paintIndex: item.paint_index ?? 0,
+      floatValue: info.floatvalue,
+      paintSeed: info.paintseed,
+      paintIndex: info.paintindex,
       stickers,
       charms,
     };
@@ -157,11 +138,12 @@ export async function fetchInspectData(
     if (status === 429) {
       recordInspect429();
       if (!isCircuitOpen()) {
-        console.warn(`[Inspect] CSFloat listings 429 (${CIRCUIT_BREAKER.consecutive429s}/${CIRCUIT_BREAKER.threshold})`);
+        console.warn(`[Inspect] CSFloat 429 (${CIRCUIT_BREAKER.consecutive429s}/${CIRCUIT_BREAKER.threshold})`);
       }
       return { failed: true, reason: "rate_limited" };
     }
-    console.warn(`[Inspect] CSFloat listings failed: status=${status ?? "no-response"} msg=${err.message}`);
+    const body = JSON.stringify(err.response?.data ?? {}).slice(0, 200);
+    console.warn(`[Inspect] CSFloat failed: status=${status ?? "no-response"} body=${body}`);
     return { failed: true, reason: "api_error" };
   }
 }
@@ -182,7 +164,7 @@ export async function inspectItem(
   }
 
   const { rows } = await pool.query(
-    `SELECT i.id, i.inspect_link, i.market_hash_name, i.float_value, i.paint_seed, i.paint_index, i.stickers, i.charms, i.inspected_at
+    `SELECT i.id, i.inspect_link, i.float_value, i.paint_seed, i.paint_index, i.stickers, i.charms, i.inspected_at
      FROM inventory_items i
      JOIN steam_accounts sa ON i.steam_account_id = sa.id
      WHERE sa.user_id = $1 AND i.asset_id = $2`,
@@ -219,7 +201,7 @@ export async function inspectItem(
     }
   }
 
-  const result = await fetchInspectData(item.inspect_link, item.market_hash_name);
+  const result = await fetchInspectData(item.inspect_link);
 
   if ("failed" in result) {
     await pool.query(
@@ -289,9 +271,8 @@ export async function batchInspect(
       break;
     }
 
-    // 5s delay — listings API is shared with price crawler
     if (i + concurrency < assetIds.length) {
-      await new Promise((r) => setTimeout(r, 5000));
+      await new Promise((r) => setTimeout(r, 3000));
     }
   }
 
