@@ -186,7 +186,7 @@ export async function sellItem(
       `contextid=2`,
       `assetid=${assetId}`,
       `amount=1`,
-      `price=${walletPriceCents}`,
+      `price=${buyerPays}`,
     ].join("&");
 
     const { data } = await axios.post(
