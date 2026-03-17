@@ -121,7 +121,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     if (nonce) {
       console.log(`[Auth] Storing token for nonce: ${nonce.substring(0, 8)}...`);
       pendingLogins.set(nonce, { token, createdAt: Date.now() });
-      res.send(`<html><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="font-size:28px">✅</h2><h2>Login successful</h2><p id="msg" style="color:#999;margin-top:12px">This window will close automatically...</p></div><script>window.close();setTimeout(function(){document.getElementById('msg').textContent='You can close this window.'},500);</script></body></html>`);
+      res.send(`<html><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="font-size:28px">✅</h2><h2>Login successful!</h2><p style="color:#999;margin-top:12px">Go back to SkinKeeper</p></div></body></html>`);
       return;
     }
 
