@@ -13,6 +13,7 @@ import '../portfolio/portfolio_provider.dart';
 import '../portfolio/portfolio_pl_provider.dart';
 import '../trades/trades_provider.dart';
 import '../transactions/transactions_provider.dart';
+import '../settings/accounts_provider.dart';
 import '../../models/user.dart';
 
 // --- Login Screen -------------------------------------------------------
@@ -123,6 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.invalidate(portfolioPLProvider);
     ref.invalidate(tradesProvider);
     ref.invalidate(transactionsProvider);
+    ref.invalidate(accountsProvider);
 
     // Background inventory sync from Steam
     Future.microtask(() async {
