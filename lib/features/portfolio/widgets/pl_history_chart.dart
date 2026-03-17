@@ -43,7 +43,7 @@ class PLHistoryChart extends ConsumerWidget {
           Row(
             children: [
               Text(
-                'P/L History',
+                'Profit History',
                 style: AppTheme.title.copyWith(fontSize: 14),
               ),
               const Spacer(),

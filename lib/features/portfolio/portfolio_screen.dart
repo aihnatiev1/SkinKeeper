@@ -1091,7 +1091,7 @@ class _PLSummaryCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('DETAILED PROFIT / LOSS', style: TextStyle(
+          const Text('DETAILED PROFIT', style: TextStyle(
             fontSize: 10, fontWeight: FontWeight.w600,
             letterSpacing: 1.5, color: AppTheme.textDisabled,
           )),

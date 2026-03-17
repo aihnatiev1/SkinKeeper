@@ -189,6 +189,8 @@ class _ClientTokenAuthTabState extends ConsumerState<ClientTokenAuthTab>
           if (context.canPop()) context.pop();
         } else {
           ref.invalidate(authStateProvider);
+          // Navigate back to where user came from after successful re-auth
+          if (context.canPop()) context.pop();
         }
       } else if (next.status == 'error' && next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(

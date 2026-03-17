@@ -51,7 +51,7 @@ class ItemPLList extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'No transactions found.\nSync your Steam Market history\nor add them manually.',
+              'No purchases yet.\nAdd what you paid to track profit.',
               textAlign: TextAlign.center,
               style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
             ),
@@ -73,7 +73,7 @@ class ItemPLList extends ConsumerWidget {
                         children: [
                           Icon(Icons.add_rounded, size: 16, color: AppTheme.primary),
                           const SizedBox(width: 6),
-                          Text('Add transaction',
+                          Text('Add Purchase',
                               style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
