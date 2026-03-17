@@ -16,7 +16,9 @@ import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_sheet.dart';
 import '../../widgets/shared_ui.dart';
+import '../auth/session_gate.dart';
 import '../auth/session_provider.dart';
+import '../inventory/inventory_provider.dart';
 import '../purchases/iap_service.dart';
 import 'transactions_provider.dart';
 
@@ -31,6 +33,7 @@ class TransactionsScreen extends ConsumerWidget {
     final itemFilter = ref.watch(txItemFilterProvider);
     final sessionAsync = ref.watch(sessionStatusProvider);
     final needsReauth = sessionAsync.valueOrNull?.needsReauth ?? false;
+    final hasSession = ref.watch(hasSessionProvider);
     final l10n = AppLocalizations.of(context);
 
     return Scaffold(
@@ -97,34 +100,85 @@ class TransactionsScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            // Session reauth banner
-            if (needsReauth)
+            // Session banner
+            if (needsReauth && hasSession)
               GestureDetector(
-                onTap: () => context.push('/session'),
+                onTap: () => requireSession(context, ref),
                 child: Container(
                   width: double.infinity,
                   margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: AppTheme.loss.withValues(alpha: 0.15),
+                    color: AppTheme.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.loss.withValues(alpha: 0.3)),
+                    border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Icon(Icons.warning_amber_rounded, color: AppTheme.loss, size: 20),
-                      const SizedBox(width: 10),
+                      Icon(Icons.lock_outline_rounded, color: AppTheme.warning, size: 20),
+                      SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          l10n.sessionExpiredReauth,
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                          'Extra verification needed for history sync',
+                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
+                      Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
                     ],
                   ),
                 ),
               ),
+            // Locked state — no session
+            if (!hasSession) ...[
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppTheme.primary.withValues(alpha: 0.15),
+                            width: 1,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.lock_outline_rounded,
+                          size: 36,
+                          color: AppTheme.primary.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Enable history sync',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Steam requires an extra verification step\nto access your market history',
+                        style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      GradientButton(
+                        label: 'Enable History',
+                        icon: Icons.lock_open_rounded,
+                        expanded: false,
+                        onPressed: () => requireSession(context, ref),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.95, 0.95)),
+              ),
+            ] else ...[
             // Body content
             // Stats card
             stats.when(
@@ -281,6 +335,7 @@ class TransactionsScreen extends ConsumerWidget {
                 ),
               ),
             ),
+          ], // end else (has session content)
           ],
         ),
       ),
