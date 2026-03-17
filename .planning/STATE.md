@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Auth Flow Redesign
 status: executing
-stopped_at: "Completed 27-01-PLAN.md (backend session-optional hardening)"
-last_updated: "2026-03-17T18:40:00Z"
-last_activity: "2026-03-17 -- Phase 27 Plan 01 executed: private inventory detection, hasSession metadata, nonce TTL cleanup"
+stopped_at: "Completed 28-01-PLAN.md (session gate infrastructure)"
+last_updated: "2026-03-17T19:16:01Z"
+last_activity: "2026-03-17 -- Phase 28 Plan 01 executed: requireSession() gate, SessionGateScreen, ConnectProgressOverlay"
 progress:
   total_phases: 13
   completed_phases: 5
   total_plans: 30
-  completed_plans: 17
-  percent: 57
+  completed_plans: 18
+  percent: 60
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 27 (Tier 1 — Zero Friction Entry) — Plan 01 + 02 complete
-Next: Phase 27 Plan 03 or Phase 28 (Intent-Based Session Unlock)
-Status: Backend hardened for sessionless access, login screen redesigned
-Last activity: 2026-03-17 -- Completed 27-01 (backend private inventory detection + nonce TTL)
+Phase: 28 (Tier 2 — Intent-Based Session Unlock) — Plan 01 complete
+Next: Phase 28 Plan 02 (wire requireSession into sell/trade actions)
+Status: Session gate infrastructure built (requireSession, gate screen, progress overlay)
+Last activity: 2026-03-17 -- Completed 28-01 (session gate infrastructure)
 
-Progress: [██████████] 100%
+Progress: [████████████] 60%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [██████████] 100%
 | 20 | 01 | ~480s | 9 | 11 |
 | 27 | 01 | 268s | 2 | 4 |
 | 27 | 02 | 147s | 2 | 3 |
+| 28 | 01 | 197s | 2 | 3 |
 
 ## Accumulated Context
 
@@ -116,6 +117,9 @@ Progress: [██████████] 100%
 - [27-02]: Polling is fallback only — deep link handler in main.dart remains primary auth path
 - [27-02]: isLinking mode preserved for account linking flow (uses openSteamLinkLogin, no polling)
 - [27-02]: hasSessionProvider checks valid/expiring status for future sell/trade UI gating
+- [28-01]: Duplicated _StepCard and token helpers from ClientTokenAuthTab (private classes cannot be shared)
+- [28-01]: QR fallback uses ExpansionTile with polling timer scoped to expanded state
+- [28-01]: ConnectProgressOverlay is a regular widget (not OverlayEntry) shown as Scaffold body swap
 
 ### Pending Todos
 
@@ -128,5 +132,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-17
-Stopped at: "Completed 27-01-PLAN.md (backend session-optional hardening)"
+Stopped at: "Completed 28-01-PLAN.md (session gate infrastructure)"
 Resume file: None
