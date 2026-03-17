@@ -52,6 +52,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
     final l10n = AppLocalizations.of(context);
     final sessionAsync = ref.watch(sessionStatusProvider);
     final needsReauth = sessionAsync.valueOrNull?.needsReauth ?? false;
+    final hasSession = ref.watch(hasSessionProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -83,27 +84,27 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                 ),
                 if (needsReauth)
                   GestureDetector(
-                    onTap: () => context.push('/session'),
+                    onTap: () => requireSession(context, ref),
                     child: Container(
                       width: double.infinity,
                       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: AppTheme.loss.withValues(alpha: 0.15),
+                        color: AppTheme.warning.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.loss.withValues(alpha: 0.3)),
+                        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
                       ),
-                      child: Row(
+                      child: const Row(
                         children: [
-                          const Icon(Icons.warning_amber_rounded, color: AppTheme.loss, size: 20),
-                          const SizedBox(width: 10),
+                          Icon(Icons.lock_outline_rounded, color: AppTheme.warning, size: 20),
+                          SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              l10n.sessionExpiredReauth,
-                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                              'Trading locked — tap to enable',
+                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                             ),
                           ),
-                          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
+                          Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
                         ],
                       ),
                     ),
@@ -132,8 +133,8 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
               ],
             ),
 
-            // ── FAB over content ──
-            Positioned(
+            // ── FAB over content (hidden when no session — locked state shows Connect CTA) ──
+            if (hasSession) Positioned(
               bottom: 16,
               left: 0,
               right: 0,
