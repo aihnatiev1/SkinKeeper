@@ -478,8 +478,8 @@ class _TableContentState extends ConsumerState<_TableContent> {
   // ── Sticky row ─────────────────────────────────────────────────────────────
   Widget _stickyRow(ItemPL item) {
     final subtitle = item.currentHolding > 0
-        ? '${item.currentHolding} in stock'
-        : 'sold all';
+        ? '${item.currentHolding} held'
+        : 'all sold';
     return Container(
       height: _kRowH,
       padding: const EdgeInsets.only(left: 8, right: 6),
@@ -549,7 +549,7 @@ class _TableContentState extends ConsumerState<_TableContent> {
             decoration: _border(),
             child: Row(children: [
               _hdrCell('QTY', _kColQty, PlSortCol.qty, sort, tap),
-              _hdrCell('BUY', _kColBuy, PlSortCol.buyPrice, sort, tap),
+              _hdrCell('COST', _kColBuy, PlSortCol.buyPrice, sort, tap),
               _hdrCell('CURRENT', _kColCur, PlSortCol.currentPrice, sort, tap),
               _hdrCell('INVESTED', _kColInv, PlSortCol.invested, sort, tap),
               _hdrCell('WORTH', _kColWorth, PlSortCol.worth, sort, tap),
