@@ -1,7 +1,15 @@
 import axios from "axios";
 import { steamRateLimit } from "./prices.js";
+import {
+  initProxyPool,
+  getAvailableSlot,
+  getSlotConfig,
+  recordSlot429,
+  recordSlotSuccess,
+} from "./proxyPool.js";
 
 const STEAM_API_KEY = () => process.env.STEAM_API_KEY!;
+const STEAM_DOMAIN = "steamcommunity.com";
 
 interface SteamPlayerSummary {
   steamid: string;
@@ -181,6 +189,8 @@ export async function fetchSteamInventory(
   steamId: string,
   cookies?: { steamLoginSecure: string; sessionId: string }
 ): Promise<ParsedInventoryItem[]> {
+  initProxyPool();
+
   const headers: Record<string, string> = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
   };
@@ -209,7 +219,7 @@ export async function fetchSteamInventory(
   return allItems;
 }
 
-/** Fetch and parse a single inventory context (paginated). */
+/** Fetch and parse a single inventory context (paginated). Uses proxy rotation on 429. */
 async function fetchInventoryContext(
   steamId: string,
   contextId: string,
@@ -227,10 +237,17 @@ async function fetchInventoryContext(
     for (let retry = 0; retry < 3; retry++) {
       try {
         await steamRateLimit();
+
+        // Use proxy pool for inventory requests — rotate on 429
+        const slot = getAvailableSlot(STEAM_DOMAIN);
+        const slotConfig = slot ? getSlotConfig(slot.index) : {};
+
         const resp = await axios.get(
           `https://steamcommunity.com/inventory/${steamId}/730/${contextId}`,
-          { params, timeout: 15000, headers }
+          { params, timeout: 15000, headers, ...slotConfig }
         );
+
+        if (slot) recordSlotSuccess(slot.index, STEAM_DOMAIN);
         data = resp.data;
         break;
       } catch (err: any) {
@@ -238,10 +255,18 @@ async function fetchInventoryContext(
           // Steam returns 403 when inventory is set to private
           throw new Error('INVENTORY_PRIVATE');
         }
-        if (err.response?.status === 429 && retry < 2) {
-          console.log(`[Steam] Rate limited ctx${contextId}, waiting ${(retry + 1) * 10}s...`);
-          await new Promise((r) => setTimeout(r, (retry + 1) * 10000));
-          continue;
+        if (err.response?.status === 429) {
+          const slot = getAvailableSlot(STEAM_DOMAIN);
+          if (slot) {
+            const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
+            recordSlot429(slot.index, STEAM_DOMAIN, retryAfter);
+          }
+          if (retry < 2) {
+            // Short wait then retry — proxy pool will use a different slot
+            console.log(`[Steam] Rate limited ctx${contextId} via proxy pool, retrying...`);
+            await new Promise((r) => setTimeout(r, 3000));
+            continue;
+          }
         }
         console.log(`[Steam] Error ctx${contextId} page ${page}, returning ${items.length} items`);
         return items;

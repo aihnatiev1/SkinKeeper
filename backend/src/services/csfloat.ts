@@ -1,6 +1,15 @@
 import axios from "axios";
-import { HttpsProxyAgent } from "https-proxy-agent";
 import { AdaptiveCrawler, savePrices } from "./prices.js";
+import {
+  initProxyPool,
+  getSlotCount,
+  getSlot,
+  getSlotConfig,
+  isSlotAvailable,
+  recordSlot429,
+  recordSlotSuccess,
+  getAvailableSlot,
+} from "./proxyPool.js";
 
 interface CSFloatListing {
   id: string;
@@ -11,35 +20,25 @@ interface CSFloatListing {
   };
 }
 
-// Reusable proxy agents (created once, reused across requests)
-let primaryAgent: HttpsProxyAgent<string> | null = null;
-let fallbackAgent: HttpsProxyAgent<string> | null = null;
-
-export function getCSFloatProxyAgent(): HttpsProxyAgent<string> | null {
-  const proxyUrl = process.env.CSFLOAT_PROXY_URL;
-  if (!proxyUrl) return null;
-  if (!primaryAgent) primaryAgent = new HttpsProxyAgent(proxyUrl);
-  return primaryAgent;
-}
-
-function getCSFloatFallbackAgent(): HttpsProxyAgent<string> | null {
-  const proxyUrl = process.env.CSFLOAT_PROXY_FALLBACK;
-  if (!proxyUrl) return null;
-  if (!fallbackAgent) fallbackAgent = new HttpsProxyAgent(proxyUrl);
-  return fallbackAgent;
-}
+const CSFLOAT_DOMAIN = "csfloat.com";
 
 /**
  * Fetch the lowest listing price for a single item on CSFloat.
- * Routes through proxy to avoid IP bans.
+ * Routes through proxy pool with auto-rotation on 429.
  */
 async function fetchCSFloatItemPrice(
-  marketHashName: string
+  marketHashName: string,
+  slotIndex = -1
 ): Promise<number | null> {
   const apiKey = process.env.CSFLOAT_API_KEY;
   if (!apiKey) return null;
 
-  const agent = getCSFloatProxyAgent();
+  // If slot specified, use it; otherwise find available
+  const useSlot = slotIndex >= 0
+    ? getSlot(slotIndex)
+    : getAvailableSlot(CSFLOAT_DOMAIN);
+  if (!useSlot) return null;
+
   const requestConfig: any = {
     params: {
       market_hash_name: marketHashName,
@@ -48,17 +47,16 @@ async function fetchCSFloatItemPrice(
     },
     headers: { Authorization: apiKey },
     timeout: 15000,
+    ...getSlotConfig(useSlot.index),
   };
-  if (agent) {
-    requestConfig.httpsAgent = agent;
-    requestConfig.proxy = false; // disable axios built-in proxy
-  }
 
   try {
     const { data } = await axios.get<{ data: CSFloatListing[] }>(
       "https://csfloat.com/api/v1/listings",
       requestConfig
     );
+    recordSlotSuccess(useSlot.index, CSFLOAT_DOMAIN);
+
     const listings = data.data;
     if (listings && listings.length > 0) {
       return listings[0].price / 100;
@@ -66,40 +64,38 @@ async function fetchCSFloatItemPrice(
     return null;
   } catch (err: any) {
     const status = err?.response?.status;
-    // If primary proxy gets 429, try fallback
     if (status === 429) {
-      const fb = getCSFloatFallbackAgent();
-      if (fb) {
+      const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
+      recordSlot429(useSlot.index, CSFLOAT_DOMAIN, retryAfter);
+
+      // Try next available slot immediately
+      if (slotIndex >= 0) {
+        // Bound to a slot — let the caller handle
+        throw err;
+      }
+      const nextSlot = getAvailableSlot(CSFLOAT_DOMAIN);
+      if (nextSlot && nextSlot.index !== useSlot.index) {
         try {
           const { data } = await axios.get<{ data: CSFloatListing[] }>(
             "https://csfloat.com/api/v1/listings",
-            { ...requestConfig, httpsAgent: fb }
+            { ...requestConfig, ...getSlotConfig(nextSlot.index) }
           );
+          recordSlotSuccess(nextSlot.index, CSFLOAT_DOMAIN);
           const listings = data.data;
           if (listings && listings.length > 0) return listings[0].price / 100;
           return null;
-        } catch { /* fallback also failed */ }
+        } catch {
+          /* fallback also failed */
+        }
       }
     }
     throw err;
   }
 }
 
-// Conservative crawler settings to stay under CSFloat rate limits
-const csfloatCrawler = new AdaptiveCrawler(
-  {
-    name: "CSFloat",
-    minIntervalMs: 30_000,
-    maxIntervalMs: 3600_000,
-    startIntervalMs: 90_000,
-    backoffFactor: 3,
-    cooldownFactor: 0.95,
-    successesBeforeSpeedup: 20,
-    refreshAgeMs: 4 * 3600_000,
-  },
-  "csfloat",
-  fetchCSFloatItemPrice
-);
+// ─── Multi-Slot CSFloat Crawlers ─────────────────────────────────────────
+
+const csfloatCrawlers: AdaptiveCrawler[] = [];
 
 export function startCSFloatCrawler(): void {
   const apiKey = process.env.CSFLOAT_API_KEY;
@@ -107,13 +103,48 @@ export function startCSFloatCrawler(): void {
     console.warn("[CSFloat] CSFLOAT_API_KEY not set, crawler disabled");
     return;
   }
-  const proxy = process.env.CSFLOAT_PROXY_URL ? " (via proxy)" : " (direct)";
-  console.log(`[CSFloat] Starting crawler${proxy}`);
-  csfloatCrawler.start(60_000);
+
+  initProxyPool();
+  const slotCount = getSlotCount();
+
+  for (let i = 0; i < slotCount; i++) {
+    const slot = getSlot(i);
+    if (!slot) continue;
+
+    const crawler = new AdaptiveCrawler(
+      {
+        name: "CSFloat",
+        minIntervalMs: 30_000,       // 1 req / 30s per slot
+        maxIntervalMs: 600_000,      // 10 min max (reduced from 1h)
+        startIntervalMs: 60_000,     // start 1 req / 60s (was 90s)
+        backoffFactor: 2.5,          // backoff on 429
+        cooldownFactor: 0.93,        // 7% faster per streak (was 5%)
+        successesBeforeSpeedup: 15,  // need 15 successes (was 20)
+        refreshAgeMs: 4 * 3600_000,  // refresh after 4h
+      },
+      "csfloat",
+      (name) => fetchCSFloatItemPrice(name, i),
+      { slotIndex: i, domain: CSFLOAT_DOMAIN }
+    );
+
+    csfloatCrawlers.push(crawler);
+    // Stagger: each slot starts 20s apart
+    crawler.start(60_000 + i * 20_000);
+  }
+
+  console.log(`[CSFloat] Started ${csfloatCrawlers.length} parallel crawlers (via proxy pool)`);
 }
 
 export function stopCSFloatCrawler(): void {
-  csfloatCrawler.stop();
+  for (const c of csfloatCrawlers) c.stop();
+  csfloatCrawlers.length = 0;
+}
+
+// Legacy export for backward compatibility
+export function getCSFloatProxyAgent() {
+  // Return the agent from slot 1 (primary proxy) for inspect.ts compatibility
+  const slot = getSlot(1);
+  return slot?.agent ?? null;
 }
 
 export async function fetchCSFloatPrices(

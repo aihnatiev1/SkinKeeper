@@ -2,6 +2,16 @@ import axios from "axios";
 import { pool } from "../db/pool.js";
 import { evaluateAlerts } from "./alertEngine.js";
 import { recordFetchStart, recordSuccess, recordFailure, record429, updateCrawlerState } from "./priceStats.js";
+import {
+  initProxyPool,
+  proxyRequest,
+  getSlotCount,
+  getSlot,
+  getSlotConfig,
+  isSlotAvailable,
+  recordSlot429,
+  recordSlotSuccess,
+} from "./proxyPool.js";
 
 interface SkinportItem {
   market_hash_name: string;
@@ -34,16 +44,19 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
     return skinportCache;
   }
 
+  // Try via proxy rotation — if one IP gets 429, try next
   for (let attempt = 0; attempt < SKINPORT_MAX_RETRIES; attempt++) {
     const endLatency = recordFetchStart("skinport");
     try {
-      const { data } = await axios.get<SkinportItem[]>(
-        "https://api.skinport.com/v1/items",
+      const { data } = await proxyRequest<SkinportItem[]>(
         {
+          method: "GET",
+          url: "https://api.skinport.com/v1/items",
           params: { app_id: 730, currency: "USD" },
           headers: { "Accept-Encoding": "br, gzip" },
           timeout: 30000,
-        }
+        },
+        "skinport"
       );
       endLatency();
 
@@ -66,7 +79,7 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
       if (status === 429) {
         record429("skinport");
         const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
-        const waitSec = retryAfter > 0 ? retryAfter : (attempt + 1) * 60; // default: 60s, 120s, 180s
+        const waitSec = retryAfter > 0 ? retryAfter : (attempt + 1) * 60;
         skinportBackoffUntil = Date.now() + waitSec * 1000;
         console.warn(`[Skinport] 429 rate limited (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), retry-after=${retryAfter}s, waiting ${waitSec}s`);
 
@@ -108,16 +121,22 @@ class AdaptiveCrawler {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private source: string;
   private fetchFn: (name: string) => Promise<number | null>;
+  /** Which proxy slot this crawler is bound to (-1 = auto-rotate) */
+  private slotIndex: number;
+  private domain: string;
 
   constructor(
     config: AdaptiveLimiterConfig,
     source: string,
-    fetchFn: (name: string) => Promise<number | null>
+    fetchFn: (name: string) => Promise<number | null>,
+    options?: { slotIndex?: number; domain?: string }
   ) {
     this.config = config;
     this.source = source;
     this.fetchFn = fetchFn;
     this.currentInterval = config.startIntervalMs;
+    this.slotIndex = options?.slotIndex ?? -1;
+    this.domain = options?.domain ?? source;
   }
 
   async getNextItem(): Promise<string | null> {
@@ -162,8 +181,14 @@ class AdaptiveCrawler {
     // If rate limited, wait
     if (Date.now() < this.pausedUntil) {
       const waitMs = this.pausedUntil - Date.now();
-      console.log(`[${this.config.name}] Rate limited, resuming in ${Math.ceil(waitMs / 1000)}s`);
       this.timer = setTimeout(() => this.tick(), this.jitter(waitMs + 1000));
+      return;
+    }
+
+    // If bound to a specific slot, check if it's available
+    if (this.slotIndex >= 0 && !isSlotAvailable(this.slotIndex, this.domain)) {
+      // Slot in cooldown — wait 30s and retry
+      this.timer = setTimeout(() => this.tick(), 30_000);
       return;
     }
 
@@ -182,14 +207,13 @@ class AdaptiveCrawler {
 
       if (price !== null) {
         await savePrices(new Map([[itemName, price]]), this.source);
-        console.log(`[${this.config.name}] ${itemName}: $${price} (${(this.currentInterval / 1000).toFixed(1)}s interval)`);
       } else {
         // Mark as fetched so we don't loop on non-marketable items
         await savePrices(new Map([[itemName, 0]]), this.source);
-        console.log(`[${this.config.name}] ${itemName}: no price`);
       }
 
       recordSuccess(this.source, 1);
+      if (this.slotIndex >= 0) recordSlotSuccess(this.slotIndex, this.domain);
 
       // Success — reset 429 counter and track speedup
       this.consecutive429s = 0;
@@ -212,32 +236,37 @@ class AdaptiveCrawler {
         const retryAfter = err.retryAfter
           ?? parseInt(err.response?.headers?.["retry-after"] || "0", 10);
 
+        // Record in proxy pool
+        if (this.slotIndex >= 0) {
+          recordSlot429(this.slotIndex, this.domain, retryAfter);
+        }
+
         // Exponential backoff on interval
         this.currentInterval = Math.min(
           this.config.maxIntervalMs,
           Math.floor(this.currentInterval * this.config.backoffFactor)
         );
 
-        // Circuit breaker: after 5 consecutive 429s, pause for 1 hour
+        // Circuit breaker: after 5 consecutive 429s, pause 10 min (not 1h — we have proxies)
         if (this.consecutive429s >= 5) {
-          const pauseMs = 60 * 60_000; // 1 hour
+          const pauseMs = 10 * 60_000; // 10 minutes (reduced from 1h)
           this.pausedUntil = Date.now() + pauseMs;
           this.currentInterval = this.config.maxIntervalMs;
-          console.warn(`[${this.config.name}] Circuit breaker: ${this.consecutive429s} consecutive 429s — pausing 1h until ${new Date(this.pausedUntil).toISOString()}`);
+          const slotName = this.slotIndex >= 0 ? getSlot(this.slotIndex)?.name ?? "?" : "auto";
+          console.warn(`[${this.config.name}:${slotName}] Circuit breaker: ${this.consecutive429s} 429s — pausing 10m`);
           this.timer = setTimeout(() => this.tick(), pauseMs + 1000);
           updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
           return;
         }
 
         if (retryAfter > 0) {
-          this.pausedUntil = Date.now() + retryAfter * 1000;
-          console.log(`[${this.config.name}] 429 — pausing ${retryAfter}s, interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
-          this.timer = setTimeout(() => this.tick(), retryAfter * 1000 + 1000);
+          // Cap wait at 5 min per slot — other slots handle the load
+          const waitMs = Math.min(retryAfter * 1000, 5 * 60_000);
+          this.pausedUntil = Date.now() + waitMs;
+          this.timer = setTimeout(() => this.tick(), waitMs + 1000);
           updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
           return;
         }
-
-        console.log(`[${this.config.name}] 429 (${this.consecutive429s}/5) — interval now ${(this.currentInterval / 1000).toFixed(1)}s`);
       } else {
         recordFailure(this.source, err.message || String(err));
         console.error(`[${this.config.name}] Error:`, err.message || err);
@@ -249,7 +278,8 @@ class AdaptiveCrawler {
   }
 
   start(delayMs = 5000): void {
-    console.log(`[${this.config.name}] Starting crawler (interval: ${(this.currentInterval / 1000).toFixed(1)}s)`);
+    const slotName = this.slotIndex >= 0 ? getSlot(this.slotIndex)?.name ?? "?" : "auto";
+    console.log(`[${this.config.name}:${slotName}] Starting crawler (interval: ${(this.currentInterval / 1000).toFixed(1)}s)`);
     this.timer = setTimeout(() => this.tick(), delayMs);
   }
 
@@ -262,37 +292,51 @@ class AdaptiveCrawler {
 }
 
 // ─── Global Steam Rate Limiter ───────────────────────────────────────────
-// All requests to steamcommunity.com share this queue to prevent
-// inventory fetches and price crawler from fighting each other.
+// Per-slot rate limiters — each proxy slot has its own timing
+const steamSlotLastRequest = new Map<number, number>();
+const STEAM_MIN_GAP_MS = 3500; // 3.5s between requests per slot
 
-let steamLastRequestAt = 0;
-const STEAM_MIN_GAP_MS = 3000; // minimum 3s between any two Steam requests
-
-export async function steamRateLimit(): Promise<void> {
+export async function steamRateLimit(slotIndex = -1): Promise<void> {
+  const key = slotIndex;
   const now = Date.now();
-  const gap = now - steamLastRequestAt;
+  const last = steamSlotLastRequest.get(key) ?? 0;
+  const gap = now - last;
   if (gap < STEAM_MIN_GAP_MS) {
     await new Promise((r) => setTimeout(r, STEAM_MIN_GAP_MS - gap));
   }
-  steamLastRequestAt = Date.now();
+  steamSlotLastRequest.set(key, Date.now());
 }
 
 // ─── Steam Market ────────────────────────────────────────────────────────
 
+/**
+ * Fetch Steam market price for a single item.
+ * If slotIndex provided, uses that specific proxy slot.
+ * Otherwise, uses direct connection.
+ */
 export async function fetchSteamMarketPrice(
-  marketHashName: string
+  marketHashName: string,
+  slotIndex = -1
 ): Promise<number | null> {
-  await steamRateLimit();
+  await steamRateLimit(slotIndex);
+
+  const config: any = {
+    params: {
+      appid: 730,
+      currency: 1, // USD
+      market_hash_name: marketHashName,
+    },
+    timeout: 10000,
+  };
+
+  // Apply proxy slot config
+  if (slotIndex >= 0) {
+    Object.assign(config, getSlotConfig(slotIndex));
+  }
+
   const { data } = await axios.get(
     "https://steamcommunity.com/market/priceoverview/",
-    {
-      params: {
-        appid: 730,
-        currency: 1, // USD
-        market_hash_name: marketHashName,
-      },
-      timeout: 10000,
-    }
+    config
   );
   if (data.success && data.lowest_price) {
     return parseFloat(data.lowest_price.replace(/[^0-9.]/g, ""));
@@ -300,23 +344,56 @@ export async function fetchSteamMarketPrice(
   return null;
 }
 
-const steamCrawler = new AdaptiveCrawler(
-  {
-    name: "Steam",
-    minIntervalMs: 5000,        // fastest: 1 req / 5s (~12/min — safe zone)
+// ─── Multi-Slot Steam Crawlers ───────────────────────────────────────────
+
+const steamCrawlers: AdaptiveCrawler[] = [];
+
+function createSteamCrawlerConfig(): Omit<AdaptiveLimiterConfig, "name"> {
+  return {
+    minIntervalMs: 5000,        // fastest: 1 req / 5s (~12/min per slot)
     maxIntervalMs: 120_000,     // slowest: 1 req / 2min
     startIntervalMs: 8000,      // start conservatively: 1 req / 8s
-    backoffFactor: 2.5,         // aggressive backoff on 429
-    cooldownFactor: 0.95,       // only 5% faster per streak (slow ramp)
-    successesBeforeSpeedup: 20, // need 20 clean successes to speed up
+    backoffFactor: 2.0,         // backoff on 429
+    cooldownFactor: 0.95,       // 5% faster per streak
+    successesBeforeSpeedup: 15, // need 15 clean successes to speed up (was 20)
     refreshAgeMs: 30 * 60_000,  // refresh after 30 min
-  },
-  "steam",
-  fetchSteamMarketPrice
-);
+  };
+}
 
-export function startSteamCrawler(): void { steamCrawler.start(5000); }
-export function stopSteamCrawler(): void { steamCrawler.stop(); }
+export function startSteamCrawlers(): void {
+  initProxyPool();
+  const slotCount = getSlotCount();
+
+  for (let i = 0; i < slotCount; i++) {
+    const slot = getSlot(i);
+    if (!slot) continue;
+
+    const crawler = new AdaptiveCrawler(
+      {
+        ...createSteamCrawlerConfig(),
+        name: `Steam`,
+      },
+      "steam",
+      (name) => fetchSteamMarketPrice(name, i),
+      { slotIndex: i, domain: "steamcommunity.com" }
+    );
+
+    steamCrawlers.push(crawler);
+    // Stagger start: each slot starts 3s apart to avoid burst
+    crawler.start(5000 + i * 3000);
+  }
+
+  console.log(`[Steam] Started ${steamCrawlers.length} parallel crawlers (one per proxy slot)`);
+}
+
+export function stopSteamCrawlers(): void {
+  for (const c of steamCrawlers) c.stop();
+  steamCrawlers.length = 0;
+}
+
+// Legacy exports for backward compatibility
+export function startSteamCrawler(): void { startSteamCrawlers(); }
+export function stopSteamCrawler(): void { stopSteamCrawlers(); }
 
 // ─── Shared Utilities ────────────────────────────────────────────────────
 
@@ -364,10 +441,6 @@ export async function getLatestPrices(
 ): Promise<Map<string, Record<string, number>>> {
   if (marketHashNames.length === 0) return new Map();
 
-  // Use LATERAL join to do one fast index-only lookup per item×source
-  // instead of scanning millions of rows with DISTINCT ON
-  // Filter price_usd > 0 inside LATERAL so we get last known real price,
-  // not a 0-placeholder that was saved when Steam temporarily returned no price
   const { rows } = await pool.query(
     `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name),
           sources AS (SELECT unnest(ARRAY['skinport','steam','csfloat','dmarket']) AS source)

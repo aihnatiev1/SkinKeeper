@@ -7,6 +7,7 @@ import { SteamSessionService } from "../services/steamSession.js";
 import { fetchSteamInventory } from "../services/steam.js";
 import { getCacheStats } from "../utils/cacheRegistry.js";
 import { getInspectCircuitState } from "../services/inspect.js";
+import { getPoolStats } from "../services/proxyPool.js";
 
 const router = Router();
 
@@ -556,9 +557,9 @@ router.get("/cache-stats", requireAdminSecret, (_req: Request, res: Response) =>
   res.json(getCacheStats());
 });
 
-// GET /api/admin/job-health — cron job health status
+// GET /api/admin/job-health — cron job health status + proxy pool
 router.get("/job-health", requireAdminSecret, (_req: Request, res: Response) => {
-  res.json({ ...getJobHealth(), inspectCircuit: getInspectCircuitState() });
+  res.json({ ...getJobHealth(), inspectCircuit: getInspectCircuitState(), proxyPool: getPoolStats() });
 });
 
 // POST /api/admin/set-premium/:userId — manually set premium (for testing release builds)

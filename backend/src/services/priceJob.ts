@@ -1,10 +1,11 @@
 import cron from "node-cron";
-import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawler, stopSteamCrawler } from "./prices.js";
+import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
 import { runDailyPLSnapshot } from "./profitLoss.js";
 import { checkExpiredSubscriptions } from "./purchases.js";
 import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js";
+import { initProxyPool } from "./proxyPool.js";
 
 // ─── Job Health Tracking ────────────────────────────────────────────────
 
@@ -81,6 +82,9 @@ async function fetchAndSaveDMarket(): Promise<void> {
 const scheduledTasks: cron.ScheduledTask[] = [];
 
 export function startPriceJobs() {
+  // Initialize proxy pool before starting any jobs
+  initProxyPool();
+
   // Skinport: every 5 minutes (bulk endpoint, no per-item needed)
   scheduledTasks.push(cron.schedule("*/5 * * * *", async () => {
     try {
@@ -103,10 +107,10 @@ export function startPriceJobs() {
     }
   }));
 
-  // Steam Market: background crawler (1 item per 3.5s, no API key needed)
-  startSteamCrawler();
+  // Steam Market: parallel crawlers (one per proxy slot)
+  startSteamCrawlers();
 
-  // CSFloat: background crawler (1 item per 5s, respects 429)
+  // CSFloat: parallel crawlers (one per proxy slot)
   startCSFloatCrawler();
 
   // Daily P/L snapshots at 00:05 UTC
@@ -156,7 +160,7 @@ export function stopAllJobs(): void {
   scheduledTasks.length = 0;
 
   // Stop crawlers
-  stopSteamCrawler();
+  stopSteamCrawlers();
   stopCSFloatCrawler();
 
   console.log("[CRON] All jobs stopped");

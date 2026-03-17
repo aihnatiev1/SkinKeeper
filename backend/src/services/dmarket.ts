@@ -1,6 +1,13 @@
 import crypto from "node:crypto";
 import axios from "axios";
 import { record429, recordFailure } from "./priceStats.js";
+import {
+  initProxyPool,
+  getAvailableSlot,
+  getSlotConfig,
+  recordSlot429,
+  recordSlotSuccess,
+} from "./proxyPool.js";
 
 interface DMarketItem {
   title: string;
@@ -16,6 +23,8 @@ interface DMarketResponse {
   total: { items: number };
   cursor: string;
 }
+
+const DMARKET_DOMAIN = "api.dmarket.com";
 
 /**
  * Sign a DMarket API request using Ed25519.
@@ -53,7 +62,7 @@ export function signDMarketRequest(
 
 /**
  * Fetch the cheapest listing price for a single item on DMarket.
- * Returns price in USD (cents string parsed / 100) or null.
+ * Routes through proxy pool for 429 rotation.
  */
 export async function fetchDMarketItemPrice(
   marketHashName: string
@@ -65,6 +74,8 @@ export async function fetchDMarketItemPrice(
     return null;
   }
 
+  initProxyPool();
+
   const path = "/exchange/v1/market/items";
   const query = `?gameId=a8db&title=${encodeURIComponent(marketHashName)}&limit=1&currency=USD&orderBy=price&orderDir=asc`;
   const fullPath = path + query;
@@ -72,33 +83,49 @@ export async function fetchDMarketItemPrice(
 
   const signature = signDMarketRequest("GET", fullPath, "", timestamp);
 
-  try {
-    const { data } = await axios.get<DMarketResponse>(
-      `https://api.dmarket.com${fullPath}`,
-      {
-        headers: {
-          "X-Api-Key": publicKey,
-          "X-Sign-Date": timestamp,
-          "X-Request-Sign": `dmar ed25519 ${signature}`,
-        },
-        timeout: 10000,
-      }
-    );
+  // Try with proxy rotation on 429
+  const triedSlots = new Set<number>();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const slot = getAvailableSlot(DMARKET_DOMAIN);
+    if (!slot || triedSlots.has(slot.index)) break;
+    triedSlots.add(slot.index);
 
-    if (data.objects?.length > 0) {
-      return parseInt(data.objects[0].price.USD, 10) / 100;
+    try {
+      const { data } = await axios.get<DMarketResponse>(
+        `https://api.dmarket.com${fullPath}`,
+        {
+          headers: {
+            "X-Api-Key": publicKey,
+            "X-Sign-Date": timestamp,
+            "X-Request-Sign": `dmar ed25519 ${signature}`,
+          },
+          timeout: 10000,
+          ...getSlotConfig(slot.index),
+        }
+      );
+
+      recordSlotSuccess(slot.index, DMARKET_DOMAIN);
+
+      if (data.objects?.length > 0) {
+        return parseInt(data.objects[0].price.USD, 10) / 100;
+      }
+      return null;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 429) {
+        const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
+        record429("dmarket");
+        recordSlot429(slot.index, DMARKET_DOMAIN, retryAfter);
+        console.warn(`[DMarket] 429 for ${marketHashName} via ${slot.name}`);
+        continue; // Try next slot
+      } else {
+        recordFailure("dmarket", err.message || String(err));
+      }
+      return null;
     }
-    return null;
-  } catch (err: any) {
-    const status = err?.response?.status;
-    if (status === 429) {
-      record429("dmarket");
-      console.warn(`[DMarket] 429 for ${marketHashName}`);
-    } else {
-      recordFailure("dmarket", err.message || String(err));
-    }
-    return null;
   }
+
+  return null;
 }
 
 /**
