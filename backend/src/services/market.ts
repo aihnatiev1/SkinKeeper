@@ -155,8 +155,29 @@ export async function sellItem(
     const freshSessionId = await getFreshSessionId(session.steamLoginSecure);
     const sessionId = freshSessionId ?? session.sessionId;
 
+    // Fetch webTradeEligibility cookie — Steam gates market operations behind this
+    let eligCookie: string | undefined;
+    try {
+      const eligRes = await axios.get(
+        "https://steamcommunity.com/market/eligibilitycheck/",
+        {
+          headers: {
+            Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${sessionId}`,
+          },
+          maxRedirects: 0,
+          validateStatus: (s: number) => s >= 200 && s < 400,
+        }
+      );
+      const setCookies: string[] = eligRes.headers["set-cookie"] ?? [];
+      eligCookie = setCookies
+        .map((c: string) => c.split(";")[0])
+        .find((c: string) => c.startsWith("webTradeEligibility="));
+    } catch (e: any) {
+      console.warn(`[Sell] Eligibility check failed, proceeding without:`, e.message);
+    }
+
     console.log(
-      `[Sell] assetId=${assetId} price=${walletPriceCents}c (${currencyLabel}) sessionId=${sessionId.substring(0, 8)}… fresh=${!!freshSessionId}`
+      `[Sell] assetId=${assetId} price=${walletPriceCents}c (${currencyLabel}) sessionId=${sessionId.substring(0, 8)}… fresh=${!!freshSessionId} eligibility=${!!eligCookie}`
     );
 
     const formBody = [
@@ -174,7 +195,7 @@ export async function sellItem(
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${sessionId}`,
+          Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${sessionId}${eligCookie ? "; " + eligCookie : ""}`,
           Referer: "https://steamcommunity.com/my/inventory/",
           Origin: "https://steamcommunity.com",
           "User-Agent":
