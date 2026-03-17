@@ -177,7 +177,7 @@ export async function sellItem(
     }
 
     console.log(
-      `[Sell] assetId=${assetId} price=${walletPriceCents}c (${currencyLabel}) sessionId=${sessionId.substring(0, 8)}… fresh=${!!freshSessionId} eligibility=${!!eligCookie}`
+      `[Sell] assetId=${assetId} sellerReceives=${walletPriceCents}c buyerPays=${buyerPays}c (${currencyLabel}) sessionId=${sessionId.substring(0, 8)}… fresh=${!!freshSessionId} eligibility=${!!eligCookie}`
     );
 
     const formBody = [
