@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Auth Flow Redesign
 status: executing
-stopped_at: "Completed 27-02-PLAN.md (Flutter login redesign + nonce polling)"
-last_updated: "2026-03-17T14:00:00Z"
-last_activity: "2026-03-17 -- Phase 27 Plan 02 executed: login screen redesign + nonce polling + hasSessionProvider"
+stopped_at: "Completed 27-01-PLAN.md (backend session-optional hardening)"
+last_updated: "2026-03-17T18:40:00Z"
+last_activity: "2026-03-17 -- Phase 27 Plan 01 executed: private inventory detection, hasSession metadata, nonce TTL cleanup"
 progress:
   total_phases: 13
   completed_phases: 5
   total_plans: 30
-  completed_plans: 16
-  percent: 53
+  completed_plans: 17
+  percent: 57
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 27 (Tier 1 — Zero Friction Entry) — Plan 02 complete
-Next: Phase 27 Plan 01 (backend) or Phase 28 (Intent-Based Session Unlock)
-Status: Login screen redesigned, nonce polling added, hasSessionProvider ready
-Last activity: 2026-03-17 -- Completed 27-02 (Flutter login redesign + nonce polling)
+Phase: 27 (Tier 1 — Zero Friction Entry) — Plan 01 + 02 complete
+Next: Phase 27 Plan 03 or Phase 28 (Intent-Based Session Unlock)
+Status: Backend hardened for sessionless access, login screen redesigned
+Last activity: 2026-03-17 -- Completed 27-01 (backend private inventory detection + nonce TTL)
 
 Progress: [██████████] 100%
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | 19 | 01 | ~900s | 3 | 4 |
 | 19 | 02 | ~1200s | 4 | 6 |
 | 20 | 01 | ~480s | 9 | 11 |
+| 27 | 01 | 268s | 2 | 4 |
 | 27 | 02 | 147s | 2 | 3 |
 
 ## Accumulated Context
@@ -109,6 +110,9 @@ Progress: [██████████] 100%
 - [20-01]: Bulk sell gate placed in InventoryScreen callbacks (not SellBottomSheet) — avoids showing sheet at all for free users
 - [20-01]: Route is /premium not /paywall — plan had /paywall but router only registers /premium
 - [20-01]: /pl, /pl/items, and /pl/history all get requirePremium re-enabled — all P/L routes are premium
+- [27-01]: INVENTORY_PRIVATE thrown on 403 or success:false from Steam context 2 — propagated per-account in refresh
+- [27-01]: hasSession derived from SteamSessionService.getSession on active account (not DB column)
+- [27-01]: pendingLogins TTL 10 minutes with 60s cleanup interval (replaces bulk clear at size > 100)
 - [27-02]: Polling is fallback only — deep link handler in main.dart remains primary auth path
 - [27-02]: isLinking mode preserved for account linking flow (uses openSteamLinkLogin, no polling)
 - [27-02]: hasSessionProvider checks valid/expiring status for future sell/trade UI gating
@@ -124,5 +128,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-17
-Stopped at: "Completed 27-02-PLAN.md (Flutter login redesign + nonce polling)"
+Stopped at: "Completed 27-01-PLAN.md (backend session-optional hardening)"
 Resume file: None
