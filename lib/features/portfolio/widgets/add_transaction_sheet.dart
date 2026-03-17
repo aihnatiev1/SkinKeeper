@@ -19,12 +19,12 @@ import '../portfolio_provider.dart';
 
 /// Sources for transaction origin
 const _sources = [
-  ('manual', 'Other', Icons.edit_rounded),
   ('csfloat', 'CSFloat', Icons.storefront_rounded),
-  ('buff163', 'Buff163', Icons.store_rounded),
+  ('buff163', 'Buff', Icons.store_rounded),
   ('skinport', 'Skinport', Icons.shopping_bag_rounded),
   ('trade', 'Trade', Icons.swap_horiz_rounded),
   ('drop', 'Drop', Icons.card_giftcard_rounded),
+  ('manual', 'Other', Icons.edit_rounded),
 ];
 
 class AddTransactionSheet extends ConsumerStatefulWidget {
@@ -221,7 +221,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             child: Row(
               children: [
                 const Text(
-                  'Log Transaction',
+                  'Add Purchase',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -276,7 +276,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildLabel('PRICE PER UNIT (\$)'),
+                            _buildLabel('PRICE'),
                             const SizedBox(height: 6),
                             _buildTextField(
                               controller: _priceController,
@@ -304,7 +304,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildLabel('QUANTITY'),
+                            _buildLabel('QTY'),
                             const SizedBox(height: 6),
                             _buildTextField(
                               controller: _qtyController,
@@ -439,7 +439,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   const SizedBox(height: 16),
 
                   // ── Note (optional) ──
-                  _buildLabel('NOTE (OPTIONAL)'),
+                  _buildLabel('NOTE'),
                   const SizedBox(height: 6),
                   _buildTextField(
                     controller: _noteController,
