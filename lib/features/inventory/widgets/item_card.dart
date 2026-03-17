@@ -539,14 +539,13 @@ class _FooterSection extends StatelessWidget {
               _WearPill(wear: item.wearShort!, compact: true),
           ],
         ),
-        if (item.floatValue != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4, right: 4),
-            child: _MiniFloatBar(
-              floatValue: item.floatValue,
-              wearShort: item.wearShort!,
-            ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, right: 4),
+          child: _MiniFloatBar(
+            floatValue: item.floatValue,
+            wearShort: item.wearShort!,
           ),
+        ),
       ],
     );
   }
@@ -595,8 +594,8 @@ class _FooterSection extends StatelessWidget {
               _WearPill(wear: item.wearShort!),
           ],
         ),
-        // Float value text
-        if (item.floatValue != null) ...[
+        // Float value text (only when exact float known)
+        if (item.floatValue != null)
           Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Text(
@@ -611,12 +610,12 @@ class _FooterSection extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 6),
-          _MiniFloatBar(
-            floatValue: item.floatValue,
-            wearShort: item.wearShort!,
-          ),
-        ],
+        // Float bar — always shown for items with wear
+        const SizedBox(height: 6),
+        _MiniFloatBar(
+          floatValue: item.floatValue,
+          wearShort: item.wearShort!,
+        ),
       ],
     );
   }
@@ -675,10 +674,19 @@ class _MiniFloatBar extends StatelessWidget {
 
   const _MiniFloatBar({required this.wearShort, this.floatValue});
 
+  // Midpoint of each wear range — used when exact float is unknown
+  static const _wearMidpoints = <String, double>{
+    'FN': 0.035,
+    'MW': 0.11,
+    'FT': 0.265,
+    'WW': 0.415,
+    'BS': 0.725,
+  };
+
   @override
   Widget build(BuildContext context) {
-    if (floatValue == null) return const SizedBox.shrink();
-    final pos = floatValue!.clamp(0.0, 1.0);
+    final pos = (floatValue ?? _wearMidpoints[wearShort] ?? 0.5).clamp(0.0, 1.0);
+    final hasExactFloat = floatValue != null;
 
     return Column(
       children: [
@@ -704,7 +712,7 @@ class _MiniFloatBar extends StatelessWidget {
                       _buildSegment(0.55, const Color(0xFFEF4444)), // BS
                     ],
                   ),
-                  // Marker
+                  // Marker — solid when exact float, semi-transparent when estimated
                   Positioned(
                     left: (pos * w - 1.5).clamp(0.0, w - 3),
                     top: -1,
@@ -712,7 +720,7 @@ class _MiniFloatBar extends StatelessWidget {
                     child: Container(
                       width: 3,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.white.withValues(alpha: hasExactFloat ? 1.0 : 0.5),
                         borderRadius: BorderRadius.circular(1.5),
                         boxShadow: [
                           BoxShadow(
