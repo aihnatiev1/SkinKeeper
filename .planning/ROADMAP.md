@@ -266,28 +266,27 @@ Plans:
 - [ ] 27-02-PLAN.md — Flutter: redesign login screen (single CTA), remove mandatory session redirect, route to portfolio after OpenID, inventory provider falls back to public API
 
 ### Phase 28: Tier 2 — Intent-Based Session Unlock
-**Goal**: When user tries sell/trade, show value-driven gate with system browser login (ASWebAuthenticationSession/Custom Tabs) as primary method
+**Goal**: When user tries sell/trade, show value-driven gate with client token clipboard flow as primary method
 **Depends on**: Phase 27 (tier 1 entry works)
-**Requirements**: AUTHUX-05, AUTHUX-06, AUTHUX-07, AUTHUX-08, AUTHUX-09, AUTHUX-10
+**Requirements**: AUTHUX-05, AUTHUX-06, AUTHUX-07, AUTHUX-08, AUTHUX-09, AUTHUX-10, AUTHUX-14, AUTHUX-15
 **Architecture**:
-  - Primary: System browser (flutter_custom_tabs / ASWebAuthenticationSession) — leverages existing Safari/Chrome Steam session, no password needed if already logged in
-  - Polling: Frontend polls backend every 2-3s for session status after browser opens
-  - Manual fallback: "I've Approved ✓" button triggers immediate backend check
-  - Help section: QR (another device) + web token (advanced) as hidden fallbacks
+  - Primary: Client token clipboard flow (2-step: open Steam in browser, copy token from clientjstoken page, auto-detect on return)
+  - Fallback: QR code scan via Steam Guard (collapsible "Have another device?" section)
+  - Gate function: requireSession(context, ref) checks hasSessionProvider, shows gate modal if false
+  - System browser CANNOT capture Steam session cookies (sandboxed) — clipboard flow is the real method
 **Success Criteria**:
   1. Tapping Sell/Quick Sell/Trade/Accept checks session state — if no session, shows gate
   2. Gate screen: "Enable Full Access" with value-driven copy + feature list
-  3. Primary CTA "Log in to Steam" opens system browser (shared cookies with Safari/Chrome)
-  4. Live sync status: "Waiting for Steam confirmation..." with polling + "I've Approved ✓" fallback
-  5. "Having trouble?" section: QR from another device + paste token (advanced)
-  6. Connect progress: animated steps (Syncing → Loading → Calculating)
-  7. After connect, auto-navigate back to the screen that triggered the gate
-  8. Deep link callback (myapp://auth-callback) to return user to app after browser login
+  3. Primary: 2-step token flow (Open Steam + Copy Session) with auto-clipboard detection
+  4. QR fallback in "Have another device?" collapsible section
+  5. Connect progress: animated steps (Syncing → Loading → Done)
+  6. After connect, auto-return to the action that triggered the gate
+  7. Manual paste fallback when auto-detection fails
 **Plans**: 2 plans
 
 Plans:
-- [ ] 28-01-PLAN.md — Backend: /check-session polling endpoint, system browser auth flow (redirect URL + cookie capture), deep link callback handler. Flutter: flutter_custom_tabs setup, ASWebAuthenticationSession config, deep link registration
-- [ ] 28-02-PLAN.md — Flutter: SessionGate widget, gate screen UI (system browser primary, QR/token fallback in "Having trouble?"), polling + "I've Approved" manual trigger, connect progress animation, auto-return after connect
+- [ ] 28-01-PLAN.md — Flutter: requireSession() gate function, SessionGateScreen (token primary + QR fallback), connect progress animation
+- [ ] 28-02-PLAN.md — Flutter: wire requireSession to all sell/trade/accept intercept points, clean up SellBottomSheet inline session warning
 
 ### Phase 29: UX Polish — Locked States, Nudges & Connect Reward
 **Goal**: Unconnected users see helpful banners, connected users get reward animation
