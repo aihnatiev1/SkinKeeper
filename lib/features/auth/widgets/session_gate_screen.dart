@@ -241,45 +241,22 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
             _buildValueSection(isExpired: isExpired),
             const SizedBox(height: 20),
 
-            // ── Step 1 ────────────────────────────────────────────────
-            _StepCard(
-              step: 1,
-              currentStep: _step,
-              title: 'Sign in to Steam',
-              description:
-                  "We'll open Steam in your browser.\nLog in if needed.",
-              buttonLabel: 'Open Steam',
-              buttonIcon: Icons.open_in_new_rounded,
-              onTap: tokenState.loading ? null : _openSteamLogin,
-            ),
-            const SizedBox(height: 12),
-
-            // ── Step 2 ────────────────────────────────────────────────
-            _StepCard(
-              step: 2,
-              currentStep: _step,
-              title: 'Copy your session',
-              description:
-                  "We'll open a special page.\nTap Select All then Copy.",
-              buttonLabel: 'Open & Copy',
-              buttonIcon: Icons.content_copy_rounded,
-              onTap:
-                  _step >= 2 && !tokenState.loading ? _openTokenPage : null,
-            ),
-            const SizedBox(height: 16),
-
-            // ── Status banner ─────────────────────────────────────────
-            if (_autoStatus != null) _buildStatusBanner(),
-
-            // ── Manual paste ──────────────────────────────────────────
-            if (_showManualPaste || _tokenController.text.isNotEmpty) ...[
-              _buildManualPasteSection(tokenState),
-            ],
-
-            const SizedBox(height: 16),
-
-            // ── QR fallback ───────────────────────────────────────────
+            // ── QR Code (PRIMARY) ─────────────────────────────────────
             _QrFallbackSection(onAuthenticated: _onAuthSuccess),
+            const SizedBox(height: 20),
+
+            // ── Browser fallback (collapsed) ──────────────────────────
+            _BrowserFallbackSection(
+              step: _step,
+              tokenState: tokenState,
+              autoStatus: _autoStatus,
+              showManualPaste: _showManualPaste,
+              tokenController: _tokenController,
+              onOpenSteam: _openSteamLogin,
+              onOpenToken: _openTokenPage,
+              onSubmit: _handleSubmit,
+              statusBanner: _autoStatus != null ? _buildStatusBanner() : null,
+            ),
           ],
         ),
       ),
@@ -436,99 +413,6 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
     );
   }
 
-  Widget _buildManualPasteSection(ClientTokenAuthState tokenState) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        GestureDetector(
-          onTap: () => setState(() => _showManualPaste = !_showManualPaste),
-          child: Row(
-            children: [
-              Icon(Icons.keyboard_arrow_down,
-                  size: 18, color: Colors.white.withValues(alpha: 0.3)),
-              const SizedBox(width: 6),
-              Text(
-                'Having trouble? Paste manually',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _tokenController,
-          enabled: !tokenState.loading,
-          maxLines: 2,
-          decoration: InputDecoration(
-            hintText: 'Paste here...',
-            hintStyle:
-                const TextStyle(color: AppTheme.textDisabled, fontSize: 13),
-            filled: true,
-            fillColor: AppTheme.surface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.border),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: AppTheme.primary, width: 1.5),
-            ),
-            contentPadding: const EdgeInsets.all(14),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.content_paste_rounded,
-                  size: 18, color: AppTheme.textMuted),
-              onPressed: () async {
-                final data = await Clipboard.getData(Clipboard.kTextPlain);
-                if (data?.text != null) {
-                  _tokenController.text = data!.text!.trim();
-                  setState(() {});
-                }
-              },
-            ),
-          ),
-          style: const TextStyle(
-            color: Colors.white,
-            fontFamily: 'monospace',
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 48,
-          child: ElevatedButton(
-            onPressed: tokenState.loading ? null : _handleSubmit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor:
-                  AppTheme.primary.withValues(alpha: 0.3),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: tokenState.loading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white),
-                  )
-                : const Text('Connect',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 // ─── Feature Chip ────────────────────────────────────────────────────────
@@ -725,8 +609,17 @@ class _QrFallbackSection extends ConsumerStatefulWidget {
 }
 
 class _QrFallbackSectionState extends ConsumerState<_QrFallbackSection> {
-  bool _expanded = false;
   Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-start QR generation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(qrAuthProvider.notifier).startQR();
+      _startPolling();
+    });
+  }
 
   @override
   void dispose() {
@@ -734,16 +627,6 @@ class _QrFallbackSectionState extends ConsumerState<_QrFallbackSection> {
     super.dispose();
   }
 
-  void _onExpand(bool expanded) {
-    setState(() => _expanded = expanded);
-    if (expanded) {
-      ref.read(qrAuthProvider.notifier).startQR();
-      _startPolling();
-    } else {
-      _pollTimer?.cancel();
-      _pollTimer = null;
-    }
-  }
 
   void _startPolling() {
     _pollTimer?.cancel();
@@ -763,45 +646,48 @@ class _QrFallbackSectionState extends ConsumerState<_QrFallbackSection> {
   Widget build(BuildContext context) {
     final qrState = ref.watch(qrAuthProvider);
 
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(bottom: 16),
-        onExpansionChanged: _onExpand,
-        title: Row(
+    return Column(
+      children: [
+        // QR header
+        Row(
           children: [
             Icon(Icons.qr_code_2,
-                size: 18, color: Colors.white.withValues(alpha: 0.4)),
+                size: 20, color: AppTheme.primary),
             const SizedBox(width: 8),
             Text(
-              'Have another device?',
+              'Scan with Steam Guard',
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.4),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.9),
               ),
             ),
           ],
         ),
-        children: [
-          if (!_expanded)
-            const SizedBox.shrink()
-          else if (qrState.loading)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else if (qrState.status == 'error')
-            _buildQrError(qrState)
-          else if (qrState.status == 'expired')
-            _buildQrExpired()
-          else
-            _buildQrReady(qrState),
-        ],
-      ),
+        const SizedBox(height: 6),
+        Text(
+          'Open Steam Guard on another device and scan this code',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // QR content
+        if (qrState.loading)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (qrState.status == 'error')
+          _buildQrError(qrState)
+        else if (qrState.status == 'expired')
+          _buildQrExpired()
+        else
+          _buildQrReady(qrState),
+      ],
     );
   }
 
@@ -816,7 +702,7 @@ class _QrFallbackSectionState extends ConsumerState<_QrFallbackSection> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Image.memory(
-              base64Decode(qrState.qrImage!),
+              base64Decode(qrState.qrImage!.replaceFirst(RegExp(r'^data:image/\w+;base64,'), '')),
               width: 180,
               height: 180,
               fit: BoxFit.contain,
@@ -908,6 +794,126 @@ class _QrFallbackSectionState extends ConsumerState<_QrFallbackSection> {
           label: const Text('Retry'),
         ),
       ],
+    );
+  }
+}
+
+// ── Browser Fallback Section (collapsible) ─────────────────────────────
+class _BrowserFallbackSection extends StatelessWidget {
+  final int step;
+  final ClientTokenAuthState tokenState;
+  final String? autoStatus;
+  final bool showManualPaste;
+  final TextEditingController tokenController;
+  final VoidCallback onOpenSteam;
+  final VoidCallback onOpenToken;
+  final VoidCallback onSubmit;
+  final Widget? statusBanner;
+
+  const _BrowserFallbackSection({
+    required this.step,
+    required this.tokenState,
+    required this.autoStatus,
+    required this.showManualPaste,
+    required this.tokenController,
+    required this.onOpenSteam,
+    required this.onOpenToken,
+    required this.onSubmit,
+    this.statusBanner,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 16),
+        title: Row(
+          children: [
+            Icon(Icons.help_outline_rounded,
+                size: 16, color: Colors.white.withValues(alpha: 0.35)),
+            const SizedBox(width: 8),
+            Text(
+              'Having trouble? Use browser instead',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.35),
+              ),
+            ),
+          ],
+        ),
+        children: [
+          _StepCard(
+            step: 1,
+            currentStep: step,
+            title: 'Sign in to Steam',
+            description: "We'll open Steam in your browser.\nLog in if needed.",
+            buttonLabel: 'Open Steam',
+            buttonIcon: Icons.open_in_new_rounded,
+            onTap: tokenState.loading ? null : onOpenSteam,
+          ),
+          const SizedBox(height: 12),
+          _StepCard(
+            step: 2,
+            currentStep: step,
+            title: 'Copy your session',
+            description: "We'll open a special page.\nTap Select All then Copy.",
+            buttonLabel: 'Open & Copy',
+            buttonIcon: Icons.content_copy_rounded,
+            onTap: step >= 2 && !tokenState.loading ? onOpenToken : null,
+          ),
+          if (statusBanner != null) ...[
+            const SizedBox(height: 16),
+            statusBanner!,
+          ],
+          if (showManualPaste || tokenController.text.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: tokenController,
+                    decoration: InputDecoration(
+                      hintText: 'Paste token here...',
+                      hintStyle: const TextStyle(fontSize: 12),
+                      filled: true,
+                      fillColor: AppTheme.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: tokenState.loading ? null : onSubmit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: tokenState.loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Text('Connect', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
