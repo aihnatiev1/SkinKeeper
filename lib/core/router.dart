@@ -98,6 +98,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
     errorBuilder: (context, state) {
+      // Catch auth callback URLs that GoRouter doesn't recognize as routes
+      final uri = state.uri;
+      if (uri.path.contains('/auth/callback') && uri.queryParameters.containsKey('token')) {
+        // Redirect to portfolio — polling or deep link handler will pick up the token
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          GoRouter.of(context).go('/portfolio');
+        });
+        return const Scaffold(backgroundColor: Color(0xFF0A0E1A));
+      }
       return Scaffold(
         backgroundColor: const Color(0xFF0A0E1A),
         body: Center(child: Text('Route error: ${state.uri}', style: const TextStyle(color: Colors.white))),
