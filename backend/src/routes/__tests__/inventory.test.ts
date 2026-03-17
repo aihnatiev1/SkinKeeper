@@ -27,6 +27,7 @@ vi.mock("../../services/inspect.js", () => ({
 vi.mock("../../services/steamSession.js", () => ({
   SteamSessionService: {
     getActiveAccountId: vi.fn().mockResolvedValue(1),
+    getSession: vi.fn().mockResolvedValue(null),
     ensureValidSession: vi.fn().mockResolvedValue({
       sessionId: "test-session",
       steamLoginSecure: "test-secure",
