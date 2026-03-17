@@ -80,14 +80,14 @@
 - [ ] **AUTHUX-04**: Portfolio, prices, alerts all work without Steam session
 
 ### Tier 2: Intent-Based Unlock
-- [ ] **AUTHUX-05**: Sell/Trade/Accept actions trigger unlock gate (not shown at login)
+- [x] **AUTHUX-05**: Sell/Trade/Accept actions trigger unlock gate (not shown at login)
 - [ ] **AUTHUX-06**: Gate screen: value-driven copy ("Enable trading & selling"), shows what unlocks
 - [ ] **AUTHUX-07**: System browser (ASWebAuthenticationSession/Custom Tabs) is primary connect — leverages existing Steam session in Safari/Chrome
 - [ ] **AUTHUX-08**: QR code and web token are fallbacks in "Having trouble?" section
 - [ ] **AUTHUX-14**: "I've Approved ✓" manual trigger button as polling fallback
 - [ ] **AUTHUX-15**: Deep link callback (myapp://auth-callback) returns user to app after browser login
 - [ ] **AUTHUX-09**: After successful connect, progress animation: "Syncing items... Loading prices... Calculating profit..."
-- [ ] **AUTHUX-10**: Auto-navigate back to action that triggered the gate
+- [x] **AUTHUX-10**: Auto-navigate back to action that triggered the gate
 
 ### UX Polish
 - [ ] **AUTHUX-11**: Locked states for unconnected users: "Connect Steam to sell items" banners
