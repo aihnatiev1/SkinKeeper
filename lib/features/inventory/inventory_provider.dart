@@ -4,7 +4,16 @@ import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../models/inventory_item.dart';
+import '../auth/session_provider.dart';
 import '../purchases/iap_service.dart';
+
+/// Whether the active account has a valid Steam session.
+/// Used to gate sell/trade UI elements without blocking inventory display.
+final hasSessionProvider = Provider<bool>((ref) {
+  final status = ref.watch(sessionStatusProvider).valueOrNull;
+  if (status == null) return false;
+  return status.status == 'valid' || status.status == 'expiring';
+});
 
 final inventoryProvider =
     AsyncNotifierProvider<InventoryNotifier, List<InventoryItem>>(

@@ -70,6 +70,12 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
 }
 
 class SteamAuthService {
+  /// Generate a random hex nonce for polling-based login.
+  String _generateNonce() {
+    final random = Random.secure();
+    return List.generate(32, (_) => random.nextInt(16).toRadixString(16)).join();
+  }
+
   /// Open Steam login in Safari — callback redirects via Universal Link
   Future<void> openSteamLogin() async {
     final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback';
@@ -92,6 +98,53 @@ class SteamAuthService {
         .replace(queryParameters: params);
 
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  /// Open Steam login and return nonce for polling fallback.
+  /// Primary flow: Universal Link deep link fires -> app receives token directly.
+  /// Fallback: App polls /auth/steam/poll/:nonce every 3s.
+  Future<String> openSteamLoginWithPolling() async {
+    final nonce = _generateNonce();
+    final returnTo = '${AppConstants.apiBaseUrl}/auth/steam/callback?nonce=$nonce';
+    final returnUri = Uri.parse(returnTo);
+    final realm =
+        '${returnUri.scheme}://${returnUri.host}${returnUri.hasPort ? ':${returnUri.port}' : ''}/';
+
+    final params = {
+      'openid.ns': 'http://specs.openid.net/auth/2.0',
+      'openid.mode': 'checkid_setup',
+      'openid.return_to': returnTo,
+      'openid.realm': realm,
+      'openid.identity':
+          'http://specs.openid.net/auth/2.0/identifier_select',
+      'openid.claimed_id':
+          'http://specs.openid.net/auth/2.0/identifier_select',
+    };
+
+    final uri = Uri.parse(AppConstants.steamOpenIdUrl)
+        .replace(queryParameters: params);
+
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    return nonce;
+  }
+
+  /// Poll backend for Steam login result. Returns token string or null.
+  Future<String?> pollSteamLogin(String nonce, ApiClient api) async {
+    try {
+      final response = await api.get('/auth/steam/poll/$nonce');
+      final data = response.data as Map<String, dynamic>;
+      final status = data['status'] as String?;
+      if (status == 'authenticated') {
+        return data['token'] as String?;
+      }
+      if (status == 'error') {
+        throw Exception(data['error'] ?? 'Login failed');
+      }
+      return null; // still pending
+    } catch (e) {
+      if (e is Exception && e.toString().contains('Login failed')) rethrow;
+      return null; // network error, keep polling
+    }
   }
 
   /// Open Steam login for linking a new account.

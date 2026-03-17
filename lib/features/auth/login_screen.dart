@@ -7,13 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
-import '../../widgets/shared_ui.dart';
-import 'session_provider.dart';
 import 'steam_auth_service.dart';
-import 'widgets/clienttoken_auth_tab.dart';
-import 'widgets/qr_auth_tab.dart';
+import '../inventory/inventory_provider.dart';
+import '../portfolio/portfolio_provider.dart';
+import '../../models/user.dart';
 
-// ─── Login Screen ────────────────────────────────────────────────────────
+// --- Login Screen -------------------------------------------------------
 
 class LoginScreen extends ConsumerStatefulWidget {
   final bool isLinking;
@@ -24,53 +23,138 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  int _selectedTab = 0; // 0 = Token, 1 = Browser, 2 = QR
-  late final PageController _pageCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageCtrl = PageController();
-    
-    // Set link mode in provider if needed
-    if (widget.isLinking) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(sessionLinkModeProvider.notifier).state = true;
-      });
-    }
-  }
-
-  void _onTabChanged(int i) {
-    setState(() => _selectedTab = i);
-    _pageCtrl.animateToPage(i,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-  }
-
-  void _onPageChanged(int i) {
-    setState(() => _selectedTab = i);
-  }
-
-  Future<void> _openSteamLogin() async {
-    await ref.read(authServiceProvider).openSteamLogin();
-  }
+  String? _nonce;
+  Timer? _pollTimer;
+  bool _isPolling = false;
+  bool _timedOut = false;
 
   @override
   void dispose() {
-    _pageCtrl.dispose();
+    _pollTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _startLogin() async {
+    setState(() {
+      _isPolling = true;
+      _timedOut = false;
+    });
+    try {
+      final authService = ref.read(authServiceProvider);
+      if (widget.isLinking) {
+        await authService.openSteamLinkLogin(ref);
+        // Link flow uses deep link callback only, no polling
+        return;
+      }
+      _nonce = await authService.openSteamLoginWithPolling();
+      _startPolling();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isPolling = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to open Steam login: ${friendlyError(e)}'),
+          backgroundColor: AppTheme.loss,
+        ));
+      }
+    }
+  }
+
+  void _startPolling() {
+    int attempts = 0;
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      attempts++;
+      if (attempts > 20) {
+        // 60 seconds
+        timer.cancel();
+        if (mounted) setState(() { _isPolling = false; _timedOut = true; });
+        return;
+      }
+      // Guard: if deep link already handled auth, stop polling
+      final currentUser = ref.read(authStateProvider).valueOrNull;
+      if (currentUser != null) {
+        timer.cancel();
+        if (mounted) setState(() { _isPolling = false; });
+        return;
+      }
+      final api = ref.read(apiClientProvider);
+      final authService = ref.read(authServiceProvider);
+      try {
+        final token = await authService.pollSteamLogin(_nonce!, api);
+        if (token != null && mounted) {
+          timer.cancel();
+          await _completeLogin(token);
+        }
+      } catch (e) {
+        // Login failed error from backend
+        timer.cancel();
+        if (mounted) {
+          setState(() { _isPolling = false; });
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Login failed: ${friendlyError(e)}'),
+            backgroundColor: AppTheme.loss,
+          ));
+        }
+      }
+    });
+  }
+
+  Future<void> _completeLogin(String token) async {
+    // Guard: deep link may have already set the user
+    final currentUser = ref.read(authStateProvider).valueOrNull;
+    if (currentUser != null) {
+      if (mounted) setState(() { _isPolling = false; });
+      return;
+    }
+    final api = ref.read(apiClientProvider);
+    await api.saveToken(token);
+    final resp = await api.get('/auth/me');
+    final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
+    ref.read(authStateProvider.notifier).setUser(user);
+    ref.invalidate(inventoryProvider);
+    ref.invalidate(portfolioProvider);
+    if (mounted) setState(() { _isPolling = false; });
+    // Router will redirect to /portfolio automatically
+  }
+
+  Future<void> _checkNow() async {
+    if (_nonce == null) return;
+    final currentUser = ref.read(authStateProvider).valueOrNull;
+    if (currentUser != null) {
+      _pollTimer?.cancel();
+      if (mounted) setState(() { _isPolling = false; });
+      return;
+    }
+    final api = ref.read(apiClientProvider);
+    final authService = ref.read(authServiceProvider);
+    try {
+      final token = await authService.pollSteamLogin(_nonce!, api);
+      if (token != null && mounted) {
+        _pollTimer?.cancel();
+        await _completeLogin(token);
+      }
+    } catch (_) {
+      // Ignore — user can retry
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-    final isLoading = authState.isLoading;
-
     ref.listen(authStateProvider, (_, next) {
       if (next.hasError) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Login failed: ${friendlyError(next.error)}'),
           backgroundColor: AppTheme.loss,
         ));
+      }
+      // If deep link set the user while polling, stop polling
+      if (next.valueOrNull != null) {
+        _pollTimer?.cancel();
+        if (_isPolling && mounted) {
+          setState(() { _isPolling = false; });
+        }
       }
     });
 
@@ -86,40 +170,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              if (canPop)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        size: 20, color: AppTheme.textSecondary),
-                    onPressed: () => context.pop(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Column(
+              children: [
+                if (canPop)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 0),
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                            size: 20, color: AppTheme.textSecondary),
+                        onPressed: () => context.pop(),
+                      ),
+                    ),
                   ),
-                ),
-              SizedBox(height: canPop ? 8 : 32),
-              _buildHeader(),
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: PillTabSelector(
-                  tabs: const ['Full Access', 'Browser', 'QR Code'],
-                  selected: _selectedTab,
-                  onChanged: _onTabChanged,
-                ),
-              ).animate().fadeIn(duration: 400.ms, delay: 400.ms),
-              Expanded(
-                child: PageView(
-                  controller: _pageCtrl,
-                  onPageChanged: _onPageChanged,
-                  children: [
-                    ClientTokenAuthTab(isLinking: widget.isLinking),
-                    _buildBrowserTab(isLoading),
-                    const QrAuthTab(),
-                  ],
-                ),
-              ),
-            ],
+                SizedBox(height: canPop ? 8 : 32),
+                _buildHeader(),
+                const SizedBox(height: 32),
+                _buildFeaturePills(),
+                const Spacer(),
+                _buildSteamButton(),
+                const SizedBox(height: 12),
+                if (_isPolling) _buildPollingStatus(),
+                if (_timedOut) _buildTimeoutStatus(),
+                if (!_isPolling && !_timedOut) _buildSecurityNote(),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 32),
+              ],
+            ),
           ),
         ),
       ),
@@ -166,117 +245,159 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  // ─── Browser tab ─────────────────────────────────────────────────────
+  Widget _buildFeaturePills() {
+    const features = [
+      ('Real-time prices', Icons.trending_up_rounded),
+      ('Portfolio tracking', Icons.pie_chart_rounded),
+      ('Price alerts', Icons.notifications_active_rounded),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: features.map((f) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppTheme.primary.withValues(alpha: 0.15),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(f.$2, size: 14, color: AppTheme.primaryLight),
+              const SizedBox(width: 6),
+              Text(
+                f.$1,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    ).animate().fadeIn(duration: 500.ms, delay: 500.ms);
+  }
 
-  Widget _buildBrowserTab(bool isLoading) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+  Widget _buildSteamButton() {
+    return GestureDetector(
+      onTap: _isPolling
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              _startLogin();
+            },
+      child: AnimatedOpacity(
+        opacity: _isPolling ? 0.6 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          width: double.infinity,
+          height: 56,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B2838),
+            borderRadius: BorderRadius.circular(AppTheme.r16),
+            border: Border.all(color: const Color(0xFF2A475E)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.login_rounded, size: 22, color: Colors.white),
+              const SizedBox(width: 12),
+              Text(
+                widget.isLinking ? 'Link with Steam' : 'Continue with Steam',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(duration: 500.ms, delay: 650.ms).slideY(
+          begin: 0.1,
+          duration: 500.ms,
+          delay: 650.ms,
+          curve: Curves.easeOut,
+        );
+  }
+
+  Widget _buildPollingStatus() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
       child: Column(
         children: [
-          const SizedBox(height: 24),
-          // What you get
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF00E676).withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF00E676).withValues(alpha: 0.1)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.check_circle_outline, size: 16,
-                        color: const Color(0xFF00E676).withValues(alpha: 0.7)),
-                    const SizedBox(width: 8),
-                    Text('What you get:',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                            color: Colors.white.withValues(alpha: 0.6))),
-                  ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppTheme.textMuted,
                 ),
-                const SizedBox(height: 8),
-                Text('Inventory tracking, real-time prices, portfolio value',
-                    style: TextStyle(fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.5), height: 1.4)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          // What you don't get
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.warning.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.1)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 16,
-                        color: AppTheme.warning.withValues(alpha: 0.7)),
-                    const SizedBox(width: 8),
-                    Text('Not included:',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                            color: Colors.white.withValues(alpha: 0.6))),
-                  ],
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Waiting for Steam login...',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.textMuted,
                 ),
-                const SizedBox(height: 8),
-                Text('Trades, market history, profit tracking.\nUse "Full Access" tab for these features.',
-                    style: TextStyle(fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.5), height: 1.4)),
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          Text('Quick and safe — uses official Steam OpenID.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.3))),
-          const SizedBox(height: 28),
-          if (isLoading)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 24),
-              child: SizedBox(width: 24, height: 24,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2.5, color: AppTheme.primary)),
-            ),
           GestureDetector(
-            onTap: isLoading
-                ? null
-                : () {
-                    HapticFeedback.mediumImpact();
-                    if (widget.isLinking) {
-                      ref.read(authServiceProvider).openSteamLinkLogin(ref);
-                    } else {
-                      _openSteamLogin();
-                    }
-                  },
-            child: Container(
-              width: double.infinity,
-              height: 56,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1B2838),
-                borderRadius: BorderRadius.circular(AppTheme.r16),
-                border: Border.all(color: const Color(0xFF2A475E)),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.login_rounded, size: 22, color: Colors.white),
-                  SizedBox(width: 12),
-                  Text('Sign in with Steam',
-                      style: TextStyle(fontSize: 16,
-                          fontWeight: FontWeight.w600, color: Colors.white)),
-                ],
+            onTap: _checkNow,
+            child: Text(
+              'Completed login? Tap to continue',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.primary.withValues(alpha: 0.8),
               ),
             ),
           ),
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 300.ms);
+  }
+
+  Widget _buildTimeoutStatus() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: GestureDetector(
+        onTap: _startLogin,
+        child: const Text(
+          'Login timed out. Tap to try again.',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppTheme.textMuted,
+          ),
+        ),
+      ),
+    ).animate().fadeIn(duration: 300.ms);
+  }
+
+  Widget _buildSecurityNote() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        'Safe and secure — uses official Steam OpenID',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.white.withValues(alpha: 0.3),
+        ),
+      ),
+    ).animate().fadeIn(duration: 500.ms, delay: 800.ms);
   }
 }
