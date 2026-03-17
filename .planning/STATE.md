@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Auth Flow Redesign
-status: planning
-stopped_at: "Milestone 6 created — ready for Phase 27 planning"
-last_updated: "2026-03-17T12:00:00Z"
-last_activity: "2026-03-17 -- Milestone 6 (Auth Flow Redesign) created with 3 phases (27-29)"
+status: executing
+stopped_at: "Completed 27-02-PLAN.md (Flutter login redesign + nonce polling)"
+last_updated: "2026-03-17T14:00:00Z"
+last_activity: "2026-03-17 -- Phase 27 Plan 02 executed: login screen redesign + nonce polling + hasSessionProvider"
 progress:
   total_phases: 13
   completed_phases: 5
   total_plans: 30
-  completed_plans: 15
-  percent: 50
+  completed_plans: 16
+  percent: 53
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 27 (Tier 1 — Zero Friction Entry) — ready for planning
-Next: Phase 28 (Intent-Based Session Unlock)
-Status: Milestone 6 created — auth flow redesign with tier-based architecture
-Last activity: 2026-03-17 -- Milestone 6 created, 3 phases planned (27-29), 13 requirements defined
+Phase: 27 (Tier 1 — Zero Friction Entry) — Plan 02 complete
+Next: Phase 27 Plan 01 (backend) or Phase 28 (Intent-Based Session Unlock)
+Status: Login screen redesigned, nonce polling added, hasSessionProvider ready
+Last activity: 2026-03-17 -- Completed 27-02 (Flutter login redesign + nonce polling)
 
 Progress: [██████████] 100%
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | 19 | 01 | ~900s | 3 | 4 |
 | 19 | 02 | ~1200s | 4 | 6 |
 | 20 | 01 | ~480s | 9 | 11 |
+| 27 | 02 | 147s | 2 | 3 |
 
 ## Accumulated Context
 
@@ -108,6 +109,9 @@ Progress: [██████████] 100%
 - [20-01]: Bulk sell gate placed in InventoryScreen callbacks (not SellBottomSheet) — avoids showing sheet at all for free users
 - [20-01]: Route is /premium not /paywall — plan had /paywall but router only registers /premium
 - [20-01]: /pl, /pl/items, and /pl/history all get requirePremium re-enabled — all P/L routes are premium
+- [27-02]: Polling is fallback only — deep link handler in main.dart remains primary auth path
+- [27-02]: isLinking mode preserved for account linking flow (uses openSteamLinkLogin, no polling)
+- [27-02]: hasSessionProvider checks valid/expiring status for future sell/trade UI gating
 
 ### Pending Todos
 
@@ -119,6 +123,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14
-Stopped at: "Completed 20-01-PLAN.md (premium gate activation)"
+Last session: 2026-03-17
+Stopped at: "Completed 27-02-PLAN.md (Flutter login redesign + nonce polling)"
 Resume file: None
