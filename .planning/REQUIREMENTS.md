@@ -71,6 +71,27 @@
 - [ ] **WIDGET-04**: Tapping widget opens app to portfolio screen
 - [ ] **WIDGET-05**: Widget shows P/L summary if premium user
 
+## Milestone 6 Requirements — Auth Flow Redesign
+
+### Tier 1: Zero Friction Entry
+- [ ] **AUTHUX-01**: Login screen shows only "Continue with Steam" button → OpenID in browser
+- [ ] **AUTHUX-02**: After OpenID login, user goes directly to app (Portfolio) — NO session screen
+- [ ] **AUTHUX-03**: Inventory shows read-only items (public Steam inventory) without session
+- [ ] **AUTHUX-04**: Portfolio, prices, alerts all work without Steam session
+
+### Tier 2: Intent-Based Unlock
+- [ ] **AUTHUX-05**: Sell/Trade/Accept actions trigger unlock gate (not shown at login)
+- [ ] **AUTHUX-06**: Gate screen: value-driven copy ("Enable trading & selling"), shows what unlocks
+- [ ] **AUTHUX-07**: QR code is primary connect method — large QR, clear Steam Guard instructions
+- [ ] **AUTHUX-08**: Web token is hidden fallback — "Use browser instead (advanced)" small link
+- [ ] **AUTHUX-09**: After successful connect, progress animation: "Syncing items... Loading prices... Calculating profit..."
+- [ ] **AUTHUX-10**: Auto-navigate back to action that triggered the gate
+
+### UX Polish
+- [ ] **AUTHUX-11**: Locked states for unconnected users: "Connect Steam to sell items" banners
+- [ ] **AUTHUX-12**: Soft nudge in Portfolio: "Connect Steam to unlock full potential"
+- [ ] **AUTHUX-13**: Post-connect reward: "772 items synced, +$1,350 profit detected"
+
 ## Out of Scope (M3)
 
 | Feature | Reason |

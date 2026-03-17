@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: "Completed 20-01-PLAN.md (premium gate activation)"
-last_updated: "2026-03-14T22:40:00Z"
-last_activity: "2026-03-14 -- Phase 20 complete: premium gates activated across Flutter + backend"
+milestone: v2.0
+milestone_name: Auth Flow Redesign
+status: planning
+stopped_at: "Milestone 6 created — ready for Phase 27 planning"
+last_updated: "2026-03-17T12:00:00Z"
+last_activity: "2026-03-17 -- Milestone 6 (Auth Flow Redesign) created with 3 phases (27-29)"
 progress:
   total_phases: 13
   completed_phases: 5
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 21 (Web Foundation) — next up
-Next: Phase 22 (Dashboard & Inventory) after Phase 21
-Status: Phase 20 complete (premium gates activated — premiumProvider wired, PremiumGate widget, tier-based alert limits, requirePremium re-enabled on P/L/CSV routes)
-Last activity: 2026-03-14 -- Phase 20 complete: all premium gates active, 234 backend tests passing
+Phase: 27 (Tier 1 — Zero Friction Entry) — ready for planning
+Next: Phase 28 (Intent-Based Session Unlock)
+Status: Milestone 6 created — auth flow redesign with tier-based architecture
+Last activity: 2026-03-17 -- Milestone 6 created, 3 phases planned (27-29), 13 requirements defined
 
 Progress: [██████████] 100%
 

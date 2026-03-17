@@ -24,6 +24,11 @@ Milestones 1 (Auth & Selling) and 2 (Premium & Growth) are complete. Milestone 3
 - [x] Phase 19: Named Portfolios
 - [x] Phase 20: Premium Gate Activation (completed 2026-03-14)
 
+### Milestone 6: Auth Flow Redesign — ACTIVE
+- [ ] Phase 27: Tier 1 — Zero Friction Entry
+- [ ] Phase 28: Tier 2 — Intent-Based Session Unlock
+- [ ] Phase 29: UX Polish — Locked States, Nudges & Connect Reward
+
 ### Milestone 5: Web Platform — PLANNED
 - [ ] Phase 21: Web Foundation — Next.js scaffold, design system, auth, layout shell
 - [ ] Phase 22: Dashboard & Inventory — Portfolio dashboard, inventory grid, item detail, price comparison
@@ -242,6 +247,57 @@ Plans:
 - [x] 15-03-PLAN.md — Gap closure: fix SteamClient unhandled rejection (exit code 1), Steam HTML scraper fixtures + scrapers.test.ts
 - [x] 15-04-PLAN.md — Gap closure: auth/trades/market/session route integration tests, coverage threshold update to actual measured value
 
+## Phase Details (M6 — Auth Flow Redesign)
+
+### Phase 27: Tier 1 — Zero Friction Entry
+**Goal**: Users enter app instantly after Steam OpenID — no session screen, full read-only access
+**Depends on**: Phase 20 (existing auth works)
+**Requirements**: AUTHUX-01, AUTHUX-02, AUTHUX-03, AUTHUX-04
+**Success Criteria**:
+  1. Login screen: single "Continue with Steam" CTA, clean design with app branding
+  2. After OpenID callback, route goes to `/portfolio` — NOT to session screen
+  3. Inventory loads via public Steam API (no cookies needed) for read-only view
+  4. Portfolio value, prices, alerts all functional without session cookies
+  5. Session screen removed from mandatory post-login flow
+**Plans**: 2 plans
+
+Plans:
+- [ ] 27-01-PLAN.md — Backend: ensure public inventory endpoint works without session, separate identity (JWT) from session (cookies) in auth flow
+- [ ] 27-02-PLAN.md — Flutter: redesign login screen (single CTA), remove mandatory session redirect, route to portfolio after OpenID, inventory provider falls back to public API
+
+### Phase 28: Tier 2 — Intent-Based Session Unlock
+**Goal**: When user tries sell/trade, show value-driven gate with QR primary + web token fallback
+**Depends on**: Phase 27 (tier 1 entry works)
+**Requirements**: AUTHUX-05, AUTHUX-06, AUTHUX-07, AUTHUX-08, AUTHUX-09, AUTHUX-10
+**Success Criteria**:
+  1. Tapping Sell/Quick Sell/Trade/Accept checks session state — if no session, shows gate
+  2. Gate screen: "Enable trading & selling" with feature list (trade offers, market history, instant accept)
+  3. QR tab is default and prominent — large QR, "Open Steam" button, 4-step instructions
+  4. "Use browser instead (advanced)" small link below QR — opens web token flow
+  5. Connect progress: animated steps (Syncing → Loading → Calculating)
+  6. After connect, auto-navigate back to the screen that triggered the gate
+  7. QR timeout 60s → auto-refresh with "QR expired" message
+**Plans**: 2 plans
+
+Plans:
+- [ ] 28-01-PLAN.md — Flutter: SessionGate widget (checks session, shows gate or passes through), gate screen UI (QR primary, token fallback link), connect progress animation
+- [ ] 28-02-PLAN.md — Flutter: wire SessionGate to all sell/trade/accept actions, auto-return after connect, QR timeout/refresh, "Open Steam" launch
+
+### Phase 29: UX Polish — Locked States, Nudges & Connect Reward
+**Goal**: Unconnected users see helpful banners, connected users get reward animation
+**Depends on**: Phase 28 (gate flow works)
+**Requirements**: AUTHUX-11, AUTHUX-12, AUTHUX-13
+**Success Criteria**:
+  1. Trades tab: "Connect Steam to manage trades" empty state with connect CTA
+  2. Sell buttons: show lock icon when no session, tap triggers gate
+  3. Portfolio: soft nudge banner "Connect Steam to unlock full potential"
+  4. Post-connect reward: "✓ 772 items synced, +$1,350 profit detected" with confetti/animation
+  5. All locked states consistent design language
+**Plans**: 1 plan
+
+Plans:
+- [ ] 29-01-PLAN.md — Flutter: locked state banners (trades, sell, portfolio nudge), post-connect reward animation, consistent lock icon on gated actions
+
 ## Phase Details (M5 — Web Platform)
 
 **Stack**: Next.js 15 (App Router) + Tailwind CSS 4 + Framer Motion + TanStack Query + Zustand + Recharts + Stripe
@@ -391,6 +447,10 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 18. Backend Error Propagation | 2/2 | Complete | 2026-03-13 |
 | 19. Named Portfolios | 2/2 | Complete | 2026-03-14 |
 | 20. Premium Gate Activation | 0/1 | Pending | — |
+| **Milestone 6: Auth Redesign** | | | |
+| 27. Tier 1 — Zero Friction Entry | 0/2 | Pending | — |
+| 28. Tier 2 — Intent-Based Unlock | 0/2 | Pending | — |
+| 29. UX Polish — Locked States | 0/1 | Pending | — |
 | **Milestone 5: Web Platform** | | | |
 | 21. Web Foundation | 0/3 | Pending | — |
 | 22. Dashboard & Inventory | 0/3 | Pending | — |
