@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
@@ -153,7 +152,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             _buildHeader(item, count),
             const SizedBox(height: 16),
 
-            // Session check
+            // Session is guaranteed valid by caller (requireSession).
+            // Still watch for 'expiring' warning or mid-sheet expiry.
             sessionStatus.when(
               data: (ss) {
                 if (ss.status == 'valid' || ss.status == 'expiring') {
@@ -166,13 +166,26 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                     wallet: wallet,
                   );
                 }
-                return _buildSessionWarning(context);
+                // Session expired while sheet is open -- minimal prompt
+                return Center(
+                  child: TextButton.icon(
+                    onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Session expired. Close and retry.'),
+                  ),
+                );
               },
               loading: () => const Padding(
                 padding: EdgeInsets.all(24),
                 child: CircularProgressIndicator(color: AppTheme.primary),
               ),
-              error: (_, _) => _buildSessionWarning(context),
+              error: (_, _) => Center(
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Session error. Close and retry.'),
+                ),
+              ),
             ),
 
             const SizedBox(height: 8),
@@ -224,58 +237,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSessionWarning(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.loss.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppTheme.r16),
-        border: Border.all(color: AppTheme.loss.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.error_outline, color: AppTheme.loss, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Steam session required to sell items',
-                  style: AppTheme.body.copyWith(
-                    color: AppTheme.loss,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                // Capture router before pop — context is deactivated after pop
-                final router = GoRouter.of(context);
-                Navigator.of(context, rootNavigator: true).pop();
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  router.push('/session');
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.loss,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.r12),
-                ),
-              ),
-              child: const Text('Connect Session'),
-            ),
-          ),
-        ],
-      ),
     );
   }
 

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
+import '../auth/session_gate.dart';
 import '../purchases/iap_service.dart';
 import 'inventory_provider.dart';
 import 'inventory_selection_provider.dart';
@@ -39,12 +40,16 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   @override
   bool get wantKeepAlive => true;
 
-  void _showSellSheet(List<InventoryItem> items) {
+  Future<void> _showSellSheet(List<InventoryItem> items) async {
+    if (!await requireSession(context, ref)) return;
+    if (!mounted) return;
     showGlassSheet(context, SellBottomSheet(items: items));
   }
 
   Future<void> _quickSell(List<InventoryItem> items) async {
     if (items.isEmpty) return;
+    if (!await requireSession(context, ref)) return;
+    if (!mounted) return;
     HapticFeedback.mediumImpact();
 
     try {

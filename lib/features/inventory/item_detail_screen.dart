@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
+import '../auth/session_gate.dart';
 import '../purchases/iap_service.dart';
 import '../portfolio/widgets/add_transaction_sheet.dart';
 import '../../core/settings_provider.dart';
@@ -864,6 +865,8 @@ class _SellActions extends ConsumerWidget {
                         flex: 3,
                         child: GestureDetector(
                           onTap: () async {
+                            if (!await requireSession(context, ref)) return;
+                            if (!context.mounted) return;
                             HapticFeedback.mediumImpact();
                             final items = [
                               {
@@ -923,7 +926,9 @@ class _SellActions extends ConsumerWidget {
                       Expanded(
                         flex: 2,
                         child: GestureDetector(
-                          onTap: () {
+                          onTap: () async {
+                            if (!await requireSession(context, ref)) return;
+                            if (!context.mounted) return;
                             HapticFeedback.selectionClick();
                             showGlassSheet(
                                 context, SellBottomSheet(items: [item]));
