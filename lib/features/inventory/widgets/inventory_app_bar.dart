@@ -152,7 +152,7 @@ class InventoryAppBar extends ConsumerWidget {
                             size: 13, color: AppTheme.warning),
                         const SizedBox(width: 5),
                         Text(
-                          'Bulk Quick Sale',
+                          'Bulk Sale',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,

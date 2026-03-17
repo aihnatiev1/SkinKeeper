@@ -166,7 +166,7 @@ class _InventoryStatsAndFilters extends ConsumerWidget {
               const Spacer(),
               // Optional: Sync indicator or small sync button
               Text(
-                'Market Prices (Buff/Steam)',
+                'Market Prices',
                 style: TextStyle(
                   fontSize: 10,
                   color: AppTheme.textMuted.withValues(alpha: 0.5),

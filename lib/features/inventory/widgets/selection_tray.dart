@@ -93,7 +93,7 @@ class SelectionTray extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '$count items',
+                    '$count ${count == 1 ? 'item' : 'items'}',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -137,9 +137,9 @@ class SelectionTray extends StatelessWidget {
                               size: 15, color: Colors.black),
                           SizedBox(width: 4),
                           Text(
-                            'Quick',
+                            'Quick Sell',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: Colors.black,
                             ),
@@ -176,9 +176,9 @@ class SelectionTray extends StatelessWidget {
                               size: 15, color: Colors.white),
                           SizedBox(width: 6),
                           Text(
-                            'Sell',
+                            'Set Price',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,
                             ),
