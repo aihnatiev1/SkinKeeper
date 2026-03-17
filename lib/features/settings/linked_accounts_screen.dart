@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../models/user.dart';
 import '../../widgets/shared_ui.dart';
 import 'accounts_provider.dart';
+import '../auth/session_gate.dart';
 import '../auth/steam_auth_service.dart';
 
 class LinkedAccountsScreen extends ConsumerWidget {
@@ -200,7 +201,7 @@ class _AccountCard extends ConsumerWidget {
                         ? 'Reconnect'
                         : 'Enable Trading',
                   ),
-                  onPressed: () => context.push('/session'),
+                  onPressed: () => requireSession(context, ref),
                 ),
               ),
               const SizedBox(width: 8),
