@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/review_service.dart';
 import '../../core/theme.dart';
+import '../../features/auth/session_gate.dart';
 import '../../features/auth/session_provider.dart';
 import '../../features/settings/accounts_provider.dart';
 import '../../models/market_listing.dart';
@@ -691,6 +692,8 @@ class _TradeOfferTile extends ConsumerWidget {
   }
 
   Future<void> _accept(WidgetRef ref, BuildContext context) async {
+    if (!await requireSession(context, ref)) return;
+    if (!context.mounted) return;
     HapticFeedback.mediumImpact();
     try {
       await ref.read(tradesProvider.notifier).acceptOffer(offer.id);
@@ -710,6 +713,8 @@ class _TradeOfferTile extends ConsumerWidget {
   }
 
   Future<void> _decline(WidgetRef ref, BuildContext context) async {
+    if (!await requireSession(context, ref)) return;
+    if (!context.mounted) return;
     HapticFeedback.lightImpact();
     try {
       await ref.read(tradesProvider.notifier).declineOffer(offer.id);
@@ -728,6 +733,8 @@ class _TradeOfferTile extends ConsumerWidget {
   }
 
   Future<void> _cancel(WidgetRef ref, BuildContext context) async {
+    if (!await requireSession(context, ref)) return;
+    if (!context.mounted) return;
     HapticFeedback.lightImpact();
     try {
       await ref.read(tradesProvider.notifier).cancelOffer(offer.id);

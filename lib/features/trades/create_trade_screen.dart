@@ -10,6 +10,7 @@ import '../../core/api_client.dart';
 import '../../core/review_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../auth/session_gate.dart';
 import '../../widgets/glass_sheet.dart';
 import '../../widgets/shared_ui.dart';
 import '../../models/trade_offer.dart';
@@ -44,6 +45,22 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
   bool _loadingInventories = false;
   String? _inventoryError;
   bool _sending = false;
+  bool _hasSession = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final connected = await requireSession(context, ref);
+      if (!mounted) return;
+      if (!connected) {
+        // User dismissed gate -- go back
+        context.pop();
+        return;
+      }
+      setState(() => _hasSession = true);
+    });
+  }
 
   @override
   void dispose() {
@@ -53,6 +70,15 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_hasSession) {
+      return Scaffold(
+        backgroundColor: AppTheme.bg,
+        body: const Center(
+          child: CircularProgressIndicator(color: AppTheme.primary),
+        ),
+      );
+    }
+
     final currency = ref.watch(currencyProvider);
     return Scaffold(
       backgroundColor: AppTheme.bg,
