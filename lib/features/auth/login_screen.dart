@@ -47,7 +47,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final authService = ref.read(authServiceProvider);
       if (widget.isLinking) {
         await authService.openSteamLinkLogin(ref);
-        // Link flow uses deep link callback only, no polling
+        // Link flow: show "I'm back" button since deep links don't work on iOS
+        // User returns manually, taps button, we refresh accounts
+        if (mounted) {
+          setState(() => _isPolling = true);
+          // Poll accounts every 3s to detect when link completes
+          _pollTimer?.cancel();
+          int attempts = 0;
+          final api = ref.read(apiClientProvider);
+          _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+            attempts++;
+            if (attempts > 30) { // 90 seconds
+              timer.cancel();
+              if (mounted) setState(() { _isPolling = false; _timedOut = true; });
+              return;
+            }
+            try {
+              final resp = await api.get('/auth/accounts');
+              final accounts = (resp.data['accounts'] as List?)?.length ?? 0;
+              final prevCount = ref.read(accountsProvider).valueOrNull?.length ?? 0;
+              if (accounts > prevCount) {
+                // New account detected!
+                timer.cancel();
+                ref.invalidate(accountsProvider);
+                ref.invalidate(inventoryProvider);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Account linked successfully!'),
+                      backgroundColor: Color(0xFF00E676),
+                    ),
+                  );
+                  setState(() => _isPolling = false);
+                  context.pop();
+                }
+              }
+            } catch (_) {}
+          });
+        }
         return;
       }
       _nonce = await authService.openSteamLoginWithPolling();
