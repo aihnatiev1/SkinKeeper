@@ -128,54 +128,56 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.r24)),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppTheme.textDisabled,
-              borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.textDisabled,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // Cross-account warning banner
-          if (isNonActiveAccount) ...[
-            _buildSwitchAccountBanner(context),
-            const SizedBox(height: 4),
+            // Cross-account warning banner
+            if (isNonActiveAccount) ...[
+              _buildSwitchAccountBanner(context),
+              const SizedBox(height: 4),
+            ],
+
+            // Header — item info
+            _buildHeader(item, count),
+            const SizedBox(height: 16),
+
+            // Session check
+            sessionStatus.when(
+              data: (ss) {
+                if (ss.status == 'valid' || ss.status == 'expiring') {
+                  final wallet = walletAsync.valueOrNull ?? WalletInfo.usd;
+                  return _buildSellContent(
+                    quickPriceAsync: quickPriceAsync,
+                    volume: volume,
+                    count: count,
+                    sessionWarning: ss.status == 'expiring',
+                    wallet: wallet,
+                  );
+                }
+                return _buildSessionWarning(context);
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(color: AppTheme.primary),
+              ),
+              error: (_, _) => _buildSessionWarning(context),
+            ),
+
+            const SizedBox(height: 8),
           ],
-
-          // Header — item info
-          _buildHeader(item, count),
-          const SizedBox(height: 16),
-
-          // Session check
-          sessionStatus.when(
-            data: (ss) {
-              if (ss.status == 'valid' || ss.status == 'expiring') {
-                final wallet = walletAsync.valueOrNull ?? WalletInfo.usd;
-                return _buildSellContent(
-                  quickPriceAsync: quickPriceAsync,
-                  volume: volume,
-                  count: count,
-                  sessionWarning: ss.status == 'expiring',
-                  wallet: wallet,
-                );
-              }
-              return _buildSessionWarning(context);
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(color: AppTheme.primary),
-            ),
-            error: (_, _) => _buildSessionWarning(context),
-          ),
-
-          const SizedBox(height: 8),
-        ],
+        ),
       ),
     );
   }
