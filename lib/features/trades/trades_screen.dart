@@ -82,7 +82,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                     ],
                   ),
                 ),
-                if (needsReauth)
+                if (needsReauth && hasSession)
                   GestureDetector(
                     onTap: () => requireSession(context, ref),
                     child: Container(
@@ -109,27 +109,79 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                       ),
                     ),
                   ),
-                _TradesAccountFilter(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: PillTabSelector(
-                    tabs: [l10n.tradePending, l10n.alertHistory, 'Listings'],
-                    selected: _selectedTab,
-                    onChanged: (i) {
-                      setState(() => _selectedTab = i);
-                      _pageCtrl.animateToPage(i, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
-                    },
+                if (hasSession) _TradesAccountFilter(),
+                if (!hasSession)
+                  // ── Locked state — clean centered plashka ──
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: AppTheme.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppTheme.primary.withValues(alpha: 0.15),
+                                width: 1,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.lock_outline_rounded,
+                              size: 36,
+                              color: AppTheme.primary.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Enable trading',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Steam requires an extra verification step\nto create and accept trade offers',
+                            style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          GradientButton(
+                            label: 'Enable Trading',
+                            icon: Icons.lock_open_rounded,
+                            expanded: false,
+                            onPressed: () => requireSession(context, ref),
+                          ),
+                        ],
+                      ),
+                    ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.95, 0.95)),
+                  )
+                else ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: PillTabSelector(
+                      tabs: [l10n.tradePending, l10n.alertHistory, 'Listings'],
+                      selected: _selectedTab,
+                      onChanged: (i) {
+                        setState(() => _selectedTab = i);
+                        _pageCtrl.animateToPage(i, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+                      },
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: PageView(
-                    controller: _pageCtrl,
-                    onPageChanged: (i) => setState(() => _selectedTab = i),
-                    children: [_PendingTab(), _HistoryTab(), _ListingsTab()],
+                  Expanded(
+                    child: PageView(
+                      controller: _pageCtrl,
+                      onPageChanged: (i) => setState(() => _selectedTab = i),
+                      children: [_PendingTab(), _HistoryTab(), _ListingsTab()],
+                    ),
                   ),
-                ),
-                // Bottom spacing for the FAB
-                const SizedBox(height: 80),
+                  // Bottom spacing for the FAB
+                  const SizedBox(height: 80),
+                ],
               ],
             ),
 
@@ -194,61 +246,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
 class _PendingTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hasSession = ref.watch(hasSessionProvider);
     final offersAsync = ref.watch(tradesProvider);
-
-    // Show locked state when no Steam session
-    if (!hasSession) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppTheme.primary.withValues(alpha: 0.15),
-                  width: 1,
-                ),
-              ),
-              child: Icon(
-                Icons.lock_outline_rounded,
-                size: 36,
-                color: AppTheme.primary.withValues(alpha: 0.5),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Enable trading',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Steam requires an extra verification step\nto create and accept trade offers',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppTheme.textMuted,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            GradientButton(
-              label: 'Enable Trading',
-              icon: Icons.lock_open_rounded,
-              expanded: false,
-              onPressed: () => requireSession(context, ref),
-            ),
-          ],
-        ),
-      ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.95, 0.95));
-    }
 
     return offersAsync.when(
       data: (tradesState) {
