@@ -233,7 +233,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
         title: Text(isExpired ? 'Session Expired' : 'Enable Full Access'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
