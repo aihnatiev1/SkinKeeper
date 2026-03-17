@@ -234,6 +234,10 @@ async function fetchInventoryContext(
         data = resp.data;
         break;
       } catch (err: any) {
+        if (err.response?.status === 403 && contextId === "2") {
+          // Steam returns 403 when inventory is set to private
+          throw new Error('INVENTORY_PRIVATE');
+        }
         if (err.response?.status === 429 && retry < 2) {
           console.log(`[Steam] Rate limited ctx${contextId}, waiting ${(retry + 1) * 10}s...`);
           await new Promise((r) => setTimeout(r, (retry + 1) * 10000));
@@ -244,7 +248,14 @@ async function fetchInventoryContext(
       }
     }
 
-    if (!data?.success || !data?.assets) break;
+    if (!data?.success) {
+      // If context 2 returns success:false with no assets on first page, inventory is likely private
+      if (contextId === "2" && page === 0 && !data?.assets) {
+        throw new Error('INVENTORY_PRIVATE');
+      }
+      break;
+    }
+    if (!data?.assets) break;
 
     const assets = data.assets as SteamInventoryAsset[];
     const descriptions = data.descriptions as SteamInventoryDescription[];

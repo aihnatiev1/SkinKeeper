@@ -59,7 +59,11 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       prices: priceMap.get(item.market_hash_name) ?? {},
     }));
 
-    res.json({ items: enriched, count: enriched.length });
+    // Check if active account has a session (for session-dependent UI features)
+    const activeAccountId = await SteamSessionService.getActiveAccountId(req.userId!);
+    const session = activeAccountId ? await SteamSessionService.getSession(activeAccountId) : null;
+
+    res.json({ items: enriched, count: enriched.length, hasSession: !!session });
   } catch (err) {
     console.error("Inventory fetch error:", err);
     res.status(500).json({ error: "Failed to load inventory" });
@@ -140,14 +144,25 @@ router.post(
       }
 
       let totalItems = 0;
+      const privateAccountIds: number[] = [];
 
       for (const account of accounts) {
         // Use session cookies to see trade-banned items not visible publicly
         const session = await SteamSessionService.getSession(account.id);
-        const items = await fetchSteamInventory(
-          account.steam_id,
-          session ? { steamLoginSecure: session.steamLoginSecure, sessionId: session.sessionId } : undefined
-        );
+        let items: Awaited<ReturnType<typeof fetchSteamInventory>>;
+        try {
+          items = await fetchSteamInventory(
+            account.steam_id,
+            session ? { steamLoginSecure: session.steamLoginSecure, sessionId: session.sessionId } : undefined
+          );
+        } catch (err: any) {
+          if (err.message === 'INVENTORY_PRIVATE') {
+            console.log(`[Inventory] Account ${account.id} (${account.steam_id}) has private inventory`);
+            privateAccountIds.push(account.id);
+            continue;
+          }
+          throw err;
+        }
 
         // Batch upsert items using unnest for performance (~1 query instead of ~800)
         if (items.length > 0) {
@@ -197,7 +212,7 @@ router.post(
         totalItems += items.length;
       }
 
-      res.json({ success: true, total_items: totalItems });
+      res.json({ success: true, total_items: totalItems, private_accounts: privateAccountIds });
 
       // Background: fetch latest Skinport prices so new items have prices immediately
       fetchSkinportPrices()
