@@ -532,7 +532,7 @@ class _AddPurchaseSheetState extends State<_AddPurchaseSheet> {
     final priceText = _priceController.text.trim();
     if (priceText.isEmpty) return;
 
-    final price = double.tryParse(priceText);
+    final price = double.tryParse(priceText.replaceAll(',', '.'));
     if (price == null || price <= 0) return;
 
     setState(() => _saving = true);

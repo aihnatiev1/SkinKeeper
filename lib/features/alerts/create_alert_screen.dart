@@ -118,7 +118,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
       return;
     }
 
-    final threshold = double.tryParse(_thresholdController.text);
+    final threshold = double.tryParse(_thresholdController.text.replaceAll(',', '.'));
     if (threshold == null || threshold <= 0) {
       setState(() => _error = 'Enter a valid price');
       return;

@@ -116,17 +116,17 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       _selectedItem != null &&
       _selectedItem!.isNotEmpty &&
       _priceController.text.isNotEmpty &&
-      (double.tryParse(_priceController.text) ?? 0) > 0;
+      (double.tryParse(_priceController.text.replaceAll(',', '.')) ?? 0) > 0;
 
   int get _priceCents {
-    final price = double.tryParse(_priceController.text) ?? 0;
+    final price = double.tryParse(_priceController.text.replaceAll(',', '.')) ?? 0;
     return (price * 100).round();
   }
 
   int get _quantity => int.tryParse(_qtyController.text) ?? 1;
 
   double get _totalPrice =>
-      (double.tryParse(_priceController.text) ?? 0) * _quantity;
+      (double.tryParse(_priceController.text.replaceAll(',', '.')) ?? 0) * _quantity;
 
   bool get _isUnchanged =>
       widget.editMode &&
@@ -287,9 +287,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                               prefixIcon: Icons.attach_money_rounded,
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
-                                    RegExp(r'^\d*\.?\d{0,2}')),
+                                    RegExp(r'^\d*[.,]?\d{0,2}')),
                                 TextInputFormatter.withFunction((old, next) {
-                                  final v = double.tryParse(next.text) ?? 0;
+                                  final v = double.tryParse(next.text.replaceAll(',', '.')) ?? 0;
                                   return v <= 100000 ? next : old;
                                 }),
                               ],

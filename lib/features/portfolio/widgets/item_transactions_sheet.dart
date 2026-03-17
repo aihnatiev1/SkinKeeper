@@ -301,7 +301,7 @@ class _EditTxSheetState extends ConsumerState<_EditTxSheet> {
   }
 
   Future<void> _save() async {
-    final price = double.tryParse(_priceCtrl.text);
+    final price = double.tryParse(_priceCtrl.text.replaceAll(',', '.'));
     if (price == null || price < 0) {
       setState(() => _error = 'Invalid price');
       return;

@@ -59,7 +59,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   bool get _isSingle => widget.items.length == 1;
 
   void _onCustomPriceChanged(String value) {
-    final parsed = double.tryParse(value);
+    final parsed = double.tryParse(value.replaceAll(',', '.'));
     setState(() {
       _customPriceCents = parsed != null ? (parsed * 100).round() : null;
     });
