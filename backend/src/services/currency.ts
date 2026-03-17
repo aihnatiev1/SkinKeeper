@@ -285,7 +285,8 @@ const COUNTRY_CURRENCY: Record<string, number> = {
  *
  * Strategy:
  * 1. Try to parse g_rgWalletInfo from a Steam page (market listing, etc.)
- * 2. Fall back to steamCountry cookie → country-currency mapping
+ * 2. Try g_nWalletCurrency variable (available even without full wallet info)
+ * 3. Fall back to steamCountry cookie → country-currency mapping
  */
 export async function detectWalletCurrency(
   steamLoginSecure: string
@@ -306,9 +307,11 @@ export async function detectWalletCurrency(
       }
     );
 
-    // Strategy 1: Try g_rgWalletInfo from response body (if 200)
+    // Strategy 1 & 2: Parse HTML variables (if 200)
     if (response.status === 200) {
       const html = response.data as string;
+
+      // Strategy 1: Try g_rgWalletInfo (full wallet object)
       const match = html.match(/g_rgWalletInfo\s*=\s*(\{[^}]+\})/);
       if (match) {
         try {
@@ -323,9 +326,22 @@ export async function detectWalletCurrency(
           }
         } catch { /* parse failed, fall through */ }
       }
+
+      // Strategy 2: Try g_nWalletCurrency (scalar, often present even without g_rgWalletInfo)
+      const nMatch = html.match(/g_nWalletCurrency\s*=\s*(\d+)/);
+      if (nMatch) {
+        const currencyId = parseInt(nMatch[1], 10);
+        if (currencyId > 0 && STEAM_CURRENCIES[currencyId]) {
+          const info = getCurrencyInfo(currencyId);
+          console.log(
+            `[Currency] Detected from g_nWalletCurrency: ${info?.code ?? "unknown"} (ID: ${currencyId})`
+          );
+          return currencyId;
+        }
+      }
     }
 
-    // Strategy 2: Parse steamCountry from Set-Cookie
+    // Strategy 3: Parse steamCountry from Set-Cookie
     const cookies = response.headers["set-cookie"];
     if (cookies) {
       for (const cookie of cookies) {
