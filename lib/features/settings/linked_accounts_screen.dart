@@ -85,17 +85,17 @@ class _AccountCard extends ConsumerWidget {
     switch (account.sessionStatus) {
       case 'valid': return AppTheme.profit;
       case 'expiring': return AppTheme.warning;
-      case 'expired': return AppTheme.loss;
-      default: return AppTheme.textDisabled;
+      case 'expired': return AppTheme.warning;
+      default: return AppTheme.textMuted;
     }
   }
 
   String _statusLabel() {
     switch (account.sessionStatus) {
-      case 'valid': return 'Logged in';
-      case 'expiring': return 'Login expiring soon';
-      case 'expired': return 'Login expired';
-      default: return 'Not connected';
+      case 'valid': return 'Trading enabled';
+      case 'expiring': return 'Session expiring soon';
+      case 'expired': return 'Trading locked — session expired';
+      default: return 'Online · Trading locked';
     }
   }
 
@@ -189,8 +189,17 @@ class _AccountCard extends ConsumerWidget {
               if (!account.isActive) const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.vpn_key, size: 16),
-                  label: Text(account.isActive ? 'Reconnect' : 'Sign in'),
+                  icon: Icon(
+                    account.sessionStatus == 'valid' || account.sessionStatus == 'expiring'
+                        ? Icons.check_circle_outline
+                        : Icons.lock_open_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    account.sessionStatus == 'valid' || account.sessionStatus == 'expiring'
+                        ? 'Reconnect'
+                        : 'Enable Trading',
+                  ),
                   onPressed: () => context.push('/session'),
                 ),
               ),
