@@ -640,7 +640,7 @@ class _WearPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _wearPillColors[wear] ?? AppTheme.textMuted;
-    final label = compact ? wear : (_wearFullNames[wear] ?? wear);
+    final label = wear; // Always show short code (FT, WW, etc.) — CS users know these
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 4 : 6,
