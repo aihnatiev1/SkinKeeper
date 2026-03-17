@@ -14,7 +14,9 @@ import '../../models/profit_loss.dart';
 import '../../widgets/premium_gate.dart';
 import '../../widgets/shared_ui.dart';
 import '../../widgets/sync_indicator.dart';
+import '../auth/session_gate.dart';
 import '../auth/widgets/session_status_widget.dart';
+import '../inventory/inventory_provider.dart';
 import '../purchases/iap_service.dart';
 import 'portfolio_pl_provider.dart';
 import 'portfolio_provider.dart';
@@ -115,6 +117,11 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
               ),
             ),
 
+            // ── Session nudge ──
+            SliverToBoxAdapter(
+              child: _SessionNudgeBanner(),
+            ),
+
             // ── Tabs ──
             SliverToBoxAdapter(
               child: Padding(
@@ -189,6 +196,54 @@ class _AddFab extends StatelessWidget {
             ],
           ),
           child: const Icon(Icons.add_rounded, size: 26, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Session Nudge Banner ─────────────────────────────────────
+class _SessionNudgeBanner extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasSession = ref.watch(hasSessionProvider);
+    final itemCount =
+        ref.watch(inventoryProvider).valueOrNull?.length ?? 0;
+
+    // Only show when no session AND user has inventory items
+    if (hasSession || itemCount == 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: GestureDetector(
+        onTap: () => requireSession(context, ref),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border:
+                Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.lock_open_rounded,
+                  size: 18, color: AppTheme.primary.withValues(alpha: 0.8)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Connect Steam to sell items and track trades',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: Colors.white.withValues(alpha: 0.3)),
+            ],
+          ),
         ),
       ),
     );

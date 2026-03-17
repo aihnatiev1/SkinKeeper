@@ -181,9 +181,16 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
 
   // ── Build ──────────────────────────────────────────────────────────────
 
+  bool get _isExpiredSession {
+    final status = ref.read(sessionStatusProvider).valueOrNull;
+    return status != null &&
+        (status.status == 'expired' || status.needsReauth);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokenState = ref.watch(clientTokenAuthProvider);
+    final isExpired = _isExpiredSession;
 
     // Listen for auth success from token flow
     ref.listen<ClientTokenAuthState>(clientTokenAuthProvider, (prev, next) {
@@ -223,7 +230,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
             Navigator.of(context).pop(false);
           },
         ),
-        title: const Text('Enable Full Access'),
+        title: Text(isExpired ? 'Session Expired' : 'Enable Full Access'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -231,7 +238,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Value proposition ──────────────────────────────────────
-            _buildValueSection(),
+            _buildValueSection(isExpired: isExpired),
             const SizedBox(height: 20),
 
             // ── Step 1 ────────────────────────────────────────────────
@@ -281,7 +288,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
 
   // ── Sub-builders ───────────────────────────────────────────────────────
 
-  Widget _buildValueSection() {
+  Widget _buildValueSection({bool isExpired = false}) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -293,7 +300,9 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Steam requires this extra step to protect your items',
+            isExpired
+                ? 'Steam keeps sessions active for about 24 hours. Sign in again to continue trading.'
+                : 'Steam requires this extra step to protect your items',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,

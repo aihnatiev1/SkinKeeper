@@ -10,6 +10,7 @@ class SelectionTray extends StatelessWidget {
   final List<InventoryItem> selectedItems;
   final CurrencyInfo currency;
   final bool expanded;
+  final bool hasSession;
   final VoidCallback onToggleExpand;
   final void Function(String assetId) onRemoveItem;
   final VoidCallback onClear;
@@ -21,6 +22,7 @@ class SelectionTray extends StatelessWidget {
     required this.selectedItems,
     required this.currency,
     required this.expanded,
+    this.hasSession = true,
     required this.onToggleExpand,
     required this.onRemoveItem,
     required this.onClear,
@@ -130,13 +132,13 @@ class SelectionTray extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.flash_on_rounded,
+                          const Icon(Icons.flash_on_rounded,
                               size: 15, color: Colors.black),
-                          SizedBox(width: 4),
-                          Text(
+                          const SizedBox(width: 4),
+                          const Text(
                             'Quick Sell',
                             style: TextStyle(
                               fontSize: 12,
@@ -144,6 +146,11 @@ class SelectionTray extends StatelessWidget {
                               color: Colors.black,
                             ),
                           ),
+                          if (!hasSession) ...[
+                            const SizedBox(width: 3),
+                            const Icon(Icons.lock_outline,
+                                size: 10, color: Colors.black54),
+                          ],
                         ],
                       ),
                     ),
@@ -169,13 +176,13 @@ class SelectionTray extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.sell_rounded,
+                          const Icon(Icons.sell_rounded,
                               size: 15, color: Colors.white),
-                          SizedBox(width: 6),
-                          Text(
+                          const SizedBox(width: 6),
+                          const Text(
                             'Set Price',
                             style: TextStyle(
                               fontSize: 12,
@@ -183,6 +190,12 @@ class SelectionTray extends StatelessWidget {
                               color: Colors.white,
                             ),
                           ),
+                          if (!hasSession) ...[
+                            const SizedBox(width: 3),
+                            Icon(Icons.lock_outline,
+                                size: 10,
+                                color: Colors.white.withValues(alpha: 0.6)),
+                          ],
                         ],
                       ),
                     ),

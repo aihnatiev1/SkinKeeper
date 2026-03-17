@@ -114,6 +114,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               selectedItems: selectedItems,
               currency: currency,
               expanded: _trayExpanded,
+              hasSession: ref.watch(hasSessionProvider),
               onToggleExpand: () =>
                   setState(() => _trayExpanded = !_trayExpanded),
               onRemoveItem: (assetId) =>

@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../auth/session_gate.dart';
 import '../purchases/iap_service.dart';
+import 'inventory_provider.dart';
 import '../portfolio/widgets/add_transaction_sheet.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
@@ -846,6 +847,7 @@ class _SellActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final quickPriceAsync = ref.watch(quickPriceProvider(item.marketHashName));
     final currency = ref.watch(currencyProvider);
+    final hasSession = ref.watch(hasSessionProvider);
 
     return GlassCard(
       padding: const EdgeInsets.all(AppTheme.s14),
@@ -884,7 +886,10 @@ class _SellActions extends ConsumerWidget {
                                   context, const SellProgressSheet());
                             }
                           },
-                          child: Container(
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
                             height: 48,
                             decoration: BoxDecoration(
                               gradient: AppTheme.primaryGradient,
@@ -918,6 +923,17 @@ class _SellActions extends ConsumerWidget {
                                 ),
                               ],
                             ),
+                          ),
+                              if (!hasSession)
+                                Positioned(
+                                  top: 4,
+                                  right: 6,
+                                  child: Icon(Icons.lock_outline,
+                                      size: 12,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.7)),
+                                ),
+                            ],
                           ),
                         ),
                       ),

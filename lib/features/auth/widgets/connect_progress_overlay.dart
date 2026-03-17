@@ -29,7 +29,7 @@ class _ConnectProgressOverlayState extends State<ConnectProgressOverlay> {
   static const _steps = [
     'Syncing your session...',
     'Loading inventory...',
-    "You're all set!",
+    "Connected! You're all set.",
   ];
 
   @override

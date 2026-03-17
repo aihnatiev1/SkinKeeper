@@ -16,6 +16,7 @@ import '../../models/market_listing.dart';
 import '../../models/trade_offer.dart';
 import '../../models/user.dart';
 import '../../widgets/shared_ui.dart';
+import '../inventory/inventory_provider.dart';
 import 'trades_provider.dart';
 
 class TradesScreen extends ConsumerStatefulWidget {
@@ -192,7 +193,61 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
 class _PendingTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final hasSession = ref.watch(hasSessionProvider);
     final offersAsync = ref.watch(tradesProvider);
+
+    // Show locked state when no Steam session
+    if (!hasSession) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                Icons.lock_outline_rounded,
+                size: 36,
+                color: AppTheme.primary.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Connect Steam to manage trades',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Create and accept trade offers with your Steam session',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.textMuted,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            GradientButton(
+              label: 'Connect Steam',
+              icon: Icons.link_rounded,
+              expanded: false,
+              onPressed: () => requireSession(context, ref),
+            ),
+          ],
+        ),
+      ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.95, 0.95));
+    }
 
     return offersAsync.when(
       data: (tradesState) {
