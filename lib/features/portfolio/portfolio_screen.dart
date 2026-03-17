@@ -232,7 +232,7 @@ class _SessionNudgeBanner extends ConsumerWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Connect Steam to sell items and track trades',
+                  'Enable selling & trading — one extra step required by Steam',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,

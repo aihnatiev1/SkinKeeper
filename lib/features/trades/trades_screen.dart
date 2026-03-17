@@ -100,7 +100,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Trading locked — tap to enable',
+                              'Extra verification needed for trading',
                               style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                             ),
                           ),
@@ -222,7 +222,7 @@ class _PendingTab extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Connect Steam to manage trades',
+              'Enable trading',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -230,8 +230,8 @@ class _PendingTab extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Create and accept trade offers with your Steam session',
+            Text(
+              'Steam requires an extra verification step\nto create and accept trade offers',
               style: TextStyle(
                 fontSize: 13,
                 color: AppTheme.textMuted,
@@ -240,8 +240,8 @@ class _PendingTab extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
             GradientButton(
-              label: 'Connect Steam',
-              icon: Icons.link_rounded,
+              label: 'Enable Trading',
+              icon: Icons.lock_open_rounded,
               expanded: false,
               onPressed: () => requireSession(context, ref),
             ),
