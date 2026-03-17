@@ -10,6 +10,9 @@ import '../../core/theme.dart';
 import 'steam_auth_service.dart';
 import '../inventory/inventory_provider.dart';
 import '../portfolio/portfolio_provider.dart';
+import '../portfolio/portfolio_pl_provider.dart';
+import '../trades/trades_provider.dart';
+import '../transactions/transactions_provider.dart';
 import '../../models/user.dart';
 
 // --- Login Screen -------------------------------------------------------
@@ -113,8 +116,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final resp = await api.get('/auth/me');
     final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
     ref.read(authStateProvider.notifier).setUser(user);
+
+    // Invalidate all data providers for fresh fetch
     ref.invalidate(inventoryProvider);
     ref.invalidate(portfolioProvider);
+    ref.invalidate(portfolioPLProvider);
+    ref.invalidate(tradesProvider);
+    ref.invalidate(transactionsProvider);
+
+    // Background inventory sync from Steam
+    Future.microtask(() async {
+      try {
+        await api.post('/inventory/refresh');
+        ref.invalidate(inventoryProvider);
+        ref.invalidate(portfolioProvider);
+      } catch (_) {}
+    });
+
     if (mounted) setState(() { _isPolling = false; });
     // Router will redirect to /portfolio automatically
   }

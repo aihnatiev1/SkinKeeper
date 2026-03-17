@@ -20,6 +20,9 @@ import 'features/auth/steam_auth_service.dart';
 import 'models/user.dart';
 import 'features/inventory/inventory_provider.dart';
 import 'features/portfolio/portfolio_provider.dart';
+import 'features/portfolio/portfolio_pl_provider.dart';
+import 'features/trades/trades_provider.dart';
+import 'features/transactions/transactions_provider.dart';
 import 'features/settings/accounts_provider.dart';
 import 'firebase_options.dart';
 
@@ -154,10 +157,30 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       debugPrint('AUTH: user fetched, setting auth state...');
       final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
       ref.read(authStateProvider.notifier).setUser(user);
+
       // Invalidate all data providers so they fetch fresh data for this user
       ref.invalidate(inventoryProvider);
       ref.invalidate(portfolioProvider);
-      debugPrint('AUTH: done, providers invalidated');
+      ref.invalidate(portfolioPLProvider);
+      ref.invalidate(tradesProvider);
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(accountsProvider);
+
+      // Trigger background inventory sync from Steam
+      debugPrint('AUTH: triggering background sync...');
+      Future.microtask(() async {
+        try {
+          final api = ref.read(apiClientProvider);
+          await api.post('/inventory/refresh');
+          ref.invalidate(inventoryProvider);
+          ref.invalidate(portfolioProvider);
+          debugPrint('AUTH: inventory synced from Steam');
+        } catch (e) {
+          debugPrint('AUTH: background sync failed (non-critical): $e');
+        }
+      });
+
+      debugPrint('AUTH: done, all providers invalidated');
     } catch (e, st) {
       debugPrint('AUTH ERROR: $e');
       debugPrint('$st');
