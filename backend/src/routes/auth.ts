@@ -25,13 +25,15 @@ ${token ? `<h2>✅ Login successful</h2><p style="color:#999">Opening SkinKeeper
 });
 
 // In-memory store for pending Steam login results (nonce → token)
-const pendingLogins = new Map<string, { token?: string; error?: string }>();
+const pendingLogins = new Map<string, { token?: string; error?: string; createdAt: number }>();
 
-// Cleanup old entries every 5 minutes
+// Cleanup entries older than 10 minutes (check every minute)
 setInterval(() => {
-  // Just clear all — they expire quickly anyway
-  if (pendingLogins.size > 100) pendingLogins.clear();
-}, 5 * 60 * 1000);
+  const now = Date.now();
+  for (const [key, val] of pendingLogins) {
+    if (now - val.createdAt > 10 * 60 * 1000) pendingLogins.delete(key);
+  }
+}, 60 * 1000);
 
 // GET /api/auth/steam/poll/:nonce — App polls this after opening Steam login
 router.get("/steam/poll/:nonce", async (req: Request, res: Response) => {
@@ -42,6 +44,7 @@ router.get("/steam/poll/:nonce", async (req: Request, res: Response) => {
     return;
   }
   if (entry.token) {
+    console.log(`[Auth] Nonce poll completed for ${nonce.substring(0, 8)}...`);
     pendingLogins.delete(nonce);
     res.json({ status: "authenticated", token: entry.token });
     return;
@@ -117,7 +120,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     const nonce = params.nonce;
     if (nonce) {
       console.log(`[Auth] Storing token for nonce: ${nonce.substring(0, 8)}...`);
-      pendingLogins.set(nonce, { token });
+      pendingLogins.set(nonce, { token, createdAt: Date.now() });
       res.send(`<html><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="font-size:28px">✅</h2><h2>Login successful</h2><p id="msg" style="color:#999;margin-top:12px">This window will close automatically...</p></div><script>window.close();setTimeout(function(){document.getElementById('msg').textContent='You can close this window.'},500);</script></body></html>`);
       return;
     }
@@ -129,7 +132,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     console.error("Steam callback error:", err);
     const nonce = (req.query as any).nonce;
     if (nonce) {
-      pendingLogins.set(nonce, { error: "auth_failed" });
+      pendingLogins.set(nonce, { error: "auth_failed", createdAt: Date.now() });
       res.send(`<html><body style="background:#0a0e1a;color:#ff5252;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>Login failed</h2><p>Return to SkinKeeper and try again</p></div></body></html>`);
       return;
     }
