@@ -443,7 +443,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   const SizedBox(height: 6),
                   _buildTextField(
                     controller: _noteController,
-                    hint: 'e.g. "Bought from friend"',
+                    hint: 'e.g. "Bought on DMarket"',
                     prefixIcon: Icons.notes_rounded,
                     maxLines: 1,
                     maxLength: 250,
