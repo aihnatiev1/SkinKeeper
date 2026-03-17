@@ -186,10 +186,10 @@ export async function sellItem(
       `contextid=2`,
       `assetid=${assetId}`,
       `amount=1`,
-      `price=${buyerPays}`,
+      `price=${walletPriceCents}`,
     ].join("&");
 
-    const { data } = await axios.post(
+    const resp = await axios.post(
       "https://steamcommunity.com/market/sellitem/",
       formBody,
       {
@@ -203,10 +203,12 @@ export async function sellItem(
           "X-Requested-With": "XMLHttpRequest",
         },
         timeout: 15000,
+        validateStatus: () => true, // don't throw on non-2xx
       }
     );
+    const data = resp.data;
 
-    console.log(`[Sell] Response:`, JSON.stringify(data));
+    console.log(`[Sell] HTTP ${resp.status} Response:`, JSON.stringify(data));
 
     if (data.success) {
       // Update stored sessionId if it changed
