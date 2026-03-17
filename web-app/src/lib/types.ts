@@ -182,6 +182,22 @@ export interface TransactionStats {
   profitCents: number;
 }
 
+// ─── Market / Wallet ──────────────────────────────────────────────────
+export interface WalletInfo {
+  detected: boolean;
+  currencyId: number;
+  code: string;
+  symbol: string;
+  rate: number | null;
+  source: 'auto' | 'manual' | 'default';
+}
+
+export interface SteamCurrency {
+  id: number;
+  code: string;
+  symbol: string;
+}
+
 // ─── Alerts ────────────────────────────────────────────────────────────
 // GET /api/alerts — snake_case
 export interface Alert {

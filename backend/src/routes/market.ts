@@ -24,6 +24,8 @@ import {
   getExchangeRate,
   getCurrencyInfo,
   convertUsdToWallet,
+  setWalletCurrency,
+  getSteamCurrencies,
 } from "../services/currency.js";
 import { SessionExpiredError } from "../utils/errors.js";
 
@@ -202,7 +204,7 @@ router.get(
       }
 
       if (!info) {
-        res.json({ detected: false, currencyId: 1, code: "USD", symbol: "$", rate: 1 });
+        res.json({ detected: false, currencyId: 1, code: "USD", symbol: "$", rate: 1, source: "default" });
         return;
       }
 
@@ -213,6 +215,49 @@ router.get(
     }
   }
 );
+
+/**
+ * PUT /api/market/wallet-currency
+ * Manually set the wallet currency for a Steam account.
+ * Body: { currencyId: number, accountId?: number }
+ */
+router.put(
+  "/wallet-currency",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { currencyId, accountId } = req.body;
+
+      if (!currencyId || typeof currencyId !== "number") {
+        res.status(400).json({ error: "currencyId is required (number)" });
+        return;
+      }
+
+      const resolvedAccountId = accountId
+        ? parseInt(accountId)
+        : await SteamSessionService.getActiveAccountId(req.userId!);
+
+      const result = await setWalletCurrency(resolvedAccountId, currencyId);
+      if (!result) {
+        res.status(400).json({ error: "Unsupported currency ID" });
+        return;
+      }
+
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      console.error("Set wallet currency error:", err);
+      res.status(500).json({ error: "Failed to set wallet currency" });
+    }
+  }
+);
+
+/**
+ * GET /api/market/currencies
+ * List all supported Steam currencies for the picker UI.
+ */
+router.get("/currencies", (_req, res: Response) => {
+  res.json({ currencies: getSteamCurrencies() });
+});
 
 // ─── Sell Operations (async, tracked) ────────────────────────────────────
 

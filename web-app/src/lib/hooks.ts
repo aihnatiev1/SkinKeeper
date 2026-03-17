@@ -12,6 +12,8 @@ import type {
   Transaction,
   TransactionStats,
   Alert,
+  WalletInfo,
+  SteamCurrency,
 } from './types';
 import { useAuthStore } from './store';
 
@@ -175,6 +177,36 @@ export function useSyncTransactions() {
   return useMutation({
     mutationFn: () => api.post('/transactions/sync'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  });
+}
+
+// ─── Market / Wallet ──────────────────────────────────────────────────
+
+export function useWalletInfo() {
+  return useQuery({
+    queryKey: ['wallet-info'],
+    queryFn: () => api.get<WalletInfo>('/market/wallet-info'),
+  });
+}
+
+export function useSteamCurrencies() {
+  return useQuery({
+    queryKey: ['steam-currencies'],
+    queryFn: () =>
+      api.get<{ currencies: SteamCurrency[] }>('/market/currencies'),
+    select: (data) => data.currencies,
+    staleTime: Infinity,
+  });
+}
+
+export function useSetWalletCurrency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (currencyId: number) =>
+      api.put('/market/wallet-currency', { currencyId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wallet-info'] });
+    },
   });
 }
 

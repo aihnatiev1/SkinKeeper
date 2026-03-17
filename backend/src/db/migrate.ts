@@ -359,6 +359,9 @@ ALTER TABLE sell_operation_items
   ADD COLUMN IF NOT EXISTS account_id INTEGER REFERENCES steam_accounts(id) ON DELETE SET NULL;
 
 -- 021: marker — backfill trade_offers account_id_from (done in data migration below)
+
+-- 022: Track wallet currency source (auto-detected vs manual)
+ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS currency_source VARCHAR(10) DEFAULT 'auto';
 `;
 
 export async function migrate() {

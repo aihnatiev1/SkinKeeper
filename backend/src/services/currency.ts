@@ -409,9 +409,10 @@ export async function getWalletInfo(
   code: string;
   symbol: string;
   rate: number | null;
+  source: string;
 } | null> {
   const { rows } = await pool.query(
-    "SELECT wallet_currency FROM steam_accounts WHERE id = $1",
+    "SELECT wallet_currency, currency_source FROM steam_accounts WHERE id = $1",
     [accountId]
   );
   const currencyId = rows[0]?.wallet_currency;
@@ -427,5 +428,38 @@ export async function getWalletInfo(
     code: info.code,
     symbol: info.symbol,
     rate,
+    source: rows[0].currency_source || "auto",
   };
+}
+
+/**
+ * Manually set wallet currency for an account.
+ * @returns The currency info that was set.
+ */
+export async function setWalletCurrency(
+  accountId: number,
+  currencyId: number
+): Promise<{ currencyId: number; code: string; symbol: string } | null> {
+  const info = getCurrencyInfo(currencyId);
+  if (!info) return null;
+
+  await pool.query(
+    "UPDATE steam_accounts SET wallet_currency = $1, currency_source = 'manual' WHERE id = $2",
+    [currencyId, accountId]
+  );
+
+  console.log(
+    `[Currency] Manually set for account ${accountId}: ${info.code} (ID: ${currencyId})`
+  );
+
+  return { currencyId, code: info.code, symbol: info.symbol };
+}
+
+/** All supported Steam currencies for the client to render a picker. */
+export function getSteamCurrencies(): Array<{ id: number; code: string; symbol: string }> {
+  return Object.entries(STEAM_CURRENCIES).map(([id, info]) => ({
+    id: parseInt(id, 10),
+    code: info.code,
+    symbol: info.symbol,
+  }));
 }

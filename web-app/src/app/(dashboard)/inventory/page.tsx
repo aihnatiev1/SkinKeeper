@@ -2,6 +2,7 @@
 
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
+import { CurrencyBanner } from '@/components/currency-banner';
 import { useInventory, useRefreshInventory } from '@/lib/hooks';
 import { formatPrice, getItemIconUrl, getWearShort, cn } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
@@ -58,6 +59,7 @@ export default function InventoryPage() {
   return (
     <div>
       <Header title="Inventory" />
+      <CurrencyBanner />
       <div className="p-6 space-y-4">
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3">
