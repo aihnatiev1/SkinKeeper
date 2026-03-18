@@ -71,6 +71,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         });
         ref.invalidate(accountsProvider);
         ref.invalidate(inventoryProvider);
+        ref.invalidate(sessionStatusProvider);
         if (mounted) {
           setState(() { _isPolling = false; });
           ScaffoldMessenger.of(context).showSnackBar(
@@ -221,13 +222,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.invalidate(tradesProvider);
     ref.invalidate(transactionsProvider);
     ref.invalidate(accountsProvider);
+    ref.invalidate(sessionStatusProvider);
 
-    // Background inventory sync from Steam
+    // Background sync from Steam
     Future.microtask(() async {
       try {
         await api.post('/inventory/refresh');
         ref.invalidate(inventoryProvider);
         ref.invalidate(portfolioProvider);
+      } catch (_) {}
+      try {
+        await api.post('/transactions/sync');
+        ref.invalidate(transactionsProvider);
+        ref.invalidate(portfolioPLProvider);
+        ref.invalidate(portfolioProvider);
+      } catch (_) {}
+      try {
+        await api.post('/trades/sync');
+        ref.invalidate(tradesProvider);
       } catch (_) {}
     });
 
