@@ -488,7 +488,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        group.displayName,
+                        '${group.items.first.isStatTrak ? 'ST ' : ''}${group.items.first.isSouvenir ? 'SV ' : ''}${group.displayName}',
                         style: AppTheme.bodySmall.copyWith(
                           fontWeight: FontWeight.w600,
                           color: s.selected
@@ -500,22 +500,35 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                       ),
                       Row(
                         children: [
+                          if (group.items.first.accountName != null)
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3), width: 0.5),
+                              ),
+                              child: Text(
+                                group.items.first.accountName!.length > 8
+                                    ? '${group.items.first.accountName!.substring(0, 8)}…'
+                                    : group.items.first.accountName!,
+                                style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: AppTheme.primaryLight),
+                              ),
+                            ),
                           Flexible(
                             child: Text(
-                              group.weaponName,
+                              group.weaponName.replaceFirst('★ ', '').replaceFirst('StatTrak™ ', '').replaceFirst('Souvenir ', ''),
                               style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
                           ),
                           if (group.wear != null) ...[
-                            const SizedBox(width: 6),
+                            Text(' · ', style: TextStyle(color: AppTheme.textDisabled, fontSize: 10)),
                             Text(
                               group.wear!,
-                              style: AppTheme.captionSmall.copyWith(
-                                fontSize: 10,
-                                color: AppTheme.textDisabled,
-                              ),
+                              style: const TextStyle(fontSize: 10, color: AppTheme.textDisabled),
                             ),
                           ],
                         ],
@@ -586,6 +599,77 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
       }
     }
     return result;
+  }
+
+  // --- Selected items sheet ------------------------------------------------
+
+  void _showSelectedItemsSheet() {
+    final selected = _selectedGroups;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.bgSecondary,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        maxChildSize: 0.8,
+        minChildSize: 0.3,
+        expand: false,
+        builder: (_, scrollCtrl) => StatefulBuilder(
+          builder: (ctx, setSheetState) => Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Text('$_totalSellCount items to sell', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                    const Spacer(),
+                    Text('~${ref.read(currencyProvider).format(_totalValue)}', style: const TextStyle(fontSize: 14, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollCtrl,
+                  itemCount: selected.length,
+                  itemBuilder: (_, i) {
+                    final entry = selected[i];
+                    return ListTile(
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          width: 36, height: 36,
+                          color: AppTheme.surface,
+                          child: entry.group.fullIconUrl.isNotEmpty
+                              ? Image.network(entry.group.fullIconUrl, fit: BoxFit.contain)
+                              : null,
+                        ),
+                      ),
+                      title: Text(entry.group.displayName, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                      subtitle: Text('${entry.count} × ${ref.read(currencyProvider).format(entry.group.estimatedPrice ?? 0)}', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                      trailing: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _sel[entry.group.marketHashName]!.selectedIds.clear();
+                          });
+                          setSheetState(() {});
+                          // Close if nothing left
+                          if (!_hasSelection) Navigator.pop(ctx);
+                        },
+                        child: const Icon(Icons.close_rounded, size: 18, color: AppTheme.loss),
+                      ),
+                      dense: true,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // --- Bottom bar ----------------------------------------------------------
@@ -709,26 +793,37 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _hasSelection
-                            ? 'Selling $_totalSellCount items'
-                            : 'Select items to sell',
-                        style: AppTheme.title,
-                      ),
-                      if (_hasSelection)
-                        Text(
-                          '~${ref.watch(currencyProvider).format(_totalValue)}',
-                          style: AppTheme.mono.copyWith(
-                            fontSize: 13,
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
+                  child: GestureDetector(
+                    onTap: _hasSelection ? _showSelectedItemsSheet : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              _hasSelection
+                                  ? 'Selling $_totalSellCount items'
+                                  : 'Select items to sell',
+                              style: AppTheme.title,
+                            ),
+                            if (_hasSelection) ...[
+                              const SizedBox(width: 4),
+                              Icon(Icons.expand_less_rounded, size: 16, color: AppTheme.textMuted),
+                            ],
+                          ],
                         ),
-                    ],
+                        if (_hasSelection)
+                          Text(
+                            '~${ref.watch(currencyProvider).format(_totalValue)}',
+                            style: AppTheme.mono.copyWith(
+                              fontSize: 13,
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 SizedBox(
