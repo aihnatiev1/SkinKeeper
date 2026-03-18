@@ -222,21 +222,24 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     ref.watch(themeModeProvider);
     final locale = ref.watch(localeProvider);
 
-    return MaterialApp.router(
-      title: 'SkinKeeper',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
-      routerConfig: router,
-      locale: locale,
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: MaterialApp.router(
+        title: 'SkinKeeper',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.darkTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.dark,
+        routerConfig: router,
+        locale: locale,
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     );
   }
 }
