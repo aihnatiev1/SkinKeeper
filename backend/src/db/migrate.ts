@@ -362,6 +362,16 @@ ALTER TABLE sell_operation_items
 
 -- 022: Track wallet currency source (auto-detected vs manual)
 ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS currency_source VARCHAR(10) DEFAULT 'auto';
+
+-- 023: Widen varchar columns that can overflow
+-- asset_id: Steam 64-bit IDs can be 19-20 digits
+ALTER TABLE inventory_items ALTER COLUMN asset_id TYPE VARCHAR(30);
+ALTER TABLE sell_operation_items ALTER COLUMN asset_id TYPE VARCHAR(30);
+ALTER TABLE trade_offer_items ALTER COLUMN asset_id TYPE VARCHAR(30);
+-- trade_token: Steam trade tokens can be 30+ chars
+ALTER TABLE steam_accounts ALTER COLUMN trade_token TYPE VARCHAR(50);
+-- session_method: "clienttoken_exchanged" = 22 chars
+ALTER TABLE steam_accounts ALTER COLUMN session_method TYPE VARCHAR(30);
 `;
 
 export async function migrate() {

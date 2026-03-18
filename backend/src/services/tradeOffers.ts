@@ -211,12 +211,18 @@ async function getApiAuthParams(accountId: number, session?: SteamSession | null
 const tradeHistorySyncCache = new TTLCache<string, number>(10 * 60 * 1000, 500);
 registerCache("tradeHistorySync", tradeHistorySyncCache as unknown as TTLCache<unknown, unknown>);
 
+// Cache eligibility cookie per steamLoginSecure (30 min TTL)
+const eligibilityCache = new TTLCache<string, string>(30 * 60 * 1000, 50);
+registerCache("eligibility", eligibilityCache as unknown as TTLCache<unknown, unknown>);
+
 /**
- * Get the webTradeEligibility cookie from Steam.
- * Steam requires this cookie for all trade/market web pages since ~2024.
- * Without it, requests get stuck in a redirect loop with /market/eligibilitycheck/.
+ * Get the webTradeEligibility cookie from Steam (cached 30 min).
  */
 async function getEligibilityCookie(session: SteamSession): Promise<string | null> {
+  const cacheKey = session.steamLoginSecure.substring(0, 30);
+  const cached = eligibilityCache.get(cacheKey);
+  if (cached) return cached;
+
   try {
     const resp = await axios.get(
       `${STEAM_COMMUNITY}/market/eligibilitycheck/?goto=%2F`,
@@ -232,7 +238,10 @@ async function getEligibilityCookie(session: SteamSession): Promise<string | nul
     );
     for (const c of resp.headers["set-cookie"] || []) {
       const match = c.match(/webTradeEligibility=([^;]+)/);
-      if (match) return match[1];
+      if (match) {
+        eligibilityCache.set(cacheKey, match[1]);
+        return match[1];
+      }
     }
     return null;
   } catch {
