@@ -5,6 +5,7 @@ import { fetchSteamInventory } from "../services/steam.js";
 import { getLatestPrices, fetchSkinportPrices, savePrices } from "../services/prices.js";
 import { inspectItem, batchInspect } from "../services/inspect.js";
 import { SteamSessionService } from "../services/steamSession.js";
+import { getQueue } from "../infra/JobQueue.js";
 
 const router = Router();
 
@@ -121,25 +122,127 @@ router.get(
   }
 );
 
-// In-memory sync jobs tracker
-const syncJobs = new Map<string, { status: string; totalItems: number; error?: string; startedAt: number; privateAccounts: number[] }>();
+// ─── Inventory refresh via JobQueue ──────────────────────────────────────
 
-// Clean up old jobs every 10 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, job] of syncJobs) {
-    if (now - job.startedAt > 30 * 60_000) syncJobs.delete(id);
+interface InventoryRefreshData {
+  userId: number;
+  accounts: Array<{ id: number; steam_id: string }>;
+}
+
+const inventoryQueue = getQueue<InventoryRefreshData>('inventory');
+
+inventoryQueue.process(async (job, updateProgress) => {
+  const { userId, accounts } = job.data;
+  let totalItems = 0;
+  const privateAccounts: number[] = [];
+
+  for (const account of accounts) {
+    // Use session cookies to see trade-banned items not visible publicly
+    const session = await SteamSessionService.getSession(account.id);
+    let items: Awaited<ReturnType<typeof fetchSteamInventory>>;
+    try {
+      items = await fetchSteamInventory(
+        account.steam_id,
+        session ? { steamLoginSecure: session.steamLoginSecure, sessionId: session.sessionId } : undefined
+      );
+    } catch (err: any) {
+      if (err.message === 'INVENTORY_PRIVATE') {
+        console.log(`[Inventory] Account ${account.id} (${account.steam_id}) has private inventory`);
+        privateAccounts.push(account.id);
+        continue;
+      }
+      throw err;
+    }
+
+    // Batch upsert items using unnest for performance (~1 query instead of ~800)
+    if (items.length > 0) {
+      const accountIds = items.map(() => account.id);
+      const assetIds = items.map(i => i.asset_id);
+      const names = items.map(i => i.market_hash_name);
+      const icons = items.map(i => i.icon_url);
+      const wears = items.map(i => i.wear);
+      const rarities = items.map(i => i.rarity);
+      const rarityColors = items.map(i => i.rarity_color);
+      const tradables = items.map(i => i.tradable);
+      const tradeBans = items.map(i => i.trade_ban_until);
+      const inspectLinks = items.map(i => i.inspect_link);
+
+      await pool.query(
+        `INSERT INTO inventory_items
+           (steam_account_id, asset_id, market_hash_name, icon_url, wear, rarity, rarity_color, tradable, trade_ban_until, inspect_link, updated_at)
+         SELECT * FROM unnest(
+           $1::int[], $2::text[], $3::text[], $4::text[], $5::text[],
+           $6::text[], $7::text[], $8::boolean[], $9::timestamptz[], $10::text[]
+         ), NOW()
+         ON CONFLICT (steam_account_id, asset_id)
+         DO UPDATE SET market_hash_name = EXCLUDED.market_hash_name,
+                       icon_url = EXCLUDED.icon_url,
+                       wear = EXCLUDED.wear,
+                       rarity = EXCLUDED.rarity,
+                       rarity_color = EXCLUDED.rarity_color,
+                       tradable = EXCLUDED.tradable,
+                       trade_ban_until = EXCLUDED.trade_ban_until,
+                       inspect_link = EXCLUDED.inspect_link,
+                       updated_at = NOW()`,
+        [accountIds, assetIds, names, icons, wears, rarities, rarityColors, tradables, tradeBans, inspectLinks]
+      );
+    }
+
+    // Remove items that no longer exist in inventory
+    const currentAssetIds = items.map((i) => i.asset_id);
+    if (currentAssetIds.length > 0) {
+      await pool.query(
+        `DELETE FROM inventory_items
+         WHERE steam_account_id = $1
+           AND asset_id != ALL($2::text[])`,
+        [account.id, currentAssetIds]
+      );
+    }
+
+    totalItems += items.length;
+    updateProgress(totalItems);
   }
-}, 10 * 60_000);
+
+  // Background: fetch latest Skinport prices so new items have prices immediately
+  fetchSkinportPrices()
+    .then((prices) => savePrices(prices, "skinport"))
+    .catch((err) => console.error("Background Skinport refresh error:", err));
+
+  // Background: inspect items missing float values (only skins with wear)
+  const { rows: uninspected } = await pool.query(
+    `SELECT i.asset_id FROM inventory_items i
+     JOIN steam_accounts sa ON i.steam_account_id = sa.id
+     WHERE sa.user_id = $1 AND i.float_value IS NULL
+       AND i.inspect_link IS NOT NULL AND i.wear IS NOT NULL
+     ORDER BY i.updated_at DESC
+     LIMIT 100`,
+    [userId]
+  );
+  if (uninspected.length > 0) {
+    const ids = uninspected.map((r: any) => r.asset_id);
+    batchInspect(userId, ids).catch((err) =>
+      console.error("Background inspect error:", err)
+    );
+  }
+
+  return { totalItems, privateAccounts };
+});
 
 // GET /api/inventory/sync-status/:jobId — check background sync status
 router.get("/sync-status/:jobId", authMiddleware, (req: AuthRequest, res: Response) => {
-  const job = syncJobs.get(req.params.jobId as string);
+  const job = inventoryQueue.getJob(req.params.jobId as string);
   if (!job) {
     res.status(404).json({ error: "Job not found" });
     return;
   }
-  res.json(job);
+  const result = job.result as { totalItems?: number; privateAccounts?: number[] } | undefined;
+  res.json({
+    status: job.status === 'active' ? 'syncing' : job.status === 'completed' ? 'done' : job.status,
+    totalItems: result?.totalItems ?? job.progress,
+    error: job.error,
+    startedAt: job.createdAt,
+    privateAccounts: result?.privateAccounts ?? [],
+  });
 });
 
 // POST /api/inventory/refresh?accountId=X — re-fetch from Steam and update DB
@@ -165,122 +268,16 @@ router.post(
         return;
       }
 
-      // Generate job ID and return immediately
-      const jobId = `sync_${req.userId}_${Date.now()}`;
-      syncJobs.set(jobId, { status: "syncing", totalItems: 0, startedAt: Date.now(), privateAccounts: [] });
+      // Enqueue job — returns immediately with UUID
+      const job = inventoryQueue.add('inventory-refresh', {
+        userId: req.userId!,
+        accounts: accounts.map((a: any) => ({ id: a.id, steam_id: a.steam_id })),
+      });
 
-      // Respond immediately — client can poll sync-status
-      res.json({ success: true, jobId, status: "syncing" });
-
-      // Do the actual sync in background
-      let totalItems = 0;
-      const privateAccountIds: number[] = [];
-
-      for (const account of accounts) {
-        // Use session cookies to see trade-banned items not visible publicly
-        const session = await SteamSessionService.getSession(account.id);
-        let items: Awaited<ReturnType<typeof fetchSteamInventory>>;
-        try {
-          items = await fetchSteamInventory(
-            account.steam_id,
-            session ? { steamLoginSecure: session.steamLoginSecure, sessionId: session.sessionId } : undefined
-          );
-        } catch (err: any) {
-          if (err.message === 'INVENTORY_PRIVATE') {
-            console.log(`[Inventory] Account ${account.id} (${account.steam_id}) has private inventory`);
-            privateAccountIds.push(account.id);
-            continue;
-          }
-          throw err;
-        }
-
-        // Batch upsert items using unnest for performance (~1 query instead of ~800)
-        if (items.length > 0) {
-          const accountIds = items.map(() => account.id);
-          const assetIds = items.map(i => i.asset_id);
-          const names = items.map(i => i.market_hash_name);
-          const icons = items.map(i => i.icon_url);
-          const wears = items.map(i => i.wear);
-          const rarities = items.map(i => i.rarity);
-          const rarityColors = items.map(i => i.rarity_color);
-          const tradables = items.map(i => i.tradable);
-          const tradeBans = items.map(i => i.trade_ban_until);
-          const inspectLinks = items.map(i => i.inspect_link);
-
-          await pool.query(
-            `INSERT INTO inventory_items
-               (steam_account_id, asset_id, market_hash_name, icon_url, wear, rarity, rarity_color, tradable, trade_ban_until, inspect_link, updated_at)
-             SELECT * FROM unnest(
-               $1::int[], $2::text[], $3::text[], $4::text[], $5::text[],
-               $6::text[], $7::text[], $8::boolean[], $9::timestamptz[], $10::text[]
-             ), NOW()
-             ON CONFLICT (steam_account_id, asset_id)
-             DO UPDATE SET market_hash_name = EXCLUDED.market_hash_name,
-                           icon_url = EXCLUDED.icon_url,
-                           wear = EXCLUDED.wear,
-                           rarity = EXCLUDED.rarity,
-                           rarity_color = EXCLUDED.rarity_color,
-                           tradable = EXCLUDED.tradable,
-                           trade_ban_until = EXCLUDED.trade_ban_until,
-                           inspect_link = EXCLUDED.inspect_link,
-                           updated_at = NOW()`,
-            [accountIds, assetIds, names, icons, wears, rarities, rarityColors, tradables, tradeBans, inspectLinks]
-          );
-        }
-
-        // Remove items that no longer exist in inventory
-        const currentAssetIds = items.map((i) => i.asset_id);
-        if (currentAssetIds.length > 0) {
-          await pool.query(
-            `DELETE FROM inventory_items
-             WHERE steam_account_id = $1
-               AND asset_id != ALL($2::text[])`,
-            [account.id, currentAssetIds]
-          );
-        }
-
-        totalItems += items.length;
-      }
-
-      // Update job status
-      const job = syncJobs.get(jobId);
-      if (job) {
-        job.status = "done";
-        job.totalItems = totalItems;
-        job.privateAccounts = privateAccountIds;
-      }
-
-      // Background: fetch latest Skinport prices so new items have prices immediately
-      fetchSkinportPrices()
-        .then((prices) => savePrices(prices, "skinport"))
-        .catch((err) => console.error("Background Skinport refresh error:", err));
-
-      // Background: inspect items missing float values (only skins with wear)
-      const { rows: uninspected } = await pool.query(
-        `SELECT i.asset_id FROM inventory_items i
-         JOIN steam_accounts sa ON i.steam_account_id = sa.id
-         WHERE sa.user_id = $1 AND i.float_value IS NULL
-           AND i.inspect_link IS NOT NULL AND i.wear IS NOT NULL
-         ORDER BY i.updated_at DESC
-         LIMIT 100`,
-        [req.userId]
-      );
-      if (uninspected.length > 0) {
-        const ids = uninspected.map((r: any) => r.asset_id);
-        batchInspect(req.userId!, ids).catch((err) =>
-          console.error("Background inspect error:", err)
-        );
-      }
+      res.json({ success: true, jobId: job.id, status: "syncing" });
     } catch (err: any) {
       console.error("Inventory refresh error:", err);
-      // Response already sent (jobId returned). Try to mark job as failed.
-      for (const [id, job] of syncJobs) {
-        if (id.startsWith(`sync_${req.userId}_`) && job.status === "syncing") {
-          job.status = "error";
-          job.error = err.message ?? String(err);
-          break;
-        }
-      }
+      res.status(500).json({ error: "Failed to start inventory refresh" });
     }
   }
 );
