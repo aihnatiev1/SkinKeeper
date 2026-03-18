@@ -41,10 +41,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _startLogin() async {
-    if (widget.isLinking) {
-      await _startLinkLogin();
-      return;
-    }
     await _startWebViewLogin();
   }
 
@@ -66,19 +62,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final api = ref.read(apiClientProvider);
 
-      // Submit cookies to /auth/token (initial login, no JWT yet)
-      final response = await api.post('/auth/token', data: {
-        'steamLoginSecure': result.steamLoginSecure,
-        if (result.sessionId != null) 'sessionId': result.sessionId,
-        if (result.refreshToken != null) 'steamRefreshToken': result.refreshToken,
-      });
-
-      final data = response.data as Map<String, dynamic>;
-      final token = data['token'] as String?;
-      if (token != null) {
-        await _completeLogin(token);
+      if (widget.isLinking) {
+        // Link mode: use /session/token with linkMode flag
+        await api.post('/session/token?linkMode=true', data: {
+          'steamLoginSecure': result.steamLoginSecure,
+          if (result.sessionId != null) 'sessionId': result.sessionId,
+          if (result.refreshToken != null) 'steamRefreshToken': result.refreshToken,
+        });
+        ref.invalidate(accountsProvider);
+        ref.invalidate(inventoryProvider);
+        if (mounted) {
+          setState(() { _isPolling = false; });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account linked successfully!'),
+              backgroundColor: Color(0xFF00E676),
+            ),
+          );
+          context.pop();
+        }
       } else {
-        throw Exception('No token in response');
+        // Initial login: use /auth/token
+        final response = await api.post('/auth/token', data: {
+          'steamLoginSecure': result.steamLoginSecure,
+          if (result.sessionId != null) 'sessionId': result.sessionId,
+          if (result.refreshToken != null) 'steamRefreshToken': result.refreshToken,
+        });
+
+        final data = response.data as Map<String, dynamic>;
+        final token = data['token'] as String?;
+        if (token != null) {
+          await _completeLogin(token);
+        } else {
+          throw Exception('No token in response');
+        }
       }
     } catch (e) {
       if (mounted) {
