@@ -308,6 +308,7 @@ Plans:
 **Goal**: Build scalable infrastructure that grows without rewrites — job queue, rate limiting, caching layers, connection pooling
 **Depends on**: Phase 29
 **Architecture**: Design for 10k users, implement for 100. Each layer has a config knob, not a rewrite threshold.
+**Requirements**: SCALE-01 (job queue), SCALE-02 (Steam API gateway), SCALE-03 (response cache), SCALE-04 (connection pool tuning), SCALE-05 (graceful degradation), SCALE-06 (job progress API), SCALE-07 (health dashboard)
 **Success Criteria**:
   1. **Job Queue** (BullMQ + Redis): All async operations go through queue — inventory refresh, trade sync, transaction sync, batch inspect. In-memory Redis for now, swap to Redis server when needed (same API). Configurable concurrency per queue.
   2. **Steam API Gateway**: Single module ALL Steam HTTP calls go through. Global rate limiter (configurable: 10 req/s now → 50 req/s with proxies later). Request dedup (same URL within 5s = shared promise). Circuit breaker per endpoint. Metrics counter.
