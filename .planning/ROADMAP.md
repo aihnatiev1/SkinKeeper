@@ -288,20 +288,45 @@ Plans:
 - [ ] 28-01-PLAN.md — Flutter: requireSession() gate function, SessionGateScreen (token primary + QR fallback), connect progress animation
 - [ ] 28-02-PLAN.md — Flutter: wire requireSession to all sell/trade/accept intercept points, clean up SellBottomSheet inline session warning
 
-### Phase 29: UX Polish — Locked States, Nudges & Connect Reward
-**Goal**: Unconnected users see helpful banners, connected users get reward animation
+### Phase 29: UX Polish — Locked States, Nudges, Expired Copy & Connect Reward
+**Goal**: Unconnected users see helpful banners, expired sessions get honest "blame Steam" copy, connected users get reward animation
 **Depends on**: Phase 28 (gate flow works)
 **Requirements**: AUTHUX-11, AUTHUX-12, AUTHUX-13
 **Success Criteria**:
   1. Trades tab: "Connect Steam to manage trades" empty state with connect CTA
   2. Sell buttons: show lock icon when no session, tap triggers gate
   3. Portfolio: soft nudge banner "Connect Steam to unlock full potential"
-  4. Post-connect reward: "✓ 772 items synced, +$1,350 profit detected" with confetti/animation
-  5. All locked states consistent design language
+  4. Gate screen: different copy for first-time ("Enable Full Access") vs expired session ("Session expired — Steam keeps sessions for ~24h, sign in again")
+  5. Post-connect reward: "✓ 772 items synced, +$1,350 profit detected" with animation
+  6. All locked states consistent design language
 **Plans**: 1 plan
 
 Plans:
-- [ ] 29-01-PLAN.md — Flutter: locked state banners (trades, sell, portfolio nudge), post-connect reward animation, consistent lock icon on gated actions
+- [ ] 29-01-PLAN.md — Flutter: locked state banners (trades, sell, portfolio nudge), expired session copy in gate, post-connect reward animation, consistent lock icon on gated actions
+
+### Phase 30: Scaling Infrastructure (100 → 10k+ users)
+**Goal**: Build scalable infrastructure that grows without rewrites — job queue, rate limiting, caching layers, connection pooling
+**Depends on**: Phase 29
+**Architecture**: Design for 10k users, implement for 100. Each layer has a config knob, not a rewrite threshold.
+**Success Criteria**:
+  1. **Job Queue** (BullMQ + Redis): All async operations go through queue — inventory refresh, trade sync, transaction sync, batch inspect. In-memory Redis for now, swap to Redis server when needed (same API). Configurable concurrency per queue.
+  2. **Steam API Gateway**: Single module ALL Steam HTTP calls go through. Global rate limiter (configurable: 10 req/s now → 50 req/s with proxies later). Request dedup (same URL within 5s = shared promise). Circuit breaker per endpoint. Metrics counter.
+  3. **Response Cache Layer**: In-memory TTL cache for hot endpoints (/portfolio/summary, /inventory GET). Cache key = userId + endpoint. Configurable TTL per route. Cache invalidation on write operations. Grows to Redis when needed (same interface).
+  4. **Connection Pool Tuning**: PG pool min/max configurable via env. Prepared statement caching. Query timeout enforcement. Slow query logging (>500ms).
+  5. **Graceful Degradation**: If Steam API returns 503/429 → return cached data with `stale: true` flag. Flutter shows "Data may be outdated" banner. No error screens for temporary outages.
+  6. **Job Progress API**: WebSocket or SSE for real-time sync progress ("Syncing 450/1200 items"). Falls back to polling `/sync-status/:jobId` (already exists).
+  7. **Health Dashboard**: Admin endpoint showing queue depth, cache hit rate, Steam API latency, active jobs, DB pool utilization.
+**Scalability Path**:
+  - 100 users: in-memory queue + in-memory cache (current Node process)
+  - 1k users: Redis queue + Redis cache (add Redis container)
+  - 10k users: multiple Node workers + shared Redis + PG read replicas
+  - All use SAME code, different config
+**Plans**: 3 plans
+
+Plans:
+- [ ] 30-01-PLAN.md — Backend: Job queue abstraction (in-memory now, Redis-compatible interface), inventory/trade/inspect queues with concurrency limits, job progress tracking
+- [ ] 30-02-PLAN.md — Backend: Steam API Gateway (global rate limiter, request dedup, circuit breaker, metrics), response cache layer (TTL per route, cache invalidation), PG pool tuning, slow query logging
+- [ ] 30-03-PLAN.md — Flutter: sync progress (SSE/polling), "Data may be outdated" banner, graceful error handling. Backend: health dashboard admin endpoint
 
 ## Phase Details (M5 — Web Platform)
 
@@ -456,6 +481,7 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 27. Tier 1 — Zero Friction Entry | 0/2 | Pending | — |
 | 28. Tier 2 — Intent-Based Unlock | 0/2 | Pending | — |
 | 29. UX Polish — Locked States | 0/1 | Pending | — |
+| 30. Scaling Infrastructure | 0/3 | Pending | — |
 | **Milestone 5: Web Platform** | | | |
 | 21. Web Foundation | 0/3 | Pending | — |
 | 22. Dashboard & Inventory | 0/3 | Pending | — |
