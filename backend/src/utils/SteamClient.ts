@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 
 const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
 
-interface SteamRequestOptions {
+export interface SteamRequestOptions {
   /** Full URL to request */
   url: string;
   /** HTTP method (default: GET) */
@@ -31,7 +31,7 @@ interface SteamRequestOptions {
   validateStatus?: (status: number) => boolean;
 }
 
-interface SteamResponse<T = unknown> {
+export interface SteamResponse<T = unknown> {
   data: T;
   status: number;
   headers: Record<string, string>;
