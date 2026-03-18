@@ -31,143 +31,20 @@ import { SessionExpiredError } from "../utils/errors.js";
 
 const router = Router();
 
-// Store Steam session cookies for an account
-// POST /api/market/session { sessionId, steamLoginSecure, accountId? }
-router.post(
-  "/session",
-  authMiddleware,
-  validateBody(sessionCookiesSchema),
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { sessionId, steamLoginSecure, accountId } = req.body;
+// DEPRECATED: Use POST /api/session/token instead
+router.post("/session", authMiddleware, (_req, res) => {
+  res.status(410).json({ error: "Deprecated. Use POST /api/session/token instead." });
+});
 
-      const resolvedAccountId = accountId
-        ? parseInt(accountId)
-        : await SteamSessionService.getActiveAccountId(req.userId!);
+// DEPRECATED: Use POST /api/session/token instead
+router.post("/clienttoken", authMiddleware, (_req, res) => {
+  res.status(410).json({ error: "Deprecated. Use POST /api/session/token instead." });
+});
 
-      await SteamSessionService.saveSession(resolvedAccountId, {
-        sessionId,
-        steamLoginSecure,
-      });
-
-      res.json({ success: true });
-    } catch (err) {
-      console.error("Session save error:", err);
-      res.status(500).json({ error: "Failed to save session" });
-    }
-  }
-);
-
-// Store Steam clientjstoken for an account
-// POST /api/market/clienttoken { steamid, token, accountId? }
-router.post(
-  "/clienttoken",
-  authMiddleware,
-  validateBody(clientTokenSchema),
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { steamid, token, accountId } = req.body;
-
-      const resolvedAccountId = accountId
-        ? parseInt(accountId)
-        : await SteamSessionService.getActiveAccountId(req.userId!);
-
-      // Exchange the access token for web cookies
-      const session = await exchangeTokenForSession(steamid, token);
-      if (!session) {
-        await SteamSessionService.saveSession(resolvedAccountId, {
-          sessionId: "",
-          steamLoginSecure: "",
-          accessToken: token,
-        });
-        res.json({
-          success: true,
-          method: "token_stored",
-          message: "Token saved. Cookie exchange not available, some features may be limited.",
-        });
-        return;
-      }
-
-      await SteamSessionService.saveSession(resolvedAccountId, {
-        sessionId: session.sessionId,
-        steamLoginSecure: session.steamLoginSecure,
-        accessToken: token,
-      });
-
-      res.json({ success: true, method: "cookies_obtained" });
-    } catch (err) {
-      console.error("Clienttoken save error:", err);
-      res.status(500).json({ error: "Failed to save token" });
-    }
-  }
-);
-
-// GET /api/market/session/status?accountId=X — check if session is configured
-router.get(
-  "/session/status",
-  authMiddleware,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const paramId = parseInt(req.query.accountId as string);
-      const accountId = paramId && !isNaN(paramId)
-        ? paramId
-        : await SteamSessionService.getActiveAccountId(req.userId!);
-
-      const session = await SteamSessionService.getSession(accountId);
-      const hasSession = !!(session?.sessionId && session?.steamLoginSecure);
-      const hasToken = !!session?.accessToken;
-      res.json({ hasSession, hasToken, configured: hasSession || hasToken });
-    } catch (err) {
-      res.status(500).json({ error: "Failed to check session" });
-    }
-  }
-);
-
-// Exchange Steam access token for web session cookies
-async function exchangeTokenForSession(
-  steamId: string,
-  accessToken: string
-): Promise<{ sessionId: string; steamLoginSecure: string } | null> {
-  try {
-    // Use Steam's IAuthenticationService to get web cookies
-    await axios.get(
-      "https://api.steampowered.com/IAuthenticationService/GenerateAccessTokenForApp/v1/",
-      {
-        params: {
-          access_token: accessToken,
-        },
-        timeout: 10000,
-      }
-    );
-
-    // Construct the steamLoginSecure cookie: steamId||accessToken
-    const steamLoginSecure = `${steamId}||${accessToken}`;
-
-    // Extract real sessionid from Steam's Set-Cookie header
-    const sessionId = await SteamSessionService.extractSessionId(steamLoginSecure);
-    if (!sessionId) {
-      console.warn("[Session] Could not extract sessionid from Steam cookies, using fallback format");
-      // Fall through to fallback below
-    } else {
-      return { sessionId, steamLoginSecure };
-    }
-  } catch {
-    // Fallback: construct cookies directly from the access token
-  }
-
-  // Fallback: construct cookies with URL-encoded format
-  try {
-    const steamLoginSecure = `${steamId}%7C%7C${accessToken}`;
-    const sessionId = await SteamSessionService.extractSessionId(steamLoginSecure);
-    if (!sessionId) {
-      console.warn("[Session] Could not extract sessionid from Steam even with fallback format");
-      return null;
-    }
-    return { sessionId, steamLoginSecure };
-  } catch {
-    return null;
-  }
-}
+// DEPRECATED: Use GET /api/session/status instead
+router.get("/session/status", authMiddleware, (_req, res) => {
+  res.status(410).json({ error: "Deprecated. Use GET /api/session/status instead." });
+});
 
 // ─── Wallet Currency ─────────────────────────────────────────────────────
 

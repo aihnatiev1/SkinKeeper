@@ -16,7 +16,7 @@ import '../auth/steam_auth_service.dart';
 import '../../core/router.dart';
 import '../onboarding/onboarding_screen.dart';
 import '../auth/widgets/session_status_widget.dart';
-import 'steam_session_provider.dart';
+import '../auth/session_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -24,7 +24,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider);
-    final sessionStatus = ref.watch(steamSessionStatusProvider);
+    final sessionStatus = ref.watch(sessionStatusProvider);
     final l10n = AppLocalizations.of(context);
     final currency = ref.watch(currencyProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -100,19 +100,19 @@ class SettingsScreen extends ConsumerWidget {
                   leading: Icon(
                     Icons.vpn_key,
                     color: sessionStatus.whenOrNull(
-                          data: (s) => s.configured ? AppTheme.profit : AppTheme.textMuted,
+                          data: (s) => s.status == 'valid' || s.status == 'expiring' ? AppTheme.profit : AppTheme.textMuted,
                         ) ??
                         AppTheme.textMuted,
                   ),
                   title: Text(l10n.steamSession),
                   subtitle: Text(
                     sessionStatus.whenOrNull(
-                          data: (s) => s.configured ? l10n.connected : l10n.notConfigured,
+                          data: (s) => s.status == 'valid' || s.status == 'expiring' ? l10n.connected : s.status == 'expired' ? 'Expired' : l10n.notConfigured,
                         ) ??
                         l10n.checking,
                     style: TextStyle(
                       color: sessionStatus.whenOrNull(
-                            data: (s) => s.configured ? AppTheme.profit : AppTheme.textDisabled,
+                            data: (s) => s.status == 'valid' || s.status == 'expiring' ? AppTheme.profit : AppTheme.textDisabled,
                           ) ??
                           AppTheme.textDisabled,
                       fontSize: 12,
