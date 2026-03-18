@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
+import { fetchSteamAnalystPrices } from "./steamAnalyst.js";
 import { runDailyPLSnapshot } from "./profitLoss.js";
 import { checkExpiredSubscriptions } from "./purchases.js";
 import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js";
@@ -18,6 +19,7 @@ interface JobHealth {
 
 const jobHealth: Record<string, JobHealth> = {
   skinport: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  steam_analyst: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   dmarket: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   steam: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   csfloat: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
@@ -96,6 +98,17 @@ export function startPriceJobs() {
     }
   }));
 
+  // SteamAnalyst: every 15 minutes (bulk — all items in 1 call)
+  scheduledTasks.push(cron.schedule("*/15 * * * *", async () => {
+    try {
+      await fetchSteamAnalystPrices();
+      recordJobRun("steam_analyst", true);
+    } catch (err) {
+      recordJobRun("steam_analyst", false, err instanceof Error ? err.message : String(err));
+      console.error("[CRON] SteamAnalyst price fetch failed:", err);
+    }
+  }));
+
   // DMarket: every 10 minutes, offset +5 (bulk per-item)
   scheduledTasks.push(cron.schedule("5,15,25,35,45,55 * * * *", async () => {
     try {
@@ -153,6 +166,12 @@ export function startPriceJobs() {
       await fetchAndSaveSkinport();
     } catch (err) {
       console.error("[INIT] Initial Skinport fetch failed:", err);
+    }
+
+    try {
+      await fetchSteamAnalystPrices();
+    } catch (err) {
+      console.error("[INIT] Initial SteamAnalyst fetch failed:", err);
     }
 
     try {

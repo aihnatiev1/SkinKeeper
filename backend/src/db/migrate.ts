@@ -379,6 +379,16 @@ ALTER TABLE steam_accounts ALTER COLUMN session_method TYPE VARCHAR(30);
 -- 025: Watchlist — track items you don't own
 ALTER TABLE price_alerts ADD COLUMN IF NOT EXISTS is_watchlist BOOLEAN DEFAULT FALSE;
 ALTER TABLE price_alerts ADD COLUMN IF NOT EXISTS icon_url TEXT;
+
+-- 026: Shared current_prices table — one row per item per source, UPSERT on refresh
+CREATE TABLE IF NOT EXISTS current_prices (
+  market_hash_name VARCHAR(255) NOT NULL,
+  source           VARCHAR(20)  NOT NULL,
+  price_usd        DECIMAL(10,2) NOT NULL,
+  updated_at       TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (market_hash_name, source)
+);
+CREATE INDEX IF NOT EXISTS idx_current_prices_name ON current_prices(market_hash_name);
 `;
 
 export async function migrate() {
@@ -495,6 +505,13 @@ export async function migrate() {
     WHERE t.account_id_from IS NULL
       AND t.account_id_to IS NULL
       AND t.is_internal = FALSE
+  `);
+
+  // 027: Add 'invalid' to trade status constraint (Steam states 1 & 8)
+  await pool.query(`
+    ALTER TABLE trade_offers DROP CONSTRAINT IF EXISTS chk_trade_status;
+    ALTER TABLE trade_offers ADD CONSTRAINT chk_trade_status
+      CHECK (status IN ('pending','accepted','declined','expired','cancelled','countered','error','awaiting_confirmation','on_hold','invalid'));
   `);
 
   console.log("Migrations complete.");

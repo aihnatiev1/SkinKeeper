@@ -205,7 +205,7 @@ export async function proxyRequest<T = any>(
       return { data: response.data, slotIndex: slot.index };
     } catch (err: any) {
       const status = err?.response?.status;
-      if (status === 429) {
+      if (status === 429 || status === 403) {
         const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
         recordSlot429(slot.index, domain, retryAfter);
         lastError = err;

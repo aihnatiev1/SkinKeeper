@@ -53,7 +53,10 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
           method: "GET",
           url: "https://api.skinport.com/v1/items",
           params: { app_id: 730, currency: "USD" },
-          headers: { "Accept-Encoding": "br, gzip" },
+          headers: {
+            "Accept-Encoding": "br, gzip",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          },
           timeout: 30000,
         },
         "skinport"
@@ -76,12 +79,12 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
     } catch (err: any) {
       endLatency();
       const status = err?.response?.status;
-      if (status === 429) {
+      if (status === 429 || status === 403) {
         record429("skinport");
         const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
         const waitSec = retryAfter > 0 ? retryAfter : (attempt + 1) * 60;
         skinportBackoffUntil = Date.now() + waitSec * 1000;
-        console.warn(`[Skinport] 429 rate limited (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), retry-after=${retryAfter}s, waiting ${waitSec}s`);
+        console.warn(`[Skinport] ${status} (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), waiting ${waitSec}s`);
 
         if (attempt < SKINPORT_MAX_RETRIES - 1) {
           await new Promise((r) => setTimeout(r, waitSec * 1000));
@@ -140,30 +143,28 @@ class AdaptiveCrawler {
   }
 
   async getNextItem(): Promise<string | null> {
-    // Items without any price for this source (all marketable items, including trade-banned)
+    // Items without any price from ANY source in current_prices (true gaps)
     const { rows: noPriceRows } = await pool.query(
       `SELECT DISTINCT ii.market_hash_name
        FROM inventory_items ii
        WHERE NOT EXISTS (
-           SELECT 1 FROM price_history ph
-           WHERE ph.market_hash_name = ii.market_hash_name
-             AND ph.source = $1
+           SELECT 1 FROM current_prices cp
+           WHERE cp.market_hash_name = ii.market_hash_name
+             AND cp.price_usd > 0
          )
-       LIMIT 1`,
-      [this.source]
+       LIMIT 1`
     );
     if (noPriceRows.length > 0) return noPriceRows[0].market_hash_name;
 
-    // Item with oldest price (older than refreshAgeMs)
+    // Item with oldest price for THIS source (older than refreshAgeMs)
     const ageSec = Math.floor(this.config.refreshAgeMs / 1000);
     const { rows: oldestRows } = await pool.query(
-      `SELECT ph.market_hash_name, MAX(ph.recorded_at) AS last_at
-       FROM price_history ph
-       INNER JOIN inventory_items ii ON ii.market_hash_name = ph.market_hash_name
-       WHERE ph.source = $1
-       GROUP BY ph.market_hash_name
-       HAVING MAX(ph.recorded_at) < NOW() - INTERVAL '1 second' * $2
-       ORDER BY last_at ASC
+      `SELECT cp.market_hash_name, cp.updated_at
+       FROM current_prices cp
+       INNER JOIN inventory_items ii ON ii.market_hash_name = cp.market_hash_name
+       WHERE cp.source = $1
+         AND cp.updated_at < NOW() - INTERVAL '1 second' * $2
+       ORDER BY cp.updated_at ASC
        LIMIT 1`,
       [this.source, ageSec]
     );
@@ -326,6 +327,9 @@ export async function fetchSteamMarketPrice(
       currency: 1, // USD
       market_hash_name: marketHashName,
     },
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    },
     timeout: 10000,
   };
 
@@ -350,13 +354,13 @@ const steamCrawlers: AdaptiveCrawler[] = [];
 
 function createSteamCrawlerConfig(): Omit<AdaptiveLimiterConfig, "name"> {
   return {
-    minIntervalMs: 5000,        // fastest: 1 req / 5s (~12/min per slot)
-    maxIntervalMs: 120_000,     // slowest: 1 req / 2min
-    startIntervalMs: 8000,      // start conservatively: 1 req / 8s
+    minIntervalMs: 10_000,      // fastest: 1 req / 10s (gap-filler, less aggressive)
+    maxIntervalMs: 300_000,     // slowest: 1 req / 5min
+    startIntervalMs: 15_000,    // start slow: 1 req / 15s
     backoffFactor: 2.0,         // backoff on 429
     cooldownFactor: 0.95,       // 5% faster per streak
-    successesBeforeSpeedup: 15, // need 15 clean successes to speed up (was 20)
-    refreshAgeMs: 30 * 60_000,  // refresh after 30 min
+    successesBeforeSpeedup: 15, // need 15 clean successes to speed up
+    refreshAgeMs: 4 * 3600_000, // refresh after 4h (gap-filler: SteamAnalyst+Skinport are primary)
   };
 }
 
@@ -397,14 +401,14 @@ export function stopSteamCrawler(): void { stopSteamCrawlers(); }
 
 // ─── Shared Utilities ────────────────────────────────────────────────────
 
-// Store prices in DB for history
+// Store prices in DB for history + current_prices
 export async function savePrices(
   prices: Map<string, number>,
   source: string
 ): Promise<void> {
   if (prices.size === 0) return;
 
-  // Batch insert in chunks of 500 (PG has param limit)
+  // Batch insert into price_history in chunks of 500
   const entries = [...prices.entries()];
   const chunkSize = 500;
 
@@ -427,6 +431,9 @@ export async function savePrices(
     );
   }
 
+  // Also update current_prices for fast lookups
+  await upsertCurrentPrices(prices, source);
+
   // Evaluate alerts after saving prices
   try {
     await evaluateAlerts(prices, source);
@@ -435,26 +442,54 @@ export async function savePrices(
   }
 }
 
-// Get latest prices for a list of items
+// ─── Current Prices (shared table) ──────────────────────────────────────
+
+/**
+ * Batch UPSERT prices into current_prices table.
+ * One row per item per source — always up to date.
+ */
+export async function upsertCurrentPrices(
+  prices: Map<string, number>,
+  source: string
+): Promise<void> {
+  if (prices.size === 0) return;
+
+  const entries = [...prices.entries()].filter(([, p]) => p > 0);
+  const chunkSize = 500;
+
+  for (let c = 0; c < entries.length; c += chunkSize) {
+    const chunk = entries.slice(c, c + chunkSize);
+    const values: string[] = [];
+    const params: (string | number)[] = [];
+    let i = 1;
+
+    for (const [name, price] of chunk) {
+      values.push(`($${i}, $${i + 1}, $${i + 2})`);
+      params.push(name, source, price);
+      i += 3;
+    }
+
+    await pool.query(
+      `INSERT INTO current_prices (market_hash_name, source, price_usd)
+       VALUES ${values.join(",")}
+       ON CONFLICT (market_hash_name, source)
+       DO UPDATE SET price_usd = EXCLUDED.price_usd, updated_at = NOW()`,
+      params
+    );
+  }
+}
+
+// Get latest prices for a list of items (reads from current_prices)
 export async function getLatestPrices(
   marketHashNames: string[]
 ): Promise<Map<string, Record<string, number>>> {
   if (marketHashNames.length === 0) return new Map();
 
   const { rows } = await pool.query(
-    `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name),
-          sources AS (SELECT unnest(ARRAY['skinport','steam','csfloat','dmarket']) AS source)
-     SELECT n.market_hash_name, s.source, lp.price_usd
-     FROM names n
-     CROSS JOIN sources s
-     JOIN LATERAL (
-       SELECT price_usd FROM price_history ph
-       WHERE ph.market_hash_name = n.market_hash_name
-         AND ph.source = s.source
-         AND ph.price_usd > 0
-       ORDER BY ph.recorded_at DESC
-       LIMIT 1
-     ) lp ON true`,
+    `SELECT market_hash_name, source, price_usd
+     FROM current_prices
+     WHERE market_hash_name = ANY($1)
+       AND price_usd > 0`,
     [marketHashNames]
   );
 
