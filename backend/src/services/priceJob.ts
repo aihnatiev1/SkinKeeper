@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers } from "./prices.js";
+import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
 import { runDailyPLSnapshot } from "./profitLoss.js";
@@ -132,6 +132,18 @@ export function startPriceJobs() {
     } catch (err) {
       recordJobRun("subscriptions", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] Subscription check failed:", err);
+    }
+  }));
+
+  // Prune old price_history at 02:00 UTC daily
+  // Strategy: keep 7 days detailed, aggregate 7-90d to daily, delete >90d
+  scheduledTasks.push(cron.schedule("0 2 * * *", async () => {
+    try {
+      await pruneOldPrices();
+      recordJobRun("pricePruning", true);
+    } catch (err) {
+      recordJobRun("pricePruning", false, err instanceof Error ? err.message : String(err));
+      console.error("[CRON] Price pruning failed:", err);
     }
   }));
 

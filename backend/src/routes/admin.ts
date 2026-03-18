@@ -562,6 +562,17 @@ router.get("/job-health", requireAdminSecret, (_req: Request, res: Response) => 
   res.json({ ...getJobHealth(), inspectCircuit: getInspectCircuitState(), proxyPool: getPoolStats() });
 });
 
+// POST /api/admin/prune-prices — manually trigger price history pruning
+router.post("/prune-prices", requireAdminSecret, async (_req: Request, res: Response) => {
+  try {
+    const { pruneOldPrices } = await import("../services/prices.js");
+    await pruneOldPrices();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/admin/set-premium/:userId — manually set premium (for testing release builds)
 // Body: { premium: true/false, days?: number }
 router.post("/set-premium/:userId", requireAdminSecret, async (req: Request, res: Response) => {

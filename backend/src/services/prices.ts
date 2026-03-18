@@ -498,6 +498,46 @@ export async function getPriceHistory(
   }));
 }
 
+/**
+ * Prune old price_history to keep DB size manageable.
+ *
+ * Strategy:
+ * 1. Delete rows older than 90 days entirely
+ * 2. For rows 7-90 days old: keep only 1 per item/source/day (the latest)
+ * 3. Keep last 7 days untouched (full detail for charts)
+ *
+ * This reduces ~14M skinport rows to manageable levels.
+ */
+export async function pruneOldPrices(): Promise<void> {
+  const start = Date.now();
+
+  // Step 1: Delete everything older than 90 days
+  const { rowCount: deletedOld } = await pool.query(
+    `DELETE FROM price_history WHERE recorded_at < NOW() - INTERVAL '90 days'`
+  );
+  console.log(`[Prune] Deleted ${deletedOld ?? 0} rows older than 90 days`);
+
+  // Step 2: For 7-90 days, keep only latest per item/source/day
+  // Delete duplicates — keep the one with MAX(id) per (name, source, date)
+  const { rowCount: deletedDups } = await pool.query(
+    `DELETE FROM price_history ph
+     WHERE recorded_at >= NOW() - INTERVAL '90 days'
+       AND recorded_at < NOW() - INTERVAL '7 days'
+       AND id NOT IN (
+         SELECT DISTINCT ON (market_hash_name, source, recorded_at::date)
+                id
+         FROM price_history
+         WHERE recorded_at >= NOW() - INTERVAL '90 days'
+           AND recorded_at < NOW() - INTERVAL '7 days'
+         ORDER BY market_hash_name, source, recorded_at::date, recorded_at DESC
+       )`
+  );
+  console.log(`[Prune] Deleted ${deletedDups ?? 0} duplicate rows (7-90 days, keeping 1/day/item/source)`);
+
+  const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+  console.log(`[Prune] Completed in ${elapsed}s`);
+}
+
 // Export the AdaptiveCrawler class for use by CSFloat
 export { AdaptiveCrawler };
 export type { AdaptiveLimiterConfig };
