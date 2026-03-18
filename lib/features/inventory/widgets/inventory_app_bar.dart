@@ -134,41 +134,6 @@ class InventoryAppBar extends ConsumerWidget {
                 GestureDetector(
                   onTap: () {
                     HapticFeedback.mediumImpact();
-                    context.push('/deals');
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.profit.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppTheme.profit.withValues(alpha: 0.3),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.compare_arrows_rounded,
-                            size: 13, color: AppTheme.profit),
-                        const SizedBox(width: 5),
-                        Text(
-                          'Deals',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.profit,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
                     context.push('/inventory/bulk-sell');
                   },
                   child: Container(

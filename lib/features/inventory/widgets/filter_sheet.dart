@@ -30,12 +30,19 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
     super.dispose();
   }
 
+  static const _wearOptions = [
+    ('FN', 'Factory New', Color(0xFF10B981)),
+    ('MW', 'Minimal Wear', Color(0xFF06B6D4)),
+    ('FT', 'Field-Tested', Color(0xFF3B82F6)),
+    ('WW', 'Well-Worn', Color(0xFFF59E0B)),
+    ('BS', 'Battle-Scarred', Color(0xFFEF4444)),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final floatRangeRaw = ref.watch(floatRangeProvider);
+    final selectedWears = ref.watch(wearFilterProvider);
     final stickerQuery = ref.watch(stickerSearchProvider);
-    final isFloatActive = floatRangeRaw != null;
-    final floatRange = floatRangeRaw ?? const RangeValues(0.0, 1.0);
+    final hasFilters = selectedWears.isNotEmpty || stickerQuery.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
@@ -60,103 +67,103 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
           ),
           const SizedBox(height: 16),
 
-          // Title
-          const Text(
-            'Advanced Filters',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Float Range
+          // Title + clear
           Row(
             children: [
               const Text(
-                'Float Range',
+                'Filters',
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
               ),
               const Spacer(),
-              if (isFloatActive)
+              if (hasFilters)
                 GestureDetector(
-                  onTap: () =>
-                      ref.read(floatRangeProvider.notifier).state = null,
+                  onTap: () {
+                    ref.read(wearFilterProvider.notifier).state = {};
+                    ref.read(stickerSearchProvider.notifier).state = '';
+                    _stickerController.clear();
+                  },
                   child: const Text(
-                    'Clear',
-                    style: TextStyle(fontSize: 12, color: AppTheme.primary),
+                    'Clear all',
+                    style: TextStyle(fontSize: 12, color: AppTheme.loss),
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
 
-          // Wear zone labels
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('FN',
-                  style: TextStyle(fontSize: 10, color: Color(0xFF10B981))),
-              Text('MW',
-                  style: TextStyle(fontSize: 10, color: Color(0xFF06B6D4))),
-              Text('FT',
-                  style: TextStyle(fontSize: 10, color: Color(0xFF3B82F6))),
-              Text('WW',
-                  style: TextStyle(fontSize: 10, color: Color(0xFFF59E0B))),
-              Text('BS',
-                  style: TextStyle(fontSize: 10, color: Color(0xFFEF4444))),
-            ],
-          ),
-          const SizedBox(height: 4),
-
-          // Wear zone color bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: SizedBox(
-              height: 4,
-              child: Row(
-                children: [
-                  _wearSegment(const Color(0xFF10B981), 0.07), // FN 0-0.07
-                  _wearSegment(const Color(0xFF06B6D4), 0.08), // MW 0.07-0.15
-                  _wearSegment(const Color(0xFF3B82F6), 0.23), // FT 0.15-0.38
-                  _wearSegment(const Color(0xFFF59E0B), 0.07), // WW 0.38-0.45
-                  _wearSegment(const Color(0xFFEF4444), 0.55), // BS 0.45-1.0
-                ],
-              ),
+          // Wear filter chips
+          const Text(
+            'Wear',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(height: 4),
-
-          RangeSlider(
-            values: floatRange,
-            min: 0.0,
-            max: 1.0,
-            divisions: 100,
-            activeColor: AppTheme.primary,
-            inactiveColor: AppTheme.surface,
-            labels: RangeLabels(
-              floatRange.start.toStringAsFixed(2),
-              floatRange.end.toStringAsFixed(2),
-            ),
-            onChanged: (values) {
-              ref.read(floatRangeProvider.notifier).state = values;
-            },
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _wearOptions.map((w) {
+              final code = w.$1;
+              final label = w.$2;
+              final color = w.$3;
+              final selected = selectedWears.contains(code);
+              return GestureDetector(
+                onTap: () {
+                  final current = Set<String>.from(ref.read(wearFilterProvider));
+                  if (selected) {
+                    current.remove(code);
+                  } else {
+                    current.add(code);
+                  }
+                  ref.read(wearFilterProvider.notifier).state = current;
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected ? color.withValues(alpha: 0.15) : AppTheme.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: selected ? color.withValues(alpha: 0.5) : AppTheme.border,
+                      width: selected ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (selected)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(Icons.check_rounded, size: 14, color: color),
+                        ),
+                      Text(
+                        code,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: selected ? color : AppTheme.textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: selected ? color.withValues(alpha: 0.7) : AppTheme.textDisabled,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
-
-          if (isFloatActive)
-            Text(
-              '${floatRange.start.toStringAsFixed(3)} — ${floatRange.end.toStringAsFixed(3)}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.textMuted,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
 
           const SizedBox(height: 24),
 
@@ -180,13 +187,13 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
                   const TextStyle(color: AppTheme.textDisabled, fontSize: 13),
               prefixIcon:
                   const Icon(Icons.search, size: 18, color: AppTheme.textMuted),
-              suffixIcon: stickerQuery.isNotEmpty
-                  ? GestureDetector(
-                      onTap: () {
+              suffixIcon: _stickerController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close, size: 16, color: AppTheme.textMuted),
+                      onPressed: () {
                         _stickerController.clear();
                         ref.read(stickerSearchProvider.notifier).state = '';
                       },
-                      child: const Icon(Icons.close, size: 16, color: AppTheme.textMuted),
                     )
                   : null,
               filled: true,
@@ -200,33 +207,8 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
             ),
             style: const TextStyle(fontSize: 13, color: Colors.white),
           ),
-
-          const SizedBox(height: 16),
-
-          // Clear all filters
-          if (isFloatActive || stickerQuery.isNotEmpty)
-            GestureDetector(
-              onTap: () {
-                ref.read(floatRangeProvider.notifier).state = null;
-                ref.read(stickerSearchProvider.notifier).state = '';
-                _stickerController.clear();
-              },
-              child: const Center(
-                child: Text(
-                  'Clear all filters',
-                  style: TextStyle(fontSize: 13, color: AppTheme.loss),
-                ),
-              ),
-            ),
         ],
       ),
-    );
-  }
-
-  Widget _wearSegment(Color color, double flex) {
-    return Expanded(
-      flex: (flex * 100).round(),
-      child: Container(color: color),
     );
   }
 }

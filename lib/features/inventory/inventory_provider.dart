@@ -39,21 +39,20 @@ final searchQueryProvider = StateProvider<String>((ref) => '');
 final gridColumnsProvider = StateProvider<int>((ref) => 2);
 final hideNoPriceProvider = StateProvider<bool>((ref) => false);
 final groupingEnabledProvider = StateProvider<bool>((ref) => true);
-final wearFilterProvider = StateProvider<String?>((ref) => null);
 final tradableOnlyProvider = StateProvider<bool>((ref) => false);
 
 // TODO: gate behind premium when IAP is ready
-/// Float range filter — null means inactive
-final floatRangeProvider = StateProvider<RangeValues?>((ref) => null);
+/// Wear filter — set of wear codes (FN, MW, FT, WW, BS). Empty = show all.
+final wearFilterProvider = StateProvider<Set<String>>((ref) => {});
 
 /// Sticker name search — empty means inactive
 final stickerSearchProvider = StateProvider<String>((ref) => '');
 
-/// Whether any advanced filter (float range or sticker search) is active.
+/// Whether any advanced filter is active.
 final advancedFiltersActiveProvider = Provider<bool>((ref) {
-  final floatRange = ref.watch(floatRangeProvider);
+  final wears = ref.watch(wearFilterProvider);
   final stickerQuery = ref.watch(stickerSearchProvider);
-  return floatRange != null || stickerQuery.isNotEmpty;
+  return wears.isNotEmpty || stickerQuery.isNotEmpty;
 });
 
 enum InventoryCategory { all, knives, weapons, stickers, containers }
@@ -140,9 +139,8 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
   final category = ref.watch(categoryProvider);
   final query = ref.watch(searchQueryProvider).toLowerCase();
   final hideNoPrice = ref.watch(hideNoPriceProvider);
-  final wearFilter = ref.watch(wearFilterProvider);
+  final wearChips = ref.watch(wearFilterProvider);
   final tradableOnly = ref.watch(tradableOnlyProvider);
-  final floatRange = ref.watch(floatRangeProvider);
   final stickerQuery = ref.watch(stickerSearchProvider);
 
   return inventory.whenData((items) {
@@ -169,13 +167,13 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
 
       // 2. Search & Detail Filters
       if (hideNoPrice && item.prices.isEmpty) return false;
-      if (wearFilter != null && item.wearShort != wearFilter) return false;
+      // Old single-wear filter removed — wearChips handles it now
       if (tradableOnly && !item.tradable) return false;
 
-      // 3. Float Range Filter
-      if (floatRange != null) {
-        if (item.floatValue == null) return false;
-        if (item.floatValue! < floatRange.start || item.floatValue! > floatRange.end) return false;
+      // 3. Wear Chips Filter (advanced)
+      if (wearChips.isNotEmpty) {
+        final ws = item.wearShort;
+        if (ws == null || !wearChips.contains(ws)) return false;
       }
 
       // 4. Sticker Search Filter
