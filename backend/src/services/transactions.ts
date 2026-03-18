@@ -114,16 +114,26 @@ export async function fetchSteamTransactions(
   console.log(`[Transactions] Event types:`, typeCounts);
   console.log(`[Transactions] Data: ${Object.keys(listings).length} listings, ${Object.keys(purchaseMap).length} purchases`);
 
-  // Get exchange rate to convert wallet currency → USD cents
-  let walletToUsdRate = 1;
-  if (walletCurrencyId !== 1) {
-    const usdToWallet = await getExchangeRate(walletCurrencyId);
-    if (usdToWallet && usdToWallet > 0) {
-      walletToUsdRate = 1 / usdToWallet;
-      console.log(`[Transactions] Exchange rate: 1 wallet unit = ${walletToUsdRate.toFixed(6)} USD (currency ${walletCurrencyId})`);
-    } else {
-      console.warn(`[Transactions] Could not get exchange rate for currency ${walletCurrencyId}, prices will be in wallet currency!`);
-    }
+  // Exchange rate cache for this batch — avoid repeated API calls
+  const rateCache = new Map<number, number>();
+  rateCache.set(1, 1); // USD = 1
+
+  /**
+   * Get walletToUsd rate for a Steam currencyid (raw format: 2000 + enum).
+   * Returns multiplier to convert from wallet cents to USD cents.
+   */
+  async function getWalletToUsdRate(rawCurrencyId: number | string): Promise<number> {
+    const raw = typeof rawCurrencyId === "string" ? parseInt(rawCurrencyId) : rawCurrencyId;
+    const currencyId = raw >= 2000 ? raw - 2000 : raw;
+    if (currencyId <= 0) return 1;
+
+    const cached = rateCache.get(currencyId);
+    if (cached !== undefined) return cached;
+
+    const usdToWallet = await getExchangeRate(currencyId);
+    const rate = (usdToWallet && usdToWallet > 0) ? 1 / usdToWallet : 1;
+    rateCache.set(currencyId, rate);
+    return rate;
   }
 
   let lookupMisses = 0;
@@ -150,21 +160,24 @@ export async function fetchSteamTransactions(
     // Skip events where asset data is missing
     if (!asset?.market_hash_name) continue;
 
-    // For sells: use received_amount from purchase (what seller actually got)
-    // For buys: use paid_amount + paid_fee from purchase (what buyer paid total)
-    // Fallback to listing.price/original_price if purchase unavailable
+    // For sells: use received_amount + received_currencyid (what seller got in THEIR currency)
+    // For buys: use paid_amount + paid_fee + currencyid (what buyer paid in THEIR currency)
     let totalPrice: number;
+    let txCurrencyId: number | string;
     if (isSell) {
       totalPrice = purchase?.received_amount ?? listing?.original_price ?? listing?.price ?? 0;
+      txCurrencyId = purchase?.received_currencyid ?? listing?.currencyid ?? 2001;
     } else {
       totalPrice = purchase
         ? purchase.paid_amount + purchase.paid_fee
         : (listing ? listing.price + listing.fee + listing.publisher_fee : 0);
+      txCurrencyId = purchase?.currencyid ?? listing?.currencyid ?? 2001;
     }
 
     if (totalPrice <= 0) continue;
 
-    // Convert from wallet currency to USD cents
+    // Convert from transaction's actual currency to USD cents
+    const walletToUsdRate = await getWalletToUsdRate(txCurrencyId);
     const priceUsdCents = Math.round(totalPrice * walletToUsdRate);
 
     transactions.push({
