@@ -121,7 +121,29 @@ router.get(
   }
 );
 
+// In-memory sync jobs tracker
+const syncJobs = new Map<string, { status: string; totalItems: number; error?: string; startedAt: number; privateAccounts: number[] }>();
+
+// Clean up old jobs every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of syncJobs) {
+    if (now - job.startedAt > 30 * 60_000) syncJobs.delete(id);
+  }
+}, 10 * 60_000);
+
+// GET /api/inventory/sync-status/:jobId — check background sync status
+router.get("/sync-status/:jobId", authMiddleware, (req: AuthRequest, res: Response) => {
+  const job = syncJobs.get(req.params.jobId as string);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  res.json(job);
+});
+
 // POST /api/inventory/refresh?accountId=X — re-fetch from Steam and update DB
+// Returns immediately with jobId, sync happens in background
 router.post(
   "/refresh",
   authMiddleware,
@@ -143,6 +165,14 @@ router.post(
         return;
       }
 
+      // Generate job ID and return immediately
+      const jobId = `sync_${req.userId}_${Date.now()}`;
+      syncJobs.set(jobId, { status: "syncing", totalItems: 0, startedAt: Date.now(), privateAccounts: [] });
+
+      // Respond immediately — client can poll sync-status
+      res.json({ success: true, jobId, status: "syncing" });
+
+      // Do the actual sync in background
       let totalItems = 0;
       const privateAccountIds: number[] = [];
 
@@ -212,7 +242,13 @@ router.post(
         totalItems += items.length;
       }
 
-      res.json({ success: true, total_items: totalItems, private_accounts: privateAccountIds });
+      // Update job status
+      const job = syncJobs.get(jobId);
+      if (job) {
+        job.status = "done";
+        job.totalItems = totalItems;
+        job.privateAccounts = privateAccountIds;
+      }
 
       // Background: fetch latest Skinport prices so new items have prices immediately
       fetchSkinportPrices()
@@ -235,9 +271,16 @@ router.post(
           console.error("Background inspect error:", err)
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Inventory refresh error:", err);
-      res.status(500).json({ error: "Failed to refresh inventory" });
+      // Response already sent (jobId returned). Try to mark job as failed.
+      for (const [id, job] of syncJobs) {
+        if (id.startsWith(`sync_${req.userId}_`) && job.status === "syncing") {
+          job.status = "error";
+          job.error = err.message ?? String(err);
+          break;
+        }
+      }
     }
   }
 );
