@@ -35,6 +35,12 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Reset auth providers so stale 'authenticated' state doesn't
+    // trick the listener into showing success without a real request
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(clientTokenAuthProvider.notifier).reset();
+      ref.read(qrAuthProvider.notifier).reset();
+    });
   }
 
   @override
