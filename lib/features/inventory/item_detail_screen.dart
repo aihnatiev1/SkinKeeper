@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
+import '../../core/export_service.dart';
 import '../auth/session_gate.dart';
 import '../purchases/iap_service.dart';
 import 'inventory_provider.dart';
@@ -335,17 +336,56 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                 ),
               )
             else
-              PriceHistoryChart(
-                history: _history ?? [],
-                period: _period,
-                onPeriodChanged: (p) {
-                  setState(() {
-                    _period = p;
-                    _historyLoading = true;
-                    _historyError = null;
-                  });
-                  _fetchHistory();
-                },
+              Column(
+                children: [
+                  PriceHistoryChart(
+                    history: _history ?? [],
+                    period: _period,
+                    onPeriodChanged: (p) {
+                      setState(() {
+                        _period = p;
+                        _historyLoading = true;
+                        _historyError = null;
+                      });
+                      _fetchHistory();
+                    },
+                  ),
+                  const SizedBox(height: AppTheme.s8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: () => exportPriceHistory(
+                        context,
+                        ref,
+                        days: _period.days,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(AppTheme.r8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.file_download_outlined,
+                                size: 14, color: AppTheme.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Export CSV',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               )
                   .animate()
                   .fadeIn(duration: 500.ms, delay: 450.ms),

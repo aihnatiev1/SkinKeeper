@@ -76,4 +76,77 @@ router.get(
   }
 );
 
+/**
+ * GET /api/export/price-history?days=30&source=steam
+ * Download price history CSV for all items in the user's inventory.
+ */
+const VALID_SOURCES = new Set(["skinport", "steam", "csfloat", "dmarket"]);
+
+router.get(
+  "/price-history",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 90);
+      const sourceRaw = (req.query.source as string || "").toLowerCase().trim();
+      const source = VALID_SOURCES.has(sourceRaw) ? sourceRaw : null;
+
+      // Get all items the user has in inventory
+      const { rows: userItems } = await pool.query(
+        `SELECT DISTINCT i.market_hash_name
+         FROM inventory_items i
+         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         WHERE sa.user_id = $1`,
+        [req.userId]
+      );
+
+      if (userItems.length === 0) {
+        res.status(400).json({ error: "No items in inventory" });
+        return;
+      }
+
+      const names = userItems.map((r: any) => r.market_hash_name);
+
+      const params: (string[] | string | number)[] = [names, days];
+      let sourceFilter = "";
+      if (source) {
+        params.push(source);
+        sourceFilter = `AND ph.source = $${params.length}`;
+      }
+
+      const { rows } = await pool.query(
+        `SELECT ph.market_hash_name, ph.source, ph.price_usd::float, ph.recorded_at
+         FROM price_history ph
+         WHERE ph.market_hash_name = ANY($1::text[])
+           AND ph.recorded_at > NOW() - INTERVAL '1 day' * $2
+           AND ph.price_usd > 0
+           ${sourceFilter}
+         ORDER BY ph.market_hash_name, ph.recorded_at DESC`,
+        params
+      );
+
+      // Build CSV with BOM for Excel UTF-8 compatibility
+      const BOM = "\uFEFF";
+      const header = "Item,Source,Price (USD),Date";
+      const csvRows = rows.map((r: any) => {
+        const name = `"${(r.market_hash_name || "").replace(/"/g, '""')}"`;
+        const date = new Date(r.recorded_at).toISOString().slice(0, 19).replace("T", " ");
+        return `${name},"${r.source}",${r.price_usd},"${date}"`;
+      });
+
+      const csv = BOM + header + "\n" + csvRows.join("\n");
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="price-history-${days}d${source ? `-${source}` : ""}.csv"`
+      );
+      res.send(csv);
+    } catch (err) {
+      console.error("Price history export error:", err);
+      res.status(500).json({ error: "Export failed" });
+    }
+  }
+);
+
 export default router;
