@@ -186,7 +186,11 @@ export class SteamSessionService {
       );
       if (rows[0]?.steam_id && rows[0].steam_id !== sessionSteamId) {
         console.error(`[Session] MISMATCH: account ${accountId} has steam_id ${rows[0].steam_id} but session belongs to ${sessionSteamId}. Rejecting save.`);
-        throw new Error(`Session steam_id mismatch: expected ${rows[0].steam_id}, got ${sessionSteamId}`);
+        const err = new Error(`You signed in as a different Steam account. Your app account is linked to ${rows[0].steam_id}, but you logged in as ${sessionSteamId}. Please sign in with the correct account.`);
+        (err as any).code = "STEAM_ID_MISMATCH";
+        (err as any).expectedSteamId = rows[0].steam_id;
+        (err as any).actualSteamId = sessionSteamId;
+        throw err;
       }
     }
 

@@ -258,9 +258,18 @@ router.post("/token", async (req: AuthRequest, res: Response) => {
     console.log(`[Token] Session saved for account ${accountId}: method=${method}, sls_len=${steamLoginSecure.length}`);
 
     res.json({ status: "authenticated" });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Token submit error:", err);
-    res.status(500).json({ error: "Failed to process token" });
+    if (err.code === "STEAM_ID_MISMATCH") {
+      res.status(409).json({
+        error: err.message,
+        code: "STEAM_ID_MISMATCH",
+        expectedSteamId: err.expectedSteamId,
+        actualSteamId: err.actualSteamId,
+      });
+    } else {
+      res.status(500).json({ error: "Failed to process token" });
+    }
   }
 });
 

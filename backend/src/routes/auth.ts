@@ -754,9 +754,18 @@ router.post("/token", async (req: Request, res: Response) => {
         premium_until: user.premium_until,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Token login error:", err);
-    res.status(500).json({ error: "Failed to process token" });
+    if (err.code === "STEAM_ID_MISMATCH") {
+      res.status(409).json({
+        error: err.message,
+        code: "STEAM_ID_MISMATCH",
+        expectedSteamId: err.expectedSteamId,
+        actualSteamId: err.actualSteamId,
+      });
+    } else {
+      res.status(500).json({ error: "Failed to process token" });
+    }
   }
 });
 
