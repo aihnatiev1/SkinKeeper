@@ -1,6 +1,6 @@
 import { pool } from "../db/pool.js";
 import { SteamSessionService } from "./steamSession.js";
-import { sellItem } from "./market.js";
+import { sellItem, quickSellPrice } from "./market.js";
 import { recalculateCostBasis } from "./profitLoss.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -199,9 +199,34 @@ async function processOperation(
 
       const itemAccountId: number = item.account_id ?? fallbackAccountId;
 
+      // Auto-resolve quick price when client sends priceCents=0
+      let priceCents: number = item.price_cents;
+      if (priceCents <= 0 && item.market_hash_name) {
+        const qp = await quickSellPrice(item.market_hash_name);
+        if (qp === null || qp <= 0) {
+          await pool.query(
+            `UPDATE sell_operation_items
+             SET status = 'failed', error_message = 'No market price available', updated_at = NOW()
+             WHERE id = $1`,
+            [item.id]
+          );
+          await pool.query(
+            `UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`,
+            [operationId]
+          );
+          consecutiveErrors++;
+          continue;
+        }
+        priceCents = qp;
+        await pool.query(
+          `UPDATE sell_operation_items SET price_cents = $1 WHERE id = $2`,
+          [priceCents, item.id]
+        );
+      }
+
       try {
         const session = await getSession(itemAccountId);
-        const result = await sellItem(session, item.asset_id, item.price_cents, itemAccountId);
+        const result = await sellItem(session, item.asset_id, priceCents, itemAccountId);
 
         if (result.success) {
           await pool.query(

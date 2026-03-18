@@ -287,12 +287,13 @@ export async function quickSellPrice(
 // Bulk sell multiple items at same price
 export async function bulkSell(
   session: SteamSession,
-  items: Array<{ assetId: string; priceInCents: number }>
+  items: Array<{ assetId: string; priceInCents: number }>,
+  accountId?: number
 ): Promise<Array<{ assetId: string; result: SellResult }>> {
   const results: Array<{ assetId: string; result: SellResult }> = [];
 
   for (const item of items) {
-    const result = await sellItem(session, item.assetId, item.priceInCents);
+    const result = await sellItem(session, item.assetId, item.priceInCents, accountId);
     results.push({ assetId: item.assetId, result });
 
     // Pause between sells to avoid rate limit

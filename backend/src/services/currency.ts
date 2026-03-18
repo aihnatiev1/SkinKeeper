@@ -308,6 +308,9 @@ export async function detectWalletCurrency(
     );
 
     // Strategy 1 & 2: Parse HTML variables (if 200)
+    if (response.status !== 200) {
+      console.warn(`[Currency] Steam market returned HTTP ${response.status} (expected 200)`);
+    }
     if (response.status === 200) {
       const html = response.data as string;
 
@@ -360,7 +363,11 @@ export async function detectWalletCurrency(
       }
     }
 
-    console.warn("[Currency] Could not detect wallet currency from Steam response");
+    const cookieHeader = response.headers["set-cookie"];
+    console.warn(
+      `[Currency] Could not detect wallet currency from Steam response` +
+      ` (status=${response.status}, hasCookies=${!!cookieHeader}, cookieCount=${cookieHeader?.length ?? 0})`
+    );
     return null;
   } catch (err: any) {
     console.error("[Currency] Failed to detect wallet currency:", err.message);

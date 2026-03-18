@@ -444,10 +444,13 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
           );
           return false;
         } else {
-          return _confirmDeleteAll(context, item);
+          final confirmed = await _confirmDeleteAll(context, item);
+          if (confirmed) {
+            await _deleteAllForItem(context, item);
+          }
+          return false; // never let Dismissible remove the widget itself
         }
       },
-      onDismissed: (_) => _deleteAllForItem(context, item),
       child: GestureDetector(
         onLongPress: () => _showItemActions(context, item),
         child: Container(
@@ -635,12 +638,13 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
     return result ?? false;
   }
 
-  void _deleteAllForItem(BuildContext context, ItemPL item) async {
+  Future<void> _deleteAllForItem(BuildContext context, ItemPL item) async {
     try {
       final api = ref.read(apiClientProvider);
       final encoded = Uri.encodeQueryComponent(item.marketHashName);
       await api.delete('/transactions?item=$encoded');
       ref.invalidate(itemsPLProvider);
+      ref.invalidate(portfolioPLProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

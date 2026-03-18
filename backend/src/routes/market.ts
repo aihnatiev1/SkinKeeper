@@ -525,7 +525,7 @@ router.post(
         return;
       }
 
-      const results = await bulkSell(session, items);
+      const results = await bulkSell(session, items, resolvedAccountId);
       const succeeded = results.filter((r) => r.result.success).length;
       res.json({ results, succeeded, total: items.length });
     } catch (err) {
