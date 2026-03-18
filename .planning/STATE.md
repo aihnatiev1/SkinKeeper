@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Auth Flow Redesign
 status: executing
-stopped_at: "Completed 28-02-PLAN.md (wire requireSession to sell/trade actions)"
-last_updated: "2026-03-17T19:23:52Z"
-last_activity: "2026-03-17 -- Phase 28 Plan 02 executed: requireSession wired to all sell/trade intercept points"
+stopped_at: "Completed 30-01-PLAN.md (JobQueue infra + inventory migration)"
+last_updated: "2026-03-18T18:31:06Z"
+last_activity: "2026-03-18 -- Phase 30 Plan 01 executed: in-memory JobQueue with inventory refresh migration"
 progress:
   total_phases: 13
   completed_phases: 5
   total_plans: 30
-  completed_plans: 19
-  percent: 63
+  completed_plans: 20
+  percent: 67
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 28 (Tier 2 — Intent-Based Session Unlock) — Plan 02 complete
-Next: Phase 28 Plan 03 (if exists, or next phase)
-Status: All sell/trade actions gated behind requireSession
-Last activity: 2026-03-17 -- Completed 28-02 (wire requireSession to sell/trade actions)
+Phase: 30 (Scaling Infrastructure) — Plan 01 complete
+Next: Phase 30 Plan 02
+Status: JobQueue infra created, inventory refresh migrated to queue
+Last activity: 2026-03-18 -- Completed 30-01 (JobQueue infra + inventory migration)
 
-Progress: [████████████░] 63%
+Progress: [█████████████░] 67%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [████████████░] 63%
 | 27 | 02 | 147s | 2 | 3 |
 | 28 | 01 | 197s | 2 | 3 |
 | 28 | 02 | 285s | 2 | 5 |
+| 30 | 01 | 221s | 2 | 3 |
 
 ## Accumulated Context
 
@@ -134,6 +135,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-17
-Stopped at: "Completed 28-02-PLAN.md (wire requireSession to sell/trade actions)"
+Last session: 2026-03-18
+Stopped at: "Completed 30-01-PLAN.md (JobQueue infra + inventory migration)"
 Resume file: None

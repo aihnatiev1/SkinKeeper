@@ -482,7 +482,7 @@ Phases execute in numeric order: 1 → 2 → 3 (M1) → 4 → 10 (M2) → 11 →
 | 27. Tier 1 — Zero Friction Entry | 0/2 | Pending | — |
 | 28. Tier 2 — Intent-Based Unlock | 0/2 | Pending | — |
 | 29. UX Polish — Locked States | 0/1 | Pending | — |
-| 30. Scaling Infrastructure | 0/3 | Pending | — |
+| 30. Scaling Infrastructure | 1/3 | In Progress | — |
 | **Milestone 5: Web Platform** | | | |
 | 21. Web Foundation | 0/3 | Pending | — |
 | 22. Dashboard & Inventory | 0/3 | Pending | — |
