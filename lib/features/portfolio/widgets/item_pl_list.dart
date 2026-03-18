@@ -12,27 +12,18 @@ import '../portfolio_pl_provider.dart';
 import 'add_transaction_sheet.dart';
 import 'csv_import_sheet.dart';
 
-// ── Layout constants ──────────────────────────────────────────────────────────
-const _kRowH = 52.0;
-const _kHdrH = 28.0;
-const _kNameW = 162.0; // sticky: icon + name
-
-// Scrollable column widths — order matches screenshot
-const _kColQty = 46.0;
-const _kColBuy = 76.0;
-const _kColCur = 76.0;
-const _kColInv = 86.0;
-const _kColWorth = 82.0;
-const _kColPct = 54.0;
-const _kColGain = 82.0;
-const _kColFees = 86.0;
-
-const _hdrStyle = TextStyle(
-  fontSize: 10,
-  fontWeight: FontWeight.w700,
-  color: AppTheme.textMuted,
-  letterSpacing: 0.7,
-);
+// ── Sort labels ──────────────────────────────────────────────────────────────
+const _kSortLabels = <PlSortCol, String>{
+  PlSortCol.recent: 'Recent',
+  PlSortCol.qty: 'Quantity',
+  PlSortCol.buyPrice: 'Buy Price',
+  PlSortCol.currentPrice: 'Current',
+  PlSortCol.invested: 'Invested',
+  PlSortCol.worth: 'Worth',
+  PlSortCol.pct: 'Change %',
+  PlSortCol.gain: 'Gain',
+  PlSortCol.afterFees: 'After Fees',
+};
 
 // ── Public widget ─────────────────────────────────────────────────────────────
 class ItemPLList extends ConsumerWidget {
@@ -256,7 +247,7 @@ class _TabChip extends StatelessWidget {
   }
 }
 
-// ── Table ────────────────────────────────────────────────────────────────────
+// ── Card list ────────────────────────────────────────────────────────────────
 class _TableContent extends ConsumerStatefulWidget {
   final List<ItemPL> items;
   final PlSort sort;
@@ -267,115 +258,356 @@ class _TableContent extends ConsumerStatefulWidget {
 }
 
 class _TableContentState extends ConsumerState<_TableContent> {
-  final _hCtrl = ScrollController();
-
-  @override
-  void dispose() { _hCtrl.dispose(); super.dispose(); }
-
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Sticky left: icon + name
-        SizedBox(
-          width: _kNameW,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _stickyHeader(),
-              for (final item in widget.items)
-                GestureDetector(
-                  onLongPress: () => _showItemActions(context, item),
-                  child: _stickyRow(item),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      child: Column(
+        children: [
+          _SortBar(sort: widget.sort),
+          const SizedBox(height: 4),
+          for (int i = 0; i < widget.items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _ItemCard(item: widget.items[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sort bar ─────────────────────────────────────────────────────────────────
+class _SortBar extends ConsumerWidget {
+  final PlSort sort;
+  const _SortBar({required this.sort});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final label = _kSortLabels[sort.col] ?? 'Recent';
+    final arrow = sort.desc ? ' \u2193' : ' \u2191';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: Row(
+        children: [
+          Text('Sort by: ',
+              style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+          GestureDetector(
+            onTap: () => _showSortMenu(context, ref),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppTheme.primary.withValues(alpha: 0.25)),
+              ),
+              child: Text(
+                '$label$arrow',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primary,
                 ),
-            ],
-          ),
-        ),
-        Container(width: 0.5, color: AppTheme.divider),
-        // Scrollable columns
-        Expanded(
-          child: SingleChildScrollView(
-            controller: _hCtrl,
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _dataHeader(),
-                for (final item in widget.items)
-                  Consumer(builder: (ctx, ref, child) => _dataRow(item, ref)),
-              ],
+              ),
             ),
           ),
-        ),
-        Container(width: 0.5, color: AppTheme.divider),
-        // Sticky right: edit + delete
-        SizedBox(
-          width: 72,
-          child: Column(
-            children: [
-              _actionsHeader(),
-              for (final item in widget.items)
-                _actionsRow(context, item),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _actionsHeader() => Container(
-        height: _kHdrH,
-        decoration: _border(),
-      );
-
-  Widget _actionsRow(BuildContext context, ItemPL item) => Container(
-        height: _kRowH,
-        decoration: _border(),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
+  void _showSortMenu(BuildContext context, WidgetRef ref) {
+    final current = ref.read(plSortProvider);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: AppTheme.glass(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                showGlassSheet(context, AddTransactionSheet(
-                  initialItemName: item.marketHashName,
-                  initialPriceUsd: item.avgBuyPrice > 0 ? item.avgBuyPrice : null,
-                  initialQty: item.currentHolding > 0 ? item.currentHolding : null,
-                  editMode: true,
-                ));
-              },
-              child: Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(
-                  color: AppTheme.textMuted.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.edit_outlined, size: 14, color: AppTheme.textSecondary),
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text('Sort by',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14)),
             ),
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: () => _confirmDeleteAll(context, item),
-              child: Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(
-                  color: AppTheme.loss.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+            for (final col in PlSortCol.values)
+              ListTile(
+                dense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16),
+                title: Text(
+                  _kSortLabels[col] ?? col.name,
+                  style: TextStyle(
+                    color: current.col == col
+                        ? AppTheme.primary
+                        : AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: current.col == col
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
                 ),
-                child: Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.loss.withValues(alpha: 0.8)),
+                trailing: current.col == col
+                    ? Text(
+                        current.desc ? '\u2193' : '\u2191',
+                        style: TextStyle(
+                            color: AppTheme.primary, fontSize: 14),
+                      )
+                    : null,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  ref.read(plSortProvider.notifier).state =
+                      current.withCol(col);
+                  context.pop();
+                },
               ),
-            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Item card ────────────────────────────────────────────────────────────────
+class _ItemCard extends ConsumerStatefulWidget {
+  final ItemPL item;
+  const _ItemCard({required this.item});
+
+  @override
+  ConsumerState<_ItemCard> createState() => _ItemCardState();
+}
+
+class _ItemCardState extends ConsumerState<_ItemCard> {
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final currency = ref.watch(currencyProvider);
+    final tab = ref.watch(plTabProvider);
+    final isSold = tab == PlTab.sold;
+    final profitColor = item.isProfitable ? AppTheme.profit : AppTheme.loss;
+    final pctPrefix = item.profitPct >= 0 ? '+' : '';
+    final pctText = item.hasCostData && item.currentPriceCents > 0
+        ? '$pctPrefix${item.profitPct.toStringAsFixed(1)}%'
+        : null;
+
+    // Subtitle
+    final subtitle = isSold
+        ? '${item.totalQuantitySold} sold \u00B7 ${currency.format(item.avgSellPrice)} avg'
+        : '${item.currentHolding} held \u00B7 ${currency.format(item.avgBuyPrice)} avg';
+
+    // Worth / Earned
+    final worthLabel = isSold ? 'Earned' : 'Worth';
+    final worthValue = isSold
+        ? (item.totalEarnedCents > 0
+            ? currency.format(item.totalEarned)
+            : '\u2014')
+        : (item.totalWorthNowCents > 0
+            ? currency.format(item.totalWorthNow)
+            : '\u2014');
+
+    // Profit
+    final profitValue = item.hasCostData && item.currentPriceCents > 0
+        ? currency.formatWithSign(item.totalProfit)
+        : '\u2014';
+
+    return Dismissible(
+      key: ValueKey(item.marketHashName),
+      background: _swipeBackground(
+        alignment: Alignment.centerLeft,
+        color: AppTheme.primary,
+        icon: Icons.edit_outlined,
+      ),
+      secondaryBackground: _swipeBackground(
+        alignment: Alignment.centerRight,
+        color: AppTheme.loss,
+        icon: Icons.delete_outline_rounded,
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          HapticFeedback.lightImpact();
+          showGlassSheet(
+            context,
+            AddTransactionSheet(
+              initialItemName: item.marketHashName,
+              initialPriceUsd:
+                  item.avgBuyPrice > 0 ? item.avgBuyPrice : null,
+              initialQty:
+                  item.currentHolding > 0 ? item.currentHolding : null,
+              editMode: true,
+            ),
+          );
+          return false;
+        } else {
+          return _confirmDeleteAll(context, item);
+        }
+      },
+      onDismissed: (_) => _deleteAllForItem(context, item),
+      child: GestureDetector(
+        onLongPress: () => _showItemActions(context, item),
+        child: Container(
+          decoration: AppTheme.glass(),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Row 1: icon + name + profit badge
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Item icon
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: _itemIcon(item),
+                  ),
+                  const SizedBox(width: 10),
+                  // Name + subtitle
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.displayName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Profit % badge
+                  if (pctText != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: profitColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        pctText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: profitColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              // Divider
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    color: AppTheme.divider),
+              ),
+              // Row 3: Worth / Profit / Change
+              Row(
+                children: [
+                  _metricColumn(worthLabel, worthValue, Colors.white),
+                  _metricColumn('Profit', profitValue, profitColor),
+                  _metricColumn(
+                    'Change',
+                    pctText ?? '\u2014',
+                    profitColor,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _metricColumn(String label, String value, Color valueColor) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: AppTheme.textDisabled),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _itemIcon(ItemPL item) {
+    if (item.imageUrl != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: CachedNetworkImage(
+          imageUrl: item.imageUrl!,
+          width: 32,
+          height: 32,
+          fit: BoxFit.contain,
+          errorWidget: (ctx, url, err) => _iconPlaceholder(),
+          placeholder: (ctx, url) => _iconPlaceholder(),
+        ),
+      );
+    }
+    return _iconPlaceholder();
+  }
+
+  Widget _iconPlaceholder() => Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(4),
         ),
       );
 
-  // ── Delete all transactions for item ──────────────────────────────────────
-  void _confirmDeleteAll(BuildContext context, ItemPL item) {
+  Widget _swipeBackground({
+    required Alignment alignment,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: color, size: 24),
+    );
+  }
+
+  // ── Delete confirmation ──────────────────────────────────────────────────
+  Future<bool> _confirmDeleteAll(BuildContext context, ItemPL item) async {
     HapticFeedback.mediumImpact();
-    showDialog(
+    final result = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.surface,
@@ -387,19 +619,20 @@ class _TableContentState extends ConsumerState<_TableContent> {
         ),
         actions: [
           TextButton(
-            onPressed: () => context.pop(),
-            child: Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
+            onPressed: () => Navigator.of(context).pop(false),
+            child:
+                Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
           ),
           TextButton(
-            onPressed: () async {
-              context.pop();
-              _deleteAllForItem(context, item);
-            },
-            child: Text('Delete', style: TextStyle(color: AppTheme.loss, fontWeight: FontWeight.w700)),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Delete',
+                style: TextStyle(
+                    color: AppTheme.loss, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
+    return result ?? false;
   }
 
   void _deleteAllForItem(BuildContext context, ItemPL item) async {
@@ -411,13 +644,15 @@ class _TableContentState extends ConsumerState<_TableContent> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppTheme.loss),
+          SnackBar(
+              content: Text('Delete failed: $e'),
+              backgroundColor: AppTheme.loss),
         );
       }
     }
   }
 
-  // ── Item long-press actions ────────────────────────────────────────────────
+  // ── Item long-press actions ──────────────────────────────────────────────
   void _showItemActions(BuildContext context, ItemPL item) {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
@@ -465,267 +700,4 @@ class _TableContentState extends ConsumerState<_TableContent> {
       ),
     );
   }
-
-  // ── Sticky header ──────────────────────────────────────────────────────────
-  Widget _stickyHeader() => Container(
-        height: _kHdrH,
-        padding: const EdgeInsets.only(left: 10),
-        decoration: _border(),
-        alignment: Alignment.centerLeft,
-        child: const Text('ITEM', style: _hdrStyle),
-      );
-
-  // ── Sticky row ─────────────────────────────────────────────────────────────
-  Widget _stickyRow(ItemPL item) {
-    final subtitle = item.currentHolding > 0
-        ? '${item.currentHolding} held'
-        : 'all sold';
-    return Container(
-      height: _kRowH,
-      padding: const EdgeInsets.only(left: 8, right: 6),
-      decoration: _border(),
-      child: Row(
-        children: [
-          // Icon
-          if (item.imageUrl != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: CachedNetworkImage(
-                imageUrl: item.imageUrl!,
-                width: 30,
-                height: 30,
-                fit: BoxFit.contain,
-                errorWidget: (ctx, url, err) => _iconPlaceholder(),
-                placeholder: (ctx, url) => _iconPlaceholder(),
-              ),
-            )
-          else
-            _iconPlaceholder(),
-          const SizedBox(width: 6),
-          // Name
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(item.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimary)),
-                const SizedBox(height: 1),
-                Text(subtitle,
-                    style: AppTheme.captionSmall.copyWith(
-                        color: item.currentHolding > 0
-                            ? AppTheme.textMuted
-                            : AppTheme.textDisabled)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _iconPlaceholder() => Container(
-        width: 30, height: 30,
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(4),
-        ),
-      );
-
-  // ── Data header ────────────────────────────────────────────────────────────
-  Widget _dataHeader() => Consumer(
-        builder: (ctx, ref, _) {
-          final sort = ref.watch(plSortProvider);
-          void tap(PlSortCol c) {
-            HapticFeedback.selectionClick();
-            ref.read(plSortProvider.notifier).state = sort.withCol(c);
-          }
-          return Container(
-            height: _kHdrH,
-            decoration: _border(),
-            child: Row(children: [
-              _hdrCell('QTY', _kColQty, PlSortCol.qty, sort, tap),
-              _hdrCell('COST', _kColBuy, PlSortCol.buyPrice, sort, tap),
-              _hdrCell('CURRENT', _kColCur, PlSortCol.currentPrice, sort, tap),
-              _hdrCell('INVESTED', _kColInv, PlSortCol.invested, sort, tap),
-              _hdrCell('WORTH', _kColWorth, PlSortCol.worth, sort, tap),
-              _hdrCell('%', _kColPct, PlSortCol.pct, sort, tap),
-              _hdrCell('GAIN', _kColGain, PlSortCol.gain, sort, tap),
-              _hdrCell('AFTER FEES', _kColFees, PlSortCol.afterFees, sort, tap),
-            ]),
-          );
-        },
-      );
-
-  Widget _hdrCell(String label, double w, PlSortCol col, PlSort sort,
-      void Function(PlSortCol) tap) {
-    final active = sort.col == col;
-    return GestureDetector(
-      onTap: () => tap(col),
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: w,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(label,
-                    style: _hdrStyle.copyWith(
-                        color: active ? Colors.white : AppTheme.textMuted),
-                    textAlign: TextAlign.right,
-                    overflow: TextOverflow.ellipsis),
-              ),
-              const SizedBox(width: 2),
-              Text(
-                active ? (sort.desc ? '↓' : '↑') : '⇅',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: active ? AppTheme.primary : AppTheme.textDisabled,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Data row ───────────────────────────────────────────────────────────────
-  Widget _dataRow(ItemPL item, WidgetRef ref) {
-    final currency = ref.watch(currencyProvider);
-    final tab = ref.watch(plTabProvider);
-    final profitColor = item.isProfitable ? AppTheme.profit : AppTheme.loss;
-    final feesColor =
-        item.gainAfterFeesCents >= 0 ? AppTheme.profit : AppTheme.loss;
-    final pctPrefix = item.profitPct >= 0 ? '+' : '';
-
-    // For sold tab: show avg sell price as "current"
-    final displayPrice = tab == PlTab.sold && item.isSoldOut
-        ? item.avgSellPrice
-        : item.currentPrice;
-    final displayPriceLabel =
-        tab == PlTab.sold && item.isSoldOut ? 'sold @' : null;
-
-    return Container(
-      height: _kRowH,
-      decoration: _border(),
-      child: Row(children: [
-        // QTY
-        _cell(_kColQty,
-            child: Text(
-              tab == PlTab.sold
-                  ? '${item.totalQuantitySold}'
-                  : '${item.currentHolding}',
-              style: AppTheme.bodySmall.copyWith(fontWeight: FontWeight.w600),
-            )),
-
-        // BUY price (each)
-        _cell(_kColBuy,
-            child: Text(
-              item.avgBuyPriceCents > 0 ? currency.format(item.avgBuyPrice) : '—',
-              style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-            )),
-
-        // CURRENT / sold @
-        _cell(_kColCur,
-            child: displayPrice > 0
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(currency.format(displayPrice),
-                          style: AppTheme.bodySmall
-                              .copyWith(fontWeight: FontWeight.w500)),
-                      if (displayPriceLabel != null)
-                        Text(displayPriceLabel,
-                            style: AppTheme.captionSmall
-                                .copyWith(color: AppTheme.textDisabled)),
-                    ],
-                  )
-                : Text('—',
-                    style:
-                        TextStyle(color: AppTheme.textDisabled, fontSize: 15))),
-
-        // TOTAL INVESTED
-        _cell(_kColInv,
-            child: Text(
-              item.totalSpentCents > 0
-                  ? currency.format(item.totalSpent)
-                  : '—',
-              style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-            )),
-
-        // WORTH NOW
-        _cell(_kColWorth,
-            child: Text(
-              item.totalWorthNowCents > 0
-                  ? currency.format(item.totalWorthNow)
-                  : '—',
-              style: AppTheme.bodySmall.copyWith(fontWeight: FontWeight.w500),
-            )),
-
-        // %
-        _cell(_kColPct,
-            child: item.hasCostData && item.currentPriceCents > 0
-                ? Text(
-                    '$pctPrefix${item.profitPct.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: profitColor),
-                  )
-                : Text('—',
-                    style: TextStyle(
-                        color: AppTheme.textDisabled, fontSize: 15))),
-
-        // GAIN
-        _cell(_kColGain,
-            child: item.hasCostData && item.currentPriceCents > 0
-                ? Text(
-                    currency.formatWithSign(item.totalProfit),
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: profitColor),
-                  )
-                : Text('—',
-                    style: TextStyle(
-                        color: AppTheme.textDisabled, fontSize: 15))),
-
-        // AFTER FEES
-        _cell(_kColFees,
-            child: item.hasCostData && item.currentPriceCents > 0
-                ? Text(
-                    currency.formatWithSign(item.gainAfterFees),
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: feesColor),
-                  )
-                : Text('—',
-                    style: TextStyle(
-                        color: AppTheme.textDisabled, fontSize: 15))),
-      ]),
-    );
-  }
-
-  Widget _cell(double width, {required Widget child}) => SizedBox(
-        width: width,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 10),
-          child: Align(alignment: Alignment.centerRight, child: child),
-        ),
-      );
-
-  BoxDecoration _border() => BoxDecoration(
-        border: Border(
-            bottom: BorderSide(color: AppTheme.divider, width: 0.5)),
-      );
 }
