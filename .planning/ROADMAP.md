@@ -327,7 +327,7 @@ Plans:
 Plans:
 - [ ] 30-01-PLAN.md — Backend: Job queue abstraction (in-memory now, Redis-compatible interface), inventory/trade/inspect queues with concurrency limits, job progress tracking
 - [x] 30-02-PLAN.md — Backend: Steam API Gateway (global rate limiter, request dedup, circuit breaker, metrics), response cache layer (TTL per route, cache invalidation), PG pool tuning, slow query logging
-- [ ] 30-03-PLAN.md — Flutter: sync progress (SSE/polling), "Data may be outdated" banner, graceful error handling. Backend: health dashboard admin endpoint
+- [x] 30-03-PLAN.md — Flutter: sync progress (SSE/polling), "Data may be outdated" banner, graceful error handling. Backend: health dashboard admin endpoint
 
 ## Phase Details (M5 — Web Platform)
 

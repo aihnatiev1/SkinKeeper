@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Auth Flow Redesign
 status: executing
-stopped_at: "Completed 30-02-PLAN.md (SteamGateway + ResponseCache + PG pool tuning)"
-last_updated: "2026-03-18T18:36:30Z"
-last_activity: "2026-03-18 -- Phase 30 Plan 02 executed: SteamGateway, ResponseCache, PG pool tuning"
+stopped_at: "Completed 30-03-PLAN.md (Health Dashboard + Graceful Degradation)"
+last_updated: "2026-03-18T19:00:00Z"
+last_activity: "2026-03-18 -- Phase 30 Plan 03 executed: Health dashboard, stale data banner, graceful degradation"
 progress:
   total_phases: 13
   completed_phases: 5
   total_plans: 30
-  completed_plans: 21
-  percent: 70
+  completed_plans: 22
+  percent: 73
 ---
 
 # Project State
@@ -25,17 +25,17 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 30 (Scaling Infrastructure) — Plan 02 complete
-Next: Phase 30 Plan 03
-Status: SteamGateway + ResponseCache + PG pool tuning complete
-Last activity: 2026-03-18 -- Completed 30-02 (SteamGateway + ResponseCache + PG pool tuning)
+Phase: 30 (Scaling Infrastructure) — Plan 03 complete
+Next: Phase 30 Plan 04 (or next phase)
+Status: Health dashboard + graceful degradation complete
+Last activity: 2026-03-18 -- Completed 30-03 (Health Dashboard + Stale Data Banner)
 
-Progress: [██████████████] 70%
+Progress: [███████████████] 73%
 
 ## Performance Metrics
 
 **Velocity (from M1/M2):**
-- Total plans completed: 22
+- Total plans completed: 23
 - Average duration: ~3.5min
 - Total execution time: ~1.3 hours
 
@@ -62,6 +62,7 @@ Progress: [██████████████] 70%
 | 28 | 02 | 285s | 2 | 5 |
 | 30 | 01 | 221s | 2 | 3 |
 | 30 | 02 | 446s | 2 | 5 |
+| 30 | 03 | 278s | 2 | 5 |
 
 ## Accumulated Context
 
@@ -128,6 +129,9 @@ Progress: [██████████████] 70%
 - [30-02]: SteamRequestOptions/SteamResponse exported from SteamClient.ts for SteamGateway consumption
 - [30-02]: ResponseCache uses own Map (not TTLCache) to support per-entry TTL and pattern invalidation
 - [30-02]: registerCache adapter uses duck-typed stats getter for TTLCache-based registry compatibility
+- [30-03]: getPoolStats aliased as getDbPoolStats in admin.ts to avoid collision with proxyPool.getPoolStats
+- [30-03]: inventoryStaleProvider (StateProvider<bool>) tracks stale flag from API, reset on refresh
+- [30-03]: 429/503 in inventory job returns stale data from DB instead of failing
 
 ### Pending Todos
 
@@ -140,5 +144,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-18
-Stopped at: "Completed 30-02-PLAN.md (SteamGateway + ResponseCache + PG pool tuning)"
+Stopped at: "Completed 30-03-PLAN.md (Health Dashboard + Graceful Degradation)"
 Resume file: None
