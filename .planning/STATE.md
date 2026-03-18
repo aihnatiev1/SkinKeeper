@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Auth Flow Redesign
 status: executing
-stopped_at: "Completed 30-01-PLAN.md (JobQueue infra + inventory migration)"
-last_updated: "2026-03-18T18:31:06Z"
-last_activity: "2026-03-18 -- Phase 30 Plan 01 executed: in-memory JobQueue with inventory refresh migration"
+stopped_at: "Completed 30-02-PLAN.md (SteamGateway + ResponseCache + PG pool tuning)"
+last_updated: "2026-03-18T18:36:30Z"
+last_activity: "2026-03-18 -- Phase 30 Plan 02 executed: SteamGateway, ResponseCache, PG pool tuning"
 progress:
   total_phases: 13
   completed_phases: 5
   total_plans: 30
-  completed_plans: 20
-  percent: 67
+  completed_plans: 21
+  percent: 70
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 30 (Scaling Infrastructure) — Plan 01 complete
-Next: Phase 30 Plan 02
-Status: JobQueue infra created, inventory refresh migrated to queue
-Last activity: 2026-03-18 -- Completed 30-01 (JobQueue infra + inventory migration)
+Phase: 30 (Scaling Infrastructure) — Plan 02 complete
+Next: Phase 30 Plan 03
+Status: SteamGateway + ResponseCache + PG pool tuning complete
+Last activity: 2026-03-18 -- Completed 30-02 (SteamGateway + ResponseCache + PG pool tuning)
 
-Progress: [█████████████░] 67%
+Progress: [██████████████] 70%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [█████████████░] 67%
 | 28 | 01 | 197s | 2 | 3 |
 | 28 | 02 | 285s | 2 | 5 |
 | 30 | 01 | 221s | 2 | 3 |
+| 30 | 02 | 446s | 2 | 5 |
 
 ## Accumulated Context
 
@@ -124,6 +125,9 @@ Progress: [█████████████░] 67%
 - [28-01]: ConnectProgressOverlay is a regular widget (not OverlayEntry) shown as Scaffold body swap
 - [28-02]: SellBottomSheet keeps sessionStatus.when wrapper for mid-sheet expiry, uses minimal TextButton prompt instead of full warning
 - [28-02]: CreateTradeScreen uses addPostFrameCallback + _hasSession bool to gate entry, pops back if dismissed
+- [30-02]: SteamRequestOptions/SteamResponse exported from SteamClient.ts for SteamGateway consumption
+- [30-02]: ResponseCache uses own Map (not TTLCache) to support per-entry TTL and pattern invalidation
+- [30-02]: registerCache adapter uses duck-typed stats getter for TTLCache-based registry compatibility
 
 ### Pending Todos
 
@@ -136,5 +140,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-18
-Stopped at: "Completed 30-01-PLAN.md (JobQueue infra + inventory migration)"
+Stopped at: "Completed 30-02-PLAN.md (SteamGateway + ResponseCache + PG pool tuning)"
 Resume file: None
