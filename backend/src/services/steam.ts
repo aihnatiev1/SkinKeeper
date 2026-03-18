@@ -11,6 +11,18 @@ import {
 const STEAM_API_KEY = () => process.env.STEAM_API_KEY!;
 const STEAM_DOMAIN = "steamcommunity.com";
 
+// Separate rate limiter for inventory requests — don't compete with price crawlers
+let inventoryLastRequest = 0;
+const INVENTORY_MIN_GAP_MS = 5000; // 5s between inventory page requests
+async function inventoryRateLimit(): Promise<void> {
+  const now = Date.now();
+  const gap = now - inventoryLastRequest;
+  if (gap < INVENTORY_MIN_GAP_MS) {
+    await new Promise((r) => setTimeout(r, INVENTORY_MIN_GAP_MS - gap));
+  }
+  inventoryLastRequest = Date.now();
+}
+
 interface SteamPlayerSummary {
   steamid: string;
   personaname: string;
@@ -230,13 +242,14 @@ async function fetchInventoryContext(
   let totalFiltered = 0;
 
   for (let page = 0; page < 20; page++) {
-    const params: Record<string, string> = { l: "english", count: "500" };
+    const params: Record<string, string> = { l: "english", count: "2000" };
     if (lastAssetId) params.start_assetid = lastAssetId;
 
     let data: any;
-    for (let retry = 0; retry < 3; retry++) {
+    const maxRetries = 6;
+    for (let retry = 0; retry < maxRetries; retry++) {
       try {
-        await steamRateLimit();
+        await inventoryRateLimit();
 
         // Use proxy pool for inventory requests — rotate on 429
         const slot = getAvailableSlot(STEAM_DOMAIN);
@@ -252,23 +265,25 @@ async function fetchInventoryContext(
         break;
       } catch (err: any) {
         if (err.response?.status === 403 && contextId === "2") {
-          // Steam returns 403 when inventory is set to private
           throw new Error('INVENTORY_PRIVATE');
         }
-        if (err.response?.status === 429) {
+        const is429 = err.response?.status === 429;
+        const isTimeout = err.code === "ETIMEDOUT" || err.code === "ECONNRESET";
+        if (is429 || isTimeout) {
           const slot = getAvailableSlot(STEAM_DOMAIN);
-          if (slot) {
+          if (slot && is429) {
             const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
             recordSlot429(slot.index, STEAM_DOMAIN, retryAfter);
           }
-          if (retry < 2) {
-            // Short wait then retry — proxy pool will use a different slot
-            console.log(`[Steam] Rate limited ctx${contextId} via proxy pool, retrying...`);
-            await new Promise((r) => setTimeout(r, 3000));
+          if (retry < maxRetries - 1) {
+            // Exponential backoff: 5s, 10s, 20s, 30s, 30s
+            const waitSec = Math.min(5 * Math.pow(2, retry), 30);
+            console.log(`[Steam] ${is429 ? '429' : 'timeout'} ctx${contextId} page ${page}, retry ${retry + 1}/${maxRetries} in ${waitSec}s...`);
+            await new Promise((r) => setTimeout(r, waitSec * 1000));
             continue;
           }
         }
-        console.log(`[Steam] Error ctx${contextId} page ${page}, returning ${items.length} items`);
+        console.log(`[Steam] Error ctx${contextId} page ${page} after ${retry + 1} retries, returning ${items.length} items`);
         return items;
       }
     }
