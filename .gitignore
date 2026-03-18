@@ -51,3 +51,5 @@ ios/Runner/GoogleService-Info.plist
 # Backend secrets
 backend/.env
 backend/src/coverage/
+node_modules/
+ecosystem.config.js
