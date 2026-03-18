@@ -363,6 +363,9 @@ ALTER TABLE sell_operation_items
 -- 022: Track wallet currency source (auto-detected vs manual)
 ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS currency_source VARCHAR(10) DEFAULT 'auto';
 
+-- 024: Widen condition column for smart alert types (bargain, sellNow, arbitrage)
+ALTER TABLE price_alerts ALTER COLUMN condition TYPE VARCHAR(20);
+
 -- 023: Widen varchar columns that can overflow
 -- asset_id: Steam 64-bit IDs can be 19-20 digits
 ALTER TABLE inventory_items ALTER COLUMN asset_id TYPE VARCHAR(30);

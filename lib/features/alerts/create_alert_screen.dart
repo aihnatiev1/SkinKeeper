@@ -96,6 +96,12 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
     };
   }
 
+  bool get _isPercentCondition =>
+      _condition == AlertCondition.changePct ||
+      _condition == AlertCondition.bargain ||
+      _condition == AlertCondition.sellNow ||
+      _condition == AlertCondition.arbitrage;
+
   String? get _currentPriceHint {
     if (_selectedItem == null) return null;
     final inventory = ref.read(inventoryProvider).valueOrNull ?? [];
@@ -120,7 +126,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
 
     final threshold = double.tryParse(_thresholdController.text.replaceAll(',', '.'));
     if (threshold == null || threshold <= 0) {
-      setState(() => _error = 'Enter a valid price');
+      setState(() => _error = _isPercentCondition ? 'Enter a valid percentage' : 'Enter a valid price');
       return;
     }
 
@@ -271,10 +277,9 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Condition pills + threshold in one row
+                    // Condition pills
                     Row(
                       children: [
-                        // Condition toggle
                         _ConditionPill(
                           label: 'drops below',
                           icon: Icons.trending_down,
@@ -312,6 +317,47 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    // Smart alert pills
+                    Row(
+                      children: [
+                        _ConditionPill(
+                          label: 'deal alert',
+                          icon: Icons.local_fire_department,
+                          selected:
+                              _condition == AlertCondition.bargain,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(
+                                () => _condition = AlertCondition.bargain);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _ConditionPill(
+                          label: 'sell signal',
+                          icon: Icons.trending_up,
+                          selected:
+                              _condition == AlertCondition.sellNow,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(
+                                () => _condition = AlertCondition.sellNow);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _ConditionPill(
+                          label: 'arbitrage',
+                          icon: Icons.compare_arrows,
+                          selected:
+                              _condition == AlertCondition.arbitrage,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() =>
+                                _condition = AlertCondition.arbitrage);
+                          },
+                        ),
+                      ],
+                    ),
 
                     const SizedBox(height: 16),
 
@@ -323,24 +369,20 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
                       decoration: InputDecoration(
-                        prefixText: _condition == AlertCondition.changePct
-                            ? null
-                            : '\$ ',
+                        prefixText: _isPercentCondition ? null : '\$ ',
                         prefixStyle: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textPrimary,
                         ),
-                        suffixText: _condition == AlertCondition.changePct
-                            ? '%'
-                            : null,
+                        suffixText: _isPercentCondition ? '%' : null,
                         suffixStyle: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textMuted,
                         ),
-                        hintText: _condition == AlertCondition.changePct
-                            ? '5.0'
+                        hintText: _isPercentCondition
+                            ? '15'
                             : _currentPriceHint ?? '0.00',
                         hintStyle: TextStyle(
                           fontSize: 22,

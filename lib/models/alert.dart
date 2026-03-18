@@ -1,4 +1,4 @@
-enum AlertCondition { above, below, changePct }
+enum AlertCondition { above, below, changePct, bargain, sellNow, arbitrage }
 
 enum AlertSource { steam, skinport, csfloat, dmarket, any }
 

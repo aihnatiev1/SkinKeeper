@@ -99,6 +99,84 @@ export async function evaluateAlerts(
         }
         break;
       }
+
+      case "bargain": {
+        // Price dropped significantly below 7-day average
+        const avgSource = alert.source === "any" ? "steam" : alert.source;
+        const { rows: avgRows } = await pool.query(
+          `SELECT AVG(price_usd)::float AS avg_price
+           FROM price_history
+           WHERE market_hash_name = $1 AND source = $2
+             AND price_usd > 0 AND recorded_at > NOW() - INTERVAL '7 days'`,
+          [alert.market_hash_name, avgSource]
+        );
+        const bargainAvg = avgRows[0]?.avg_price;
+        if (bargainAvg && bargainAvg > 0) {
+          const dropPct = ((bargainAvg - currentPrice) / bargainAvg) * 100;
+          if (dropPct >= alert.threshold) {
+            shouldTrigger = true;
+            message = `${alert.market_hash_name} is ${dropPct.toFixed(0)}% below weekly avg ($${currentPrice.toFixed(2)} vs avg $${bargainAvg.toFixed(2)}) on ${source}`;
+          }
+        }
+        break;
+      }
+
+      case "sellNow": {
+        // Price spiked above 7-day average — only for items user owns
+        const { rows: owned } = await pool.query(
+          `SELECT 1 FROM inventory_items i
+           JOIN steam_accounts sa ON i.steam_account_id = sa.id
+           WHERE sa.user_id = $1 AND i.market_hash_name = $2 LIMIT 1`,
+          [alert.user_id, alert.market_hash_name]
+        );
+        if (owned.length === 0) break;
+
+        const sellSource = alert.source === "any" ? "steam" : alert.source;
+        const { rows: sellAvgRows } = await pool.query(
+          `SELECT AVG(price_usd)::float AS avg_price
+           FROM price_history
+           WHERE market_hash_name = $1 AND source = $2
+             AND price_usd > 0 AND recorded_at > NOW() - INTERVAL '7 days'`,
+          [alert.market_hash_name, sellSource]
+        );
+        const sellAvg = sellAvgRows[0]?.avg_price;
+        if (sellAvg && sellAvg > 0) {
+          const spikePct = ((currentPrice - sellAvg) / sellAvg) * 100;
+          if (spikePct >= alert.threshold) {
+            shouldTrigger = true;
+            message = `${alert.market_hash_name} is ${spikePct.toFixed(0)}% above weekly avg ($${currentPrice.toFixed(2)} vs avg $${sellAvg.toFixed(2)}) — good time to sell`;
+          }
+        }
+        break;
+      }
+
+      case "arbitrage": {
+        // Cross-market price gap
+        const { rows: allPrices } = await pool.query(
+          `SELECT source, lp.price_usd::float AS price
+           FROM (SELECT DISTINCT source FROM price_history WHERE market_hash_name = $1 AND price_usd > 0) s
+           JOIN LATERAL (
+             SELECT price_usd FROM price_history ph
+             WHERE ph.market_hash_name = $1 AND ph.source = s.source AND ph.price_usd > 0
+             ORDER BY ph.recorded_at DESC LIMIT 1
+           ) lp ON true`,
+          [alert.market_hash_name]
+        );
+        if (allPrices.length < 2) break;
+
+        const sorted = allPrices.filter(p => p.price > 0).sort((a, b) => a.price - b.price);
+        if (sorted.length < 2) break;
+
+        const cheapest = sorted[0];
+        const expensive = sorted[sorted.length - 1];
+        const gapPct = ((expensive.price - cheapest.price) / cheapest.price) * 100;
+
+        if (gapPct >= alert.threshold) {
+          shouldTrigger = true;
+          message = `${alert.market_hash_name}: Buy on ${cheapest.source} ($${cheapest.price.toFixed(2)}) → Sell on ${expensive.source} ($${expensive.price.toFixed(2)}) = +${gapPct.toFixed(0)}% gap`;
+        }
+        break;
+      }
     }
 
     if (shouldTrigger) {

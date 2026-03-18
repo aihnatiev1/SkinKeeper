@@ -8,7 +8,7 @@ import { z } from "zod";
 
 export const createAlertSchema = z.object({
   market_hash_name: z.string().min(1).max(255),
-  condition: z.enum(["above", "below", "changePct"]),
+  condition: z.enum(["above", "below", "changePct", "bargain", "sellNow", "arbitrage"]),
   threshold: z.number().positive(),
   source: z.enum(["steam", "skinport", "csfloat", "dmarket", "any"]).optional().default("any"),
   cooldown_minutes: z.number().int().min(1).max(1440).optional().default(60),
