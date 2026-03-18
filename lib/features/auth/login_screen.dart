@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
+import '../../core/sync_state_provider.dart';
 import '../../core/theme.dart';
 import 'steam_auth_service.dart';
 import 'session_provider.dart';
@@ -224,23 +225,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.invalidate(accountsProvider);
     ref.invalidate(sessionStatusProvider);
 
-    // Background sync from Steam
+    // Background sync from Steam with progress tracking
+    final syncNotifier = ref.read(syncStateProvider.notifier);
     Future.microtask(() async {
+      syncNotifier.setInventory(true);
       try {
         await api.post('/inventory/refresh');
         ref.invalidate(inventoryProvider);
         ref.invalidate(portfolioProvider);
       } catch (_) {}
+      syncNotifier.setInventory(false);
+
+      syncNotifier.setTransactions(true);
       try {
         await api.post('/transactions/sync');
         ref.invalidate(transactionsProvider);
         ref.invalidate(portfolioPLProvider);
         ref.invalidate(portfolioProvider);
       } catch (_) {}
+      syncNotifier.setTransactions(false);
+
+      syncNotifier.setTrades(true);
       try {
         await api.post('/trades/sync');
         ref.invalidate(tradesProvider);
       } catch (_) {}
+      syncNotifier.setTrades(false);
     });
 
     if (mounted) setState(() { _isPolling = false; });

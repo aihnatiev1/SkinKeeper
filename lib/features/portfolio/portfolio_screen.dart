@@ -20,6 +20,7 @@ import '../inventory/inventory_provider.dart';
 import '../purchases/iap_service.dart';
 import 'portfolio_pl_provider.dart';
 import 'portfolio_provider.dart';
+import '../../core/sync_state_provider.dart';
 import '../../widgets/account_scope_chip.dart';
 import '../../widgets/glass_sheet.dart';
 import 'widgets/add_transaction_sheet.dart';
@@ -93,6 +94,9 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
                 child: _PortfolioHeader(portfolio: portfolio),
               ),
             ),
+
+            // ── Sync banner (shows during background sync after login) ──
+            SliverToBoxAdapter(child: _SyncBanner()),
 
             // ── P/L Summary (always visible, compact) ──
             SliverToBoxAdapter(
@@ -1838,6 +1842,51 @@ class _EditPortfolioSheetState extends ConsumerState<_EditPortfolioSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Sync Banner ────────────────────────────────────────────────────────
+
+class _SyncBanner extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncState = ref.watch(syncStateProvider);
+    if (!syncState.isSyncing) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.accent.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: AppTheme.accent,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                syncState.label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.accent.withValues(alpha: 0.9),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
