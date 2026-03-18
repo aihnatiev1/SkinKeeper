@@ -57,6 +57,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   }
 
   bool get _isSingle => widget.items.length == 1;
+  bool get _allSameName => widget.items.every((i) => i.marketHashName == widget.items.first.marketHashName);
 
   void _onCustomPriceChanged(String value) {
     final parsed = double.tryParse(value.replaceAll(',', '.'));
@@ -221,14 +222,20 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               Text(
                 _isSingle
                     ? item.displayName
-                    : '$count x ${item.displayName}',
+                    : _allSameName
+                        ? '$count x ${item.displayName}'
+                        : '$count items selected',
                 style: AppTheme.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
               Text(
-                _isSingle ? item.weaponName : item.marketHashName,
+                _isSingle
+                    ? item.weaponName
+                    : _allSameName
+                        ? item.marketHashName
+                        : widget.items.map((i) => i.displayName).toSet().join(', '),
                 style: AppTheme.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
