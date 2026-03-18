@@ -215,7 +215,6 @@ async function buildSteamCookies(session: SteamSession): Promise<string> {
   const eligibility = await getEligibilityCookie(session);
   let cookies = `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`;
   if (eligibility) cookies += `; webTradeEligibility=${eligibility}`;
-  console.log(`[Trade] Cookies: sls_len=${session.steamLoginSecure.length}, sid_len=${session.sessionId.length}, eligibility=${!!eligibility}`);
   return cookies;
 }
 
@@ -352,17 +351,11 @@ async function sendSteamTradeOffer(
   );
   const data = resp.data;
 
-  console.log(`[Trade] Send response: status=${resp.status}, body=${JSON.stringify(data ?? null).substring(0, 500)}`);
+  console.log(`[Trade] Send response: status=${resp.status}, body=${JSON.stringify(data).substring(0, 500)}`);
 
   if (resp.status !== 200) {
-    const msg = (data && typeof data === "object")
-      ? (data.strError || data.message || JSON.stringify(data).substring(0, 300))
-      : String(data ?? "empty response").substring(0, 300);
+    const msg = typeof data === "object" ? (data.strError || JSON.stringify(data)) : String(data).substring(0, 200);
     throw new Error(`Steam returned ${resp.status}: ${msg}`);
-  }
-
-  if (!data) {
-    throw new Error("Steam returned empty response body");
   }
 
   if (data.tradeofferid) {
@@ -370,9 +363,9 @@ async function sendSteamTradeOffer(
     return { offerId: data.tradeofferid };
   }
 
-  console.error(`[Trade] Steam error:`, JSON.stringify(data).substring(0, 500));
+  console.error(`[Trade] Steam error:`, JSON.stringify(data));
   throw new Error(
-    data.strError || data.message || `Steam trade API error: ${JSON.stringify(data).substring(0, 300)}`
+    data.strError || `Steam trade API error: ${JSON.stringify(data)}`
   );
 }
 
@@ -1402,23 +1395,8 @@ async function getWebApiKey(accountId: number): Promise<string | null> {
       }
     );
 
-    const pageStr = typeof page === "string" ? page : String(page ?? "");
-    const pageLen = pageStr.length;
-
-    // Detect redirects to login (session expired)
-    if (pageStr.includes("/login") || pageStr.includes("g_steamID = false")) {
-      console.warn(`[Trade] API key page redirected to login for account ${accountId} — session may be expired`);
-      return null;
-    }
-
-    // Detect "Access Denied" or "limited account"
-    if (pageStr.includes("Access Denied") || pageStr.includes("limited account")) {
-      console.warn(`[Trade] API key page: Access Denied for account ${accountId} (limited account?)`);
-      return null;
-    }
-
     // Check if key is already on the page
-    let keyMatch = pageStr.match(/Key:\s*([A-F0-9]{32})/i);
+    let keyMatch = (page as string).match(/Key:\s*([A-F0-9]{32})/i);
     if (keyMatch) {
       const apiKey = keyMatch[1];
       await pool.query(
@@ -1429,10 +1407,8 @@ async function getWebApiKey(accountId: number): Promise<string | null> {
       return apiKey;
     }
 
-    console.log(`[Trade] API key page for account ${accountId}: ${pageLen} chars, hasRegisterForm=${pageStr.includes("registerkey")}, snippet=${pageStr.substring(0, 300).replace(/\s+/g, ' ')}`);
-
     // Check if we need to register — look for the registration form
-    if (pageStr.includes("registerkey")) {
+    if ((page as string).includes("registerkey")) {
       const { data: regPage } = await axios.post(
         `${STEAM_COMMUNITY}/dev/registerkey`,
         new URLSearchParams({
