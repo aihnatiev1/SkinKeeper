@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import 'steam_auth_service.dart';
+import 'session_provider.dart';
+import 'widgets/steam_webview_login.dart';
 import '../inventory/inventory_provider.dart';
 import '../portfolio/portfolio_provider.dart';
 import '../portfolio/portfolio_pl_provider.dart';
@@ -39,61 +41,101 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _startLogin() async {
+    if (widget.isLinking) {
+      await _startLinkLogin();
+      return;
+    }
+    await _startWebViewLogin();
+  }
+
+  Future<void> _startWebViewLogin() async {
+    final result = await Navigator.of(context).push<SteamWebViewResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const SteamWebViewLogin(),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _isPolling = true;
+      _timedOut = false;
+    });
+
+    try {
+      final api = ref.read(apiClientProvider);
+
+      // Submit cookies to /auth/token (initial login, no JWT yet)
+      final response = await api.post('/auth/token', data: {
+        'steamLoginSecure': result.steamLoginSecure,
+        if (result.sessionId != null) 'sessionId': result.sessionId,
+        if (result.refreshToken != null) 'steamRefreshToken': result.refreshToken,
+      });
+
+      final data = response.data as Map<String, dynamic>;
+      final token = data['token'] as String?;
+      if (token != null) {
+        await _completeLogin(token);
+      } else {
+        throw Exception('No token in response');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _isPolling = false; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Login failed: ${friendlyError(e)}'),
+          backgroundColor: AppTheme.loss,
+        ));
+      }
+    }
+  }
+
+  Future<void> _startLinkLogin() async {
     setState(() {
       _isPolling = true;
       _timedOut = false;
     });
     try {
       final authService = ref.read(authServiceProvider);
-      if (widget.isLinking) {
-        await authService.openSteamLinkLogin(ref);
-        // Link flow: show "I'm back" button since deep links don't work on iOS
-        // User returns manually, taps button, we refresh accounts
-        if (mounted) {
-          setState(() => _isPolling = true);
-          // Poll accounts every 3s to detect when link completes
-          _pollTimer?.cancel();
-          int attempts = 0;
-          final api = ref.read(apiClientProvider);
-          _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-            attempts++;
-            if (attempts > 30) { // 90 seconds
+      await authService.openSteamLinkLogin(ref);
+      if (mounted) {
+        setState(() => _isPolling = true);
+        _pollTimer?.cancel();
+        int attempts = 0;
+        final api = ref.read(apiClientProvider);
+        _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+          attempts++;
+          if (attempts > 30) {
+            timer.cancel();
+            if (mounted) setState(() { _isPolling = false; _timedOut = true; });
+            return;
+          }
+          try {
+            final resp = await api.get('/auth/accounts');
+            final accounts = (resp.data['accounts'] as List?)?.length ?? 0;
+            final prevCount = ref.read(accountsProvider).valueOrNull?.length ?? 0;
+            if (accounts > prevCount) {
               timer.cancel();
-              if (mounted) setState(() { _isPolling = false; _timedOut = true; });
-              return;
-            }
-            try {
-              final resp = await api.get('/auth/accounts');
-              final accounts = (resp.data['accounts'] as List?)?.length ?? 0;
-              final prevCount = ref.read(accountsProvider).valueOrNull?.length ?? 0;
-              if (accounts > prevCount) {
-                // New account detected!
-                timer.cancel();
-                ref.invalidate(accountsProvider);
-                ref.invalidate(inventoryProvider);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Account linked successfully!'),
-                      backgroundColor: Color(0xFF00E676),
-                    ),
-                  );
-                  setState(() => _isPolling = false);
-                  context.pop();
-                }
+              ref.invalidate(accountsProvider);
+              ref.invalidate(inventoryProvider);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Account linked successfully!'),
+                    backgroundColor: Color(0xFF00E676),
+                  ),
+                );
+                setState(() => _isPolling = false);
+                context.pop();
               }
-            } catch (_) {}
-          });
-        }
-        return;
+            }
+          } catch (_) {}
+        });
       }
-      _nonce = await authService.openSteamLoginWithPolling();
-      _startPolling();
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isPolling = false;
-        });
+        setState(() { _isPolling = false; });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to open Steam login: ${friendlyError(e)}'),
           backgroundColor: AppTheme.loss,
@@ -449,7 +491,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Text(
-        'Safe and secure — uses official Steam OpenID',
+        'You sign in directly to Steam. We never see your password.',
         style: TextStyle(
           fontSize: 12,
           color: Colors.white.withValues(alpha: 0.3),
