@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
@@ -37,6 +38,20 @@ final hideNoPriceProvider = StateProvider<bool>((ref) => false);
 final groupingEnabledProvider = StateProvider<bool>((ref) => true);
 final wearFilterProvider = StateProvider<String?>((ref) => null);
 final tradableOnlyProvider = StateProvider<bool>((ref) => false);
+
+// TODO: gate behind premium when IAP is ready
+/// Float range filter — null means inactive
+final floatRangeProvider = StateProvider<RangeValues?>((ref) => null);
+
+/// Sticker name search — empty means inactive
+final stickerSearchProvider = StateProvider<String>((ref) => '');
+
+/// Whether any advanced filter (float range or sticker search) is active.
+final advancedFiltersActiveProvider = Provider<bool>((ref) {
+  final floatRange = ref.watch(floatRangeProvider);
+  final stickerQuery = ref.watch(stickerSearchProvider);
+  return floatRange != null || stickerQuery.isNotEmpty;
+});
 
 enum InventoryCategory { all, knives, weapons, stickers, containers }
 final categoryProvider = StateProvider<InventoryCategory>((ref) => InventoryCategory.all);
@@ -124,6 +139,8 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
   final hideNoPrice = ref.watch(hideNoPriceProvider);
   final wearFilter = ref.watch(wearFilterProvider);
   final tradableOnly = ref.watch(tradableOnlyProvider);
+  final floatRange = ref.watch(floatRangeProvider);
+  final stickerQuery = ref.watch(stickerSearchProvider);
 
   return inventory.whenData((items) {
     var filtered = items.where((item) {
@@ -151,6 +168,19 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
       if (hideNoPrice && item.prices.isEmpty) return false;
       if (wearFilter != null && item.wearShort != wearFilter) return false;
       if (tradableOnly && !item.tradable) return false;
+
+      // 3. Float Range Filter
+      if (floatRange != null) {
+        if (item.floatValue == null) return false;
+        if (item.floatValue! < floatRange.start || item.floatValue! > floatRange.end) return false;
+      }
+
+      // 4. Sticker Search Filter
+      if (stickerQuery.isNotEmpty) {
+        final q = stickerQuery.toLowerCase();
+        if (!item.stickers.any((s) => s.name.toLowerCase().contains(q))) return false;
+      }
+
       if (query.isEmpty) return true;
       return item.marketHashName.toLowerCase().contains(query);
     }).toList();

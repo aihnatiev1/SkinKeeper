@@ -10,6 +10,7 @@ import '../../../widgets/account_scope_chip.dart';
 import '../../../widgets/sync_indicator.dart';
 import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
+import 'filter_sheet.dart';
 import 'glass_icon_btn.dart';
 import 'sort_menu_btn.dart';
 
@@ -108,6 +109,7 @@ class InventoryAppBar extends ConsumerWidget {
                     onToggleSearch();
                   },
                 ),
+                _FilterIconBtn(),
                 SortMenuBtn(
                   currentSort: ref.watch(sortOptionProvider),
                   onSelected: (option) {
@@ -203,6 +205,46 @@ class InventoryAppBar extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FilterIconBtn extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isActive = ref.watch(advancedFiltersActiveProvider);
+
+    return Stack(
+      children: [
+        GlassIconBtn(
+          icon: Icons.tune_rounded,
+          isActive: isActive,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            showModalBottomSheet(
+              context: context,
+              useRootNavigator: true,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => const FilterSheet(),
+            );
+          },
+        ),
+        if (isActive)
+          Positioned(
+            right: 0,
+            top: 0,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: AppTheme.primary,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.bg, width: 1.5),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
