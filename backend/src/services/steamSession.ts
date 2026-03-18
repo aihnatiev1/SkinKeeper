@@ -573,20 +573,50 @@ export class SteamSessionService {
     const row = rows[0];
     if (!row?.steam_login_secure) return "none";
 
+    // Try JWT expiry check first (no network call needed)
+    const session = await this.getSession(accountId);
+    if (session) {
+      const expiry = this.getAccessTokenExpiry(session.steamLoginSecure);
+      if (expiry) {
+        const hoursLeft = (expiry - Date.now() / 1000) / 3600;
+        if (hoursLeft <= 0) return "expired";
+        if (hoursLeft < 4) return "expiring";
+        return "valid";
+      }
+    }
+
+    // Fallback: time-based heuristic
     if (row.session_updated_at) {
       const updatedAt = new Date(row.session_updated_at).getTime();
       const hoursSinceUpdate = (Date.now() - updatedAt) / (1000 * 60 * 60);
       if (hoursSinceUpdate > 20) return "expiring";
-      // Trust sessions updated within the last 2 hours — skip live validation
-      // to avoid false negatives from Steam rate-limits / timeouts
       if (hoursSinceUpdate < 2) return "valid";
     }
 
-    const session = await this.getSession(accountId);
+    // Last resort: live validation
     if (!session) return "none";
-
     const isValid = await this.validateSession(session);
     return isValid ? "valid" : "expired";
+  }
+
+  /**
+   * Extract JWT expiry from the access token inside steamLoginSecure cookie.
+   * Returns expiry timestamp in seconds, or null if not a JWT.
+   */
+  private static getAccessTokenExpiry(steamLoginSecure: string): number | null {
+    try {
+      const decoded = decodeURIComponent(steamLoginSecure);
+      const parts = decoded.split("||");
+      if (parts.length < 2) return null;
+      const token = parts.slice(1).join("||");
+      // JWT format: header.payload.signature
+      const jwtParts = token.split(".");
+      if (jwtParts.length !== 3) return null;
+      const payload = JSON.parse(Buffer.from(jwtParts[1], "base64url").toString("utf8"));
+      return typeof payload.exp === "number" ? payload.exp : null;
+    } catch {
+      return null;
+    }
   }
 
   // ─── Session Refresh ────────────────────────────────────────────────

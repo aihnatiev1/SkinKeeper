@@ -175,6 +175,38 @@ export interface TradeOfferItem {
 const STEAM_COMMUNITY = "https://steamcommunity.com";
 const STEAM_API = "https://api.steampowered.com";
 
+/**
+ * Extract access token (JWT) from steamLoginSecure cookie.
+ * This is used for Steam API calls (IEconService) instead of Web API key.
+ * access_token auth works reliably where API key auth may return empty results.
+ */
+function extractAccessToken(session: SteamSession): string | null {
+  const decoded = decodeURIComponent(session.steamLoginSecure);
+  const parts = decoded.split("||");
+  return parts.length >= 2 ? parts.slice(1).join("||") : null;
+}
+
+/**
+ * Get auth params for Steam API calls — prefer access_token, fall back to API key.
+ */
+async function getApiAuthParams(accountId: number, session?: SteamSession | null): Promise<Record<string, string>> {
+  // Prefer access_token from session (works reliably)
+  if (session) {
+    const token = extractAccessToken(session);
+    if (token) return { access_token: token };
+  }
+  // Try to get session if not provided
+  const sess = await SteamSessionService.getSession(accountId);
+  if (sess) {
+    const token = extractAccessToken(sess);
+    if (token) return { access_token: token };
+  }
+  // Fall back to Web API key
+  const apiKey = await getWebApiKey(accountId);
+  if (apiKey) return { key: apiKey };
+  return {};
+}
+
 // Rate limit: trade history sync at most once per 10 min per user
 const tradeHistorySyncCache = new TTLCache<string, number>(10 * 60 * 1000, 500);
 registerCache("tradeHistorySync", tradeHistorySyncCache as unknown as TTLCache<unknown, unknown>);
@@ -547,24 +579,26 @@ export async function fetchPartnerInventory(
   const items: TradeItem[] = [];
   let lastAssetId: string | undefined;
 
-  for (let page = 0; page < 5; page++) {
-    const params: Record<string, string> = { l: "english", count: "500" };
+  // Use IEconService API with our Steam API key (works for any user's inventory)
+  for (let page = 0; page < 10; page++) {
+    const params: Record<string, string> = {
+      key: process.env.STEAM_API_KEY!,
+      steamid: partnerSteamId,
+      appid: "730",
+      contextid: "2",
+      get_descriptions: "1",
+      count: "1000",
+      language: "english",
+    };
     if (lastAssetId) params.start_assetid = lastAssetId;
 
-    let data: any;
+    let result: any;
     try {
       const resp = await axios.get(
-        `${STEAM_COMMUNITY}/inventory/${partnerSteamId}/730/2`,
-        {
-          params,
-          timeout: 15000,
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-          },
-        }
+        `${STEAM_API}/IEconService/GetInventoryItemsWithDescriptions/v1/`,
+        { params, timeout: 20000 }
       );
-      data = resp.data;
+      result = resp.data?.response;
     } catch (err: any) {
       if (err.response?.status === 403) {
         const e = new Error("Partner's inventory is private") as any;
@@ -576,29 +610,30 @@ export async function fetchPartnerInventory(
         e.statusCode = 429;
         throw e;
       }
-      throw err;
+      // Fallback to community endpoint on API failure
+      console.warn(`[Trade] IEconService failed for partner ${partnerSteamId}, falling back to community`);
+      return fetchPartnerInventoryCommunity(partnerSteamId);
     }
 
-    if (!data?.success || !data?.assets) break;
+    if (!result?.assets?.length) break;
 
     const descMap = new Map<string, any>();
-    for (const desc of data.descriptions ?? []) {
+    for (const desc of result.descriptions ?? []) {
       descMap.set(`${desc.classid}_${desc.instanceid}`, desc);
     }
 
-    for (const asset of data.assets) {
+    for (const asset of result.assets) {
       const desc = descMap.get(`${asset.classid}_${asset.instanceid}`);
       if (!desc || desc.tradable !== 1) continue;
 
-      // Skip non-tradable junk: medals, graffiti, charm removers, patches, etc.
       const name: string = desc.market_hash_name ?? "";
       const typeTag = desc.tags?.find((t: any) => t.category === "Type");
       const typeName: string = typeTag?.localized_tag_name ?? "";
       if (
-        typeName === "Collectible" ||       // Service Medals, Coins, Pins
-        typeName === "Graffiti" ||           // Graffiti (sealed or used)
-        typeName === "Spray" ||              // Sprays
-        typeName === "Patch" ||              // Patches
+        typeName === "Collectible" ||
+        typeName === "Graffiti" ||
+        typeName === "Spray" ||
+        typeName === "Patch" ||
         name === "Charm Remover" ||
         name === "Storage Unit"
       ) continue;
@@ -610,11 +645,44 @@ export async function fetchPartnerInventory(
       });
     }
 
-    if (!data.more_items) break;
-    lastAssetId = data.assets[data.assets.length - 1].assetid;
-    await new Promise((r) => setTimeout(r, 1500));
+    if (!result.more_items) break;
+    lastAssetId = result.last_assetid || result.assets[result.assets.length - 1]?.assetid;
+    if (!lastAssetId) break;
   }
 
+  return items;
+}
+
+/** Community endpoint fallback for partner inventory */
+async function fetchPartnerInventoryCommunity(
+  partnerSteamId: string
+): Promise<TradeItem[]> {
+  const items: TradeItem[] = [];
+  const resp = await axios.get(
+    `${STEAM_COMMUNITY}/inventory/${partnerSteamId}/730/2`,
+    {
+      params: { l: "english", count: "1000" },
+      timeout: 15000,
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" },
+    }
+  );
+  const data = resp.data;
+  if (!data?.success || !data?.assets) return items;
+
+  const descMap = new Map<string, any>();
+  for (const desc of data.descriptions ?? []) {
+    descMap.set(`${desc.classid}_${desc.instanceid}`, desc);
+  }
+
+  for (const asset of data.assets) {
+    const desc = descMap.get(`${asset.classid}_${asset.instanceid}`);
+    if (!desc || desc.tradable !== 1) continue;
+    const name: string = desc.market_hash_name ?? "";
+    const typeTag = desc.tags?.find((t: any) => t.category === "Type");
+    const typeName: string = typeTag?.localized_tag_name ?? "";
+    if (["Collectible","Graffiti","Spray","Patch"].includes(typeName) || name === "Charm Remover" || name === "Storage Unit") continue;
+    items.push({ assetId: asset.assetid, marketHashName: desc.market_hash_name, iconUrl: desc.icon_url });
+  }
   return items;
 }
 
@@ -1851,19 +1919,20 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
 }
 
 async function syncTradeOffersForAccount(userId: number, accountId: number): Promise<{ synced: number }> {
-  const apiKey = await getWebApiKey(accountId);
-  if (!apiKey) {
+  const authParams = await getApiAuthParams(accountId);
+  if (!authParams.access_token && !authParams.key) {
+    console.warn(`[Trade] No auth available for account ${accountId}, skipping sync`);
     return { synced: 0 };
   }
 
-  // Try Steam Web API first (may return empty due to known Steam API bug)
+  // Fetch active offers via Steam API (access_token works reliably)
   let activeData: any;
   try {
     const resp = await axios.get(
       `${STEAM_API}/IEconService/GetTradeOffers/v1/`,
       {
         params: {
-          key: apiKey,
+          ...authParams,
           get_sent_offers: 1,
           get_received_offers: 1,
           get_descriptions: 1,
@@ -1876,21 +1945,16 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
     activeData = resp.data?.response;
   } catch (err: any) {
     if (err.response?.status === 403) {
-      await pool.query(
-        `UPDATE steam_accounts SET web_api_key = NULL WHERE id = $1`,
-        [accountId]
-      );
-      console.warn(`[Trade] Web API key invalid for account ${accountId}, cleared`);
+      console.warn(`[Trade] API auth failed for account ${accountId} (403)`);
     }
     console.error(`[Trade] Sync active offers failed:`, err.message);
   }
 
   const apiHasOffers = (activeData?.trade_offers_sent?.length > 0 || activeData?.trade_offers_received?.length > 0);
 
-  // GetTradeOffers API is broken since ~2024 (returns empty).
-  // Fall back to HTML scraping with proper parsing.
+  // Fall back to HTML scraping only if API returned nothing
   if (!apiHasOffers) {
-    console.log(`[Trade] GetTradeOffers API returned empty for account ${accountId}, scraping HTML`);
+    console.log(`[Trade] API returned empty for account ${accountId}, trying HTML scrape`);
     const scraped = await scrapeTradeOffersHtml(accountId);
     if (scraped.synced > 0) {
       console.log(`[Trade] HTML scrape synced ${scraped.synced} offers for account ${accountId}`);
@@ -1898,7 +1962,7 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
     }
   }
 
-  // Also fetch historical via API (may also be empty due to same bug)
+  // Also fetch historical via API
   let histData: any;
   try {
     const cutoff = Math.floor(Date.now() / 1000) - 14 * 24 * 3600;
@@ -1906,7 +1970,7 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
       `${STEAM_API}/IEconService/GetTradeOffers/v1/`,
       {
         params: {
-          key: apiKey,
+          ...authParams,
           get_sent_offers: 1,
           get_received_offers: 1,
           get_descriptions: 1,
