@@ -64,6 +64,39 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                           ),
                         ),
                       ),
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          context.push('/watchlist');
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppTheme.accent.withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.visibility_outlined,
+                                  size: 14, color: AppTheme.accent),
+                              SizedBox(width: 4),
+                              Text(
+                                'Watchlist',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.accent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -196,18 +229,27 @@ class _AlertCard extends ConsumerWidget {
       AlertCondition.above => Icons.trending_up,
       AlertCondition.below => Icons.trending_down,
       AlertCondition.changePct => Icons.percent,
+      AlertCondition.bargain => Icons.local_fire_department,
+      AlertCondition.sellNow => Icons.sell_outlined,
+      AlertCondition.arbitrage => Icons.compare_arrows,
     };
 
     final conditionColor = switch (alert.condition) {
       AlertCondition.above => AppTheme.profit,
       AlertCondition.below => AppTheme.loss,
       AlertCondition.changePct => AppTheme.warning,
+      AlertCondition.bargain => AppTheme.warning,
+      AlertCondition.sellNow => AppTheme.profit,
+      AlertCondition.arbitrage => AppTheme.accent,
     };
 
     final conditionLabel = switch (alert.condition) {
       AlertCondition.above => 'Above',
       AlertCondition.below => 'Below',
       AlertCondition.changePct => 'Change',
+      AlertCondition.bargain => 'Deal',
+      AlertCondition.sellNow => 'Sell',
+      AlertCondition.arbitrage => 'Arb',
     };
 
     final thresholdStr = alert.condition == AlertCondition.changePct

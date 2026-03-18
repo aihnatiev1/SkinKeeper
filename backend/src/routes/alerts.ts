@@ -10,7 +10,7 @@ import { createAlertSchema, toggleAlertSchema, registerDeviceSchema } from "../m
 
 const router = Router();
 
-// GET /api/alerts — list user's alerts (free tier allowed for managing existing alerts)
+// GET /api/alerts — list user's alerts (excludes watchlist items)
 router.get(
   "/",
   authMiddleware,
@@ -20,7 +20,7 @@ router.get(
         `SELECT id, market_hash_name, condition, threshold::float, source,
                 is_active, cooldown_minutes, last_triggered_at, created_at
          FROM price_alerts
-         WHERE user_id = $1
+         WHERE user_id = $1 AND (is_watchlist = FALSE OR is_watchlist IS NULL)
          ORDER BY created_at DESC`,
         [req.userId]
       );
@@ -150,6 +150,123 @@ router.delete(
     } catch (err) {
       console.error("Device unregister error:", err);
       res.status(500).json({ error: "Failed to unregister device" });
+    }
+  }
+);
+
+// GET /api/alerts/search-items?q=AWP+Asiimov — search items from price_history
+router.get(
+  "/search-items",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const q = (req.query.q as string || "").trim();
+    if (q.length < 2) {
+      res.json({ items: [] });
+      return;
+    }
+
+    try {
+      // Use LATERAL JOIN instead of DISTINCT ON (price_history has 10M+ rows)
+      const { rows } = await pool.query(
+        `SELECT n.market_hash_name, lp.price_usd::float AS price, n.icon_url
+         FROM (
+           SELECT DISTINCT ph.market_hash_name,
+             (SELECT ii.icon_url FROM inventory_items ii
+              WHERE ii.market_hash_name = ph.market_hash_name AND ii.icon_url IS NOT NULL
+              LIMIT 1) AS icon_url
+           FROM price_history ph
+           WHERE ph.market_hash_name ILIKE $1
+             AND ph.price_usd > 0
+             AND ph.recorded_at > NOW() - INTERVAL '7 days'
+         ) n
+         JOIN LATERAL (
+           SELECT price_usd FROM price_history ph2
+           WHERE ph2.market_hash_name = n.market_hash_name AND ph2.price_usd > 0
+           ORDER BY ph2.recorded_at DESC LIMIT 1
+         ) lp ON true
+         ORDER BY n.market_hash_name
+         LIMIT 15`,
+        [`%${q}%`]
+      );
+
+      res.json({ items: rows });
+    } catch (err) {
+      console.error("Item search error:", err);
+      res.status(500).json({ error: "Search failed" });
+    }
+  }
+);
+
+// GET /api/alerts/watchlist — get user's watchlist items with current prices
+router.get(
+  "/watchlist",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT a.id, a.market_hash_name, a.condition, a.threshold::float,
+                a.source, a.is_active, a.cooldown_minutes, a.last_triggered_at,
+                a.created_at, a.icon_url, a.is_watchlist,
+                lp.price_usd AS current_price
+         FROM price_alerts a
+         LEFT JOIN LATERAL (
+           SELECT price_usd::float FROM price_history ph
+           WHERE ph.market_hash_name = a.market_hash_name AND ph.price_usd > 0
+           ORDER BY ph.recorded_at DESC LIMIT 1
+         ) lp ON true
+         WHERE a.user_id = $1 AND a.is_watchlist = TRUE
+         ORDER BY a.created_at DESC`,
+        [req.userId]
+      );
+      res.json({ items: rows });
+    } catch (err) {
+      console.error("Watchlist error:", err);
+      res.status(500).json({ error: "Failed to load watchlist" });
+    }
+  }
+);
+
+// POST /api/alerts/watchlist — add item to watchlist
+router.post(
+  "/watchlist",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { marketHashName, targetPrice, source, iconUrl } = req.body;
+      if (!marketHashName || !targetPrice) {
+        res.status(400).json({ error: "marketHashName and targetPrice required" });
+        return;
+      }
+
+      const { rows } = await pool.query(
+        `INSERT INTO price_alerts (user_id, market_hash_name, condition, threshold, source, is_watchlist, icon_url, cooldown_minutes)
+         VALUES ($1, $2, 'below', $3, $4, TRUE, $5, 60)
+         RETURNING id`,
+        [req.userId, marketHashName, targetPrice, source || "any", iconUrl]
+      );
+
+      res.json({ id: rows[0].id, success: true });
+    } catch (err) {
+      console.error("Watchlist add error:", err);
+      res.status(500).json({ error: "Failed to add to watchlist" });
+    }
+  }
+);
+
+// DELETE /api/alerts/watchlist/:id — remove from watchlist
+router.delete(
+  "/watchlist/:id",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      await pool.query(
+        `DELETE FROM price_alerts WHERE id = $1 AND user_id = $2 AND is_watchlist = TRUE`,
+        [req.params.id, req.userId]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Watchlist remove error:", err);
+      res.status(500).json({ error: "Failed to remove from watchlist" });
     }
   }
 );

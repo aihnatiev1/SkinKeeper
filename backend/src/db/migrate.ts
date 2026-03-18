@@ -375,6 +375,10 @@ ALTER TABLE trade_offer_items ALTER COLUMN asset_id TYPE VARCHAR(30);
 ALTER TABLE steam_accounts ALTER COLUMN trade_token TYPE VARCHAR(50);
 -- session_method: "clienttoken_exchanged" = 22 chars
 ALTER TABLE steam_accounts ALTER COLUMN session_method TYPE VARCHAR(30);
+
+-- 025: Watchlist — track items you don't own
+ALTER TABLE price_alerts ADD COLUMN IF NOT EXISTS is_watchlist BOOLEAN DEFAULT FALSE;
+ALTER TABLE price_alerts ADD COLUMN IF NOT EXISTS icon_url TEXT;
 `;
 
 export async function migrate() {
