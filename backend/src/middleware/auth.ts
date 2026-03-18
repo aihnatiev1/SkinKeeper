@@ -26,9 +26,25 @@ export function authMiddleware(
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as {
       userId: number;
       steamId?: string; // legacy — no longer included in new tokens
+      exp?: number;
     };
     req.userId = payload.userId;
     req.steamId = payload.steamId;
+
+    // Proactive refresh: if token expires within 3 days, send new one in header
+    if (payload.exp) {
+      const exp = payload.exp * 1000;
+      const threeDays = 3 * 24 * 60 * 60 * 1000;
+      if (exp - Date.now() < threeDays) {
+        const newToken = jwt.sign(
+          { userId: payload.userId },
+          process.env.JWT_SECRET!,
+          { expiresIn: "30d" }
+        );
+        res.setHeader("X-New-Token", newToken);
+      }
+    }
+
     next();
   } catch {
     res.status(401).json({ error: "Invalid token", code: "TOKEN_EXPIRED" });

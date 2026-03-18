@@ -7,6 +7,47 @@ import { SteamSessionService } from "../services/steamSession.js";
 
 const router = Router();
 
+// POST /api/auth/refresh — renew JWT before it expires
+router.post("/refresh", async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "No token" });
+      return;
+    }
+    const oldToken = authHeader.substring(7);
+
+    // Verify with ignoreExpiration — allow recently expired tokens (up to 7 days past expiry)
+    let decoded: any;
+    try {
+      decoded = jwt.verify(oldToken, process.env.JWT_SECRET!, { ignoreExpiration: true });
+    } catch {
+      res.status(401).json({ code: "TOKEN_EXPIRED", error: "Token invalid" });
+      return;
+    }
+
+    // Check if token is too old (expired more than 7 days ago)
+    const exp = decoded.exp * 1000; // to milliseconds
+    const maxGracePeriod = 7 * 24 * 60 * 60 * 1000; // 7 days
+    if (Date.now() - exp > maxGracePeriod) {
+      res.status(401).json({ code: "TOKEN_EXPIRED", error: "Token too old to refresh" });
+      return;
+    }
+
+    // Issue new token
+    const newToken = jwt.sign(
+      { userId: decoded.userId },
+      process.env.JWT_SECRET!,
+      { expiresIn: "30d" }
+    );
+
+    res.json({ token: newToken });
+  } catch (err) {
+    console.error("Token refresh error:", err);
+    res.status(500).json({ error: "Failed to refresh token" });
+  }
+});
+
 // Universal Link callback — iOS opens the app, web fallback saves to localStorage
 router.get("/callback", (req: Request, res: Response) => {
   const token = req.query.token as string | undefined;

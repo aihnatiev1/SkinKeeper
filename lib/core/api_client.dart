@@ -62,6 +62,7 @@ class ApiClient {
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
     mOptions: MacOsOptions(useDataProtectionKeyChain: true),
   );
+  bool _refreshing = false;
 
   ApiClient() {
     _dio = Dio(BaseOptions(
@@ -85,10 +86,32 @@ class ApiClient {
         }
         handler.next(options);
       },
-      onError: (error, handler) {
+      onResponse: (response, handler) async {
+        final newToken = response.headers.value('X-New-Token');
+        if (newToken != null) {
+          await _storage.write(key: 'jwt_token', value: newToken);
+          dev.log('Token proactively refreshed via X-New-Token', name: 'ApiClient');
+        }
+        handler.next(response);
+      },
+      onError: (error, handler) async {
         final path = error.requestOptions.path;
         if (isTokenExpired(error)) {
           if (!path.startsWith('/auth')) {
+            // Try to refresh token before giving up
+            final refreshed = await _tryRefreshToken();
+            if (refreshed) {
+              // Retry the original request with new token
+              try {
+                final token = await _storage.read(key: 'jwt_token');
+                final opts = error.requestOptions;
+                opts.headers['Authorization'] = 'Bearer $token';
+                final response = await _dio.fetch(opts);
+                return handler.resolve(response);
+              } catch (_) {
+                // Refresh worked but retry failed — still expired
+              }
+            }
             tokenExpiredController.add(null);
           }
         } else if (isSessionExpired(error)) {
@@ -101,6 +124,33 @@ class ApiClient {
         handler.next(error);
       },
     ));
+  }
+
+  Future<bool> _tryRefreshToken() async {
+    if (_refreshing) return false;
+    _refreshing = true;
+    try {
+      final oldToken = await _storage.read(key: 'jwt_token');
+      if (oldToken == null) return false;
+
+      final response = await Dio().post(
+        '${AppConstants.apiBaseUrl}/auth/refresh',
+        options: Options(headers: {'Authorization': 'Bearer $oldToken'}),
+      );
+
+      final newToken = response.data['token'] as String?;
+      if (newToken != null) {
+        await _storage.write(key: 'jwt_token', value: newToken);
+        dev.log('Token refreshed via /auth/refresh', name: 'ApiClient');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      dev.log('Token refresh failed: $e', name: 'ApiClient');
+      return false;
+    } finally {
+      _refreshing = false;
+    }
   }
 
   Future<void> saveToken(String token) async {
