@@ -64,7 +64,19 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     const activeAccountId = await SteamSessionService.getActiveAccountId(req.userId!);
     const session = activeAccountId ? await SteamSessionService.getSession(activeAccountId) : null;
 
-    res.json({ items: enriched, count: enriched.length, hasSession: !!session });
+    // Check data freshness — stale if last update > 15 minutes ago
+    const freshness = enriched.length > 0
+      ? await pool.query(
+          `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
+           JOIN steam_accounts sa ON i.steam_account_id = sa.id
+           WHERE sa.user_id = $1`, [req.userId])
+      : null;
+    const lastUpdate = freshness?.rows[0]?.last_update;
+    const stale = lastUpdate
+      ? (Date.now() - new Date(lastUpdate).getTime()) > 15 * 60 * 1000
+      : false;
+
+    res.json({ items: enriched, count: enriched.length, hasSession: !!session, stale });
   } catch (err) {
     console.error("Inventory fetch error:", err);
     res.status(500).json({ error: "Failed to load inventory" });
@@ -134,6 +146,7 @@ const inventoryQueue = getQueue<InventoryRefreshData>('inventory');
 inventoryQueue.process(async (job, updateProgress) => {
   const { userId, accounts } = job.data;
   let totalItems = 0;
+  let stale = false;
   const privateAccounts: number[] = [];
 
   for (const account of accounts) {
@@ -150,6 +163,20 @@ inventoryQueue.process(async (job, updateProgress) => {
         console.log(`[Inventory] Account ${account.id} (${account.steam_id}) has private inventory`);
         privateAccounts.push(account.id);
         continue;
+      }
+      // On 429/503: if we have existing DB items, mark stale instead of failing
+      const status = err.response?.status ?? err.statusCode;
+      if (status === 429 || status === 503) {
+        const { rows: existing } = await pool.query(
+          `SELECT COUNT(*)::int as cnt FROM inventory_items WHERE steam_account_id = $1`,
+          [account.id]
+        );
+        if (existing[0]?.cnt > 0) {
+          console.log(`[Inventory] Steam ${status} for account ${account.id}, returning stale data (${existing[0].cnt} items)`);
+          totalItems += existing[0].cnt;
+          stale = true;
+          continue;
+        }
       }
       throw err;
     }
@@ -225,7 +252,7 @@ inventoryQueue.process(async (job, updateProgress) => {
     );
   }
 
-  return { totalItems, privateAccounts };
+  return { totalItems, privateAccounts, stale };
 });
 
 // GET /api/inventory/sync-status/:jobId — check background sync status
@@ -235,13 +262,14 @@ router.get("/sync-status/:jobId", authMiddleware, (req: AuthRequest, res: Respon
     res.status(404).json({ error: "Job not found" });
     return;
   }
-  const result = job.result as { totalItems?: number; privateAccounts?: number[] } | undefined;
+  const result = job.result as { totalItems?: number; privateAccounts?: number[]; stale?: boolean } | undefined;
   res.json({
     status: job.status === 'active' ? 'syncing' : job.status === 'completed' ? 'done' : job.status,
     totalItems: result?.totalItems ?? job.progress,
     error: job.error,
     startedAt: job.createdAt,
     privateAccounts: result?.privateAccounts ?? [],
+    stale: result?.stale ?? false,
   });
 });
 

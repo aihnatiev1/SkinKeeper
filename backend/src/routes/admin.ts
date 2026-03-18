@@ -2,12 +2,15 @@ import { Router, Request, Response } from "express";
 import axios from "axios";
 import { getAllStats } from "../services/priceStats.js";
 import { getJobHealth } from "../services/priceJob.js";
-import { pool } from "../db/pool.js";
+import { pool, getPoolStats as getDbPoolStats } from "../db/pool.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import { fetchSteamInventory } from "../services/steam.js";
 import { getCacheStats } from "../utils/cacheRegistry.js";
 import { getInspectCircuitState } from "../services/inspect.js";
 import { getPoolStats } from "../services/proxyPool.js";
+import { getAllQueueStats } from "../infra/JobQueue.js";
+import { SteamGateway } from "../infra/SteamGateway.js";
+import { responseCache } from "../infra/ResponseCache.js";
 
 const router = Router();
 
@@ -555,6 +558,26 @@ const OFFER_STATE_NAMES: Record<number, string> = {
 // GET /api/admin/cache-stats — cache sizes and hit rates
 router.get("/cache-stats", requireAdminSecret, (_req: Request, res: Response) => {
   res.json(getCacheStats());
+});
+
+// GET /api/admin/health-dashboard — aggregated infra metrics in one endpoint
+router.get("/health-dashboard", requireAdminSecret, (_req: Request, res: Response) => {
+  const queueStats = getAllQueueStats();
+  const gatewayMetrics = SteamGateway.getMetrics();
+  const circuitState = SteamGateway.getCircuitState();
+  const cacheStats = getCacheStats();
+  const responseCacheStats = responseCache.getStats();
+  const dbPoolStats = getDbPoolStats();
+  const jobHealth = getJobHealth();
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    queues: queueStats,
+    steamGateway: { ...gatewayMetrics, circuits: circuitState },
+    caches: { ...cacheStats, responseCache: responseCacheStats },
+    database: dbPoolStats,
+    cronJobs: jobHealth,
+  });
 });
 
 // GET /api/admin/job-health — cron job health status + proxy pool
