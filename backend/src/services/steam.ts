@@ -1,27 +1,6 @@
-import axios from "axios";
-import { steamRateLimit } from "./prices.js";
-import {
-  initProxyPool,
-  getAvailableSlot,
-  getSlotConfig,
-  recordSlot429,
-  recordSlotSuccess,
-} from "./proxyPool.js";
+import { SteamGateway } from "../infra/SteamGateway.js";
 
 const STEAM_API_KEY = () => process.env.STEAM_API_KEY!;
-const STEAM_DOMAIN = "steamcommunity.com";
-
-// Separate rate limiter for inventory requests — don't compete with price crawlers
-let inventoryLastRequest = 0;
-const INVENTORY_MIN_GAP_MS = 5000; // 5s between inventory page requests
-async function inventoryRateLimit(): Promise<void> {
-  const now = Date.now();
-  const gap = now - inventoryLastRequest;
-  if (gap < INVENTORY_MIN_GAP_MS) {
-    await new Promise((r) => setTimeout(r, INVENTORY_MIN_GAP_MS - gap));
-  }
-  inventoryLastRequest = Date.now();
-}
 
 interface SteamPlayerSummary {
   steamid: string;
@@ -32,10 +11,10 @@ interface SteamPlayerSummary {
 export async function getSteamProfile(
   steamId: string
 ): Promise<SteamPlayerSummary> {
-  const { data } = await axios.get(
-    "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/",
-    { params: { key: STEAM_API_KEY(), steamids: steamId } }
-  );
+  const { data } = await SteamGateway.request<{ response: { players: SteamPlayerSummary[] } }>({
+    url: "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/",
+    params: { key: STEAM_API_KEY(), steamids: steamId },
+  });
   const players = data.response.players as SteamPlayerSummary[];
   if (players.length === 0) throw new Error("Steam user not found");
   return players[0];
@@ -47,11 +26,11 @@ export async function verifySteamOpenId(
   // Change mode to check_authentication
   const verifyParams = { ...params, "openid.mode": "check_authentication" };
 
-  const { data } = await axios.post(
-    "https://steamcommunity.com/openid/login",
-    new URLSearchParams(verifyParams).toString(),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-  );
+  const { data } = await SteamGateway.request<string>({
+    url: "https://steamcommunity.com/openid/login",
+    method: "POST",
+    data: verifyParams,
+  });
 
   if (!data.includes("is_valid:true")) {
     throw new Error("Steam OpenID verification failed");
@@ -129,17 +108,15 @@ export async function fetchSteamFriends(
   steamId: string
 ): Promise<SteamFriend[]> {
   // Get friend list
-  const { data: friendsData } = await axios.get(
-    "https://api.steampowered.com/ISteamUser/GetFriendList/v1/",
-    {
-      params: {
-        key: STEAM_API_KEY(),
-        steamid: steamId,
-        relationship: "friend",
-      },
-      timeout: 10000,
-    }
-  );
+  const { data: friendsData } = await SteamGateway.request<any>({
+    url: "https://api.steampowered.com/ISteamUser/GetFriendList/v1/",
+    params: {
+      key: STEAM_API_KEY(),
+      steamid: steamId,
+      relationship: "friend",
+    },
+    timeout: 10000,
+  });
 
   const friends = friendsData?.friendslist?.friends as
     | Array<{ steamid: string; friend_since: number }>
@@ -152,13 +129,11 @@ export async function fetchSteamFriends(
     const batch = friends.slice(i, i + 100);
     const ids = batch.map((f) => f.steamid).join(",");
 
-    const { data: summaryData } = await axios.get(
-      "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/",
-      {
-        params: { key: STEAM_API_KEY(), steamids: ids },
-        timeout: 10000,
-      }
-    );
+    const { data: summaryData } = await SteamGateway.request<any>({
+      url: "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/",
+      params: { key: STEAM_API_KEY(), steamids: ids },
+      timeout: 10000,
+    });
 
     const players = summaryData?.response?.players as SteamPlayerSummary[] ?? [];
     for (const p of players) {
@@ -201,8 +176,6 @@ export async function fetchSteamInventory(
   steamId: string,
   cookies?: { steamLoginSecure: string; sessionId: string }
 ): Promise<ParsedInventoryItem[]> {
-  initProxyPool();
-
   // Try IEconService API first (like CSFloat) — much less rate-limited
   if (cookies?.steamLoginSecure) {
     const accessToken = extractAccessTokenFromCookie(cookies.steamLoginSecure);
@@ -278,10 +251,11 @@ async function fetchInventoryViaAPI(
     };
     if (lastAssetId) params.start_assetid = lastAssetId;
 
-    const resp = await axios.get(
-      "https://api.steampowered.com/IEconService/GetInventoryItemsWithDescriptions/v1/",
-      { params, timeout: 20000 }
-    );
+    const resp = await SteamGateway.request<any>({
+      url: "https://api.steampowered.com/IEconService/GetInventoryItemsWithDescriptions/v1/",
+      params,
+      timeout: 20000,
+    });
 
     const result = resp.data?.response;
     if (!result?.assets?.length) break;
@@ -365,7 +339,7 @@ async function fetchInventoryViaAPI(
   return items;
 }
 
-/** Fetch and parse a single inventory context (paginated). Uses proxy rotation on 429. */
+/** Fetch and parse a single inventory context (paginated). Rate limiting via SteamGateway. */
 async function fetchInventoryContext(
   steamId: string,
   contextId: string,
@@ -380,46 +354,28 @@ async function fetchInventoryContext(
     if (lastAssetId) params.start_assetid = lastAssetId;
 
     let data: any;
-    const maxRetries = 6;
-    for (let retry = 0; retry < maxRetries; retry++) {
-      try {
-        await inventoryRateLimit();
+    try {
+      const resp = await SteamGateway.request<any>({
+        url: `https://steamcommunity.com/inventory/${steamId}/730/${contextId}`,
+        params,
+        timeout: 15000,
+        headers,
+        maxRetries: 5,
+        validateStatus: (s: number) => s < 400 || s === 403,
+      });
 
-        // Use proxy pool for inventory requests — rotate on 429
-        const slot = getAvailableSlot(STEAM_DOMAIN);
-        const slotConfig = slot ? getSlotConfig(slot.index) : {};
-
-        const resp = await axios.get(
-          `https://steamcommunity.com/inventory/${steamId}/730/${contextId}`,
-          { params, timeout: 15000, headers, ...slotConfig }
-        );
-
-        if (slot) recordSlotSuccess(slot.index, STEAM_DOMAIN);
-        data = resp.data;
-        break;
-      } catch (err: any) {
-        if (err.response?.status === 403 && contextId === "2") {
-          throw new Error('INVENTORY_PRIVATE');
-        }
-        const is429 = err.response?.status === 429;
-        const isTimeout = err.code === "ETIMEDOUT" || err.code === "ECONNRESET";
-        if (is429 || isTimeout) {
-          const slot = getAvailableSlot(STEAM_DOMAIN);
-          if (slot && is429) {
-            const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
-            recordSlot429(slot.index, STEAM_DOMAIN, retryAfter);
-          }
-          if (retry < maxRetries - 1) {
-            // Exponential backoff: 5s, 10s, 20s, 30s, 30s
-            const waitSec = Math.min(5 * Math.pow(2, retry), 30);
-            console.log(`[Steam] ${is429 ? '429' : 'timeout'} ctx${contextId} page ${page}, retry ${retry + 1}/${maxRetries} in ${waitSec}s...`);
-            await new Promise((r) => setTimeout(r, waitSec * 1000));
-            continue;
-          }
-        }
-        console.log(`[Steam] Error ctx${contextId} page ${page} after ${retry + 1} retries, returning ${items.length} items`);
-        return items;
+      if (resp.status === 403 && contextId === "2") {
+        throw new Error("INVENTORY_PRIVATE");
       }
+      data = resp.data;
+    } catch (err: any) {
+      if (err.message === "INVENTORY_PRIVATE") throw err;
+      // Check for 403 wrapped in SteamRequestError
+      if (err.httpStatus === 403 && contextId === "2") {
+        throw new Error("INVENTORY_PRIVATE");
+      }
+      console.log(`[Steam] Error ctx${contextId} page ${page}: ${err.message}, returning ${items.length} items`);
+      return items;
     }
 
     if (!data?.success) {
