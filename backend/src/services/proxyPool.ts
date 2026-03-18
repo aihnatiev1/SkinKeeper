@@ -214,9 +214,13 @@ export async function proxyRequest<T = any>(
       // Connection errors (dead proxy) — cooldown the slot and try next
       const code = err?.code;
       if (code === "ETIMEDOUT" || code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EHOSTUNREACH" || code === "EPIPE") {
-        const cooldownMs = 5 * 60_000; // 5 min cooldown for dead proxies
+        const cooldownMs = 10 * 60_000; // 10 min cooldown for dead proxies
+        const wasAlreadyCooling = (slot.cooldowns.get(domain) ?? 0) > Date.now();
         slot.cooldowns.set(domain, Date.now() + cooldownMs);
-        console.log(`[ProxyPool] ${slot.name} connection error for ${domain} (${code}) — cooldown ${cooldownMs / 1000}s`);
+        // Only log first time to avoid spamming
+        if (!wasAlreadyCooling) {
+          console.log(`[ProxyPool] ${slot.name} dead for ${domain} (${code}) — cooldown ${cooldownMs / 1000}s`);
+        }
         lastError = err;
         continue; // Try next slot
       }
