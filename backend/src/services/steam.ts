@@ -303,7 +303,7 @@ async function fetchInventoryViaAPI(
 
       // Parse trade ban
       let tradeBanUntil: string | null = null;
-      if (desc.tradable === 0 && desc.owner_descriptions) {
+      if (!desc.tradable && desc.owner_descriptions) {
         for (const od of desc.owner_descriptions) {
           const cleaned = (od.value || "").replace(/<[^>]+>/g, "");
           const match = cleaned.match(/(?:Tradable|Marketable) After (.+?)(?:\s*\(|$)/i)
@@ -315,7 +315,7 @@ async function fetchInventoryViaAPI(
         }
       }
 
-      if (desc.tradable === 0 && !tradeBanUntil && desc.marketable === 0) continue;
+      if (!desc.tradable && !tradeBanUntil && !desc.marketable) continue;
 
       // Parse wear, rarity, inspect link from tags/actions (same as community endpoint)
       let wear: string | null = null;
@@ -351,7 +351,7 @@ async function fetchInventoryViaAPI(
         wear,
         rarity,
         rarity_color: rarityColor,
-        tradable: desc.tradable === 1,
+        tradable: !!desc.tradable,
         trade_ban_until: tradeBanUntil,
         inspect_link: inspectLink,
       });
@@ -449,7 +449,7 @@ async function fetchInventoryContext(
 
       // Parse trade ban date from owner_descriptions
       let tradeBanUntil: string | null = null;
-      if (desc.tradable === 0 && desc.owner_descriptions) {
+      if (!desc.tradable && desc.owner_descriptions) {
         for (const od of desc.owner_descriptions) {
           const cleaned = od.value.replace(/<[^>]+>/g, '');
           // "Tradable After ...", "Marketable After ...", or "until Mar 18, 2026 (7:00:00) GMT"
@@ -465,7 +465,7 @@ async function fetchInventoryContext(
       }
 
       // Context 16 items are always trade-banned — if we couldn't parse date, still keep them
-      if (contextId === "16" && desc.tradable === 0 && !tradeBanUntil) {
+      if (contextId === "16" && !desc.tradable && !tradeBanUntil) {
         // Try to extract any date-like pattern as fallback
         for (const od of desc.owner_descriptions ?? []) {
           const dateMatch = od.value.match(/([A-Z][a-z]{2} \d{1,2}, \d{4})/);
@@ -485,7 +485,7 @@ async function fetchInventoryContext(
 
       // Skip permanently non-marketable items (graffiti, medals, coins, etc.)
       // but KEEP items that are temporarily non-marketable (trade ban)
-      if (desc.marketable === 0 && !tradeBanUntil) {
+      if (!desc.marketable && !tradeBanUntil) {
         totalFiltered++;
         continue;
       }
@@ -511,7 +511,7 @@ async function fetchInventoryContext(
         wear: wearMatch ? wearMatch[1] : null,
         rarity: rarityTag?.localized_tag_name ?? null,
         rarity_color: rarityTag?.color ?? null,
-        tradable: desc.tradable === 1,
+        tradable: !!desc.tradable,
         trade_ban_until: tradeBanUntil !== "unknown" ? tradeBanUntil : null,
         inspect_link: inspectLink,
       });
