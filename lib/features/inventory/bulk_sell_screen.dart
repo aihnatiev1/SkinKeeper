@@ -244,7 +244,14 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
 
     ref.read(sellOperationProvider.notifier).startOperation(payload);
 
-    showGlassSheetLocked(context, const SellProgressSheet());
+    // Pop bulk sell screen first, then show progress on parent
+    if (mounted) {
+      final nav = Navigator.of(context);
+      nav.pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showGlassSheetLocked(nav.context, const SellProgressSheet());
+      });
+    }
   }
 
   // --- Build ---------------------------------------------------------------
