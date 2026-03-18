@@ -201,7 +201,16 @@ class _AccountCard extends ConsumerWidget {
                         ? 'Reconnect'
                         : 'Enable Trading',
                   ),
-                  onPressed: () => requireSession(context, ref),
+                  onPressed: () async {
+                    // If not active, switch to this account first
+                    if (!account.isActive) {
+                      await ref.read(accountsProvider.notifier).setActive(account.id);
+                    }
+                    if (!context.mounted) return;
+                    await requireSession(context, ref);
+                    // Refresh accounts to update session status display
+                    ref.invalidate(accountsProvider);
+                  },
                 ),
               ),
               const SizedBox(width: 8),
