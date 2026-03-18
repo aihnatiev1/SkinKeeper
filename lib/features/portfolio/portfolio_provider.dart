@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../core/widget_service.dart';
@@ -63,21 +64,24 @@ final portfolioProvider =
 class PortfolioNotifier extends AsyncNotifier<PortfolioSummary> {
   @override
   Future<PortfolioSummary> build() async {
-    // 1. Try cache first for instant display
-    try {
-      final cached = CacheService.getPortfolio();
-      if (cached != null) {
-        final summary = PortfolioSummary.fromJson(cached);
-        _pushToWidget(summary);
-        // Start background refresh (don't await)
-        _refreshInBackground();
-        return summary;
-      }
-    } catch (_) {
-      // Cache corrupt/stale — ignore and fetch from API
+    // Re-fetch when account scope changes
+    ref.watch(accountScopeProvider);
+
+    // 1. Try cache first for instant display (only for "all accounts" scope)
+    final scope = ref.read(accountScopeProvider);
+    if (scope == null) {
+      try {
+        final cached = CacheService.getPortfolio();
+        if (cached != null) {
+          final summary = PortfolioSummary.fromJson(cached);
+          _pushToWidget(summary);
+          _refreshInBackground();
+          return summary;
+        }
+      } catch (_) {}
     }
 
-    // 2. No cache — fetch from API
+    // 2. Fetch from API
     return await _fetchFromApi();
   }
 
@@ -92,13 +96,18 @@ class PortfolioNotifier extends AsyncNotifier<PortfolioSummary> {
 
   Future<PortfolioSummary> _fetchFromApi() async {
     final api = ref.read(apiClientProvider);
-    final response = await api.get('/portfolio/summary');
+    final scope = ref.read(accountScopeProvider);
+    final params = <String, dynamic>{};
+    if (scope != null) params['accountId'] = scope;
+    final response = await api.get('/portfolio/summary', queryParameters: params);
     final json = response.data as Map<String, dynamic>;
-    // Cache the raw JSON for next launch
-    CacheService.putPortfolio(json);
-    CacheService.lastSync = DateTime.now();
+    // Cache only "all accounts" view
+    if (scope == null) {
+      CacheService.putPortfolio(json);
+      CacheService.lastSync = DateTime.now();
+    }
     final summary = PortfolioSummary.fromJson(json);
-    _pushToWidget(summary);
+    if (scope == null) _pushToWidget(summary);
     return summary;
   }
 

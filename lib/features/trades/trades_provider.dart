@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../models/market_listing.dart';
 import '../../models/trade_offer.dart';
@@ -60,21 +61,21 @@ final tradesProvider =
 class TradesNotifier extends AutoDisposeAsyncNotifier<TradesState> {
   @override
   Future<TradesState> build() async {
-    final result = await _fetchPage(0);
+    // Re-fetch when account scope changes
+    final scope = ref.watch(accountScopeProvider);
+    final result = await _fetchPage(0, accountId: scope);
 
     // Auto-sync from Steam in background
     Future.microtask(() async {
       try {
         final api = ref.read(apiClientProvider);
         await api.post('/trades/sync');
-        // Refresh with fresh data from DB
-        final fresh = await _fetchPage(0);
+        final currentScope = ref.read(accountScopeProvider);
+        final fresh = await _fetchPage(0, accountId: currentScope);
         if (state.hasValue) {
           state = AsyncData(fresh);
         }
-      } catch (_) {
-        // Sync failed silently — user can retry manually
-      }
+      } catch (_) {}
     });
 
     return result;

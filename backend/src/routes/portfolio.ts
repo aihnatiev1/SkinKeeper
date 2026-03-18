@@ -18,13 +18,19 @@ router.get(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      // Get all items for user
+      // Get items — filtered by account if specified
+      const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : null;
       const { rows: items } = await pool.query(
-        `SELECT i.market_hash_name
-         FROM inventory_items i
-         JOIN steam_accounts sa ON i.steam_account_id = sa.id
-         WHERE sa.user_id = $1`,
-        [req.userId]
+        accountId
+          ? `SELECT i.market_hash_name
+             FROM inventory_items i
+             JOIN steam_accounts sa ON i.steam_account_id = sa.id
+             WHERE sa.user_id = $1 AND sa.id = $2`
+          : `SELECT i.market_hash_name
+             FROM inventory_items i
+             JOIN steam_accounts sa ON i.steam_account_id = sa.id
+             WHERE sa.user_id = $1`,
+        accountId ? [req.userId, accountId] : [req.userId]
       );
 
       const names = [...new Set(items.map((i) => i.market_hash_name))];
