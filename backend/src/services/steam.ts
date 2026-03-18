@@ -203,6 +203,23 @@ export async function fetchSteamInventory(
 ): Promise<ParsedInventoryItem[]> {
   initProxyPool();
 
+  // Try IEconService API first (like CSFloat) — much less rate-limited
+  if (cookies?.steamLoginSecure) {
+    const accessToken = extractAccessTokenFromCookie(cookies.steamLoginSecure);
+    if (accessToken) {
+      try {
+        const items = await fetchInventoryViaAPI(steamId, accessToken);
+        if (items.length > 0) {
+          console.log(`[Steam] Inventory via API: ${items.length} items (${items.filter(i => !i.tradable).length} trade-banned)`);
+          return items;
+        }
+      } catch (err: any) {
+        console.warn(`[Steam] API inventory failed, falling back to community: ${err.message}`);
+      }
+    }
+  }
+
+  // Fallback: community endpoint (more rate-limited)
   const headers: Record<string, string> = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
   };
@@ -210,9 +227,6 @@ export async function fetchSteamInventory(
     headers.Cookie = `steamLoginSecure=${cookies.steamLoginSecure}; sessionid=${cookies.sessionId}`;
   }
 
-  // Fetch both context types:
-  // - context 2: regular inventory items
-  // - context 16: trade-banned/cooldown items (only visible with session cookies)
   const contexts = cookies ? ["2", "16"] : ["2"];
   const allItems: ParsedInventoryItem[] = [];
   const seenAssetIds = new Set<string>();
@@ -229,6 +243,126 @@ export async function fetchSteamInventory(
 
   console.log(`[Steam] Inventory total: ${allItems.length} items (${allItems.filter(i => !i.tradable).length} trade-banned)`);
   return allItems;
+}
+
+/**
+ * Extract access token (JWT) from steamLoginSecure cookie.
+ * Format: steamId%7C%7CaccessToken or steamId||accessToken
+ */
+function extractAccessTokenFromCookie(steamLoginSecure: string): string | null {
+  const decoded = decodeURIComponent(steamLoginSecure);
+  const parts = decoded.split("||");
+  return parts.length >= 2 ? parts.slice(1).join("||") : null;
+}
+
+/**
+ * Fetch inventory via Steam IEconService API (like CSFloat does).
+ * Uses access_token auth — separate infra from community, much less rate-limited.
+ */
+async function fetchInventoryViaAPI(
+  steamId: string,
+  accessToken: string
+): Promise<ParsedInventoryItem[]> {
+  const items: ParsedInventoryItem[] = [];
+  let lastAssetId: string | undefined;
+
+  for (let page = 0; page < 20; page++) {
+    const params: Record<string, string> = {
+      access_token: accessToken,
+      steamid: steamId,
+      appid: "730",
+      contextid: "2",
+      get_descriptions: "1",
+      count: "1000",
+      language: "english",
+    };
+    if (lastAssetId) params.start_assetid = lastAssetId;
+
+    const resp = await axios.get(
+      "https://api.steampowered.com/IEconService/GetInventoryItemsWithDescriptions/v1/",
+      { params, timeout: 20000 }
+    );
+
+    const result = resp.data?.response;
+    if (!result?.assets?.length) break;
+
+    const assets = result.assets as any[];
+    const descriptions = (result.descriptions || []) as any[];
+
+    console.log(`[Steam] API page ${page}: ${assets.length} assets, more=${!!result.more_items}`);
+
+    const descMap = new Map<string, any>();
+    for (const desc of descriptions) {
+      descMap.set(`${desc.classid}_${desc.instanceid}`, desc);
+    }
+
+    for (const asset of assets) {
+      const desc = descMap.get(`${asset.classid}_${asset.instanceid}`);
+      if (!desc) continue;
+      if (EXCLUDED_NAMES.includes(desc.market_hash_name)) continue;
+
+      // Parse trade ban
+      let tradeBanUntil: string | null = null;
+      if (desc.tradable === 0 && desc.owner_descriptions) {
+        for (const od of desc.owner_descriptions) {
+          const cleaned = (od.value || "").replace(/<[^>]+>/g, "");
+          const match = cleaned.match(/(?:Tradable|Marketable) After (.+?)(?:\s*\(|$)/i)
+            || cleaned.match(/until ([A-Z][a-z]{2} \d{1,2}, \d{4})/i);
+          if (match) {
+            const parsed = new Date(match[1]);
+            if (!isNaN(parsed.getTime())) tradeBanUntil = parsed.toISOString();
+          }
+        }
+      }
+
+      if (desc.tradable === 0 && !tradeBanUntil && desc.marketable === 0) continue;
+
+      // Parse wear, rarity, inspect link from tags/actions (same as community endpoint)
+      let wear: string | null = null;
+      let rarity: string | null = null;
+      let rarityColor: string | null = null;
+      let inspectLink: string | null = null;
+
+      if (desc.tags) {
+        for (const tag of desc.tags) {
+          if (tag.category === "Exterior") wear = tag.localized_tag_name || tag.name;
+          if (tag.category === "Rarity") {
+            rarity = tag.localized_tag_name || tag.name;
+            rarityColor = tag.color || null;
+          }
+        }
+      }
+      if (desc.actions) {
+        for (const action of desc.actions) {
+          if (action.link?.includes("csgo_econ_action_preview")) {
+            inspectLink = action.link
+              .replace("%owner_steamid%", steamId)
+              .replace("%assetid%", asset.assetid);
+          }
+        }
+      }
+
+      items.push({
+        asset_id: asset.assetid,
+        market_hash_name: desc.market_hash_name,
+        icon_url: desc.icon_url
+          ? `https://community.cloudflare.steamstatic.com/economy/image/${desc.icon_url}`
+          : "",
+        wear,
+        rarity,
+        rarity_color: rarityColor,
+        tradable: desc.tradable === 1,
+        trade_ban_until: tradeBanUntil,
+        inspect_link: inspectLink,
+      });
+    }
+
+    if (!result.more_items) break;
+    lastAssetId = result.last_assetid || assets[assets.length - 1]?.assetid;
+    if (!lastAssetId) break;
+  }
+
+  return items;
 }
 
 /** Fetch and parse a single inventory context (paginated). Uses proxy rotation on 429. */
