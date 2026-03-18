@@ -19,6 +19,7 @@ import '../features/settings/linked_accounts_screen.dart';
 import '../features/purchases/paywall_screen.dart';
 import '../features/alerts/alerts_screen.dart';
 import '../features/alerts/create_alert_screen.dart';
+import '../features/market/deals_screen.dart';
 import '../models/inventory_item.dart';
 import '../models/user.dart';
 import '../widgets/app_shell.dart';
@@ -94,6 +95,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/premium', builder: (_, _) => const PaywallScreen()),
           GoRoute(path: '/alerts', pageBuilder: (_, _) => const NoTransitionPage(child: AlertsScreen())),
           GoRoute(path: '/alerts/create', builder: (_, state) => CreateAlertScreen(marketHashName: state.extra as String?)),
+          GoRoute(path: '/deals', builder: (_, _) => const DealsScreen()),
         ],
       ),
     ],

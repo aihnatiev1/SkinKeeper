@@ -535,4 +535,104 @@ router.post(
 );
 
 
+// ─── Arbitrage / Best Deals ──────────────────────────────────────────────────
+
+/**
+ * GET /api/market/deals
+ * Find items where buying on an external market and selling on Steam is profitable.
+ * Profit = (Steam_Price * 0.87) - External_Price  (87% = after Steam 13% commission)
+ *
+ * Query params:
+ *   limit    — max results (default 50, max 100)
+ *   minProfit — minimum profit % to include (default 5)
+ */
+router.get(
+  "/deals",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const minProfit = parseFloat(req.query.minProfit as string) || 5;
+
+      // Use LATERAL JOIN pattern (not DISTINCT ON) for price_history — table has 10M+ rows.
+      // The CTE builds latest prices per (market_hash_name, source) via LATERAL,
+      // then we join steam vs external to find arbitrage opportunities.
+      const { rows } = await pool.query(
+        `WITH item_sources AS (
+           SELECT DISTINCT ii.market_hash_name
+           FROM inventory_items ii
+         ),
+         sources AS (
+           SELECT unnest(ARRAY['skinport','steam','csfloat','dmarket']) AS source
+         ),
+         latest AS (
+           SELECT n.market_hash_name, s.source, lp.price_usd
+           FROM item_sources n
+           CROSS JOIN sources s
+           JOIN LATERAL (
+             SELECT ph.price_usd FROM price_history ph
+             WHERE ph.market_hash_name = n.market_hash_name
+               AND ph.source = s.source
+               AND ph.price_usd > 0
+               AND ph.recorded_at > NOW() - INTERVAL '24 hours'
+             ORDER BY ph.recorded_at DESC
+             LIMIT 1
+           ) lp ON true
+         ),
+         steam_prices AS (
+           SELECT market_hash_name, price_usd AS steam_price
+           FROM latest WHERE source = 'steam'
+         ),
+         external_prices AS (
+           SELECT market_hash_name, source, price_usd AS external_price
+           FROM latest WHERE source != 'steam'
+         )
+         SELECT
+           e.market_hash_name,
+           e.source AS buy_source,
+           e.external_price AS buy_price,
+           s.steam_price AS sell_price,
+           ROUND((s.steam_price * 0.87 - e.external_price)::numeric, 2) AS profit_usd,
+           ROUND(((s.steam_price * 0.87 / e.external_price - 1) * 100)::numeric, 1) AS profit_pct
+         FROM external_prices e
+         JOIN steam_prices s ON s.market_hash_name = e.market_hash_name
+         WHERE e.external_price > 0
+           AND s.steam_price > 0
+           AND (s.steam_price * 0.87 - e.external_price) > 0
+           AND ((s.steam_price * 0.87 / e.external_price - 1) * 100) >= $1
+         ORDER BY profit_pct DESC
+         LIMIT $2`,
+        [minProfit, limit]
+      );
+
+      // Get icon URLs for the result items
+      const names = rows.map((r: any) => r.market_hash_name);
+      let iconMap = new Map<string, string>();
+      if (names.length > 0) {
+        const { rows: icons } = await pool.query(
+          `SELECT DISTINCT ON (market_hash_name) market_hash_name, icon_url
+           FROM inventory_items WHERE market_hash_name = ANY($1::text[])`,
+          [names]
+        );
+        iconMap = new Map(icons.map((r: any) => [r.market_hash_name, r.icon_url]));
+      }
+
+      const deals = rows.map((r: any) => ({
+        marketHashName: r.market_hash_name,
+        buySource: r.buy_source,
+        buyPrice: parseFloat(r.buy_price),
+        sellPrice: parseFloat(r.sell_price),
+        profitUsd: parseFloat(r.profit_usd),
+        profitPct: parseFloat(r.profit_pct),
+        iconUrl: iconMap.get(r.market_hash_name) || null,
+      }));
+
+      res.json({ deals, count: deals.length });
+    } catch (err) {
+      console.error("Market deals error:", err);
+      res.status(500).json({ error: "Failed to load deals" });
+    }
+  }
+);
+
 export default router;
