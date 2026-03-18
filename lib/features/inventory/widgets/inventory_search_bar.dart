@@ -59,10 +59,10 @@ class _InventorySearchBarState extends ConsumerState<InventorySearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    final wearFilter = ref.watch(wearFilterProvider);
+    final wearFilter = ref.watch(wearFilterProvider); // Set<String>
     final tradableOnly = ref.watch(tradableOnlyProvider);
     final hideNoPrice = ref.watch(hideNoPriceProvider);
-    final hasActiveFilter = wearFilter != null || tradableOnly || hideNoPrice;
+    final hasActiveFilter = wearFilter.isNotEmpty || tradableOnly || hideNoPrice;
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 200),
@@ -110,12 +110,13 @@ class _InventorySearchBarState extends ConsumerState<InventorySearchBar> {
                       for (final wear in const ['FN', 'MW', 'FT', 'WW', 'BS'])
                         _FilterChip(
                           label: wear,
-                          selected: wearFilter == wear,
+                          selected: wearFilter.contains(wear),
                           color: _wearColor(wear),
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            ref.read(wearFilterProvider.notifier).state =
-                                wearFilter == wear ? null : wear;
+                            final current = Set<String>.from(wearFilter);
+                            if (current.contains(wear)) { current.remove(wear); } else { current.add(wear); }
+                            ref.read(wearFilterProvider.notifier).state = current;
                           },
                         ),
                       _FilterChip(
@@ -145,7 +146,7 @@ class _InventorySearchBarState extends ConsumerState<InventorySearchBar> {
                           icon: Icons.clear_all_rounded,
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            ref.read(wearFilterProvider.notifier).state = null;
+                            ref.read(wearFilterProvider.notifier).state = {};
                             ref.read(tradableOnlyProvider.notifier).state =
                                 false;
                             ref.read(hideNoPriceProvider.notifier).state =
