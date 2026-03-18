@@ -9,7 +9,7 @@ import '../../widgets/shared_ui.dart';
 import 'steam_auth_service.dart';
 import 'session_provider.dart';
 import 'widgets/qr_auth_tab.dart';
-import 'widgets/clienttoken_auth_tab.dart';
+import 'widgets/webview_auth_tab.dart';
 import 'widgets/session_status_widget.dart';
 
 class SteamSessionScreen extends ConsumerStatefulWidget {
@@ -94,7 +94,7 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: PillTabSelector(
-                tabs: const ['Full Access', 'Browser', 'QR Code'],
+                tabs: const ['Steam Login', 'Browser', 'QR Code'],
                 selected: _selectedTab,
                 onChanged: (i) {
                   setState(() => _selectedTab = i);
@@ -207,7 +207,7 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
                 controller: _pageCtrl,
                 onPageChanged: (i) => setState(() => _selectedTab = i),
                 children: [
-                  const ClientTokenAuthTab(),
+                  WebViewAuthTab(isLinking: widget.linkMode),
                   _BrowserTab(linkMode: widget.linkMode),
                   const QrAuthTab(),
                 ],

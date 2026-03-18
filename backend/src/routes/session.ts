@@ -205,7 +205,7 @@ router.post("/guard", async (req: AuthRequest, res: Response) => {
  */
 router.post("/token", async (req: AuthRequest, res: Response) => {
   try {
-    const { steamLoginSecure } = req.body;
+    const { steamLoginSecure, sessionId: providedSessionId, steamRefreshToken } = req.body;
 
     if (!steamLoginSecure) {
       res
@@ -214,11 +214,14 @@ router.post("/token", async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    const method = steamRefreshToken ? "webview" : "clienttoken";
+    console.log(`[Token] Received: method=${method}, sls_len=${steamLoginSecure.length}, sid=${!!providedSessionId}, refresh=${!!steamRefreshToken}, linkMode=${isLinkMode(req)}`);
+
     const linkMode = isLinkMode(req);
 
     if (linkMode) {
-      // Extract sessionId first
-      const sessionId = await SteamSessionService.extractSessionId(steamLoginSecure);
+      // Use provided sessionId or extract from Steam
+      const sessionId = providedSessionId || await SteamSessionService.extractSessionId(steamLoginSecure);
       if (!sessionId) {
         res.status(400).json({ error: "Could not extract session from token" });
         return;
@@ -228,8 +231,8 @@ router.post("/token", async (req: AuthRequest, res: Response) => {
         const { accountId, steamId } = await SteamSessionService.linkNewAccount(
           req.userId!,
           cookies,
-          "clienttoken",
-          null
+          method,
+          steamRefreshToken || null
         );
         res.json({ status: "authenticated", accountId, steamId });
       } catch (err: any) {
@@ -238,19 +241,23 @@ router.post("/token", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Normal mode
+    // Normal mode — use provided sessionId or extract
     const accountId = await resolveAccountId(req);
-    const result = await SteamSessionService.handleClientToken(accountId, {
-      steamLoginSecure,
-    });
-
-    if (result) {
-      res.json({ status: "authenticated" });
-    } else {
-      res
-        .status(400)
-        .json({ error: "Could not extract session from token" });
+    const sessionId = providedSessionId || await SteamSessionService.extractSessionId(steamLoginSecure);
+    if (!sessionId) {
+      res.status(400).json({ error: "Could not extract session from token" });
+      return;
     }
+
+    const session = { sessionId, steamLoginSecure };
+    await SteamSessionService.saveSession(accountId, session);
+    await pool.query(
+      `UPDATE steam_accounts SET session_method = $1, steam_refresh_token = $2 WHERE id = $3`,
+      [method, steamRefreshToken ? (await import("../services/crypto.js")).encrypt(steamRefreshToken) : null, accountId]
+    );
+    console.log(`[Token] Session saved for account ${accountId}: method=${method}, sls_len=${steamLoginSecure.length}`);
+
+    res.json({ status: "authenticated" });
   } catch (err) {
     console.error("Token submit error:", err);
     res.status(500).json({ error: "Failed to process token" });

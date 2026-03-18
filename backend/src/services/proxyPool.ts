@@ -211,7 +211,16 @@ export async function proxyRequest<T = any>(
         lastError = err;
         continue; // Try next slot
       }
-      // Non-429 error — don't rotate, just throw
+      // Connection errors (dead proxy) — cooldown the slot and try next
+      const code = err?.code;
+      if (code === "ETIMEDOUT" || code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EHOSTUNREACH" || code === "EPIPE") {
+        const cooldownMs = 5 * 60_000; // 5 min cooldown for dead proxies
+        slot.cooldowns.set(domain, Date.now() + cooldownMs);
+        console.log(`[ProxyPool] ${slot.name} connection error for ${domain} (${code}) — cooldown ${cooldownMs / 1000}s`);
+        lastError = err;
+        continue; // Try next slot
+      }
+      // Other non-429 error — don't rotate, just throw
       throw err;
     }
   }

@@ -353,6 +353,11 @@ async function sendSteamTradeOffer(
 
   console.log(`[Trade] Send response: status=${resp.status}, body=${JSON.stringify(data).substring(0, 500)}`);
 
+  if (resp.status === 401) {
+    console.error(`[Trade] Steam returned 401 — session expired`);
+    throw new SessionExpiredError("Steam session expired (401). Please re-authenticate.");
+  }
+
   if (resp.status !== 200) {
     const msg = typeof data === "object" ? (data.strError || JSON.stringify(data)) : String(data).substring(0, 200);
     throw new Error(`Steam returned ${resp.status}: ${msg}`);

@@ -517,19 +517,36 @@ export class SteamSessionService {
 
   /**
    * Handle a clientjstoken for a specific account.
+   *
+   * clientjstoken provides a short-lived ACCESS token (~24h) with NO refresh token.
+   * This means the session CANNOT be refreshed automatically.
+   * For long-lived sessions, users should use QR auth or credential auth.
    */
   static async handleClientToken(
     accountId: number,
     tokenData: { steamLoginSecure: string; steamId?: string }
   ): Promise<SteamSession | null> {
-    const sessionId = await this.extractSessionId(tokenData.steamLoginSecure);
-    if (!sessionId) return null;
+    console.log(`[Session] handleClientToken: sls_len=${tokenData.steamLoginSecure.length}`);
 
+    const sessionId = await this.extractSessionId(tokenData.steamLoginSecure);
+    if (!sessionId) {
+      console.warn(`[Session] extractSessionId failed for clienttoken (sls_len=${tokenData.steamLoginSecure.length})`);
+      return null;
+    }
+
+    // Validate the session is actually usable right now
     const session: SteamSession = {
       sessionId,
       steamLoginSecure: tokenData.steamLoginSecure,
     };
 
+    const isValid = await this.validateSession(session);
+    if (!isValid) {
+      console.warn(`[Session] clienttoken session validation FAILED — token may be expired or malformed (sls_len=${tokenData.steamLoginSecure.length})`);
+      return null;
+    }
+
+    console.log(`[Session] clienttoken session validated OK, saving (sls_len=${tokenData.steamLoginSecure.length})`);
     await this.saveSession(accountId, session);
     await this.saveSessionMeta(accountId, "clienttoken", null);
     return session;

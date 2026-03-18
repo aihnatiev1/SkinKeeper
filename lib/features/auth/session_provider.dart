@@ -335,7 +335,10 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
 
   ClientTokenAuthNotifier(this._ref) : super(const ClientTokenAuthState());
 
-  Future<void> submitToken(String steamLoginSecure) async {
+  Future<void> submitToken(String steamLoginSecure, {
+    String? sessionId,
+    String? steamRefreshToken,
+  }) async {
     state = state.copyWith(loading: true, status: 'loading', error: null);
     try {
       final api = _ref.read(apiClientProvider);
@@ -351,6 +354,8 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
 
       final response = await api.post(endpoint, data: {
         'steamLoginSecure': steamLoginSecure,
+        if (sessionId != null) 'sessionId': sessionId,
+        if (steamRefreshToken != null) 'steamRefreshToken': steamRefreshToken,
       });
 
       // Save JWT from initial login

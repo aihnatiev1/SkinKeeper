@@ -668,12 +668,15 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
 
 router.post("/token", async (req: Request, res: Response) => {
   try {
-    const { steamLoginSecure } = req.body;
+    const { steamLoginSecure, sessionId: providedSessionId, steamRefreshToken } = req.body;
 
     if (!steamLoginSecure) {
       res.status(400).json({ error: "steamLoginSecure is required" });
       return;
     }
+
+    const method = steamRefreshToken ? "webview" : "clienttoken";
+    console.log(`[Auth/Token] Received: method=${method}, sls_len=${steamLoginSecure.length}, sid=${!!providedSessionId}, refresh=${!!steamRefreshToken}`);
 
     // Extract steamId from the token
     const steamId = SteamSessionService.extractSteamIdFromCookie(steamLoginSecure);
@@ -682,8 +685,8 @@ router.post("/token", async (req: Request, res: Response) => {
       return;
     }
 
-    // Extract sessionId from Steam
-    const sessionId = await SteamSessionService.extractSessionId(steamLoginSecure);
+    // Use provided sessionId or extract from Steam
+    const sessionId = providedSessionId || await SteamSessionService.extractSessionId(steamLoginSecure);
     if (!sessionId) {
       res.status(400).json({ error: "Invalid or expired token. Make sure you are logged in to Steam." });
       return;
@@ -726,9 +729,12 @@ router.post("/token", async (req: Request, res: Response) => {
       sessionId,
       steamLoginSecure,
     });
+
+    // Save method + refresh token
+    const { encrypt } = await import("../services/crypto.js");
     await pool.query(
-      `UPDATE steam_accounts SET session_method = 'clienttoken' WHERE id = $1`,
-      [accountId]
+      `UPDATE steam_accounts SET session_method = $1, steam_refresh_token = $2 WHERE id = $3`,
+      [method, steamRefreshToken ? encrypt(steamRefreshToken) : null, accountId]
     );
 
     const token = jwt.sign(
