@@ -16,6 +16,9 @@ final hasSessionProvider = Provider<bool>((ref) {
   return status.status == 'valid' || status.status == 'expiring';
 });
 
+/// Whether current inventory data is stale (e.g. Steam returned 429/503 or data > 15min old).
+final inventoryStaleProvider = StateProvider<bool>((ref) => false);
+
 final inventoryProvider =
     AsyncNotifierProvider<InventoryNotifier, List<InventoryItem>>(
         InventoryNotifier.new);
@@ -264,7 +267,8 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
       if (gen != _generation) return; // double-check after second async gap
       state = AsyncData(fresh);
     } catch (_) {
-      // Keep showing cached data on network error
+      // Keep showing cached data on network error — mark as stale
+      ref.read(inventoryStaleProvider.notifier).state = true;
     }
   }
 
@@ -280,6 +284,11 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     final items = rawItems
         .map((e) => InventoryItem.fromJson(e as Map<String, dynamic>))
         .toList();
+
+    // Track staleness from API response
+    final stale = response.data['stale'] == true;
+    ref.read(inventoryStaleProvider.notifier).state = stale;
+
     // Cache the raw JSON for next launch
     CacheService.putInventory(
       rawItems
@@ -297,7 +306,8 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
       await api.post('/inventory/refresh', queryParameters: _accountQuery);
       state = AsyncData(await _fetchFromApi());
     } on DioException {
-      // Network error during refresh — try cache fallback
+      // Network error during refresh — try cache fallback, mark stale
+      ref.read(inventoryStaleProvider.notifier).state = true;
       final cached = CacheService.getInventory();
       if (cached != null) {
         state = AsyncData(

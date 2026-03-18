@@ -18,6 +18,7 @@ import 'widgets/inventory_search_bar.dart';
 import 'widgets/selection_tray.dart';
 import 'widgets/sell_bottom_sheet.dart';
 import 'widgets/sell_progress_sheet.dart';
+import '../../core/widgets/stale_data_banner.dart';
 
 /// Re-export for backward compat (old code may import selectedItemsProvider)
 final selectedItemsProvider = StateProvider<Set<String>>((ref) {
@@ -94,6 +95,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final isSelecting = selection.isNotEmpty;
     final selectedItems = ref.watch(selectedItemsListProvider);
     final currency = ref.watch(currencyProvider);
+    final isStale = ref.watch(inventoryStaleProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -108,6 +110,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             onClose: () => setState(() => _searchOpen = false),
           ),
           const _InventoryStatsAndFilters(),
+          if (isStale)
+            StaleDataBanner(
+              onRefresh: () {
+                ref.read(inventoryStaleProvider.notifier).state = false;
+                ref.read(inventoryProvider.notifier).refresh();
+              },
+            ),
           const InventoryGrid(),
           if (isSelecting)
             SelectionTray(
