@@ -1,35 +1,12 @@
 import { Router, Request, Response } from "express";
-import axios from "axios";
 import { getLatestPrices, getPriceHistory } from "../services/prices.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import { batchPricesSchema, priceHistoryQuerySchema } from "../middleware/schemas.js";
 
 const router = Router();
 
-// Fetch single item price from Steam Market (no auth needed)
-async function fetchSteamMarketPrice(name: string): Promise<number | null> {
-  try {
-    const { data } = await axios.get(
-      "https://steamcommunity.com/market/priceoverview/",
-      {
-        params: { appid: 730, currency: 1, market_hash_name: name },
-        timeout: 5000,
-        headers: { "User-Agent": "Mozilla/5.0" },
-      }
-    );
-    if (data?.success && data.median_price) {
-      return parseFloat(data.median_price.replace("$", "").replace(",", ""));
-    }
-    if (data?.success && data.lowest_price) {
-      return parseFloat(data.lowest_price.replace("$", "").replace(",", ""));
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// POST /api/prices/batch — batch price lookup with Steam Market fallback
+// POST /api/prices/batch — batch price lookup from DB (no Steam fallback)
+// Prices are populated by bulk background jobs (Skinport, SteamAnalyst, DMarket)
 // Body: { names: ["AK-47 | Redline", ...] }
 router.post("/batch", validateBody(batchPricesSchema), async (req: Request, res: Response) => {
   try {
@@ -40,18 +17,6 @@ router.post("/batch", validateBody(batchPricesSchema), async (req: Request, res:
     const result: Record<string, any> = {};
     for (const [name, prices] of priceMap) {
       result[name] = prices;
-    }
-
-    // Find items with no prices in DB — fallback to Steam Market
-    const missing = uniqueNames.filter((n) => !result[n] || (!result[n].steam && !result[n].skinport));
-    // Rate-limited: max 5 Steam lookups per batch
-    for (const name of missing.slice(0, 5)) {
-      const price = await fetchSteamMarketPrice(name);
-      if (price) {
-        result[name] = { ...result[name], steam: price };
-      }
-      // Small delay to avoid Steam rate limit
-      if (missing.length > 1) await new Promise((r) => setTimeout(r, 500));
     }
 
     res.json({ prices: result });

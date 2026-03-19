@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import type {
   User,
@@ -97,11 +97,44 @@ export function usePLHistory(days = 30) {
 
 // ─── Inventory ─────────────────────────────────────────────────────────
 
-export function useInventory() {
-  return useQuery({
-    queryKey: ['inventory'],
-    queryFn: () => api.get<{ items: InventoryItem[]; count: number }>('/inventory'),
-    select: (data) => data.items,
+interface InventoryPage {
+  items: InventoryItem[];
+  total: number;
+  totalValue: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  hasSession: boolean;
+  stale: boolean;
+}
+
+interface InventoryFilters {
+  sort?: string;
+  search?: string;
+  tradableOnly?: boolean;
+  accountId?: number;
+}
+
+const INVENTORY_PAGE_SIZE = 20;
+
+export function useInventory(filters: InventoryFilters = {}) {
+  const { sort = 'price-desc', search = '', tradableOnly = false, accountId } = filters;
+
+  return useInfiniteQuery<InventoryPage>({
+    queryKey: ['inventory', sort, search, tradableOnly, accountId],
+    queryFn: ({ pageParam = 0 }) => {
+      const params = new URLSearchParams();
+      params.set('limit', String(INVENTORY_PAGE_SIZE));
+      params.set('offset', String(pageParam));
+      params.set('sort', sort);
+      if (search) params.set('search', search);
+      if (tradableOnly) params.set('tradableOnly', 'true');
+      if (accountId) params.set('accountId', String(accountId));
+      return api.get<InventoryPage>(`/inventory?${params}`);
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.offset + lastPage.limit : undefined,
+    initialPageParam: 0,
   });
 }
 

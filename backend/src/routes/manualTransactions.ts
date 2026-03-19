@@ -4,16 +4,16 @@ import { validateBody } from "../middleware/validate.js";
 import { manualTransactionSchema, batchManualSchema, csvImportSchema } from "../middleware/schemas.js";
 import { pool } from "../db/pool.js";
 import { recalculateCostBasis } from "../services/profitLoss.js";
-import { fetchSteamMarketPrice, savePrices } from "../services/prices.js";
+import { fetchSkinportPrices, savePrices } from "../services/prices.js";
 import { randomUUID } from "crypto";
 
-// Fire-and-forget price fetch for a newly added item
-function fetchPriceAsync(marketHashName: string) {
-  fetchSteamMarketPrice(marketHashName)
-    .then(price => {
-      if (price) savePrices(new Map([[marketHashName, price]]), "steam");
+// Fire-and-forget: trigger Skinport bulk refresh so new item picks up a price
+function fetchPriceAsync(_marketHashName: string) {
+  fetchSkinportPrices()
+    .then(prices => {
+      if (prices.size > 0) savePrices(prices, "skinport");
     })
-    .catch(() => {}); // ignore errors — price will come from crawler later
+    .catch(() => {}); // ignore errors — price will come from batch crawler
 }
 
 const router = Router();

@@ -9,46 +9,99 @@ import { getQueue } from "../infra/JobQueue.js";
 
 const router = Router();
 
-// GET /api/inventory?accountId=X — get items (optionally filtered by account)
+// GET /api/inventory?limit=20&offset=0&sort=price-desc&search=&tradableOnly=false&accountId=
+// Server-side sort, filter, pagination — prices resolved in DB via JOIN
 router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+    const sort = (req.query.sort as string) || "price-desc";
+    const search = (req.query.search as string) || "";
+    const tradableOnly = req.query.tradableOnly === "true";
     const filterAccountId = parseInt(req.query.accountId as string);
+
+    // Build WHERE clauses
+    const conditions = ["sa.user_id = $1"];
     const params: any[] = [req.userId];
-    let accountFilter = "";
+    let paramIdx = 2;
 
     if (filterAccountId && !isNaN(filterAccountId)) {
-      accountFilter = " AND sa.id = $2";
+      conditions.push(`sa.id = $${paramIdx}`);
       params.push(filterAccountId);
+      paramIdx++;
+    }
+    if (search) {
+      conditions.push(`i.market_hash_name ILIKE $${paramIdx}`);
+      params.push(`%${search}%`);
+      paramIdx++;
+    }
+    if (tradableOnly) {
+      conditions.push("i.tradable = true");
     }
 
+    const whereClause = conditions.join(" AND ");
+
+    // CTE: best price per item name (computed once, used for sort + total)
+    const bestPriceCTE = `
+      best AS (
+        SELECT market_hash_name, MAX(price_usd) as best_price
+        FROM current_prices WHERE price_usd > 0
+        GROUP BY market_hash_name
+      )`;
+
+    // Total count + total value in one query
+    const { rows: summaryRows } = await pool.query(
+      `WITH ${bestPriceCTE}
+       SELECT COUNT(*)::int as total,
+              COALESCE(SUM(b.best_price), 0)::float as total_value
+       FROM inventory_items i
+       JOIN steam_accounts sa ON i.steam_account_id = sa.id
+       LEFT JOIN best b ON b.market_hash_name = i.market_hash_name
+       WHERE ${whereClause}`,
+      params
+    );
+    const { total, total_value: totalValue } = summaryRows[0] ?? { total: 0, total_value: 0 };
+
+    // Sort clause
+    const orderBy = (() => {
+      switch (sort) {
+        case "price-asc":  return "COALESCE(b.best_price, 0) ASC, i.market_hash_name ASC";
+        case "name":       return "i.market_hash_name ASC";
+        case "rarity":     return "i.rarity DESC NULLS LAST, i.market_hash_name ASC";
+        default:           return "COALESCE(b.best_price, 0) DESC, i.market_hash_name ASC";
+      }
+    })();
+
+    // Paginated page query with best_price for sorting
+    const pageParams = [...params, limit, offset];
     const { rows: items } = await pool.query(
-      `SELECT i.asset_id, i.market_hash_name, i.icon_url, i.wear,
+      `WITH ${bestPriceCTE}
+       SELECT i.asset_id, i.market_hash_name, i.icon_url, i.wear,
               i.float_value, i.rarity, i.rarity_color, i.tradable,
               i.trade_ban_until,
               i.inspect_link, i.paint_seed, i.paint_index, i.stickers, i.charms,
               sa.steam_id as account_steam_id,
               sa.id as account_id,
               sa.display_name as account_name,
-              sa.avatar_url as account_avatar_url
+              sa.avatar_url as account_avatar_url,
+              COALESCE(b.best_price, 0)::float as best_price
        FROM inventory_items i
        JOIN steam_accounts sa ON i.steam_account_id = sa.id
-       WHERE sa.user_id = $1${accountFilter}
-       ORDER BY i.market_hash_name`,
-      params
+       LEFT JOIN best b ON b.market_hash_name = i.market_hash_name
+       WHERE ${whereClause}
+       ORDER BY ${orderBy}
+       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+      pageParams
     );
 
-    // Attach latest prices
+    // Fetch per-source prices only for THIS page's items
     const names = [...new Set(items.map((i) => i.market_hash_name))];
-    const priceMap = await getLatestPrices(names);
+    const priceMap = names.length > 0 ? await getLatestPrices(names) : new Map();
 
     const parseJSON = (val: any) => {
       if (!val) return [];
       if (typeof val === "string") {
-        try {
-          return JSON.parse(val);
-        } catch (_) {
-          return [];
-        }
+        try { return JSON.parse(val); } catch { return []; }
       }
       return val;
     };
@@ -60,23 +113,32 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       prices: priceMap.get(item.market_hash_name) ?? {},
     }));
 
-    // Check if active account has a session (for session-dependent UI features)
-    const activeAccountId = await SteamSessionService.getActiveAccountId(req.userId!);
+    // Session + freshness (run in parallel)
+    const [activeAccountId, freshness] = await Promise.all([
+      SteamSessionService.getActiveAccountId(req.userId!),
+      total > 0
+        ? pool.query(
+            `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
+             JOIN steam_accounts sa ON i.steam_account_id = sa.id
+             WHERE sa.user_id = $1`, [req.userId])
+        : null,
+    ]);
     const session = activeAccountId ? await SteamSessionService.getSession(activeAccountId) : null;
-
-    // Check data freshness — stale if last update > 15 minutes ago
-    const freshness = enriched.length > 0
-      ? await pool.query(
-          `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
-           JOIN steam_accounts sa ON i.steam_account_id = sa.id
-           WHERE sa.user_id = $1`, [req.userId])
-      : null;
     const lastUpdate = freshness?.rows[0]?.last_update;
     const stale = lastUpdate
       ? (Date.now() - new Date(lastUpdate).getTime()) > 15 * 60 * 1000
       : false;
 
-    res.json({ items: enriched, count: enriched.length, hasSession: !!session, stale });
+    res.json({
+      items: enriched,
+      total,
+      totalValue,
+      limit,
+      offset,
+      hasMore: offset + limit < total,
+      hasSession: !!session,
+      stale,
+    });
   } catch (err) {
     console.error("Inventory fetch error:", err);
     res.status(500).json({ error: "Failed to load inventory" });

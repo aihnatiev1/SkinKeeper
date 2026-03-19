@@ -6,55 +6,60 @@ import { CurrencyBanner } from '@/components/currency-banner';
 import { useInventory, useRefreshInventory } from '@/lib/hooks';
 import { formatPrice, getItemIconUrl, getWearShort, cn } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
-import { Search, RefreshCw, Filter, Grid3X3, List, SlidersHorizontal } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { Search, RefreshCw, Grid3X3, List, SlidersHorizontal, Loader2 } from 'lucide-react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type SortOption = 'price-desc' | 'price-asc' | 'name' | 'rarity';
 type ViewMode = 'grid' | 'list';
 
 export default function InventoryPage() {
-  const { data: items, isLoading } = useInventory();
-  const refreshInventory = useRefreshInventory();
-
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sort, setSort] = useState<SortOption>('price-desc');
   const [view, setView] = useState<ViewMode>('grid');
   const [tradableOnly, setTradableOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  const filtered = useMemo(() => {
-    if (!items) return [];
-    let result = [...items];
+  const refreshInventory = useRefreshInventory();
 
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((i) =>
-        i.market_hash_name.toLowerCase().includes(q)
-      );
-    }
-    if (tradableOnly) {
-      result = result.filter((i) => i.tradable);
-    }
+  // Debounce search — wait 300ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-    result.sort((a, b) => {
-      const priceA = a.prices?.steam || a.prices?.skinport || 0;
-      const priceB = b.prices?.steam || b.prices?.skinport || 0;
-      switch (sort) {
-        case 'price-desc': return priceB - priceA;
-        case 'price-asc': return priceA - priceB;
-        case 'name': return a.market_hash_name.localeCompare(b.market_hash_name);
-        case 'rarity': return (b.rarity || '').localeCompare(a.rarity || '');
-        default: return 0;
-      }
-    });
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInventory({ sort, search: debouncedSearch, tradableOnly });
 
-    return result;
-  }, [items, search, sort, tradableOnly]);
+  // Flatten pages into single array
+  const items = useMemo(
+    () => data?.pages.flatMap((p) => p.items) ?? [],
+    [data]
+  );
+  const total = data?.pages[0]?.total ?? 0;
+  const totalValue = data?.pages[0]?.totalValue ?? 0;
 
-  const totalValue = useMemo(() => {
-    return filtered.reduce((sum, i) => sum + (i.prices?.steam || i.prices?.skinport || 0), 0);
-  }, [filtered]);
+  // Infinite scroll — observe last item
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const lastItemRef = useCallback(
+    (node: HTMLElement | null) => {
+      if (isFetchingNextPage) return;
+      if (observerRef.current) observerRef.current.disconnect();
+      observerRef.current = new IntersectionObserver((entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage) {
+          fetchNextPage();
+        }
+      });
+      if (node) observerRef.current.observe(node);
+    },
+    [isFetchingNextPage, hasNextPage, fetchNextPage]
+  );
 
   return (
     <div>
@@ -146,7 +151,7 @@ export default function InventoryPage() {
 
         {/* Summary bar */}
         <div className="flex items-center justify-between text-sm text-muted">
-          <span>{filtered.length} items</span>
+          <span>{total} items</span>
           <span>Total: {formatPrice(totalValue)}</span>
         </div>
 
@@ -155,12 +160,14 @@ export default function InventoryPage() {
           <PageLoader />
         ) : view === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {filtered.map((item) => {
+            {items.map((item, idx) => {
               const price = item.prices?.steam || item.prices?.skinport || 0;
               const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
+              const isLast = idx === items.length - 1;
               return (
                 <motion.div
                   key={item.asset_id}
+                  ref={isLast ? lastItemRef : undefined}
                   layout
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -212,11 +219,13 @@ export default function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((item) => {
+                {items.map((item, idx) => {
                   const price = item.prices?.steam || item.prices?.skinport || 0;
+                  const isLast = idx === items.length - 1;
                   return (
                     <tr
                       key={item.asset_id}
+                      ref={isLast ? lastItemRef : undefined}
                       className="border-b border-border/50 hover:bg-surface-light transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-2">
@@ -251,6 +260,18 @@ export default function InventoryPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {/* Loading indicator for next page */}
+        {isFetchingNextPage && (
+          <div className="flex justify-center py-4">
+            <Loader2 size={24} className="animate-spin text-muted" />
+          </div>
+        )}
+
+        {/* End of list */}
+        {!hasNextPage && items.length > 0 && (
+          <p className="text-center text-sm text-muted py-4">All items loaded</p>
         )}
       </div>
     </div>

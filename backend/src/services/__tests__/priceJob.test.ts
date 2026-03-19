@@ -11,8 +11,11 @@ vi.mock("../prices.js", () => ({
   fetchSkinportPrices: vi.fn().mockResolvedValue(new Map([["AK-47", 12.34]])),
   savePrices: vi.fn().mockResolvedValue(undefined),
   getUniqueInventoryNames: vi.fn().mockResolvedValue(["AK-47 | Redline (Field-Tested)", "AWP | Asiimov (Field-Tested)"]),
+  startSteamCrawlers: vi.fn(),
+  stopSteamCrawlers: vi.fn(),
   startSteamCrawler: vi.fn(),
   stopSteamCrawler: vi.fn(),
+  pruneOldPrices: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../csfloat.js", () => ({
@@ -39,8 +42,16 @@ vi.mock("../priceStats.js", () => ({
   recordFailure: vi.fn(),
 }));
 
+vi.mock("../steamAnalyst.js", () => ({
+  fetchSteamAnalystPrices: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../proxyPool.js", () => ({
+  initProxyPool: vi.fn(),
+}));
+
 import cron from "node-cron";
-import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawler } from "../prices.js";
+import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers } from "../prices.js";
 import { startCSFloatCrawler } from "../csfloat.js";
 import { fetchDMarketPrices } from "../dmarket.js";
 
@@ -66,11 +77,11 @@ describe("priceJob", () => {
     // Wait for the initial async IIFE to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    // 4 cron jobs: Skinport, DMarket, P/L snapshot, subscriptions
-    expect(mockedCron.schedule).toHaveBeenCalledTimes(4);
+    // 6 cron jobs: Skinport, SteamAnalyst, DMarket, P/L snapshot, subscriptions, price pruning
+    expect(mockedCron.schedule).toHaveBeenCalledTimes(6);
 
     // Background crawlers started
-    expect(startSteamCrawler).toHaveBeenCalled();
+    expect(startSteamCrawlers).toHaveBeenCalled();
     expect(startCSFloatCrawler).toHaveBeenCalled();
 
     // Verify cron expressions

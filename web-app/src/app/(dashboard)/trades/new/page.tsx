@@ -14,7 +14,8 @@ type Step = 'pick-partner' | 'select-items';
 
 export default function NewTradePage() {
   const router = useRouter();
-  const { data: myItems, isLoading: invLoading } = useInventory();
+  const { data: invData, isLoading: invLoading } = useInventory({ tradableOnly: true });
+  const myItems = useMemo(() => invData?.pages.flatMap((p) => p.items) ?? [], [invData]);
 
   const [step, setStep] = useState<Step>('pick-partner');
 
@@ -87,11 +88,10 @@ export default function NewTradePage() {
   };
 
   const filteredMyItems = useMemo(() => {
-    if (!myItems) return [];
-    const tradable = myItems.filter((i) => i.tradable);
-    if (!mySearch) return tradable;
+    if (!myItems.length) return [];
+    if (!mySearch) return myItems;
     const q = mySearch.toLowerCase();
-    return tradable.filter((i) => i.market_hash_name.toLowerCase().includes(q));
+    return myItems.filter((i: any) => i.market_hash_name.toLowerCase().includes(q));
   }, [myItems, mySearch]);
 
   const filteredPartnerItems = useMemo(() => {
@@ -107,10 +107,10 @@ export default function NewTradePage() {
   };
 
   const giveValue = useMemo(() => {
-    if (!myItems) return 0;
+    if (!myItems.length) return 0;
     return myItems
-      .filter((i) => selectedGive.has(i.asset_id))
-      .reduce((s, i) => s + (i.prices?.steam || i.prices?.skinport || 0), 0);
+      .filter((i: any) => selectedGive.has(i.asset_id))
+      .reduce((s: number, i: any) => s + (i.prices?.steam || i.prices?.skinport || 0), 0);
   }, [myItems, selectedGive]);
 
   const handleSend = async () => {

@@ -66,6 +66,19 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
+// Helper: mock the 2 queries the paginated endpoint makes (summary + page)
+function mockPaginatedQueries(items: any[], total?: number) {
+  const count = total ?? items.length;
+  // 1st call: summary query (total + totalValue)
+  mockQuery.mockResolvedValueOnce({ rows: [{ total: count, total_value: 0 }] });
+  // 2nd call: page query (items)
+  mockQuery.mockResolvedValueOnce({ rows: items });
+  // 3rd call: freshness query (optional, only when total > 0)
+  if (count > 0) {
+    mockQuery.mockResolvedValueOnce({ rows: [{ last_update: new Date().toISOString() }] });
+  }
+}
+
 describe("GET /api/inventory", () => {
   beforeEach(() => {
     mockQuery.mockReset();
@@ -89,8 +102,7 @@ describe("GET /api/inventory", () => {
   });
 
   it("returns empty inventory for user with no items", async () => {
-    // inventory_items query
-    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockPaginatedQueries([]);
 
     const res = await request(app)
       .get("/api/inventory")
@@ -98,7 +110,7 @@ describe("GET /api/inventory", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.items).toEqual([]);
-    expect(res.body.count).toBe(0);
+    expect(res.body.total).toBe(0);
   });
 
   it("returns items with prices attached", async () => {
@@ -107,29 +119,28 @@ describe("GET /api/inventory", () => {
       new Map([["AK-47 | Redline (Field-Tested)", { skinport: 12.34, steam: 13.0 }]])
     );
 
-    mockQuery.mockResolvedValueOnce({
-      rows: [
-        {
-          asset_id: "111111",
-          market_hash_name: "AK-47 | Redline (Field-Tested)",
-          icon_url: "https://example.com/icon.png",
-          wear: "Field-Tested",
-          float_value: 0.25,
-          rarity: "Classified",
-          rarity_color: "D2D2D2",
-          tradable: true,
-          trade_ban_until: null,
-          inspect_link: null,
-          paint_seed: null,
-          paint_index: null,
-          stickers: null,
-          charms: null,
-          account_steam_id: "76561198000000001",
-          account_id: 1,
-          account_name: "TestAccount",
-        },
-      ],
-    });
+    mockPaginatedQueries([
+      {
+        asset_id: "111111",
+        market_hash_name: "AK-47 | Redline (Field-Tested)",
+        icon_url: "https://example.com/icon.png",
+        wear: "Field-Tested",
+        float_value: 0.25,
+        rarity: "Classified",
+        rarity_color: "D2D2D2",
+        tradable: true,
+        trade_ban_until: null,
+        inspect_link: null,
+        paint_seed: null,
+        paint_index: null,
+        stickers: null,
+        charms: null,
+        account_steam_id: "76561198000000001",
+        account_id: 1,
+        account_name: "TestAccount",
+        best_price: 13.0,
+      },
+    ]);
 
     const res = await request(app)
       .get("/api/inventory")
@@ -142,16 +153,33 @@ describe("GET /api/inventory", () => {
   });
 
   it("filters by accountId when query param provided", async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockPaginatedQueries([]);
 
     const res = await request(app)
       .get("/api/inventory?accountId=2")
       .set("Authorization", `Bearer ${jwt}`);
 
     expect(res.status).toBe(200);
-    // Verify the query was called with accountId filter
+    // Verify the summary query was called with accountId filter
     const queryCall = mockQuery.mock.calls[0];
-    expect(queryCall[1]).toContain(2); // accountId = 2 should be in params
+    expect(queryCall[1]).toContain(2);
+  });
+
+  it("returns pagination metadata", async () => {
+    mockPaginatedQueries(
+      [{ asset_id: "1", market_hash_name: "Test", best_price: 0 }],
+      50 // total items = 50 but only returning 1
+    );
+
+    const res = await request(app)
+      .get("/api/inventory?limit=20&offset=0")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(50);
+    expect(res.body.hasMore).toBe(true);
+    expect(res.body.limit).toBe(20);
+    expect(res.body.offset).toBe(0);
   });
 });
 
@@ -166,6 +194,7 @@ describe("GET /api/inventory — account_avatar_url", () => {
     account_name: "TestUser",
     account_avatar_url: "https://avatars.steamstatic.com/abc_medium.jpg",
     tradable: true,
+    best_price: 0,
   };
 
   beforeEach(() => {
@@ -173,7 +202,7 @@ describe("GET /api/inventory — account_avatar_url", () => {
   });
 
   it("returns all accounts items when no accountId filter", async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [mockItem] });
+    mockPaginatedQueries([mockItem]);
 
     const res = await request(app)
       .get("/api/inventory")
@@ -182,11 +211,11 @@ describe("GET /api/inventory — account_avatar_url", () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.items)).toBe(true);
     expect(res.body.items).toHaveLength(1);
-    expect(res.body.count).toBe(1);
+    expect(res.body.total).toBe(1);
   });
 
   it("includes account_avatar_url in each item", async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [mockItem] });
+    mockPaginatedQueries([mockItem]);
 
     const res = await request(app)
       .get("/api/inventory")
@@ -199,7 +228,7 @@ describe("GET /api/inventory — account_avatar_url", () => {
   });
 
   it("filters by accountId when provided", async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [mockItem] });
+    mockPaginatedQueries([mockItem]);
 
     const res = await request(app)
       .get("/api/inventory?accountId=1")
