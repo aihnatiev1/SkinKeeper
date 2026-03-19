@@ -446,9 +446,11 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
         } else {
           final confirmed = await _confirmDeleteAll(context, item);
           if (confirmed) {
-            await _deleteAllForItem(context, item);
+            // Don't await — let Dismissible animate out first, then refresh
+            _deleteAllForItem(context, item);
+            return true; // let Dismissible animate the removal
           }
-          return false; // never let Dismissible remove the widget itself
+          return false;
         }
       },
       child: GestureDetector(
