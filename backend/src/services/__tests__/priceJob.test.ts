@@ -59,6 +59,10 @@ vi.mock("../fadeData.js", () => ({
   initFadeData: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../steamMarketDepth.js", () => ({
+  refreshSteamDepthData: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../proxyPool.js", () => ({
   initProxyPool: vi.fn(),
 }));
@@ -92,7 +96,8 @@ describe("priceJob", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     // 7 cron jobs: Skinport, CSGOTrader, SteamAnalyst, DMarket, P/L snapshot, subscriptions, price pruning
-    expect(mockedCron.schedule).toHaveBeenCalledTimes(7);
+    // 8 cron jobs: Skinport, CSGOTrader, SteamAnalyst, DMarket, SteamDepth, P/L, subscriptions, pruning
+    expect(mockedCron.schedule).toHaveBeenCalledTimes(8);
 
     // Background crawlers started
     expect(startSteamCrawlers).toHaveBeenCalled();

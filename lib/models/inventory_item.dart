@@ -2,6 +2,35 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/steam_image.dart';
 
+class SteamDepth {
+  final int volume24h;
+  final double medianPrice;
+  final int buyOrderCount;
+  final double highestBid;
+  final int sellListingCount;
+  final double lowestAsk;
+
+  const SteamDepth({
+    required this.volume24h,
+    required this.medianPrice,
+    required this.buyOrderCount,
+    required this.highestBid,
+    required this.sellListingCount,
+    required this.lowestAsk,
+  });
+
+  factory SteamDepth.fromJson(Map<String, dynamic> json) {
+    return SteamDepth(
+      volume24h: json['volume24h'] as int? ?? 0,
+      medianPrice: (json['medianPrice'] as num?)?.toDouble() ?? 0,
+      buyOrderCount: json['buyOrderCount'] as int? ?? 0,
+      highestBid: (json['highestBid'] as num?)?.toDouble() ?? 0,
+      sellListingCount: json['sellListingCount'] as int? ?? 0,
+      lowestAsk: (json['lowestAsk'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
 class StickerInfo {
   final int slot;
   final int stickerId;
@@ -74,6 +103,7 @@ class InventoryItem {
   final double? stickerValue;
   final double? fadePercentage;
   final Map<String, String>? marketplaceLinks;
+  final SteamDepth? steamDepth;
   final int? accountId;
   final String? accountSteamId;
   final String? accountName;
@@ -98,6 +128,7 @@ class InventoryItem {
     this.stickerValue,
     this.fadePercentage,
     this.marketplaceLinks,
+    this.steamDepth,
     this.accountId,
     this.accountSteamId,
     this.accountName,
@@ -292,6 +323,7 @@ class InventoryItem {
       stickerValue: stickerValue,
       fadePercentage: fadePercentage,
       marketplaceLinks: marketplaceLinks,
+      steamDepth: steamDepth,
       accountId: accountId,
       accountSteamId: accountSteamId,
       accountName: accountName,
@@ -345,6 +377,9 @@ class InventoryItem {
       marketplaceLinks: (json['links'] as Map<String, dynamic>?)?.map(
             (k, v) => MapEntry(k, v.toString()),
           ),
+      steamDepth: json['steam_depth'] != null
+          ? SteamDepth.fromJson(json['steam_depth'] as Map<String, dynamic>)
+          : null,
       accountId: json['account_id'] as int?,
       accountSteamId: json['account_steam_id'] as String?,
       accountName: json['account_name'] as String?,

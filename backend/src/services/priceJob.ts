@@ -6,6 +6,7 @@ import { fetchSteamAnalystPrices } from "./steamAnalyst.js";
 import { fetchCSGOTraderPrices, runCSGOTraderDailySeed } from "./csgoTrader.js";
 import { refreshBuffIds } from "./buffIds.js";
 import { initFadeData } from "./fadeData.js";
+import { refreshSteamDepthData } from "./steamMarketDepth.js";
 import { runDailyPLSnapshot } from "./profitLoss.js";
 import { checkExpiredSubscriptions } from "./purchases.js";
 import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js";
@@ -170,6 +171,15 @@ export function startPriceJobs() {
     }
   }));
 
+  // Steam Market Depth: every 12 hours (after iflow dumps at 00:15/12:15)
+  scheduledTasks.push(cron.schedule("30 0,12 * * *", async () => {
+    try {
+      await refreshSteamDepthData();
+    } catch (err) {
+      console.error("[CRON] Steam depth fetch failed:", err);
+    }
+  }));
+
   // Prune old price_history at 02:00 UTC daily
   // Strategy: keep 7 days detailed, aggregate 7-90d to daily, delete >90d
   scheduledTasks.push(cron.schedule("0 2 * * *", async () => {
@@ -194,13 +204,16 @@ export function startPriceJobs() {
       console.error("[INIT] CSGOTrader daily seed failed:", err);
     }
 
-    // Phase 1.5: Static data (buff IDs + fade percentages) in parallel
+    // Phase 1.5: Static data (buff IDs + fade percentages + steam depth) in parallel
     await Promise.allSettled([
       refreshBuffIds().catch((err) =>
         console.error("[INIT] BuffIds fetch failed:", err)
       ),
       initFadeData().catch((err) =>
         console.error("[INIT] FadeData init failed:", err)
+      ),
+      refreshSteamDepthData().catch((err) =>
+        console.error("[INIT] SteamDepth fetch failed:", err)
       ),
     ]);
 

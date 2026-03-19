@@ -6,6 +6,7 @@ import { getLatestPrices, getBestPrices } from "../services/prices.js";
 import { getDopplerPrice, isDopplerPaintIndex } from "../services/dopplerPrices.js";
 import { getFadePercentage } from "../services/fadeData.js";
 import { getMarketplaceLinks } from "../services/buffIds.js";
+import { getSteamDepthBatch, SteamDepthData } from "../services/steamMarketDepth.js";
 import { inspectItem, batchInspect } from "../services/inspect.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import { getQueue } from "../infra/JobQueue.js";
@@ -124,6 +125,9 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       ? await getBestPrices([...allStickerNames])
       : new Map<string, number>();
 
+    // Steam market depth (volume + order book) from iflow
+    const depthMap = getSteamDepthBatch(names);
+
     const enriched = parsedItems.map((item) => {
       let prices = { ...(priceMap.get(item.market_hash_name) ?? {}) };
 
@@ -158,12 +162,16 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       // Marketplace links
       const links = getMarketplaceLinks(item.market_hash_name);
 
+      // Steam market depth
+      const depth = depthMap.get(item.market_hash_name);
+
       return {
         ...item,
         prices,
         sticker_value: stickerValue,
         fade_percentage: fadePercentage,
         links,
+        steam_depth: depth ?? null,
       };
     });
 
