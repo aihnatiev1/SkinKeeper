@@ -416,46 +416,10 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
         ? currency.formatWithSign(item.totalProfit)
         : '\u2014';
 
-    return Dismissible(
+    return GestureDetector(
       key: ValueKey(item.marketHashName),
-      background: _swipeBackground(
-        alignment: Alignment.centerLeft,
-        color: AppTheme.primary,
-        icon: Icons.edit_outlined,
-      ),
-      secondaryBackground: _swipeBackground(
-        alignment: Alignment.centerRight,
-        color: AppTheme.loss,
-        icon: Icons.delete_outline_rounded,
-      ),
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          HapticFeedback.lightImpact();
-          showGlassSheet(
-            context,
-            AddTransactionSheet(
-              initialItemName: item.marketHashName,
-              initialPriceUsd:
-                  item.avgBuyPrice > 0 ? item.avgBuyPrice : null,
-              initialQty:
-                  item.currentHolding > 0 ? item.currentHolding : null,
-              editMode: true,
-            ),
-          );
-          return false;
-        } else {
-          final confirmed = await _confirmDeleteAll(context, item);
-          if (confirmed) {
-            // Don't await — let Dismissible animate out first, then refresh
-            _deleteAllForItem(context, item);
-            return true; // let Dismissible animate the removal
-          }
-          return false;
-        }
-      },
-      child: GestureDetector(
-        onLongPress: () => _showItemActions(context, item),
-        child: Container(
+      onLongPress: () => _showItemActions(context, item),
+      child: Container(
           decoration: AppTheme.glass(),
           padding: const EdgeInsets.all(12),
           child: Column(
