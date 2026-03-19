@@ -345,8 +345,10 @@ class ItemCard extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              // Limit stickers shown to avoid overflow (4 max if value badge present)
                               for (int i = 0;
-                                  i < item.stickers.length && i < 5;
+                                  i < item.stickers.length &&
+                                  i < (item.stickerValue != null && item.stickerValue! > 10 ? 4 : 5);
                                   i++)
                                 Padding(
                                   padding: const EdgeInsets.only(right: 2),
@@ -879,13 +881,17 @@ class _BestExternalPrice extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 3),
-          Text(
-            '$label $priceText',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: color.withValues(alpha: 0.8),
-              fontFeatures: const [FontFeature.tabularFigures()],
+          Flexible(
+            child: Text(
+              '$label $priceText',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: color.withValues(alpha: 0.8),
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

@@ -1303,9 +1303,12 @@ class _BestBuySellSummary extends StatelessWidget {
                   decoration: BoxDecoration(color: buyColor, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  sourceDisplayName(cheapest.key),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
+                Flexible(
+                  child: Text(
+                    sourceDisplayName(cheapest.key),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -1427,34 +1430,37 @@ class _BuffSpreadWidget extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text('Buff163', style: TextStyle(
+          Text('Buff', style: TextStyle(
             fontSize: 12, fontWeight: FontWeight.w600,
             color: AppTheme.buffYellow,
           )),
-          const SizedBox(width: 12),
-          // Bid
-          Text('Bid ', style: TextStyle(
-            fontSize: 11, color: AppTheme.textDisabled,
-          )),
-          Text(currency.format(bid), style: const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w600,
-            fontFeatures: [FontFeature.tabularFigures()],
-          )),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text('↔', style: TextStyle(
-              fontSize: 11, color: AppTheme.textDisabled,
-            )),
+          const SizedBox(width: 10),
+          // Bid + Ask — flexible to avoid overflow
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text('${currency.format(bid)}', style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ), overflow: TextOverflow.ellipsis),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text('↔', style: TextStyle(
+                    fontSize: 10, color: AppTheme.textDisabled,
+                  )),
+                ),
+                Flexible(
+                  child: Text('${currency.format(ask)}', style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ), overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
           ),
-          // Ask
-          Text('Ask ', style: TextStyle(
-            fontSize: 11, color: AppTheme.textDisabled,
-          )),
-          Text(currency.format(ask), style: const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w600,
-            fontFeatures: [FontFeature.tabularFigures()],
-          )),
-          const Spacer(),
+          const SizedBox(width: 8),
           // Spread badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),

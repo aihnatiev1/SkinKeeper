@@ -144,6 +144,8 @@ class _PriceRow extends StatelessWidget {
                 fontWeight: isBest ? FontWeight.w600 : FontWeight.w400,
                 color: isBest ? AppTheme.textPrimary : AppTheme.textSecondary,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           if (isBest)

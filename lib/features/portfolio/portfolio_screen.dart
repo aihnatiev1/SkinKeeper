@@ -2222,9 +2222,10 @@ class _TypeBreakdown extends StatelessWidget {
                 children: [
                   Icon(icon, size: 14, color: AppTheme.textMuted),
                   const SizedBox(width: 8),
-                  SizedBox(
-                    width: 80,
-                    child: Text(e.type, style: const TextStyle(fontSize: 12)),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 70, maxWidth: 90),
+                    child: Text(e.type, style: const TextStyle(fontSize: 12),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
                   Expanded(
                     child: Container(
