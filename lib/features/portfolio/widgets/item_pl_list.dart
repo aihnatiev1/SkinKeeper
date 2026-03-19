@@ -643,8 +643,11 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
       final api = ref.read(apiClientProvider);
       final encoded = Uri.encodeQueryComponent(item.marketHashName);
       await api.delete('/transactions?item=$encoded');
-      ref.invalidate(itemsPLProvider);
-      ref.invalidate(portfolioPLProvider);
+      // Delay invalidation to next frame so widget tree is stable after Dismissible
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.invalidate(itemsPLProvider);
+        ref.invalidate(portfolioPLProvider);
+      });
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
