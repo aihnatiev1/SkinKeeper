@@ -505,7 +505,6 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
             ],
           ),
         ),
-      ),
     );
   }
 
