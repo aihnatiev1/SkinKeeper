@@ -1,6 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'constants.dart';
 
 // ─── Currency ────────────────────────────────────────────────────────
 
@@ -46,6 +49,7 @@ class CurrencyInfo {
   }
 }
 
+/// Fallback rates (used when API is unreachable)
 const kCurrencies = <String, CurrencyInfo>{
   'USD': CurrencyInfo(code: 'USD', symbol: '\$', rate: 1.0),
   'EUR': CurrencyInfo(code: 'EUR', symbol: '€', rate: 0.92),
@@ -58,6 +62,84 @@ const kCurrencies = <String, CurrencyInfo>{
   'TRY': CurrencyInfo(code: 'TRY', symbol: '₺', rate: 38.0),
 };
 
+/// Currency code → symbol (CSGOTrader only provides codes)
+const _currencySymbols = <String, String>{
+  'USD': '\$',
+  'EUR': '€',
+  'GBP': '£',
+  'UAH': '₴',
+  'RUB': '₽',
+  'CNY': '¥',
+  'JPY': '¥',
+  'PLN': 'zł',
+  'BRL': 'R\$',
+  'TRY': '₺',
+  'KRW': '₩',
+  'CAD': 'C\$',
+  'AUD': 'A\$',
+  'CHF': 'CHF ',
+  'SEK': 'kr',
+  'NOK': 'kr',
+  'DKK': 'kr',
+  'CZK': 'Kč',
+  'HUF': 'Ft',
+  'RON': 'lei',
+  'BGN': 'лв',
+  'HRK': 'kn',
+  'INR': '₹',
+  'THB': '฿',
+  'MYR': 'RM',
+  'SGD': 'S\$',
+  'NZD': 'NZ\$',
+  'MXN': 'MX\$',
+  'ARS': 'AR\$',
+  'CLP': 'CL\$',
+  'COP': 'CO\$',
+  'PEN': 'S/',
+  'PHP': '₱',
+  'IDR': 'Rp',
+  'VND': '₫',
+  'ZAR': 'R',
+  'ILS': '₪',
+  'AED': 'د.إ',
+  'SAR': '﷼',
+  'TWD': 'NT\$',
+  'HKD': 'HK\$',
+  'BTC': '₿',
+  'ETH': 'Ξ',
+};
+
+/// Dynamic rates fetched from the backend
+Map<String, double> _dynamicRates = {};
+
+/// Build a CurrencyInfo from dynamic or fallback rates
+CurrencyInfo _buildCurrency(String code) {
+  // Check dynamic rates first
+  final dynamicRate = _dynamicRates[code];
+  if (dynamicRate != null) {
+    return CurrencyInfo(
+      code: code,
+      symbol: _currencySymbols[code] ?? '$code ',
+      rate: dynamicRate,
+    );
+  }
+  // Fallback to hardcoded
+  return kCurrencies[code] ?? CurrencyInfo(code: code, symbol: '$code ', rate: 1.0);
+}
+
+/// Get all available currency codes (dynamic + fallback)
+List<String> get availableCurrencyCodes {
+  final codes = <String>{...kCurrencies.keys, ..._dynamicRates.keys};
+  // Prioritize common currencies
+  const priority = ['USD', 'EUR', 'GBP', 'UAH', 'RUB', 'CNY', 'PLN', 'BRL', 'TRY'];
+  final sorted = <String>[];
+  for (final c in priority) {
+    if (codes.remove(c)) sorted.add(c);
+  }
+  sorted.addAll(codes.toList()..sort());
+  return sorted;
+}
+
 class CurrencyNotifier extends Notifier<CurrencyInfo> {
   @override
   CurrencyInfo build() {
@@ -68,14 +150,27 @@ class CurrencyNotifier extends Notifier<CurrencyInfo> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final code = prefs.getString('display_currency') ?? 'USD';
-    if (kCurrencies.containsKey(code)) {
-      state = kCurrencies[code]!;
+
+    // Fetch dynamic rates from API
+    try {
+      final dio = Dio(BaseOptions(
+        baseUrl: AppConstants.apiBaseUrl,
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ));
+      final response = await dio.get('/market/exchange-rates');
+      if (response.data case {'rates': Map rates}) {
+        _dynamicRates = rates.map((k, v) => MapEntry(k.toString(), (v as num).toDouble()));
+      }
+    } catch (_) {
+      // Fallback to hardcoded rates silently
     }
+
+    state = _buildCurrency(code);
   }
 
   Future<void> setCurrency(String code) async {
-    if (!kCurrencies.containsKey(code)) return;
-    state = kCurrencies[code]!;
+    state = _buildCurrency(code);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('display_currency', code);
   }

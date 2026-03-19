@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
 import '../../core/export_service.dart';
@@ -22,7 +23,7 @@ import '../portfolio/portfolio_pl_provider.dart';
 import 'sell_provider.dart';
 import '../../widgets/glass_sheet.dart';
 import 'widgets/fee_breakdown.dart';
-import 'widgets/price_comparison_table.dart';
+import 'widgets/price_comparison_table.dart' show PriceComparisonTable, sourceColor, sourceDisplayName;
 import 'widgets/price_history_chart.dart';
 import 'widgets/sell_bottom_sheet.dart';
 import 'widgets/sell_progress_sheet.dart';
@@ -257,9 +258,22 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               GlassCard(
                 padding: const EdgeInsets.all(AppTheme.s14),
                 margin: const EdgeInsets.only(bottom: AppTheme.s12),
-                child: StickersAndCharmsDisplay(
-                  stickers: item.stickers,
-                  charms: item.charms,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    StickersAndCharmsDisplay(
+                      stickers: item.stickers,
+                      charms: item.charms,
+                    ),
+                    if (item.stickerValue != null && item.stickerValue! > 0) ...[
+                      const SizedBox(height: AppTheme.s10),
+                      _StickerValueRow(
+                        stickerValue: item.stickerValue!,
+                        bestPrice: item.bestPrice,
+                        currency: currency,
+                      ),
+                    ],
+                  ],
                 ),
               )
                   .animate()
@@ -286,6 +300,24 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 200.ms),
 
+            // ── Best Buy / Best Sell summary ──
+            _BestBuySellSummary(item: item, currency: currency)
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 250.ms),
+
+            // ── Buff Bid/Ask Spread ──
+            if (item.prices.containsKey('buff') && item.prices.containsKey('buff_bid'))
+              Padding(
+                padding: const EdgeInsets.only(top: AppTheme.s8),
+                child: _BuffSpreadWidget(
+                  ask: item.prices['buff']!,
+                  bid: item.prices['buff_bid']!,
+                  currency: currency,
+                ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 275.ms),
+
             const SizedBox(height: AppTheme.s16),
 
             // ── Sell actions ──
@@ -299,6 +331,14 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
             PriceComparisonTable(prices: item.prices, currency: currency)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 350.ms),
+
+            // ── Marketplace links (with prices) ──
+            if (item.marketplaceLinks != null && item.marketplaceLinks!.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.s12),
+              _MarketplaceLinks(links: item.marketplaceLinks!, prices: item.prices, currency: currency)
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 375.ms),
+            ],
 
             const SizedBox(height: AppTheme.s16),
 
@@ -1080,6 +1120,440 @@ class _LogPurchaseButton extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Marketplace Links (with prices) ──────────────────────────────
+class _MarketplaceLinks extends StatelessWidget {
+  final Map<String, String> links;
+  final Map<String, double> prices;
+  final CurrencyInfo currency;
+
+  const _MarketplaceLinks({
+    required this.links,
+    required this.prices,
+    required this.currency,
+  });
+
+  // source key in links → (label, color, icon, price source key)
+  static const _linkConfig = <String, (String, Color, IconData, String)>{
+    'buff': ('Buff163', AppTheme.buffYellow, Icons.storefront_rounded, 'buff'),
+    'skinport': ('Skinport', AppTheme.skinportGreen, Icons.shopping_bag_rounded, 'skinport'),
+    'csfloat': ('CSFloat', AppTheme.csfloatOrange, Icons.waves_rounded, 'csfloat'),
+    'steam': ('Steam', AppTheme.steamBlue, Icons.store_rounded, 'steam'),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final available = links.entries
+        .where((e) => _linkConfig.containsKey(e.key))
+        .toList();
+    if (available.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: AppTheme.glass(),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.s16,
+        AppTheme.s14,
+        AppTheme.s16,
+        AppTheme.s14,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('MARKETPLACE', style: AppTheme.label),
+          const SizedBox(height: AppTheme.s10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: available.map((entry) {
+              final config = _linkConfig[entry.key]!;
+              final (label, color, icon, priceKey) = config;
+              final price = prices[priceKey];
+              return _MarketButton(
+                label: label,
+                color: color,
+                icon: icon,
+                url: entry.value,
+                price: price,
+                currency: currency,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MarketButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData icon;
+  final String url;
+  final double? price;
+  final CurrencyInfo currency;
+
+  const _MarketButton({
+    required this.label,
+    required this.color,
+    required this.icon,
+    required this.url,
+    required this.currency,
+    this.price,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppTheme.r8),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+            if (price != null && price! > 0) ...[
+              const SizedBox(width: 6),
+              Text(
+                currency.format(price!),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color.withValues(alpha: 0.7),
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Best Buy / Best Sell Summary ─────────────────────────────────
+class _BestBuySellSummary extends StatelessWidget {
+  final InventoryItem item;
+  final CurrencyInfo currency;
+
+  const _BestBuySellSummary({required this.item, required this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    // Cheapest external source (where to buy)
+    final external = item.prices.entries
+        .where((e) =>
+            e.key != 'steam' &&
+            e.key != 'csgotrader' &&
+            e.key != 'buff_bid' &&
+            e.value > 0)
+        .toList();
+    if (external.isEmpty) return const SizedBox.shrink();
+
+    external.sort((a, b) => a.value.compareTo(b.value));
+    final cheapest = external.first;
+
+    // Best sell = Steam after 13% fee
+    final steamPrice = item.steamPrice;
+    final afterFees = steamPrice != null ? steamPrice * 0.87 : null;
+
+    // Profit calculation
+    final profit = afterFees != null ? afterFees - cheapest.value : null;
+    final profitPct = profit != null && cheapest.value > 0
+        ? (profit / cheapest.value * 100)
+        : null;
+
+    final buyColor = sourceColor(cheapest.key);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppTheme.s10),
+      child: Container(
+        decoration: AppTheme.glass(),
+        padding: const EdgeInsets.all(AppTheme.s14),
+        child: Column(
+          children: [
+            // Cheapest buy
+            Row(
+              children: [
+                Icon(Icons.shopping_cart_outlined,
+                    size: 14, color: buyColor.withValues(alpha: 0.7)),
+                const SizedBox(width: 8),
+                Text('Cheapest', style: TextStyle(
+                  fontSize: 12, color: AppTheme.textSecondary,
+                )),
+                const Spacer(),
+                Container(
+                  width: 6, height: 6,
+                  decoration: BoxDecoration(color: buyColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  sourceDisplayName(cheapest.key),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  currency.format(cheapest.value),
+                  style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w700,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+            // Sell on Steam (after fees)
+            if (afterFees != null) ...[
+              const SizedBox(height: AppTheme.s8),
+              Row(
+                children: [
+                  Icon(Icons.sell_outlined,
+                      size: 14, color: AppTheme.steamBlue.withValues(alpha: 0.7)),
+                  const SizedBox(width: 8),
+                  Text('Sell Steam', style: TextStyle(
+                    fontSize: 12, color: AppTheme.textSecondary,
+                  )),
+                  Text(' (−13%)', style: TextStyle(
+                    fontSize: 10, color: AppTheme.textDisabled,
+                  )),
+                  const Spacer(),
+                  Text(
+                    currency.format(afterFees),
+                    style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            // Potential profit
+            if (profit != null && profit > 0) ...[
+              const Divider(height: 20, color: AppTheme.divider),
+              Row(
+                children: [
+                  Icon(Icons.trending_up_rounded,
+                      size: 14, color: AppTheme.profit),
+                  const SizedBox(width: 8),
+                  Text('Potential', style: TextStyle(
+                    fontSize: 12, color: AppTheme.textSecondary,
+                  )),
+                  const Spacer(),
+                  Text(
+                    '+${currency.format(profit)}',
+                    style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.profit,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (profitPct != null) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.profit.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '+${profitPct.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w700,
+                          color: AppTheme.profit,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Buff Bid/Ask Spread ──────────────────────────────────────────
+class _BuffSpreadWidget extends StatelessWidget {
+  final double ask;
+  final double bid;
+  final CurrencyInfo currency;
+
+  const _BuffSpreadWidget({
+    required this.ask,
+    required this.bid,
+    required this.currency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (ask <= 0 || bid <= 0) return const SizedBox.shrink();
+
+    final spread = ((ask - bid) / ask * 100);
+    final spreadColor = spread < 3
+        ? AppTheme.profit
+        : spread < 8
+            ? AppTheme.warning
+            : AppTheme.loss;
+
+    return Container(
+      decoration: AppTheme.glass(),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.s14,
+        vertical: AppTheme.s10,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 6, height: 6,
+            decoration: const BoxDecoration(
+              color: AppTheme.buffYellow,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text('Buff163', style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w600,
+            color: AppTheme.buffYellow,
+          )),
+          const SizedBox(width: 12),
+          // Bid
+          Text('Bid ', style: TextStyle(
+            fontSize: 11, color: AppTheme.textDisabled,
+          )),
+          Text(currency.format(bid), style: const TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w600,
+            fontFeatures: [FontFeature.tabularFigures()],
+          )),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text('↔', style: TextStyle(
+              fontSize: 11, color: AppTheme.textDisabled,
+            )),
+          ),
+          // Ask
+          Text('Ask ', style: TextStyle(
+            fontSize: 11, color: AppTheme.textDisabled,
+          )),
+          Text(currency.format(ask), style: const TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w600,
+            fontFeatures: [FontFeature.tabularFigures()],
+          )),
+          const Spacer(),
+          // Spread badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: spreadColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${spread.toStringAsFixed(1)}%',
+              style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700,
+                color: spreadColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sticker Value + Overpay Row ──────────────────────────────────
+class _StickerValueRow extends StatelessWidget {
+  final double stickerValue;
+  final double? bestPrice;
+  final CurrencyInfo currency;
+
+  const _StickerValueRow({
+    required this.stickerValue,
+    required this.currency,
+    this.bestPrice,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Calculate overpay percentage: sticker value / base item price
+    final overpayPct = bestPrice != null && bestPrice! > 0
+        ? (stickerValue / bestPrice! * 100)
+        : null;
+    final isHighOverpay = overpayPct != null && overpayPct > 50;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        // Sticker value badge
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.s10,
+            vertical: AppTheme.s6,
+          ),
+          decoration: BoxDecoration(
+            color: AppTheme.warning.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(AppTheme.r6),
+            border: Border.all(
+              color: AppTheme.warning.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_awesome,
+                  size: 14, color: AppTheme.warning.withValues(alpha: 0.8)),
+              const SizedBox(width: 6),
+              Text(
+                'Sticker Value: ${currency.format(stickerValue)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.warning.withValues(alpha: 0.9),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Overpay indicator (if sticker value > 50% of item price)
+        if (isHighOverpay)
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.s10,
+              vertical: AppTheme.s6,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.profit.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppTheme.r6),
+              border: Border.all(
+                color: AppTheme.profit.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Text(
+              'Sticker Overpay: ${overpayPct!.round()}%',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.profit,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

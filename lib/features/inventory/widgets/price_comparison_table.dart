@@ -7,6 +7,12 @@ const _sourceDisplayNames = <String, String>{
   'skinport': 'Skinport',
   'csfloat': 'CSFloat',
   'dmarket': 'DMarket',
+  'buff': 'Buff163',
+  'buff_bid': 'Buff163 Buy Order',
+  'bitskins': 'BitSkins',
+  'csmoney': 'CS.Money',
+  'youpin': 'YouPin',
+  'lisskins': 'Lisskins',
 };
 
 const _sourceColors = <String, Color>{
@@ -14,6 +20,12 @@ const _sourceColors = <String, Color>{
   'skinport': AppTheme.skinportGreen,
   'csfloat': AppTheme.csfloatOrange,
   'dmarket': AppTheme.dmarketPurple,
+  'buff': AppTheme.buffYellow,
+  'buff_bid': AppTheme.buffBidYellowDim,
+  'bitskins': AppTheme.bitskinsRed,
+  'csmoney': AppTheme.csmoneyTeal,
+  'youpin': AppTheme.youpinPink,
+  'lisskins': AppTheme.lisskinsLime,
 };
 
 String sourceDisplayName(String source) =>

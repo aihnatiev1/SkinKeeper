@@ -22,29 +22,43 @@ interface SkinportItem {
 }
 
 // Skinport: free, no auth, 8 requests per 5 min
+// Singleton mutex: only one fetch at a time, concurrent callers get same result
 let skinportCache: Map<string, number> = new Map();
 let skinportLastFetch = 0;
-let skinportBackoffUntil = 0; // pause fetches until this timestamp after 429
+let skinportBackoffUntil = 0;
+let skinportInFlight: Promise<Map<string, number>> | null = null;
 
-const SKINPORT_MAX_RETRIES = 3;
-const SKINPORT_CACHE_MS = 5 * 60 * 1000;
+const SKINPORT_MAX_RETRIES = 2;
+const SKINPORT_CACHE_MS = 10 * 60 * 1000; // 10 min cache (matches cron interval)
 
 export async function fetchSkinportPrices(): Promise<Map<string, number>> {
   const now = Date.now();
 
   // Respect backoff from previous 429
   if (now < skinportBackoffUntil) {
-    console.log(`[Skinport] Rate limited, skipping until ${new Date(skinportBackoffUntil).toISOString()}`);
     if (skinportCache.size > 0) return skinportCache;
     return new Map();
   }
 
-  // Cache for 5 minutes (Skinport caches server-side anyway)
+  // Return cache if fresh
   if (now - skinportLastFetch < SKINPORT_CACHE_MS && skinportCache.size > 0) {
     return skinportCache;
   }
 
-  // Try via proxy rotation — if one IP gets 429, try next
+  // Singleton: if already fetching, wait for that result instead of firing another request
+  if (skinportInFlight) {
+    return skinportInFlight;
+  }
+
+  skinportInFlight = _doFetchSkinport();
+  try {
+    return await skinportInFlight;
+  } finally {
+    skinportInFlight = null;
+  }
+}
+
+async function _doFetchSkinport(): Promise<Map<string, number>> {
   for (let attempt = 0; attempt < SKINPORT_MAX_RETRIES; attempt++) {
     const endLatency = recordFetchStart("skinport");
     try {
@@ -82,9 +96,9 @@ export async function fetchSkinportPrices(): Promise<Map<string, number>> {
       if (status === 429 || status === 403) {
         record429("skinport");
         const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
-        const waitSec = retryAfter > 0 ? retryAfter : (attempt + 1) * 60;
+        const waitSec = retryAfter > 0 ? retryAfter : (attempt + 1) * 120;
         skinportBackoffUntil = Date.now() + waitSec * 1000;
-        console.warn(`[Skinport] ${status} (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), waiting ${waitSec}s`);
+        console.warn(`[Skinport] ${status} (attempt ${attempt + 1}/${SKINPORT_MAX_RETRIES}), backoff ${waitSec}s`);
 
         if (attempt < SKINPORT_MAX_RETRIES - 1) {
           await new Promise((r) => setTimeout(r, waitSec * 1000));
@@ -602,6 +616,23 @@ export async function getLatestPrices(
     result.set(row.market_hash_name, existing);
   }
   return result;
+}
+
+// Get best (highest) price for a list of items — returns Map<name, bestPrice>
+export async function getBestPrices(
+  marketHashNames: string[]
+): Promise<Map<string, number>> {
+  if (marketHashNames.length === 0) return new Map();
+
+  const { rows } = await pool.query(
+    `SELECT market_hash_name, MAX(price_usd)::float AS best_price
+     FROM current_prices
+     WHERE market_hash_name = ANY($1) AND price_usd > 0
+     GROUP BY market_hash_name`,
+    [marketHashNames]
+  );
+
+  return new Map(rows.map((r: any) => [r.market_hash_name, r.best_price]));
 }
 
 // Get unique market_hash_names from all users' inventories

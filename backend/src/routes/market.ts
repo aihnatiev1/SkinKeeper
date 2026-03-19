@@ -28,6 +28,8 @@ import {
   getSteamCurrencies,
 } from "../services/currency.js";
 import { SessionExpiredError } from "../utils/errors.js";
+import { getExchangeRates, getExchangeRatesUpdatedAt } from "../services/csgoTrader.js";
+import { getMarketplaceLinks } from "../services/buffIds.js";
 
 const router = Router();
 
@@ -44,6 +46,23 @@ router.post("/clienttoken", authMiddleware, (_req, res) => {
 // DEPRECATED: Use GET /api/session/status instead
 router.get("/session/status", authMiddleware, (_req, res) => {
   res.status(410).json({ error: "Deprecated. Use GET /api/session/status instead." });
+});
+
+// ─── Exchange Rates (public, no auth) ────────────────────────────────────
+
+/**
+ * GET /api/market/exchange-rates
+ * Returns CSGOTrader exchange rates (50+ currencies, USD-relative).
+ * Used by Flutter client for multi-currency display.
+ */
+router.get("/exchange-rates", (_req, res: Response) => {
+  const rates = getExchangeRates();
+  const updatedAt = getExchangeRatesUpdatedAt();
+  res.json({
+    rates,
+    count: Object.keys(rates).length,
+    updatedAt: updatedAt?.toISOString() ?? null,
+  });
 });
 
 // ─── Wallet Currency ─────────────────────────────────────────────────────
@@ -554,40 +573,23 @@ router.get(
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
       const minProfit = parseFloat(req.query.minProfit as string) || 5;
 
-      // Use LATERAL JOIN pattern (not DISTINCT ON) for price_history — table has 10M+ rows.
-      // The CTE builds latest prices per (market_hash_name, source) via LATERAL,
-      // then we join steam vs external to find arbitrage opportunities.
+      // Use current_prices table (always fresh) instead of 10M+ row price_history.
+      // Compare external marketplace prices vs Steam to find arbitrage.
       const { rows } = await pool.query(
-        `WITH item_sources AS (
-           SELECT DISTINCT ii.market_hash_name
-           FROM inventory_items ii
-         ),
-         sources AS (
-           SELECT unnest(ARRAY['skinport','steam','csfloat','dmarket']) AS source
-         ),
-         latest AS (
-           SELECT n.market_hash_name, s.source, lp.price_usd
-           FROM item_sources n
-           CROSS JOIN sources s
-           JOIN LATERAL (
-             SELECT ph.price_usd FROM price_history ph
-             WHERE ph.market_hash_name = n.market_hash_name
-               AND ph.source = s.source
-               AND ph.price_usd > 0
-               AND ph.recorded_at > NOW() - INTERVAL '24 hours'
-             ORDER BY ph.recorded_at DESC
-             LIMIT 1
-           ) lp ON true
-         ),
-         steam_prices AS (
-           SELECT market_hash_name, price_usd AS steam_price
-           FROM latest WHERE source = 'steam'
+        `WITH steam_prices AS (
+           SELECT cp.market_hash_name, cp.price_usd AS steam_price
+           FROM current_prices cp
+           INNER JOIN inventory_items ii ON ii.market_hash_name = cp.market_hash_name
+           WHERE cp.source = 'steam' AND cp.price_usd > 0
          ),
          external_prices AS (
-           SELECT market_hash_name, source, price_usd AS external_price
-           FROM latest WHERE source != 'steam'
+           SELECT cp.market_hash_name, cp.source, cp.price_usd AS external_price
+           FROM current_prices cp
+           INNER JOIN inventory_items ii ON ii.market_hash_name = cp.market_hash_name
+           WHERE cp.source IN ('skinport','csfloat','dmarket','buff','bitskins','csmoney','youpin','lisskins')
+             AND cp.price_usd > 0
          )
-         SELECT
+         SELECT DISTINCT ON (e.market_hash_name, e.source)
            e.market_hash_name,
            e.source AS buy_source,
            e.external_price AS buy_price,
@@ -596,11 +598,9 @@ router.get(
            ROUND(((s.steam_price * 0.87 / e.external_price - 1) * 100)::numeric, 1) AS profit_pct
          FROM external_prices e
          JOIN steam_prices s ON s.market_hash_name = e.market_hash_name
-         WHERE e.external_price > 0
-           AND s.steam_price > 0
-           AND (s.steam_price * 0.87 - e.external_price) > 0
+         WHERE (s.steam_price * 0.87 - e.external_price) > 0
            AND ((s.steam_price * 0.87 / e.external_price - 1) * 100) >= $1
-         ORDER BY profit_pct DESC
+         ORDER BY e.market_hash_name, e.source, profit_pct DESC
          LIMIT $2`,
         [minProfit, limit]
       );
@@ -617,15 +617,31 @@ router.get(
         iconMap = new Map(icons.map((r: any) => [r.market_hash_name, r.icon_url]));
       }
 
-      const deals = rows.map((r: any) => ({
-        marketHashName: r.market_hash_name,
-        buySource: r.buy_source,
-        buyPrice: parseFloat(r.buy_price),
-        sellPrice: parseFloat(r.sell_price),
-        profitUsd: parseFloat(r.profit_usd),
-        profitPct: parseFloat(r.profit_pct),
-        iconUrl: iconMap.get(r.market_hash_name) || null,
-      }));
+      // Get buff_bid prices for alternative sell target
+      let buffBidMap = new Map<string, number>();
+      if (names.length > 0) {
+        const { rows: buffBids } = await pool.query(
+          `SELECT market_hash_name, price_usd FROM current_prices
+           WHERE market_hash_name = ANY($1::text[]) AND source = 'buff_bid' AND price_usd > 0`,
+          [names]
+        );
+        buffBidMap = new Map(buffBids.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)]));
+      }
+
+      const deals = rows.map((r: any) => {
+        const links = getMarketplaceLinks(r.market_hash_name);
+        return {
+          marketHashName: r.market_hash_name,
+          buySource: r.buy_source,
+          buyPrice: parseFloat(r.buy_price),
+          sellPrice: parseFloat(r.sell_price),
+          profitUsd: parseFloat(r.profit_usd),
+          profitPct: parseFloat(r.profit_pct),
+          iconUrl: iconMap.get(r.market_hash_name) || null,
+          buyUrl: links[r.buy_source] ?? null,
+          buffBidPrice: buffBidMap.get(r.market_hash_name) ?? null,
+        };
+      });
 
       res.json({ deals, count: deals.length });
     } catch (err) {

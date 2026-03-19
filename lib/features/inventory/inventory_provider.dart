@@ -24,14 +24,15 @@ final inventoryProvider =
         InventoryNotifier.new);
 
 enum SortOption {
-  dateDesc,   // Date: newest first
-  dateAsc,    // Date: oldest first
-  priceDesc,  // Price: high → low
-  priceAsc,   // Price: low → high
-  floatAsc,   // Float: low → high
-  floatDesc,  // Float: high → low
-  nameAsc,    // Name A→Z (kept but not in menu)
-  rarity,     // Rarity (kept but not in menu)
+  dateDesc,       // Date: newest first
+  dateAsc,        // Date: oldest first
+  priceDesc,      // Price: high → low
+  priceAsc,       // Price: low → high
+  floatAsc,       // Float: low → high
+  floatDesc,      // Float: high → low
+  stickerValue,   // Sticker value: high → low
+  nameAsc,        // Name A→Z (kept but not in menu)
+  rarity,         // Rarity (kept but not in menu)
 }
 
 final sortOptionProvider = StateProvider<SortOption>((ref) => SortOption.priceDesc);
@@ -221,6 +222,8 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
         filtered.sort((a, b) => (a.floatValue ?? 999).compareTo(b.floatValue ?? 999));
       case SortOption.floatDesc:
         filtered.sort((a, b) => (b.floatValue ?? -1).compareTo(a.floatValue ?? -1));
+      case SortOption.stickerValue:
+        filtered.sort((a, b) => (b.stickerValue ?? 0).compareTo(a.stickerValue ?? 0));
     }
 
     return filtered;

@@ -286,8 +286,8 @@ class SettingsScreen extends ConsumerWidget {
                   Expanded(
                     child: ListView(
                       controller: scrollCtrl,
-                      children: kCurrencies.entries.map((e) {
-                        final info = e.value;
+                      children: availableCurrencyCodes.map((code) {
+                        final info = _buildCurrency(code);
                         final selected = info.code == current.code;
                         return ListTile(
                           leading: Text(info.symbol, style: const TextStyle(fontSize: 20)),

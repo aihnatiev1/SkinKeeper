@@ -46,6 +46,19 @@ vi.mock("../steamAnalyst.js", () => ({
   fetchSteamAnalystPrices: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../csgoTrader.js", () => ({
+  fetchCSGOTraderPrices: vi.fn().mockResolvedValue(25000),
+  runCSGOTraderDailySeed: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../buffIds.js", () => ({
+  refreshBuffIds: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../fadeData.js", () => ({
+  initFadeData: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../proxyPool.js", () => ({
   initProxyPool: vi.fn(),
 }));
@@ -54,6 +67,7 @@ import cron from "node-cron";
 import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers } from "../prices.js";
 import { startCSFloatCrawler } from "../csfloat.js";
 import { fetchDMarketPrices } from "../dmarket.js";
+import { fetchCSGOTraderPrices, runCSGOTraderDailySeed } from "../csgoTrader.js";
 
 const mockedCron = vi.mocked(cron);
 const mockedSavePrices = vi.mocked(savePrices);
@@ -70,15 +84,15 @@ describe("priceJob", () => {
     vi.restoreAllMocks();
   });
 
-  it("schedules 4 cron jobs + starts 2 crawlers", async () => {
+  it("schedules cron jobs + starts crawlers", async () => {
     const { startPriceJobs } = await import("../priceJob.js");
     startPriceJobs();
 
     // Wait for the initial async IIFE to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    // 6 cron jobs: Skinport, SteamAnalyst, DMarket, P/L snapshot, subscriptions, price pruning
-    expect(mockedCron.schedule).toHaveBeenCalledTimes(6);
+    // 7 cron jobs: Skinport, CSGOTrader, SteamAnalyst, DMarket, P/L snapshot, subscriptions, price pruning
+    expect(mockedCron.schedule).toHaveBeenCalledTimes(7);
 
     // Background crawlers started
     expect(startSteamCrawlers).toHaveBeenCalled();
@@ -88,7 +102,8 @@ describe("priceJob", () => {
     const calls = (mockedCron.schedule as any).mock.calls;
     const schedules = calls.map((c: any[]) => c[0]);
 
-    expect(schedules).toContain("*/5 * * * *"); // Skinport
+    expect(schedules).toContain("*/10 * * * *"); // Skinport (was */5)
+    expect(schedules).toContain("0 0 * * *"); // CSGOTrader daily seed
     expect(schedules).toContain("5,15,25,35,45,55 * * * *"); // DMarket
     expect(schedules).toContain("5 0 * * *"); // P/L daily snapshot
     expect(schedules).toContain("0 * * * *"); // Subscriptions
@@ -116,21 +131,24 @@ describe("priceJob", () => {
     );
   });
 
-  it("initial fetch on startup includes Skinport + DMarket", async () => {
+  it("initial fetch on startup seeds CSGOTrader first, then others", async () => {
     const { startPriceJobs } = await import("../priceJob.js");
     startPriceJobs();
 
     // Wait for the initial async IIFE to complete
     await new Promise((r) => setTimeout(r, 100));
 
-    // Skinport initial fetch
+    // CSGOTrader daily seed runs first (phase 1 — all sources)
+    expect(runCSGOTraderDailySeed).toHaveBeenCalled();
+
+    // Skinport initial fetch (phase 2)
     expect(mockedFetchSkinport).toHaveBeenCalled();
     expect(mockedSavePrices).toHaveBeenCalledWith(
       new Map([["AK-47", 12.34]]),
       "skinport"
     );
 
-    // DMarket initial fetch
+    // DMarket initial fetch (phase 2)
     expect(mockedFetchDMarket).toHaveBeenCalled();
   });
 
@@ -156,6 +174,13 @@ describe("priceJob", () => {
     const health = getJobHealth();
 
     expect(health).toHaveProperty("skinport");
+    expect(health).toHaveProperty("csgotrader");
+    expect(health).toHaveProperty("buff");
+    expect(health).toHaveProperty("buff_bid");
+    expect(health).toHaveProperty("bitskins");
+    expect(health).toHaveProperty("csmoney");
+    expect(health).toHaveProperty("youpin");
+    expect(health).toHaveProperty("lisskins");
     expect(health).toHaveProperty("dmarket");
     expect(health).toHaveProperty("steam");
     expect(health).toHaveProperty("csfloat");

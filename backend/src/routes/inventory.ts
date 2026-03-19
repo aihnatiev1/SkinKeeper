@@ -2,7 +2,10 @@ import { Router, Response } from "express";
 import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { fetchSteamInventory } from "../services/steam.js";
-import { getLatestPrices, fetchSkinportPrices, savePrices } from "../services/prices.js";
+import { getLatestPrices, getBestPrices } from "../services/prices.js";
+import { getDopplerPrice, isDopplerPaintIndex } from "../services/dopplerPrices.js";
+import { getFadePercentage } from "../services/fadeData.js";
+import { getMarketplaceLinks } from "../services/buffIds.js";
 import { inspectItem, batchInspect } from "../services/inspect.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import { getQueue } from "../infra/JobQueue.js";
@@ -106,12 +109,63 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       return val;
     };
 
-    const enriched = items.map((item) => ({
-      ...item,
-      stickers: parseJSON(item.stickers),
-      charms: parseJSON(item.charms),
-      prices: priceMap.get(item.market_hash_name) ?? {},
-    }));
+    // Collect all sticker names for batch price lookup
+    const allStickerNames = new Set<string>();
+    const parsedItems = items.map((item) => {
+      const stickers = parseJSON(item.stickers);
+      for (const s of stickers) {
+        if (s.name) allStickerNames.add(`Sticker | ${s.name}`);
+      }
+      return { ...item, stickers, charms: parseJSON(item.charms) };
+    });
+
+    // Fetch sticker prices in one batch query
+    const stickerPrices = allStickerNames.size > 0
+      ? await getBestPrices([...allStickerNames])
+      : new Map<string, number>();
+
+    const enriched = parsedItems.map((item) => {
+      let prices = { ...(priceMap.get(item.market_hash_name) ?? {}) };
+
+      // Doppler phase price overrides
+      if (item.paint_index && isDopplerPaintIndex(item.paint_index)) {
+        for (const source of Object.keys(prices)) {
+          const phasePrice = getDopplerPrice(item.market_hash_name, source, item.paint_index);
+          if (phasePrice !== null) {
+            prices[source] = phasePrice;
+          }
+        }
+      }
+
+      // Sticker value — sum best prices of applied stickers
+      let stickerValue: number | null = null;
+      if (item.stickers.length > 0) {
+        let total = 0;
+        for (const s of item.stickers) {
+          if (s.name) {
+            const sp = stickerPrices.get(`Sticker | ${s.name}`);
+            if (sp) total += sp;
+          }
+        }
+        if (total > 0) stickerValue = Math.round(total * 100) / 100;
+      }
+
+      // Fade percentage
+      const fadePercentage = item.paint_seed && item.market_hash_name.includes("Fade")
+        ? getFadePercentage(item.market_hash_name, item.paint_seed)
+        : null;
+
+      // Marketplace links
+      const links = getMarketplaceLinks(item.market_hash_name);
+
+      return {
+        ...item,
+        prices,
+        sticker_value: stickerValue,
+        fade_percentage: fadePercentage,
+        links,
+      };
+    });
 
     // Session + freshness (run in parallel)
     const [activeAccountId, freshness] = await Promise.all([
@@ -291,11 +345,6 @@ inventoryQueue.process(async (job, updateProgress) => {
     totalItems += items.length;
     updateProgress(totalItems);
   }
-
-  // Background: fetch latest Skinport prices so new items have prices immediately
-  fetchSkinportPrices()
-    .then((prices) => savePrices(prices, "skinport"))
-    .catch((err) => console.error("Background Skinport refresh error:", err));
 
   // Background: inspect items missing float values (only skins with wear)
   const { rows: uninspected } = await pool.query(

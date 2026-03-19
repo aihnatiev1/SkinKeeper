@@ -71,6 +71,9 @@ class InventoryItem {
   final List<StickerInfo> stickers;
   final List<CharmInfo> charms;
   final DateTime? tradeBanUntil;
+  final double? stickerValue;
+  final double? fadePercentage;
+  final Map<String, String>? marketplaceLinks;
   final int? accountId;
   final String? accountSteamId;
   final String? accountName;
@@ -92,6 +95,9 @@ class InventoryItem {
     this.stickers = const [],
     this.charms = const [],
     this.tradeBanUntil,
+    this.stickerValue,
+    this.fadePercentage,
+    this.marketplaceLinks,
     this.accountId,
     this.accountSteamId,
     this.accountName,
@@ -226,9 +232,10 @@ class InventoryItem {
       // Near-perfect FN
       if (floatValue! < 0.01 && wear == 'Factory New') return 'Clean FN';
     }
-    // Fade — all Fades with high paint_seed are "full fade"
-    if (marketHashName.contains('Fade') && paintSeed != null && paintSeed! >= 990) {
-      return 'Full Fade';
+    // Fade — use actual percentage if available, otherwise heuristic
+    if (marketHashName.contains('Fade')) {
+      if (fadePercentage != null) return '${fadePercentage!.round()}% Fade';
+      if (paintSeed != null && paintSeed! >= 990) return 'Full Fade';
     }
     // Case Hardened blue gem patterns (most famous seeds)
     if (marketHashName.contains('Case Hardened') && paintSeed != null) {
@@ -255,6 +262,7 @@ class InventoryItem {
 
   double? get csfloatPrice => prices['csfloat'];
   double? get dmarketPrice => prices['dmarket'];
+  double? get bitskinsPrice => prices['bitskins'];
 
   String get fullIconUrl => SteamImage.url(iconUrl, size: '360fx360f');
 
@@ -281,6 +289,9 @@ class InventoryItem {
       stickers: stickers,
       charms: charms,
       tradeBanUntil: tradeBanUntil,
+      stickerValue: stickerValue,
+      fadePercentage: fadePercentage,
+      marketplaceLinks: marketplaceLinks,
       accountId: accountId,
       accountSteamId: accountSteamId,
       accountName: accountName,
@@ -325,6 +336,15 @@ class InventoryItem {
       inspectLink: json['inspect_link'] as String?,
       paintSeed: json['paint_seed'] as int?,
       paintIndex: json['paint_index'] as int?,
+      stickerValue: json['sticker_value'] != null
+          ? double.tryParse(json['sticker_value'].toString())
+          : null,
+      fadePercentage: json['fade_percentage'] != null
+          ? double.tryParse(json['fade_percentage'].toString())
+          : null,
+      marketplaceLinks: (json['links'] as Map<String, dynamic>?)?.map(
+            (k, v) => MapEntry(k, v.toString()),
+          ),
       accountId: json['account_id'] as int?,
       accountSteamId: json['account_steam_id'] as String?,
       accountName: json['account_name'] as String?,

@@ -10,6 +10,8 @@ class Deal {
   final double profitUsd;
   final double profitPct;
   final String? iconUrl;
+  final String? buyUrl;
+  final double? buffBidPrice;
 
   Deal({
     required this.marketHashName,
@@ -19,6 +21,8 @@ class Deal {
     required this.profitUsd,
     required this.profitPct,
     this.iconUrl,
+    this.buyUrl,
+    this.buffBidPrice,
   });
 
   /// Short display name: "Asiimov" from "AWP | Asiimov (Field-Tested)"
@@ -48,6 +52,10 @@ class Deal {
         profitUsd: (json['profitUsd'] as num).toDouble(),
         profitPct: (json['profitPct'] as num).toDouble(),
         iconUrl: json['iconUrl'] as String?,
+        buyUrl: json['buyUrl'] as String?,
+        buffBidPrice: json['buffBidPrice'] != null
+            ? (json['buffBidPrice'] as num).toDouble()
+            : null,
       );
 }
 

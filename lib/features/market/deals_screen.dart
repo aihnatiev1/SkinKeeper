@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme.dart';
+import '../inventory/widgets/price_comparison_table.dart' show sourceColor;
 import '../../widgets/shared_ui.dart';
 import 'deals_provider.dart';
 
@@ -140,17 +142,17 @@ class _DealCard extends StatelessWidget {
   final Deal deal;
   const _DealCard({required this.deal});
 
-  Color _sourceColor(String source) => switch (source) {
-        'skinport' => AppTheme.skinportGreen,
-        'csfloat' => AppTheme.csfloatOrange,
-        'dmarket' => AppTheme.dmarketPurple,
-        _ => AppTheme.textSecondary,
-      };
+  Color _sourceColor(String source) => sourceColor(source);
 
   String _sourceLabel(String source) => switch (source) {
         'skinport' => 'Skinport',
         'csfloat' => 'CSFloat',
         'dmarket' => 'DMarket',
+        'buff' => 'Buff163',
+        'bitskins' => 'BitSkins',
+        'csmoney' => 'CS.Money',
+        'youpin' => 'YouPin',
+        'lisskins' => 'Lisskins',
         _ => source,
       };
 
@@ -277,6 +279,30 @@ class _DealCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Buff bid alternative sell target
+                if (deal.buffBidPrice != null && deal.buffBidPrice! > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 4, height: 4,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.buffYellow,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Buff bid \$${deal.buffBidPrice!.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.buffYellow.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -317,6 +343,33 @@ class _DealCard extends StatelessWidget {
               ],
             ),
           ),
+
+          // Buy button
+          if (deal.buyUrl != null) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: () => launchUrl(
+                Uri.parse(deal.buyUrl!),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: srcColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppTheme.r8),
+                  border: Border.all(
+                    color: srcColor.withValues(alpha: 0.3),
+                    width: 0.5,
+                  ),
+                ),
+                child: Icon(
+                  Icons.open_in_new_rounded,
+                  size: 16,
+                  color: srcColor,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

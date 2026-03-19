@@ -5,6 +5,7 @@ import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
 import '../../../models/profit_loss.dart';
+import 'price_comparison_table.dart' show sourceColor, sourceDisplayName;
 import 'rarity_gem.dart';
 
 // ── Wear pill colors ─────────────────────────────────────────────────
@@ -124,35 +125,43 @@ class ItemCard extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      // Price
+                      // Price block: Steam + best external
                       Expanded(
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (item.steamPrice != null)
-                              Flexible(
-                                child: Text(
-                                  currency?.format(item.steamPrice!) ??
-                                      '\$${item.steamPrice!.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: compact ? 10 : 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white.withValues(alpha: 0.85),
-                                    letterSpacing: compact ? -0.3 : -0.3,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
-                                    ],
+                            Row(
+                              children: [
+                                if (item.steamPrice != null)
+                                  Flexible(
+                                    child: Text(
+                                      currency?.format(item.steamPrice!) ??
+                                          '\$${item.steamPrice!.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: compact ? 10 : 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white.withValues(alpha: 0.85),
+                                        letterSpacing: -0.3,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures()
+                                        ],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
-                              const SizedBox(width: 6),
-                              _ArbitrageBadge(
-                                steamPrice: item.steamPrice!,
-                                buffPrice: item.prices['buff']!,
-                              ),
-                            ],
+                                if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
+                                  const SizedBox(width: 6),
+                                  _ArbitrageBadge(
+                                    steamPrice: item.steamPrice!,
+                                    buffPrice: item.prices['buff']!,
+                                  ),
+                                ],
+                              ],
+                            ),
+                            // Best external price (non-steam, non-csgotrader)
+                            if (!compact) _BestExternalPrice(item: item, currency: currency),
                           ],
                         ),
                       ),
@@ -359,6 +368,15 @@ class ItemCard extends StatelessWidget {
                                   ),
                                 _CharmThumb(charm: item.charms.first),
                               ],
+                              // Sticker premium indicator
+                              if (item.stickerValue != null && item.stickerValue! > 10)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: _StickerValueBadge(
+                                    value: item.stickerValue!,
+                                    currency: currency,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -537,6 +555,11 @@ class _FooterSection extends StatelessWidget {
               ),
             if (item.wearShort != null)
               _WearPill(wear: item.wearShort!, compact: true),
+            if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
+              const Padding(
+                padding: EdgeInsets.only(left: 3),
+                child: Text('🔥', style: TextStyle(fontSize: 9)),
+              ),
           ],
         ),
         Padding(
@@ -570,6 +593,8 @@ class _FooterSection extends StatelessWidget {
                 color: item.dopplerColor!,
                 size: 12,
               )
+            else if (item.isDoppler && item.dopplerPhase != null)
+              _DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor)
             else if (item.isRareItem)
               _RareBadge(reason: item.rareReason!),
             if (item.isSouvenir)
@@ -598,16 +623,32 @@ class _FooterSection extends StatelessWidget {
         if (item.floatValue != null)
           Padding(
             padding: const EdgeInsets.only(top: 3),
-            child: Text(
-              item.floatValue!.toStringAsFixed(7),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'monospace',
-                letterSpacing: 0.3,
-                color: Colors.white.withValues(alpha: 0.6),
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Low float fire icon
+                if (item.floatValue! < 0.01 && item.wear == 'Factory New')
+                  Tooltip(
+                    message: 'Low Float',
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 3),
+                      child: Text('🔥', style: TextStyle(fontSize: 10)),
+                    ),
+                  ),
+                Text(
+                  item.floatValue!.toStringAsFixed(7),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                    letterSpacing: 0.3,
+                    color: item.floatValue! < 0.01
+                        ? const Color(0xFFF59E0B)
+                        : Colors.white.withValues(alpha: 0.6),
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ),
           ),
         // Float bar — always shown for items with wear
@@ -616,6 +657,12 @@ class _FooterSection extends StatelessWidget {
           floatValue: item.floatValue,
           wearShort: item.wearShort!,
         ),
+        // Fade % bar — only for Fade knives with known percentage
+        if (item.fadePercentage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _MiniFadeBar(fadePercent: item.fadePercentage!),
+          ),
       ],
     );
   }
@@ -748,6 +795,100 @@ class _MiniFloatBar extends StatelessWidget {
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.6),
         ),
+      ),
+    );
+  }
+}
+
+// ─── Sticker Value Badge (on card) ───────────────────────────────────
+class _StickerValueBadge extends StatelessWidget {
+  final double value;
+  final CurrencyInfo? currency;
+
+  const _StickerValueBadge({required this.value, this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = currency?.format(value, decimals: 0) ??
+        '\$${value.toStringAsFixed(0)}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        '✨$text',
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.w800,
+          color: AppTheme.warning.withValues(alpha: 0.9),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Best External Price (card header) ───────────────────────────────
+class _BestExternalPrice extends StatelessWidget {
+  final InventoryItem item;
+  final CurrencyInfo? currency;
+
+  const _BestExternalPrice({required this.item, this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    // Find best (cheapest) non-steam, non-seed price source
+    final external = item.prices.entries
+        .where((e) => e.key != 'steam' && e.key != 'csgotrader' && e.value > 0)
+        .toList();
+    if (external.isEmpty) return const SizedBox.shrink();
+
+    // Lowest price = best deal for buying
+    external.sort((a, b) => a.value.compareTo(b.value));
+    final best = external.first;
+    final color = sourceColor(best.key);
+
+    // Short source label
+    const shortNames = <String, String>{
+      'buff': 'Buff',
+      'skinport': 'SP',
+      'csfloat': 'CSF',
+      'dmarket': 'DM',
+      'bitskins': 'BS',
+      'csmoney': 'CSM',
+      'youpin': 'YP',
+      'lisskins': 'LS',
+    };
+    final label = shortNames[best.key] ?? best.key;
+    final priceText = currency?.format(best.value) ??
+        '\$${best.value.toStringAsFixed(2)}';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            '$label $priceText',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: color.withValues(alpha: 0.8),
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -951,6 +1092,82 @@ class _TradeBanBadge extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ─── Doppler Phase Pill (non-rare phases) ─────────────────────────
+class _DopplerPhasePill extends StatelessWidget {
+  final String phase;
+  final Color? color;
+  const _DopplerPhasePill({required this.phase, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppTheme.textMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: c.withValues(alpha: 0.4), width: 0.5),
+      ),
+      child: Text(
+        phase,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: c,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Mini Fade Bar ────────────────────────────────────────────────
+class _MiniFadeBar extends StatelessWidget {
+  final double fadePercent;
+  const _MiniFadeBar({required this.fadePercent});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = fadePercent.clamp(0.0, 100.0);
+    final isHigh = pct >= 90;
+
+    return Row(
+      children: [
+        Text(
+          '${pct.round()}%',
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+            color: isHigh ? const Color(0xFFF59E0B) : AppTheme.textDisabled,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Container(
+            height: 3,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(1.5),
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: pct / 100,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(1.5),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEF4444), Color(0xFFF59E0B), Color(0xFF3B82F6)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

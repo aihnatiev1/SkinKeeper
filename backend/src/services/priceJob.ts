@@ -3,6 +3,9 @@ import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCra
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
 import { fetchSteamAnalystPrices } from "./steamAnalyst.js";
+import { fetchCSGOTraderPrices, runCSGOTraderDailySeed } from "./csgoTrader.js";
+import { refreshBuffIds } from "./buffIds.js";
+import { initFadeData } from "./fadeData.js";
 import { runDailyPLSnapshot } from "./profitLoss.js";
 import { checkExpiredSubscriptions } from "./purchases.js";
 import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js";
@@ -19,6 +22,13 @@ interface JobHealth {
 
 const jobHealth: Record<string, JobHealth> = {
   skinport: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  csgotrader: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  buff: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  buff_bid: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  bitskins: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  csmoney: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  youpin: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  lisskins: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   steam_analyst: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   dmarket: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   steam: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
@@ -87,14 +97,26 @@ export function startPriceJobs() {
   // Initialize proxy pool before starting any jobs
   initProxyPool();
 
-  // Skinport: every 5 minutes (bulk endpoint, no per-item needed)
-  scheduledTasks.push(cron.schedule("*/5 * * * *", async () => {
+  // Skinport: every 10 minutes (was 5 — reduced to stay well within 8 req/5min limit)
+  scheduledTasks.push(cron.schedule("*/10 * * * *", async () => {
     try {
       await fetchAndSaveSkinport();
       recordJobRun("skinport", true);
     } catch (err) {
       recordJobRun("skinport", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] Skinport price fetch failed:", err);
+    }
+  }));
+
+  // CSGOTrader daily seed: midnight UTC — bulk fetch ALL sources
+  // (steam, buff163, skinport, csfloat, bitskins) in one go
+  scheduledTasks.push(cron.schedule("0 0 * * *", async () => {
+    try {
+      await runCSGOTraderDailySeed();
+      recordJobRun("csgotrader", true);
+    } catch (err) {
+      recordJobRun("csgotrader", false, err instanceof Error ? err.message : String(err));
+      console.error("[CRON] CSGOTrader daily seed failed:", err);
     }
   }));
 
@@ -160,25 +182,40 @@ export function startPriceJobs() {
     }
   }));
 
-  // Initial fetch on startup (bulk sources only)
+  // Initial fetch on startup — seed prices so first user always sees values.
+  // Phase 1: CSGOTrader daily seed (all sources: steam, buff, skinport, csfloat, bitskins)
+  // Phase 2: Live API sources in parallel for freshest prices
   (async () => {
+    // Phase 1: CSGOTrader bulk seed — ~8 files, ~38K items each, zero 429 risk
+    // Also loads exchange rates, doppler phase prices, buff IDs, fade data
     try {
-      await fetchAndSaveSkinport();
+      await runCSGOTraderDailySeed();
     } catch (err) {
-      console.error("[INIT] Initial Skinport fetch failed:", err);
+      console.error("[INIT] CSGOTrader daily seed failed:", err);
     }
 
-    try {
-      await fetchSteamAnalystPrices();
-    } catch (err) {
-      console.error("[INIT] Initial SteamAnalyst fetch failed:", err);
-    }
+    // Phase 1.5: Static data (buff IDs + fade percentages) in parallel
+    await Promise.allSettled([
+      refreshBuffIds().catch((err) =>
+        console.error("[INIT] BuffIds fetch failed:", err)
+      ),
+      initFadeData().catch((err) =>
+        console.error("[INIT] FadeData init failed:", err)
+      ),
+    ]);
 
-    try {
-      await fetchAndSaveDMarket();
-    } catch (err) {
-      console.error("[INIT] Initial DMarket fetch failed:", err);
-    }
+    // Phase 2: Live sources in parallel (they won't conflict)
+    await Promise.allSettled([
+      fetchAndSaveSkinport().catch((err) =>
+        console.error("[INIT] Initial Skinport fetch failed:", err)
+      ),
+      fetchSteamAnalystPrices().catch((err) =>
+        console.error("[INIT] Initial SteamAnalyst fetch failed:", err)
+      ),
+      fetchAndSaveDMarket().catch((err) =>
+        console.error("[INIT] Initial DMarket fetch failed:", err)
+      ),
+    ]);
   })();
 }
 

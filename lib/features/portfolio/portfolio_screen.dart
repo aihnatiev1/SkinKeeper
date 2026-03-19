@@ -26,6 +26,7 @@ import '../../widgets/glass_sheet.dart';
 import 'widgets/add_transaction_sheet.dart';
 import 'widgets/item_pl_list.dart';
 import 'widgets/pl_history_chart.dart';
+import '../inventory/widgets/price_comparison_table.dart' show sourceColor, sourceDisplayName;
 
 final _tabProvider = StateProvider<int>((ref) => 0);
 
@@ -131,7 +132,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: _PillTabs(
-                  tabs: const ['Value', 'Profit', 'Items'],
+                  tabs: const ['Value', 'Profit', 'Items', 'Markets', 'Analytics'],
                   selected: tab,
                   onChanged: (i) {
                     HapticFeedback.selectionClick();
@@ -162,6 +163,16 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
                       visible: tab == 2,
                       maintainState: true,
                       child: _ItemsTab(key: const ValueKey('items')),
+                    ),
+                    Visibility(
+                      visible: tab == 3,
+                      maintainState: true,
+                      child: _MarketValueTab(key: const ValueKey('markets')),
+                    ),
+                    Visibility(
+                      visible: tab == 4,
+                      maintainState: true,
+                      child: _AnalyticsTab(key: const ValueKey('analytics')),
                     ),
                   ],
                 ),
@@ -1887,6 +1898,440 @@ class _SyncBanner extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Market Value Tab (portfolio value by source) ─────────────────
+final _valueBySourceProvider = FutureProvider.autoDispose<List<_SourceValue>>((ref) async {
+  final api = ref.read(apiClientProvider);
+  final response = await api.get('/portfolio/value-by-source');
+  final data = response.data as Map<String, dynamic>;
+  final list = data['sources'] as List<dynamic>;
+  return list.map((e) {
+    final m = e as Map<String, dynamic>;
+    return _SourceValue(
+      source: m['source'] as String,
+      totalValue: (m['totalValue'] as num).toDouble(),
+      itemCount: m['itemCount'] as int,
+    );
+  }).toList();
+});
+
+class _SourceValue {
+  final String source;
+  final double totalValue;
+  final int itemCount;
+  const _SourceValue({required this.source, required this.totalValue, required this.itemCount});
+}
+
+class _MarketValueTab extends ConsumerWidget {
+  const _MarketValueTab({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currency = ref.watch(currencyProvider);
+    final data = ref.watch(_valueBySourceProvider);
+
+    return data.when(
+      loading: () => const ShimmerCard(height: 200),
+      error: (e, _) => GlassCard(
+        child: Center(
+          child: Text('Failed to load', style: AppTheme.caption),
+        ),
+      ),
+      data: (sources) {
+        if (sources.isEmpty) {
+          return GlassCard(
+            padding: const EdgeInsets.all(AppTheme.s24),
+            child: Center(
+              child: Text('No price data yet', style: AppTheme.caption),
+            ),
+          );
+        }
+
+        final maxValue = sources.first.totalValue;
+
+        return GlassCard(
+          padding: const EdgeInsets.all(AppTheme.s16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('PORTFOLIO VALUE BY MARKET', style: AppTheme.label),
+              const SizedBox(height: AppTheme.s14),
+              ...sources.map((s) {
+                final color = sourceColor(s.source);
+                final barFraction = maxValue > 0 ? s.totalValue / maxValue : 0.0;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8, height: 8,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              sourceDisplayName(s.source),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            currency.format(s.totalValue),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 6,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(3),
+                          color: Colors.white.withValues(alpha: 0.05),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: barFraction,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(3),
+                              color: color.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${s.itemCount} items',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.textDisabled,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Analytics Tab ────────────────────────────────────────────────
+final _analyticsProvider = FutureProvider.autoDispose<_AnalyticsData>((ref) async {
+  final api = ref.read(apiClientProvider);
+  final response = await api.get('/portfolio/analytics');
+  final data = response.data as Map<String, dynamic>;
+  return _AnalyticsData(
+    rarity: (data['rarity'] as List).map((e) => _RarityEntry(
+      rarity: e['rarity'] as String,
+      color: e['color'] as String?,
+      count: e['count'] as int,
+    )).toList(),
+    types: (data['types'] as List).map((e) => _TypeEntry(
+      type: e['type'] as String,
+      count: e['count'] as int,
+    )).toList(),
+    topStickers: (data['topStickers'] as List).map((e) => _StickerEntry(
+      name: e['name'] as String,
+      count: e['count'] as int,
+      price: (e['price'] as num).toDouble(),
+    )).toList(),
+  );
+});
+
+class _AnalyticsData {
+  final List<_RarityEntry> rarity;
+  final List<_TypeEntry> types;
+  final List<_StickerEntry> topStickers;
+  const _AnalyticsData({required this.rarity, required this.types, required this.topStickers});
+}
+class _RarityEntry {
+  final String rarity;
+  final String? color;
+  final int count;
+  const _RarityEntry({required this.rarity, this.color, required this.count});
+}
+class _TypeEntry {
+  final String type;
+  final int count;
+  const _TypeEntry({required this.type, required this.count});
+}
+class _StickerEntry {
+  final String name;
+  final int count;
+  final double price;
+  const _StickerEntry({required this.name, required this.count, required this.price});
+}
+
+class _AnalyticsTab extends ConsumerWidget {
+  const _AnalyticsTab({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currency = ref.watch(currencyProvider);
+    final data = ref.watch(_analyticsProvider);
+
+    return data.when(
+      loading: () => const ShimmerCard(height: 300),
+      error: (e, _) => GlassCard(
+        child: Center(child: Text('Failed to load', style: AppTheme.caption)),
+      ),
+      data: (analytics) => Column(
+        children: [
+          // Rarity breakdown
+          _RarityBreakdown(entries: analytics.rarity),
+          const SizedBox(height: AppTheme.s12),
+          // Type breakdown
+          _TypeBreakdown(entries: analytics.types),
+          const SizedBox(height: AppTheme.s12),
+          // Top stickers
+          if (analytics.topStickers.isNotEmpty)
+            _TopStickers(entries: analytics.topStickers, currency: currency),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Rarity Breakdown ─────────────────────────────────────────────
+class _RarityBreakdown extends StatelessWidget {
+  final List<_RarityEntry> entries;
+  const _RarityBreakdown({super.key, required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) return const SizedBox.shrink();
+    final total = entries.fold<int>(0, (s, e) => s + e.count);
+
+    return GlassCard(
+      padding: const EdgeInsets.all(AppTheme.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('RARITY', style: AppTheme.label),
+          const SizedBox(height: AppTheme.s12),
+          // Stacked bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 10,
+              child: Row(
+                children: entries.map((e) {
+                  final color = e.color != null
+                      ? Color(int.parse('FF${e.color}', radix: 16))
+                      : AppTheme.textDisabled;
+                  return Expanded(
+                    flex: e.count,
+                    child: Container(color: color.withValues(alpha: 0.7)),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppTheme.s12),
+          // Legend
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            children: entries.map((e) {
+              final color = e.color != null
+                  ? Color(int.parse('FF${e.color}', radix: 16))
+                  : AppTheme.textDisabled;
+              final pct = total > 0 ? (e.count / total * 100).round() : 0;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8, height: 8,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${e.rarity} (${e.count}, $pct%)',
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Type Breakdown ───────────────────────────────────────────────
+class _TypeBreakdown extends StatelessWidget {
+  final List<_TypeEntry> entries;
+  const _TypeBreakdown({super.key, required this.entries});
+
+  static const _typeIcons = <String, IconData>{
+    'Knives': Icons.content_cut_rounded,
+    'Gloves': Icons.back_hand_rounded,
+    'Weapons': Icons.gps_fixed_rounded,
+    'Stickers': Icons.sticky_note_2_rounded,
+    'Containers': Icons.inventory_2_rounded,
+    'Music Kits': Icons.music_note_rounded,
+    'Agents': Icons.person_rounded,
+    'Patches': Icons.shield_rounded,
+    'Charms': Icons.auto_awesome_rounded,
+    'Graffiti': Icons.brush_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) return const SizedBox.shrink();
+    final total = entries.fold<int>(0, (s, e) => s + e.count);
+
+    return GlassCard(
+      padding: const EdgeInsets.all(AppTheme.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('ITEM TYPES', style: AppTheme.label),
+          const SizedBox(height: AppTheme.s12),
+          ...entries.map((e) {
+            final pct = total > 0 ? e.count / total : 0.0;
+            final icon = _typeIcons[e.type] ?? Icons.help_outline_rounded;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(icon, size: 14, color: AppTheme.textMuted),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 80,
+                    child: Text(e.type, style: const TextStyle(fontSize: 12)),
+                  ),
+                  Expanded(
+                    child: Container(
+                      height: 6,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(3),
+                        color: Colors.white.withValues(alpha: 0.05),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: pct,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(3),
+                            color: AppTheme.primary.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${e.count}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Top Stickers ─────────────────────────────────────────────────
+class _TopStickers extends StatelessWidget {
+  final List<_StickerEntry> entries;
+  final CurrencyInfo currency;
+  const _TopStickers({super.key, required this.entries, required this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(AppTheme.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('TOP APPLIED STICKERS', style: AppTheme.label),
+          const SizedBox(height: AppTheme.s12),
+          ...entries.take(5).map((e) {
+            final hasPrice = e.price > 0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Text('✨', style: TextStyle(fontSize: 12)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          e.name,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Applied ${e.count}x',
+                          style: const TextStyle(fontSize: 10, color: AppTheme.textDisabled),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasPrice)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          currency.format(e.price),
+                          style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w700,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        if (e.count > 1)
+                          Text(
+                            '${currency.format(e.price * e.count)} total',
+                            style: const TextStyle(
+                              fontSize: 10, color: AppTheme.textDisabled,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                      ],
+                    )
+                  else
+                    const Text('—', style: TextStyle(color: AppTheme.textDisabled)),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }

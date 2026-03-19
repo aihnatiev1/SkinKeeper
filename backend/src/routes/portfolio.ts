@@ -216,6 +216,137 @@ router.post(
   }
 );
 
+// GET /api/portfolio/value-by-source
+// Returns total inventory value broken down by price source
+router.get(
+  "/value-by-source",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT cp.source,
+                SUM(cp.price_usd)::float AS total_value,
+                COUNT(*)::int AS item_count
+         FROM current_prices cp
+         INNER JOIN inventory_items ii ON ii.market_hash_name = cp.market_hash_name
+         INNER JOIN steam_accounts sa ON ii.steam_account_id = sa.id
+         WHERE sa.user_id = $1 AND cp.price_usd > 0
+           AND cp.source NOT IN ('csgotrader', 'buff_bid')
+         GROUP BY cp.source
+         ORDER BY total_value DESC`,
+        [req.userId]
+      );
+
+      const sources = rows.map((r: any) => ({
+        source: r.source,
+        totalValue: r.total_value,
+        itemCount: r.item_count,
+      }));
+
+      res.json({ sources });
+    } catch (err) {
+      console.error("Value by source error:", err);
+      res.status(500).json({ error: "Failed to load value breakdown" });
+    }
+  }
+);
+
+// GET /api/portfolio/analytics
+// Returns inventory breakdown: by rarity, by type, top stickers
+router.get(
+  "/analytics",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      // Rarity breakdown
+      const { rows: rarityRows } = await pool.query(
+        `SELECT COALESCE(i.rarity, 'Unknown') AS rarity,
+                i.rarity_color,
+                COUNT(*)::int AS count
+         FROM inventory_items i
+         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         WHERE sa.user_id = $1
+         GROUP BY i.rarity, i.rarity_color
+         ORDER BY count DESC`,
+        [req.userId]
+      );
+
+      // Type breakdown (by name prefix)
+      const { rows: typeRows } = await pool.query(
+        `SELECT
+           CASE
+             WHEN i.market_hash_name LIKE '★ %' AND (i.market_hash_name LIKE '%Gloves%' OR i.market_hash_name LIKE '%Wraps%' OR i.market_hash_name LIKE '%Hand%') THEN 'Gloves'
+             WHEN i.market_hash_name LIKE '★ %' THEN 'Knives'
+             WHEN i.market_hash_name LIKE 'Sticker |%' THEN 'Stickers'
+             WHEN i.market_hash_name LIKE 'Sealed Graffiti%' OR i.market_hash_name LIKE 'Graffiti |%' THEN 'Graffiti'
+             WHEN i.market_hash_name LIKE 'Music Kit%' OR i.market_hash_name LIKE 'StatTrak™ Music Kit%' THEN 'Music Kits'
+             WHEN i.market_hash_name LIKE 'Patch |%' THEN 'Patches'
+             WHEN i.market_hash_name LIKE 'Charm |%' THEN 'Charms'
+             WHEN i.market_hash_name LIKE '%Case%' OR i.market_hash_name LIKE '%Capsule%' OR i.market_hash_name LIKE '%Package%' THEN 'Containers'
+             WHEN i.market_hash_name LIKE 'Agent |%' THEN 'Agents'
+             ELSE 'Weapons'
+           END AS item_type,
+           COUNT(*)::int AS count
+         FROM inventory_items i
+         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         WHERE sa.user_id = $1
+         GROUP BY item_type
+         ORDER BY count DESC`,
+        [req.userId]
+      );
+
+      // Top applied stickers by value (sticker names from inventory items + prices from current_prices)
+      const { rows: topStickers } = await pool.query(
+        `WITH applied_stickers AS (
+           SELECT s->>'name' AS sticker_name,
+                  COUNT(*)::int AS applied_count
+           FROM inventory_items i
+           JOIN steam_accounts sa ON i.steam_account_id = sa.id,
+           jsonb_array_elements(
+             CASE WHEN i.stickers IS NOT NULL AND i.stickers::text != '[]'
+                  THEN i.stickers::jsonb
+                  ELSE '[]'::jsonb
+             END
+           ) s
+           WHERE sa.user_id = $1 AND s->>'name' IS NOT NULL
+           GROUP BY s->>'name'
+         )
+         SELECT a.sticker_name,
+                a.applied_count,
+                COALESCE(MAX(cp.price_usd), 0)::float AS price
+         FROM applied_stickers a
+         LEFT JOIN current_prices cp
+           ON cp.market_hash_name = 'Sticker | ' || a.sticker_name
+           AND cp.price_usd > 0
+         GROUP BY a.sticker_name, a.applied_count
+         ORDER BY price DESC
+         LIMIT 10`,
+        [req.userId]
+      );
+
+      res.json({
+        rarity: rarityRows.map((r: any) => ({
+          rarity: r.rarity,
+          color: r.rarity_color,
+          count: r.count,
+        })),
+        types: typeRows.map((r: any) => ({
+          type: r.item_type,
+          count: r.count,
+        })),
+        topStickers: topStickers.map((r: any) => ({
+          name: r.sticker_name,
+          count: r.applied_count,
+          price: r.price,
+        })),
+      });
+    } catch (err) {
+      console.error("Analytics error:", err);
+      res.status(500).json({ error: "Failed to load analytics" });
+    }
+  }
+);
+
 export default router;
 
 // ---- Named Portfolios CRUD (mounted at /api) ----

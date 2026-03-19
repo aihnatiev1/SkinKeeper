@@ -40,6 +40,12 @@ class AppTheme {
   static const Color skinportGreen = Color(0xFF4ADE80);
   static const Color csfloatOrange = Color(0xFFFB923C);
   static const Color dmarketPurple = Color(0xFFC084FC);
+  static const Color buffYellow = Color(0xFFFBBF24);
+  static const Color buffBidYellowDim = Color(0xFFD4A017);
+  static const Color bitskinsRed = Color(0xFFEF4444);
+  static const Color csmoneyTeal = Color(0xFF2DD4BF);
+  static const Color youpinPink = Color(0xFFF472B6);
+  static const Color lisskinsLime = Color(0xFFA3E635);
 
   // ─── Gradients ───────────────────────────────────────────────────
   static const LinearGradient primaryGradient = LinearGradient(

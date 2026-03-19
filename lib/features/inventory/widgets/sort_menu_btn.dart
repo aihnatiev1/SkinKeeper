@@ -15,6 +15,7 @@ class SortMenuBtn extends StatelessWidget {
     SortOption.priceAsc:  (Icons.arrow_upward_rounded,   'Price: low \u2192 high'),
     SortOption.floatAsc:  (Icons.arrow_upward_rounded,   'Float: low \u2192 high'),
     SortOption.floatDesc: (Icons.arrow_downward_rounded, 'Float: high \u2192 low'),
+    SortOption.stickerValue: (Icons.auto_awesome_rounded, 'Sticker value'),
   };
 
   @override
