@@ -164,7 +164,10 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
 
     // Quick price — only fetch for single items or first of batch
     final quickPriceAsync = ref.watch(
-      quickPriceProvider(item.marketHashName),
+      quickPriceProvider(QuickPriceRequest(
+        marketHashName: item.marketHashName,
+        fallbackPriceUsd: item.bestPrice ?? item.steamPrice,
+      )),
     );
 
     return Container(

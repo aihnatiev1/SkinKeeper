@@ -280,7 +280,10 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
 
   Future<List<InventoryItem>> _fetchFromApi() async {
     final api = ref.read(apiClientProvider);
-    final response = await api.get('/inventory', queryParameters: _accountQuery);
+    final response = await api.get('/inventory', queryParameters: {
+      ..._accountQuery,
+      'limit': '5000',
+    });
     final rawItems = response.data['items'] as List<dynamic>;
     final items = rawItems
         .map((e) => InventoryItem.fromJson(e as Map<String, dynamic>))

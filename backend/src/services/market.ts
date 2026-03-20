@@ -3,6 +3,7 @@ import type { SteamSession } from "./steamSession.js";
 import { SteamSessionService } from "./steamSession.js";
 import { convertUsdToWallet, getWalletCurrency, getCurrencyInfo } from "./currency.js";
 import { getLatestPrices } from "./prices.js";
+import { getSteamDepth } from "./steamMarketDepth.js";
 
 interface SellResult {
   success: boolean;
@@ -275,7 +276,17 @@ export async function quickSellPrice(
     }
   }
 
-  // Fallback: direct Steam API call
+  // Fallback: Steam Market Depth (realtime order book from iflow)
+  const depth = getSteamDepth(marketHashName);
+  if (depth && depth.lowestAsk > 0) {
+    const askCents = Math.round(depth.lowestAsk * 100);
+    const valveFee = Math.max(1, Math.floor(askCents * 0.05));
+    const cs2Fee = Math.max(1, Math.floor(askCents * 0.10));
+    const sellerReceives = askCents - valveFee - cs2Fee;
+    return Math.max(1, sellerReceives - 1);
+  }
+
+  // Last resort: direct Steam API call (rate limited)
   const price = await getMarketPrice(marketHashName);
   if (price.lowestPrice === null) return null;
   const valveFee = Math.max(1, Math.floor(price.lowestPrice * 0.05));

@@ -55,11 +55,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     try {
       // Fetch quick price per unique market hash name in parallel
-      final uniqueNames = items.map((i) => i.marketHashName).toSet();
+      final uniqueItems = <String, InventoryItem>{};
+      for (final item in items) {
+        uniqueItems.putIfAbsent(item.marketHashName, () => item);
+      }
       final priceEntries = await Future.wait(
-        uniqueNames.map((name) async {
-          final price = await ref.read(quickPriceProvider(name).future);
-          return MapEntry(name, price);
+        uniqueItems.entries.map((e) async {
+          final price = await ref.read(quickPriceProvider(QuickPriceRequest(
+            marketHashName: e.key,
+            fallbackPriceUsd: e.value.bestPrice ?? e.value.steamPrice,
+          )).future);
+          return MapEntry(e.key, price);
         }),
       );
       final priceMap = Map.fromEntries(priceEntries);

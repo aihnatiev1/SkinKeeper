@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { fetchSteamInventory } from "../services/steam.js";
-import { getLatestPrices, getBestPrices } from "../services/prices.js";
+import { getLatestPrices, getBestPrices, fillMissingPrices } from "../services/prices.js";
 import { getDopplerPrice, isDopplerPaintIndex } from "../services/dopplerPrices.js";
 import { getFadePercentage } from "../services/fadeData.js";
 import { getMarketplaceLinks } from "../services/buffIds.js";
@@ -18,7 +18,7 @@ const router = Router();
 // Server-side sort, filter, pagination — prices resolved in DB via JOIN
 router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5000, 1), 5000);
     const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
     const sort = (req.query.sort as string) || "price-desc";
     const search = (req.query.search as string) || "";
@@ -364,6 +364,11 @@ inventoryQueue.process(async (job, updateProgress) => {
     totalItems += items.length;
     updateProgress(totalItems);
   }
+
+  // Background: fill prices for any new items that have no price yet
+  fillMissingPrices(userId).catch((err) =>
+    console.error("Background price fill error:", err)
+  );
 
   // Background: inspect items missing float values (only skins with wear)
   const { rows: uninspected } = await pool.query(

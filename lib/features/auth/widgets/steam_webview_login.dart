@@ -60,9 +60,10 @@ class _SteamWebViewLoginState extends State<SteamWebViewLogin> {
     final urlStr = url.toString();
 
     // Update title based on where user is
-    if (urlStr.contains('/login')) {
+    if (urlStr.contains('/login/home') || urlStr.contains('/login?')) {
       setState(() => _title = 'Sign in to Steam');
-    } else if (urlStr.contains('steamcommunity.com') && !urlStr.contains('/login')) {
+    } else if ((urlStr.contains('steamcommunity.com') || urlStr.contains('steampowered.com')) &&
+        !urlStr.contains('/login/') && !urlStr.contains('/login?')) {
       // User has logged in — we're on a non-login Steam page
       setState(() => _title = 'Connecting...');
       await _tryExtractCookies();

@@ -486,7 +486,7 @@ export async function runSteamBatchCrawl(): Promise<void> {
 export function startSteamCrawlers(): void {
   initProxyPool();
 
-  const INTERVAL_MS = 2 * 3600_000; // 2 hours
+  const INTERVAL_MS = 1 * 3600_000; // 1 hour
 
   async function scheduledRun() {
     try {
@@ -499,7 +499,7 @@ export function startSteamCrawlers(): void {
 
   // Start first run after 30s (let other init complete)
   steamBatchTimer = setTimeout(scheduledRun, 30_000);
-  console.log("[Steam Batch] Scheduled: runs every 2h, first run in 30s");
+  console.log("[Steam Batch] Scheduled: runs every 1h, first run in 30s");
 }
 
 export function stopSteamCrawlers(): void {
@@ -633,6 +633,75 @@ export async function getBestPrices(
   );
 
   return new Map(rows.map((r: any) => [r.market_hash_name, r.best_price]));
+}
+
+/**
+ * Fill prices for inventory items that have no price from ANY source.
+ * Uses Skinport bulk cache (instant) + Steam individual API as fallback.
+ * Called after inventory refresh to ensure new items get prices immediately.
+ */
+export async function fillMissingPrices(userId: number): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ii.market_hash_name
+     FROM inventory_items ii
+     JOIN steam_accounts sa ON ii.steam_account_id = sa.id
+     WHERE sa.user_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM current_prices cp
+         WHERE cp.market_hash_name = ii.market_hash_name
+           AND cp.price_usd > 0
+       )`,
+    [userId]
+  );
+
+  if (rows.length === 0) return 0;
+
+  const names = rows.map((r: any) => r.market_hash_name as string);
+  console.log(`[PriceFill] ${names.length} items without any price for user ${userId}`);
+
+  let filled = 0;
+
+  // 1. Try Skinport bulk cache first (free, instant)
+  try {
+    const skinportPrices = await fetchSkinportPrices();
+    const batch = new Map<string, number>();
+    for (const name of names) {
+      const price = skinportPrices.get(name);
+      if (price && price > 0) {
+        batch.set(name, price);
+        filled++;
+      }
+    }
+    if (batch.size > 0) {
+      await savePrices(batch, "skinport");
+    }
+  } catch (err) {
+    console.warn("[PriceFill] Skinport bulk failed:", (err as Error).message);
+  }
+
+  // 2. Remaining items — try Steam individual API (rate limited, max 5)
+  const remaining = names.filter((n) => {
+    // Re-check since skinport might have filled some
+    return filled === 0 || !skinportCache.has(n);
+  }).slice(0, 5);
+
+  for (const name of remaining) {
+    try {
+      const { getMarketPrice } = await import("./market.js");
+      const info = await getMarketPrice(name);
+      if (info.lowestPrice !== null) {
+        await savePrices(new Map([[name, info.lowestPrice / 100]]), "steam");
+        filled++;
+      }
+      // Small delay to avoid Steam rate limit
+      await new Promise((r) => setTimeout(r, 1500));
+    } catch {
+      break; // Stop on any error to avoid cascading 429s
+    }
+  }
+
+  console.log(`[PriceFill] Filled ${filled}/${names.length} prices for user ${userId}`);
+  return filled;
 }
 
 // Get unique market_hash_names from all users' inventories

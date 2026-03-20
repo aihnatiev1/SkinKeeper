@@ -86,9 +86,12 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _inspecting = false);
+        final is503 = e.toString().contains('503');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Inspect unavailable — try later'),
+            content: Text(is503
+                ? 'CSFloat API rate-limited — try in 15 min'
+                : 'Inspect unavailable — try later'),
             backgroundColor: AppTheme.loss,
           ),
         );
@@ -1071,7 +1074,10 @@ class _SellActions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final quickPriceAsync = ref.watch(quickPriceProvider(item.marketHashName));
+    final quickPriceAsync = ref.watch(quickPriceProvider(QuickPriceRequest(
+      marketHashName: item.marketHashName,
+      fallbackPriceUsd: item.bestPrice ?? item.steamPrice,
+    )));
     final currency = ref.watch(currencyProvider);
     final hasSession = ref.watch(hasSessionProvider);
 

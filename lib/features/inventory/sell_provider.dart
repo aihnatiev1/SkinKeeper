@@ -430,9 +430,37 @@ final walletInfoProvider =
 // ---------------------------------------------------------------------------
 
 final quickPriceProvider =
-    AutoDisposeFutureProvider.family<int, String>((ref, marketHashName) async {
+    AutoDisposeFutureProvider.family<int, QuickPriceRequest>((ref, request) async {
   final api = ref.read(apiClientProvider);
-  final encoded = Uri.encodeComponent(marketHashName);
-  final response = await api.get('/market/quickprice/$encoded');
-  return response.data['sellerReceivesCents'] as int;
+  final encoded = Uri.encodeComponent(request.marketHashName);
+  try {
+    final response = await api.get('/market/quickprice/$encoded');
+    return response.data['sellerReceivesCents'] as int;
+  } catch (_) {
+    // Fallback: calculate from local price data if backend has no Steam price
+    final price = request.fallbackPriceUsd;
+    if (price != null && price > 0) {
+      final cents = (price * 100).round();
+      final valveFee = (cents * 0.05).floor().clamp(1, cents);
+      final cs2Fee = (cents * 0.10).floor().clamp(1, cents);
+      final sellerReceives = cents - valveFee - cs2Fee;
+      return (sellerReceives - 1).clamp(1, sellerReceives);
+    }
+    rethrow;
+  }
 });
+
+class QuickPriceRequest {
+  final String marketHashName;
+  final double? fallbackPriceUsd;
+
+  const QuickPriceRequest({required this.marketHashName, this.fallbackPriceUsd});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is QuickPriceRequest && marketHashName == other.marketHashName;
+
+  @override
+  int get hashCode => marketHashName.hashCode;
+}

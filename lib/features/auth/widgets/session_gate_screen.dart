@@ -177,6 +177,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
   // ── Success flow ───────────────────────────────────────────────────────
 
   void _onAuthSuccess() {
+    if (!mounted) return;
     ref.read(sessionStatusProvider.notifier).refresh();
     setState(() => _showSuccess = true);
   }
@@ -201,7 +202,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
 
     // Listen for auth success from token flow
     ref.listen<ClientTokenAuthState>(clientTokenAuthProvider, (prev, next) {
-      if (next.status == 'authenticated') {
+      if (prev?.status != 'authenticated' && next.status == 'authenticated') {
         _onAuthSuccess();
       } else if (next.status == 'error' && next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -215,10 +216,17 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
 
     // Listen for auth success from QR flow
     ref.listen<QrAuthState>(qrAuthProvider, (prev, next) {
-      if (next.status == 'authenticated') {
+      if (prev?.status != 'authenticated' && next.status == 'authenticated') {
         _onAuthSuccess();
       }
     });
+
+    // Safety net: if tokenState is already 'authenticated' but _showSuccess hasn't fired
+    if (!_showSuccess && tokenState.status == 'authenticated') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_showSuccess) _onAuthSuccess();
+      });
+    }
 
     if (_showSuccess) {
       return Scaffold(
