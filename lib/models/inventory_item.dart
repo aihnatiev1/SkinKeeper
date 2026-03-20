@@ -84,6 +84,38 @@ class CharmInfo {
   String get fullImageUrl => SteamImage.url(image);
 }
 
+class ItemCollection {
+  final String id;
+  final String name;
+  final String? image;
+
+  const ItemCollection({required this.id, required this.name, this.image});
+
+  factory ItemCollection.fromJson(Map<String, dynamic> json) {
+    return ItemCollection(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      image: json['image'] as String?,
+    );
+  }
+}
+
+class ItemCrate {
+  final String id;
+  final String name;
+  final String? image;
+
+  const ItemCrate({required this.id, required this.name, this.image});
+
+  factory ItemCrate.fromJson(Map<String, dynamic> json) {
+    return ItemCrate(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      image: json['image'] as String?,
+    );
+  }
+}
+
 class InventoryItem {
   final String assetId;
   final String marketHashName;
@@ -104,6 +136,10 @@ class InventoryItem {
   final double? fadePercentage;
   final Map<String, String>? marketplaceLinks;
   final SteamDepth? steamDepth;
+  final double? minFloat;
+  final double? maxFloat;
+  final ItemCollection? collection;
+  final List<ItemCrate> crates;
   final int? accountId;
   final String? accountSteamId;
   final String? accountName;
@@ -129,6 +165,10 @@ class InventoryItem {
     this.fadePercentage,
     this.marketplaceLinks,
     this.steamDepth,
+    this.minFloat,
+    this.maxFloat,
+    this.collection,
+    this.crates = const [],
     this.accountId,
     this.accountSteamId,
     this.accountName,
@@ -324,6 +364,10 @@ class InventoryItem {
       fadePercentage: fadePercentage,
       marketplaceLinks: marketplaceLinks,
       steamDepth: steamDepth,
+      minFloat: minFloat,
+      maxFloat: maxFloat,
+      collection: collection,
+      crates: crates,
       accountId: accountId,
       accountSteamId: accountSteamId,
       accountName: accountName,
@@ -380,6 +424,19 @@ class InventoryItem {
       steamDepth: json['steam_depth'] != null
           ? SteamDepth.fromJson(json['steam_depth'] as Map<String, dynamic>)
           : null,
+      minFloat: json['min_float'] != null
+          ? double.tryParse(json['min_float'].toString())
+          : null,
+      maxFloat: json['max_float'] != null
+          ? double.tryParse(json['max_float'].toString())
+          : null,
+      collection: json['collection'] != null
+          ? ItemCollection.fromJson(json['collection'] as Map<String, dynamic>)
+          : null,
+      crates: (json['crates'] as List<dynamic>?)
+              ?.map((e) => ItemCrate.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
       accountId: json['account_id'] as int?,
       accountSteamId: json['account_steam_id'] as String?,
       accountName: json['account_name'] as String?,

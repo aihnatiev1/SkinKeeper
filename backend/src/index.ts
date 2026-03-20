@@ -21,6 +21,7 @@ import manualTxRoutes from "./routes/manualTransactions.js";
 import legalRoutes from "./routes/legal.js";
 import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { preloadCSGOData } from "./services/csgoData.js";
 
 dotenv.config({ override: true });
 
@@ -95,6 +96,9 @@ async function start() {
 
   // Initialize Firebase for push notifications
   initFirebase();
+
+  // Pre-warm CSGO-API static data cache
+  preloadCSGOData();
 
   // Start background price fetching
   startPriceJobs();

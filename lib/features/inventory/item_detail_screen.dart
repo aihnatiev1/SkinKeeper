@@ -46,12 +46,54 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
 
   late InventoryItem _item;
   ChartPeriod _period = ChartPeriod.month;
+  bool _inspecting = false;
 
   @override
   void initState() {
     super.initState();
     _item = widget.item;
     _fetchHistory();
+  }
+
+  /// On-demand inspect: fetch float/stickers/charms via CSFloat API
+  Future<void> _inspectItem() async {
+    if (_inspecting) return;
+    setState(() => _inspecting = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      final response = await api.get('/inventory/${_item.assetId}/inspect');
+      final data = response.data as Map<String, dynamic>;
+      if (mounted) {
+        setState(() {
+          _item = _item.withInspectData(
+            floatValue: (data['floatValue'] as num).toDouble(),
+            paintSeed: data['paintSeed'] as int? ?? 0,
+            stickers: (data['stickers'] as List<dynamic>?)
+                    ?.map((e) =>
+                        StickerInfo.fromJson(e as Map<String, dynamic>))
+                    .toList() ??
+                [],
+            charms: (data['charms'] as List<dynamic>?)
+                    ?.map((e) =>
+                        CharmInfo.fromJson(e as Map<String, dynamic>))
+                    .toList() ??
+                [],
+          );
+          _inspecting = false;
+        });
+        HapticFeedback.mediumImpact();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _inspecting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Inspect unavailable — try later'),
+            backgroundColor: AppTheme.loss,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _fetchHistory() async {
@@ -210,6 +252,39 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               textAlign: TextAlign.center,
               style: AppTheme.subtitle,
             ),
+
+            // ── Collection badge ──
+            if (item.collection != null) ...[
+              const SizedBox(height: AppTheme.s8),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.textDisabled.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppTheme.r6),
+                    border: Border.all(
+                      color: AppTheme.textDisabled.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: Text(
+                    item.collection!.name,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 150.ms),
+            ],
+
             const SizedBox(height: AppTheme.s12),
 
             // ── Wear badge + paint seed ──
@@ -248,7 +323,61 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               GlassCard(
                 padding: const EdgeInsets.all(AppTheme.s14),
                 margin: const EdgeInsets.only(bottom: AppTheme.s12),
-                child: WearBar(floatValue: item.floatValue!),
+                child: WearBar(
+                  floatValue: item.floatValue!,
+                  minFloat: item.minFloat,
+                  maxFloat: item.maxFloat,
+                ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 250.ms),
+
+            // ── On-demand inspect button (if no float yet) ──
+            if (item.floatValue == null &&
+                item.inspectLink != null &&
+                !item.isNonWeapon)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppTheme.s12),
+                child: GestureDetector(
+                  onTap: _inspecting ? null : _inspectItem,
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppTheme.r12),
+                      border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.2),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_inspecting)
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.primary,
+                            ),
+                          )
+                        else
+                          Icon(Icons.search_rounded,
+                              size: 16, color: AppTheme.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          _inspecting ? 'Inspecting...' : 'Inspect Float & Stickers',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               )
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 250.ms),
@@ -349,6 +478,14 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   .fadeIn(duration: 400.ms, delay: 375.ms),
             ],
 
+            // ── Drops from (collection / crate) ──
+            if (item.collection != null || item.crates.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.s12),
+              _DropsFromSection(item: item)
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 400.ms),
+            ],
+
             const SizedBox(height: AppTheme.s16),
 
             // ── P/L section ──
@@ -357,7 +494,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
               iconUrl: item.iconUrl,
             )
                 .animate()
-                .fadeIn(duration: 400.ms, delay: 400.ms),
+                .fadeIn(duration: 400.ms, delay: 425.ms),
 
             const SizedBox(height: AppTheme.s16),
 
@@ -1713,6 +1850,87 @@ class _SteamMarketDepth extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Drops From (Collection / Crate) ──────────────────────────────
+class _DropsFromSection extends StatelessWidget {
+  final InventoryItem item;
+
+  const _DropsFromSection({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: AppTheme.glass(),
+      padding: const EdgeInsets.all(AppTheme.s14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('ORIGIN', style: AppTheme.label),
+          const SizedBox(height: AppTheme.s10),
+          // Collection
+          if (item.collection != null)
+            _OriginRow(
+              icon: Icons.collections_bookmark_rounded,
+              label: item.collection!.name,
+              color: const Color(0xFF8B5CF6),
+            ),
+          // Crates
+          for (final crate in item.crates) ...[
+            if (item.collection != null || item.crates.indexOf(crate) > 0)
+              const SizedBox(height: AppTheme.s6),
+            _OriginRow(
+              icon: Icons.inventory_2_rounded,
+              label: crate.name,
+              color: const Color(0xFFF59E0B),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OriginRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _OriginRow({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(AppTheme.r6),
+          ),
+          child: Icon(icon, size: 14, color: color),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

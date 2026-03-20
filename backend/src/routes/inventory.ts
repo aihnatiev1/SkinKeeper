@@ -8,6 +8,7 @@ import { getFadePercentage } from "../services/fadeData.js";
 import { getMarketplaceLinks } from "../services/buffIds.js";
 import { getSteamDepthBatch, SteamDepthData } from "../services/steamMarketDepth.js";
 import { inspectItem, batchInspect } from "../services/inspect.js";
+import { getSkinInfoBatch } from "../services/csgoData.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import { getQueue } from "../infra/JobQueue.js";
 
@@ -128,6 +129,9 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     // Steam market depth (volume + order book) from iflow
     const depthMap = getSteamDepthBatch(names);
 
+    // CSGO-API static data (collection, crate, float range)
+    const csgoDataMap = await getSkinInfoBatch(names);
+
     const enriched = parsedItems.map((item) => {
       let prices = { ...(priceMap.get(item.market_hash_name) ?? {}) };
 
@@ -165,6 +169,9 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       // Steam market depth
       const depth = depthMap.get(item.market_hash_name);
 
+      // CSGO-API static info (collection, crate, float range)
+      const csgoInfo = csgoDataMap.get(item.market_hash_name);
+
       return {
         ...item,
         prices,
@@ -172,6 +179,10 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
         fade_percentage: fadePercentage,
         links,
         steam_depth: depth ?? null,
+        min_float: csgoInfo?.minFloat ?? null,
+        max_float: csgoInfo?.maxFloat ?? null,
+        collection: csgoInfo?.collection ?? null,
+        crates: csgoInfo?.crates ?? null,
       };
     });
 

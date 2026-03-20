@@ -4,17 +4,7 @@ import { validateBody } from "../middleware/validate.js";
 import { manualTransactionSchema, batchManualSchema, csvImportSchema } from "../middleware/schemas.js";
 import { pool } from "../db/pool.js";
 import { recalculateCostBasis } from "../services/profitLoss.js";
-import { fetchSkinportPrices, savePrices } from "../services/prices.js";
 import { randomUUID } from "crypto";
-
-// Fire-and-forget: trigger Skinport bulk refresh so new item picks up a price
-function fetchPriceAsync(_marketHashName: string) {
-  fetchSkinportPrices()
-    .then(prices => {
-      if (prices.size > 0) savePrices(prices, "skinport");
-    })
-    .catch(() => {}); // ignore errors — price will come from batch crawler
-}
 
 const router = Router();
 
@@ -50,7 +40,6 @@ router.post(
       );
 
       await recalculateCostBasis(req.userId!);
-      fetchPriceAsync(marketHashName);
 
       res.json({ success: true, id: rows[0].id, txId: rows[0].tx_id });
     } catch (err) {
@@ -262,7 +251,6 @@ router.post(
       }
 
       await recalculateCostBasis(req.userId!);
-      fetchPriceAsync(marketHashName);
 
       res.json({ success: true, quantity: qty, txIds });
     } catch (err) {
@@ -313,7 +301,6 @@ router.put(
         client.release();
       }
       await recalculateCostBasis(req.userId!);
-      fetchPriceAsync(marketHashName);
       res.json({ success: true });
     } catch (err) {
       console.error("[ManualTx] Replace error:", err);

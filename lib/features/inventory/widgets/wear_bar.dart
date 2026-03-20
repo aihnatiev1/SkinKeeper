@@ -4,13 +4,20 @@ import '../../../core/theme.dart';
 
 /// Visual wear bar showing float value position on the 0-1 scale.
 /// Segments: FN (0-0.07), MW (0.07-0.15), FT (0.15-0.38), WW (0.38-0.45), BS (0.45-1.0)
+///
+/// Optionally shows the skin's min/max float range as bracket markers,
+/// so the user can see where their item falls within the possible range.
 class WearBar extends StatelessWidget {
   final double floatValue;
+  final double? minFloat;
+  final double? maxFloat;
   final double height;
 
   const WearBar({
     super.key,
     required this.floatValue,
+    this.minFloat,
+    this.maxFloat,
     this.height = 22,
   });
 
@@ -21,6 +28,11 @@ class WearBar extends StatelessWidget {
     (label: 'WW', end: 0.45, color: Color(0xFFF97316)),
     (label: 'BS', end: 1.00, color: Color(0xFFEF4444)),
   ];
+
+  bool get _hasRange =>
+      minFloat != null &&
+      maxFloat != null &&
+      !(minFloat == 0.0 && maxFloat == 1.0);
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +96,40 @@ class WearBar extends StatelessWidget {
                         );
                       }).toList(),
                     ),
-                    // Animated indicator
+                    // Min/max float range overlay
+                    if (_hasRange)
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: 800.ms,
+                        curve: Curves.easeOutCubic,
+                        builder: (context, progress, _) {
+                          final minX = minFloat!.clamp(0.0, 1.0) * totalWidth;
+                          final maxX = maxFloat!.clamp(0.0, 1.0) * totalWidth;
+                          final rangeWidth = (maxX - minX) * progress;
+                          return Positioned(
+                            left: minX,
+                            top: 0,
+                            bottom: 0,
+                            width: rangeWidth.clamp(0.0, totalWidth),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  left: BorderSide(
+                                    color: AppTheme.primary.withValues(alpha: 0.6),
+                                    width: 1.5,
+                                  ),
+                                  right: BorderSide(
+                                    color: AppTheme.primary.withValues(alpha: 0.6),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                color: AppTheme.primary.withValues(alpha: 0.08),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    // Animated indicator (float value)
                     TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0, end: floatValue.clamp(0.0, 1.0)),
                       duration: 600.ms,
@@ -121,11 +166,20 @@ class WearBar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppTheme.s4),
-        // Scale labels
+        // Scale labels + min/max range
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('0', style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled)),
+            if (_hasRange)
+              Text(
+                'Range: ${minFloat!.toStringAsFixed(2)} – ${maxFloat!.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primary.withValues(alpha: 0.7),
+                ),
+              ),
             Text('1', style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled)),
           ],
         ),
