@@ -2,8 +2,7 @@ import cron from "node-cron";
 import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
-import { fetchSteamAnalystPrices } from "./steamAnalyst.js";
-import { fetchCSGOTraderPrices, runCSGOTraderDailySeed } from "./csgoTrader.js";
+import { runCSGOTraderDailySeed } from "./csgoTrader.js";
 import { refreshBuffIds } from "./buffIds.js";
 import { initFadeData } from "./fadeData.js";
 import { refreshSteamDepthData } from "./steamMarketDepth.js";
@@ -23,14 +22,13 @@ interface JobHealth {
 
 const jobHealth: Record<string, JobHealth> = {
   skinport: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
-  csgotrader: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  csgotrader_seed: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   buff: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   buff_bid: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   bitskins: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   csmoney: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   youpin: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   lisskins: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
-  steam_analyst: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   dmarket: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   steam: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   csfloat: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
@@ -114,23 +112,13 @@ export function startPriceJobs() {
   scheduledTasks.push(cron.schedule("0 0 * * *", async () => {
     try {
       await runCSGOTraderDailySeed();
-      recordJobRun("csgotrader", true);
+      recordJobRun("csgotrader_seed", true);
     } catch (err) {
-      recordJobRun("csgotrader", false, err instanceof Error ? err.message : String(err));
+      recordJobRun("csgotrader_seed", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] CSGOTrader daily seed failed:", err);
     }
   }));
 
-  // SteamAnalyst: every 15 minutes (bulk — all items in 1 call)
-  scheduledTasks.push(cron.schedule("*/15 * * * *", async () => {
-    try {
-      await fetchSteamAnalystPrices();
-      recordJobRun("steam_analyst", true);
-    } catch (err) {
-      recordJobRun("steam_analyst", false, err instanceof Error ? err.message : String(err));
-      console.error("[CRON] SteamAnalyst price fetch failed:", err);
-    }
-  }));
 
   // DMarket: every 10 minutes, offset +5 (bulk per-item)
   scheduledTasks.push(cron.schedule("5,15,25,35,45,55 * * * *", async () => {
@@ -221,9 +209,6 @@ export function startPriceJobs() {
     await Promise.allSettled([
       fetchAndSaveSkinport().catch((err) =>
         console.error("[INIT] Initial Skinport fetch failed:", err)
-      ),
-      fetchSteamAnalystPrices().catch((err) =>
-        console.error("[INIT] Initial SteamAnalyst fetch failed:", err)
       ),
       fetchAndSaveDMarket().catch((err) =>
         console.error("[INIT] Initial DMarket fetch failed:", err)

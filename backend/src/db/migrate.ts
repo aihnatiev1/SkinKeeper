@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS trade_offers (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT chk_trade_dir CHECK (direction IN ('incoming','outgoing')),
-  CONSTRAINT chk_trade_status CHECK (status IN ('pending','accepted','declined','expired','cancelled','countered','error'))
+  CONSTRAINT chk_trade_status CHECK (status IN ('pending','accepted','declined','expired','cancelled','countered','error','awaiting_confirmation','on_hold','invalid'))
 );
 
 CREATE TABLE IF NOT EXISTS trade_offer_items (
@@ -314,10 +314,10 @@ ALTER TABLE trade_offers ALTER COLUMN steam_offer_id TYPE VARCHAR(40);
 -- 015: Widen status column for awaiting_confirmation (23 chars > 20)
 ALTER TABLE trade_offers ALTER COLUMN status TYPE VARCHAR(30);
 
--- 016: Allow new trade statuses (awaiting_confirmation, on_hold)
+-- 016: Allow new trade statuses (awaiting_confirmation, on_hold, invalid)
 ALTER TABLE trade_offers DROP CONSTRAINT IF EXISTS chk_trade_status;
 ALTER TABLE trade_offers ADD CONSTRAINT chk_trade_status
-  CHECK (status IN ('pending','accepted','declined','expired','cancelled','countered','error','awaiting_confirmation','on_hold'));
+  CHECK (status IN ('pending','accepted','declined','expired','cancelled','countered','error','awaiting_confirmation','on_hold','invalid'));
 
 -- 017: Performance indexes for refactoring phase
 CREATE INDEX IF NOT EXISTS idx_inventory_items_name ON inventory_items(market_hash_name);

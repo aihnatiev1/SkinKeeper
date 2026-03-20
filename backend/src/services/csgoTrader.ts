@@ -73,7 +73,7 @@ interface SourceDef {
 const SOURCES: SourceDef[] = [
   {
     file: "steam.json",
-    source: "csgotrader",
+    source: "steam",
     extract: (e) => e?.last_7d || e?.last_24h || e?.last_30d || 0,
   },
   {

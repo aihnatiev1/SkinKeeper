@@ -98,7 +98,7 @@ export async function initFadeData(): Promise<void> {
     }
   }
 
-  console.error("[FadeData] All URLs failed — fade data not available");
+  console.warn("[FadeData] All URLs returned 404 — fade data unavailable (source repo may have been removed)");
 }
 
 /**

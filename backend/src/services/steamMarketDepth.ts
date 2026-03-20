@@ -8,7 +8,7 @@
  */
 
 import axios from "axios";
-import { createUnzip } from "zlib";
+import { createUnzip, createInflateRaw } from "zlib";
 import { Readable } from "stream";
 
 const LIST_URL = "https://api.iflow.work/export/list?dir_name=priority_archive";
@@ -162,7 +162,6 @@ async function unzipFirstFile(zipBuffer: Buffer): Promise<string | null> {
       const inflater = createUnzip();
       // Raw deflate needs a fake gzip header or use inflateRaw
       // Actually zlib.createInflateRaw is better for ZIP deflate
-      const { createInflateRaw } = require("zlib");
       const raw = createInflateRaw();
       raw.on("data", (chunk: Buffer) => chunks.push(chunk));
       raw.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));

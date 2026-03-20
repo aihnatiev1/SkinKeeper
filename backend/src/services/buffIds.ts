@@ -12,39 +12,11 @@ let buffIdsUpdatedAt: Date | null = null;
 
 /**
  * Fetch buff_ids.json and cache in memory.
- * Called from daily seed. ~38K entries, ~400KB gzipped.
+ * NOTE: CSGOTrader removed buff_ids.json — this is a no-op until an alternative source is found.
+ * Buff163 links will be omitted; skinport/csfloat/steam links still work.
  */
 export async function refreshBuffIds(): Promise<void> {
-  try {
-    const { data } = await axios.get(
-      "https://prices.csgotrader.app/latest/buff_ids.json",
-      {
-        timeout: 30_000,
-        headers: {
-          "User-Agent": "SkinKeeper/1.0",
-          "Accept-Encoding": "gzip",
-        },
-      }
-    );
-
-    if (!data || typeof data !== "object") {
-      console.error("[BuffIds] Unexpected response format");
-      return;
-    }
-
-    const newMap = new Map<string, number>();
-    for (const [name, id] of Object.entries(data)) {
-      if (typeof id === "number" && id > 0) {
-        newMap.set(name, id);
-      }
-    }
-
-    buffIdMap = newMap;
-    buffIdsUpdatedAt = new Date();
-    console.log(`[BuffIds] Cached ${newMap.size} item IDs`);
-  } catch (err: any) {
-    console.error(`[BuffIds] Fetch failed: ${err.message || err}`);
-  }
+  // Source no longer available — skip silently
 }
 
 /**
