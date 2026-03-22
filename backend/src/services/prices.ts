@@ -594,6 +594,9 @@ export async function upsertCurrentPrices(
   }
 }
 
+// Ignore prices older than this — stale data from sources that stopped updating
+const PRICE_MAX_AGE = "48 hours";
+
 // Get latest prices for a list of items (reads from current_prices)
 export async function getLatestPrices(
   marketHashNames: string[]
@@ -604,7 +607,8 @@ export async function getLatestPrices(
     `SELECT market_hash_name, source, price_usd
      FROM current_prices
      WHERE market_hash_name = ANY($1)
-       AND price_usd > 0`,
+       AND price_usd > 0
+       AND updated_at > NOW() - INTERVAL '${PRICE_MAX_AGE}'`,
     [marketHashNames]
   );
 
@@ -627,12 +631,27 @@ export async function getBestPrices(
   const { rows } = await pool.query(
     `SELECT market_hash_name, MAX(price_usd)::float AS best_price
      FROM current_prices
-     WHERE market_hash_name = ANY($1) AND price_usd > 0
+     WHERE market_hash_name = ANY($1)
+       AND price_usd > 0
+       AND updated_at > NOW() - INTERVAL '${PRICE_MAX_AGE}'
      GROUP BY market_hash_name`,
     [marketHashNames]
   );
 
   return new Map(rows.map((r: any) => [r.market_hash_name, r.best_price]));
+}
+
+// Delete stale prices that haven't been updated recently
+export async function purgeStaleCurrentPrices(): Promise<number> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM current_prices
+     WHERE updated_at < NOW() - INTERVAL '${PRICE_MAX_AGE}'`
+  );
+  const count = rowCount ?? 0;
+  if (count > 0) {
+    console.log(`[Prices] Purged ${count} stale current_prices rows (older than ${PRICE_MAX_AGE})`);
+  }
+  return count;
 }
 
 /**

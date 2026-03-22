@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices } from "./prices.js";
+import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices, purgeStaleCurrentPrices } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
 import { runCSGOTraderDailySeed } from "./csgoTrader.js";
@@ -173,6 +173,7 @@ export function startPriceJobs() {
   scheduledTasks.push(cron.schedule("0 2 * * *", async () => {
     try {
       await pruneOldPrices();
+      await purgeStaleCurrentPrices();
       recordJobRun("pricePruning", true);
     } catch (err) {
       recordJobRun("pricePruning", false, err instanceof Error ? err.message : String(err));

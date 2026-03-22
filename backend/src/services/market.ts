@@ -242,57 +242,45 @@ export async function sellItem(
   }
 }
 
-// Quick sell: Steam price - 1 cent (since we sell on Steam Market)
-// Uses cached Steam price; falls back to direct Steam API
+// Quick sell: live Steam price - 1 cent (listing/buyer-pays side).
+// Fallback chain if Steam API returns 429 or fails:
+//   1. Live Steam API (always try first — freshest data)
+//   2. Steam Market Depth lowestAsk (iflow, refreshed every 12h)
+//   3. Cached steam price from current_prices (if < 48h old)
+// Returns seller receives amount in USD cents.
 export async function quickSellPrice(
   marketHashName: string
 ): Promise<number | null> {
-  // Try cached Steam price first (no rate limits)
-  const priceMap = await getLatestPrices([marketHashName]);
-  const sources = priceMap.get(marketHashName);
+  const undercut = (buyerPaysCents: number): number => {
+    const listing = Math.max(1, buyerPaysCents - 1);
+    const valveFee = Math.max(1, Math.floor(listing * 0.05));
+    const cs2Fee = Math.max(1, Math.floor(listing * 0.10));
+    return Math.max(1, listing - valveFee - cs2Fee);
+  };
 
-  if (sources) {
-    // Prefer Steam price since we're listing on Steam Market
-    const steamPrice = sources["steam"];
-    if (steamPrice && steamPrice > 0) {
-      const steamCents = Math.round(steamPrice * 100);
-      const valveFee = Math.max(1, Math.floor(steamCents * 0.05));
-      const cs2Fee = Math.max(1, Math.floor(steamCents * 0.10));
-      const sellerReceives = steamCents - valveFee - cs2Fee;
-      return Math.max(1, sellerReceives - 1);
-    }
-
-    // Fallback to any available price if Steam not yet crawled
-    const prices = Object.values(sources).filter((p) => p > 0);
-    if (prices.length > 0) {
-      // Use median to avoid outliers from a single bad source
-      prices.sort((a, b) => a - b);
-      const medianUsd = prices[Math.floor(prices.length / 2)];
-      const medianCents = Math.round(medianUsd * 100);
-      const valveFee = Math.max(1, Math.floor(medianCents * 0.05));
-      const cs2Fee = Math.max(1, Math.floor(medianCents * 0.10));
-      const sellerReceives = medianCents - valveFee - cs2Fee;
-      return Math.max(1, sellerReceives - 1);
-    }
+  // 1. Live Steam API — always try first
+  const live = await getMarketPrice(marketHashName);
+  if (live.lowestPrice !== null && live.lowestPrice > 0) {
+    return undercut(live.lowestPrice);
   }
 
-  // Fallback: Steam Market Depth (realtime order book from iflow)
+  // 2. Steam Market Depth (iflow order book, refreshed every 12h)
   const depth = getSteamDepth(marketHashName);
   if (depth && depth.lowestAsk > 0) {
-    const askCents = Math.round(depth.lowestAsk * 100);
-    const valveFee = Math.max(1, Math.floor(askCents * 0.05));
-    const cs2Fee = Math.max(1, Math.floor(askCents * 0.10));
-    const sellerReceives = askCents - valveFee - cs2Fee;
-    return Math.max(1, sellerReceives - 1);
+    console.warn(`[QuickSell] Steam API failed for "${marketHashName}", using depth lowestAsk=$${depth.lowestAsk}`);
+    return undercut(Math.round(depth.lowestAsk * 100));
   }
 
-  // Last resort: direct Steam API call (rate limited)
-  const price = await getMarketPrice(marketHashName);
-  if (price.lowestPrice === null) return null;
-  const valveFee = Math.max(1, Math.floor(price.lowestPrice * 0.05));
-  const cs2Fee = Math.max(1, Math.floor(price.lowestPrice * 0.10));
-  const sellerReceives = price.lowestPrice - valveFee - cs2Fee;
-  return Math.max(1, sellerReceives - 1);
+  // 3. Cached steam price from current_prices (already filtered to < 48h)
+  const priceMap = await getLatestPrices([marketHashName]);
+  const sources = priceMap.get(marketHashName);
+  const cachedSteam = sources?.["steam"];
+  if (cachedSteam && cachedSteam > 0) {
+    console.warn(`[QuickSell] Steam API + depth failed for "${marketHashName}", using cached steam=$${cachedSteam}`);
+    return undercut(Math.round(cachedSteam * 100));
+  }
+
+  return null;
 }
 
 // Bulk sell multiple items at same price

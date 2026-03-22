@@ -225,12 +225,12 @@ describe("quickSellPrice", () => {
     mockAxiosGet.mockReset();
   });
 
-  it("calculates quick sell price as lowest minus fees minus 1 cent", async () => {
-    // Lowest price = $10.00 (1000 cents) — buyer pays
-    // Valve fee = floor(1000 * 0.05) = 50
-    // CS2 fee = floor(1000 * 0.10) = 100
-    // Seller receives = 1000 - 50 - 100 = 850
-    // Quick sell = 850 - 1 = 849
+  it("fetches live Steam price and undercuts listing by 1 cent", async () => {
+    // Live Steam API returns lowest_price = $10.00 (1000 cents)
+    // Undercut listing: 1000 - 1 = 999 cents (buyer pays)
+    // Valve fee = floor(999 * 0.05) = 49
+    // CS2 fee = floor(999 * 0.10) = 99
+    // Seller receives = 999 - 49 - 99 = 851
     mockAxiosGet.mockResolvedValue({
       data: {
         success: true,
@@ -241,7 +241,7 @@ describe("quickSellPrice", () => {
     });
 
     const price = await quickSellPrice("AK-47 | Redline (Field-Tested)");
-    expect(price).toBe(849);
+    expect(price).toBe(851);
   });
 
   it("returns null when no market price available", async () => {

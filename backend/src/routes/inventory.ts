@@ -47,10 +47,13 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     const whereClause = conditions.join(" AND ");
 
     // CTE: best price per item name (computed once, used for sort + total)
+    // Ignore stale prices (> 48h old) — same threshold as getLatestPrices
     const bestPriceCTE = `
       best AS (
         SELECT market_hash_name, MAX(price_usd) as best_price
-        FROM current_prices WHERE price_usd > 0
+        FROM current_prices
+        WHERE price_usd > 0
+          AND updated_at > NOW() - INTERVAL '48 hours'
         GROUP BY market_hash_name
       )`;
 
