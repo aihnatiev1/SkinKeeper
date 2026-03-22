@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
@@ -400,7 +401,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   }
 
   Widget _buildSellContent({
-    required AsyncValue<int> quickPriceAsync,
+    required AsyncValue<QuickPriceResult> quickPriceAsync,
     required AsyncValue<SellVolume> volume,
     required int count,
     required bool sessionWarning,
@@ -473,8 +474,9 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
 
         // Price section
         quickPriceAsync.when(
-          data: (priceCents) =>
-              _buildPriceSection(priceCents, count, wallet),
+          data: (result) =>
+              _buildPriceSection(result.sellerReceivesCents, count, wallet,
+                  stale: result.stale, marketUrl: result.marketUrl),
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
@@ -491,7 +493,10 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     );
   }
 
-  Widget _buildPriceSection(int quickPriceCents, int count, WalletInfo wallet) {
+  Widget _buildPriceSection(int quickPriceCents, int count, WalletInfo wallet, {
+    bool stale = false,
+    String? marketUrl,
+  }) {
     final priceStr =
         '\$${(quickPriceCents / 100).toStringAsFixed(2)}';
     final totalCents = quickPriceCents * count;
@@ -503,6 +508,61 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Stale price warning
+        if (stale)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: AppTheme.error, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Price may be outdated — enter manually or check Steam Market',
+                          style: AppTheme.captionSmall.copyWith(
+                            color: AppTheme.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (marketUrl != null) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 36,
+                      child: OutlinedButton.icon(
+                        onPressed: () => launchUrl(Uri.parse(marketUrl),
+                            mode: LaunchMode.externalApplication),
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        label: const Text('Open on Steam Market'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.error,
+                          side: BorderSide(color: AppTheme.error.withValues(alpha: 0.4)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
         // Wallet currency notice
         if (!wallet.isUsd && walletPriceStr != null)
           Padding(
@@ -573,10 +633,12 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () => _startSell(quickPriceCents),
+                  onPressed: stale ? null : () => _startSell(quickPriceCents),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.warning,
-                    foregroundColor: Colors.black,
+                    backgroundColor: stale ? AppTheme.surface : AppTheme.warning,
+                    foregroundColor: stale ? AppTheme.textDisabled : Colors.black,
+                    disabledBackgroundColor: AppTheme.surface,
+                    disabledForegroundColor: AppTheme.textDisabled,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppTheme.r16),
                     ),
@@ -586,7 +648,9 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        count == 1 ? 'Quick Sell' : 'Quick Sell All',
+                        stale
+                            ? 'Price Outdated'
+                            : count == 1 ? 'Quick Sell' : 'Quick Sell All',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -595,13 +659,17 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        count == 1
-                            ? (walletPriceStr ?? priceStr)
-                            : (walletTotalStr ?? totalStr),
+                        stale
+                            ? 'Enter price manually'
+                            : count == 1
+                                ? (walletPriceStr ?? priceStr)
+                                : (walletTotalStr ?? totalStr),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Colors.black.withValues(alpha: 0.7),
+                          color: stale
+                              ? AppTheme.textDisabled
+                              : Colors.black.withValues(alpha: 0.7),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

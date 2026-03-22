@@ -429,13 +429,32 @@ final walletInfoProvider =
 // Quick price provider (per market hash name)
 // ---------------------------------------------------------------------------
 
+class QuickPriceResult {
+  final int sellerReceivesCents;
+  final bool stale;
+  final String source; // "live", "depth", "cached", "local"
+  final String? marketUrl;
+
+  const QuickPriceResult({
+    required this.sellerReceivesCents,
+    this.stale = false,
+    this.source = 'live',
+    this.marketUrl,
+  });
+}
+
 final quickPriceProvider =
-    AutoDisposeFutureProvider.family<int, QuickPriceRequest>((ref, request) async {
+    AutoDisposeFutureProvider.family<QuickPriceResult, QuickPriceRequest>((ref, request) async {
   final api = ref.read(apiClientProvider);
   final encoded = Uri.encodeComponent(request.marketHashName);
   try {
     final response = await api.get('/market/quickprice/$encoded');
-    return response.data['sellerReceivesCents'] as int;
+    return QuickPriceResult(
+      sellerReceivesCents: response.data['sellerReceivesCents'] as int,
+      stale: response.data['stale'] as bool? ?? false,
+      source: response.data['source'] as String? ?? 'live',
+      marketUrl: response.data['marketUrl'] as String?,
+    );
   } catch (_) {
     // Fallback: calculate from local price data if backend has no Steam price
     final price = request.fallbackPriceUsd;
@@ -444,7 +463,13 @@ final quickPriceProvider =
       final valveFee = (cents * 0.05).floor().clamp(1, cents);
       final cs2Fee = (cents * 0.10).floor().clamp(1, cents);
       final sellerReceives = cents - valveFee - cs2Fee;
-      return (sellerReceives - 1).clamp(1, sellerReceives);
+      final marketUrl = 'https://steamcommunity.com/market/listings/730/${Uri.encodeComponent(request.marketHashName)}';
+      return QuickPriceResult(
+        sellerReceivesCents: (sellerReceives - 1).clamp(1, sellerReceives),
+        stale: true,
+        source: 'local',
+        marketUrl: marketUrl,
+      );
     }
     rethrow;
   }

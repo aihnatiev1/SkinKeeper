@@ -59,22 +59,29 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       for (final item in items) {
         uniqueItems.putIfAbsent(item.marketHashName, () => item);
       }
-      final priceEntries = await Future.wait(
+      final resultEntries = await Future.wait(
         uniqueItems.entries.map((e) async {
-          final price = await ref.read(quickPriceProvider(QuickPriceRequest(
+          final result = await ref.read(quickPriceProvider(QuickPriceRequest(
             marketHashName: e.key,
             fallbackPriceUsd: e.value.bestPrice ?? e.value.steamPrice,
           )).future);
-          return MapEntry(e.key, price);
+          return MapEntry(e.key, result);
         }),
       );
-      final priceMap = Map.fromEntries(priceEntries);
+      final resultMap = Map.fromEntries(resultEntries);
+
+      // If any price is stale, open sell sheet so user can review/set prices
+      final hasStale = resultMap.values.any((r) => r.stale);
+      if (hasStale && mounted) {
+        showGlassSheet(context, SellBottomSheet(items: items));
+        return;
+      }
 
       final sellItems = items
           .map((item) => {
                 'assetId': item.assetId,
                 'marketHashName': item.marketHashName,
-                'priceCents': priceMap[item.marketHashName] ?? 0,
+                'priceCents': resultMap[item.marketHashName]?.sellerReceivesCents ?? 0,
                 if (item.accountId != null) 'accountId': item.accountId,
               })
           .toList();

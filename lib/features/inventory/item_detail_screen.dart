@@ -1086,21 +1086,59 @@ class _SellActions extends ConsumerWidget {
       child: Column(
         children: [
           quickPriceAsync.when(
-            data: (priceCents) {
+            data: (result) {
+              final priceCents = result.sellerReceivesCents;
+              final stale = result.stale;
               final priceStr = currency.format(priceCents / 100);
               return Column(
                 children: [
+                  if (stale)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppTheme.s10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.error.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                color: AppTheme.error, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Price may be outdated',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.error,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   FeeBreakdown(sellerReceivesCents: priceCents, currency: currency),
                   const SizedBox(height: AppTheme.s10),
                   Row(
                     children: [
-                      // Quick Sell
+                      // Quick Sell — disabled when stale, open sell sheet instead
                       Expanded(
                         flex: 3,
                         child: GestureDetector(
                           onTap: () async {
                             if (!await requireSession(context, ref)) return;
                             if (!context.mounted) return;
+                            if (stale) {
+                              // Open sell sheet so user can enter custom price
+                              HapticFeedback.selectionClick();
+                              showGlassSheet(
+                                  context, SellBottomSheet(items: [item]));
+                              return;
+                            }
                             HapticFeedback.mediumImpact();
                             final items = [
                               {
@@ -1124,9 +1162,10 @@ class _SellActions extends ConsumerWidget {
                               Container(
                             height: 48,
                             decoration: BoxDecoration(
-                              gradient: AppTheme.primaryGradient,
+                              gradient: stale ? null : AppTheme.primaryGradient,
+                              color: stale ? AppTheme.surface : null,
                               borderRadius: BorderRadius.circular(AppTheme.r12),
-                              boxShadow: [
+                              boxShadow: stale ? null : [
                                 BoxShadow(
                                   color: AppTheme.primary.withValues(alpha: 0.3),
                                   blurRadius: 12,
@@ -1137,22 +1176,23 @@ class _SellActions extends ConsumerWidget {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text(
-                                  'Quick Sell',
+                                Text(
+                                  stale ? 'Set Price & Sell' : 'Quick Sell',
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                                    color: stale ? AppTheme.textSecondary : Colors.white,
                                   ),
                                 ),
-                                Text(
-                                  priceStr,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white.withValues(alpha: 0.7),
+                                if (!stale)
+                                  Text(
+                                    priceStr,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white.withValues(alpha: 0.7),
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
