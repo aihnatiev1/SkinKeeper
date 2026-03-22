@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/analytics_service.dart';
 import '../../core/api_client.dart';
 import '../../core/steam_image.dart';
 
@@ -103,7 +104,7 @@ FeeBreakdownData calculateFeesFromBuyerPays(int buyerPaysCents) {
 // Sell operation models
 // ---------------------------------------------------------------------------
 
-enum SellItemStatus { queued, listing, listed, failed }
+enum SellItemStatus { queued, listing, listed, failed, uncertain }
 
 class SellOperationItem {
   final String assetId;
@@ -141,6 +142,7 @@ class SellOperationItem {
         'listing' => SellItemStatus.listing,
         'listed' => SellItemStatus.listed,
         'failed' => SellItemStatus.failed,
+        'uncertain' => SellItemStatus.uncertain,
         _ => SellItemStatus.queued,
       };
 }
@@ -211,9 +213,11 @@ class SellOperationNotifier extends AsyncNotifier<SellOperation?> {
       final operation = SellOperation.fromJson(
           response.data as Map<String, dynamic>);
       state = AsyncData(operation);
+      Analytics.sellStarted(itemCount: items.length, source: 'sell_sheet');
       _startPolling(operation.operationId);
     } catch (e, st) {
       dev.log('Sell operation start failed: $e', name: 'Sell');
+      Analytics.recordError(e, st, reason: 'sell_start_failed');
       state = AsyncError(e, st);
     }
   }
@@ -235,6 +239,7 @@ class SellOperationNotifier extends AsyncNotifier<SellOperation?> {
 
       if (operation.isCompleted) {
         _pollTimer?.cancel();
+        Analytics.sellCompleted(succeeded: operation.succeeded, failed: operation.failed);
       }
     } catch (e) {
       dev.log('Sell operation poll failed: $e', name: 'Sell');
@@ -434,13 +439,24 @@ class QuickPriceResult {
   final bool stale;
   final String source; // "live", "depth", "cached", "local"
   final String? marketUrl;
+  final int currencyId; // Steam currency ID (1=USD, 18=UAH, etc.)
+  final String currencyCode;
+  final String currencySymbol;
 
   const QuickPriceResult({
     required this.sellerReceivesCents,
     this.stale = false,
     this.source = 'live',
     this.marketUrl,
+    this.currencyId = 1,
+    this.currencyCode = 'USD',
+    this.currencySymbol = '\$',
   });
+
+  /// Format price in native currency
+  String formatPrice(int cents) {
+    return '$currencySymbol${(cents / 100).toStringAsFixed(2)}';
+  }
 }
 
 final quickPriceProvider =
@@ -448,12 +464,19 @@ final quickPriceProvider =
   final api = ref.read(apiClientProvider);
   final encoded = Uri.encodeComponent(request.marketHashName);
   try {
-    final response = await api.get('/market/quickprice/$encoded');
+    final params = <String, dynamic>{};
+    if (request.accountId != null) {
+      params['accountId'] = request.accountId.toString();
+    }
+    final response = await api.get('/market/quickprice/$encoded', queryParameters: params);
     return QuickPriceResult(
       sellerReceivesCents: response.data['sellerReceivesCents'] as int,
       stale: response.data['stale'] as bool? ?? false,
       source: response.data['source'] as String? ?? 'live',
       marketUrl: response.data['marketUrl'] as String?,
+      currencyId: response.data['currencyId'] as int? ?? 1,
+      currencyCode: response.data['currencyCode'] as String? ?? 'USD',
+      currencySymbol: response.data['currencySymbol'] as String? ?? '\$',
     );
   } catch (_) {
     // Fallback: calculate from local price data if backend has no Steam price
@@ -478,14 +501,17 @@ final quickPriceProvider =
 class QuickPriceRequest {
   final String marketHashName;
   final double? fallbackPriceUsd;
+  final int? accountId;
 
-  const QuickPriceRequest({required this.marketHashName, this.fallbackPriceUsd});
+  const QuickPriceRequest({required this.marketHashName, this.fallbackPriceUsd, this.accountId});
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is QuickPriceRequest && marketHashName == other.marketHashName;
+      other is QuickPriceRequest &&
+          marketHashName == other.marketHashName &&
+          accountId == other.accountId;
 
   @override
-  int get hashCode => marketHashName.hashCode;
+  int get hashCode => Object.hash(marketHashName, accountId);
 }

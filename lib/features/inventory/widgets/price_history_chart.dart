@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import 'price_comparison_table.dart' show sourceColor, sourceDisplayName;
 
@@ -41,12 +42,14 @@ class PriceHistoryChart extends StatefulWidget {
   final List<PricePoint> history;
   final ChartPeriod period;
   final ValueChanged<ChartPeriod> onPeriodChanged;
+  final CurrencyInfo? currency;
 
   const PriceHistoryChart({
     super.key,
     required this.history,
     this.period = ChartPeriod.month,
     required this.onPeriodChanged,
+    this.currency,
   });
 
   @override
@@ -242,7 +245,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                           return Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: Text(
-                              '\$${value < 10 ? value.toStringAsFixed(2) : NumberFormat('#,##0', 'en_US').format(value.round())}',
+                              widget.currency?.format(value) ?? '\$${value < 10 ? value.toStringAsFixed(2) : NumberFormat('#,##0', 'en_US').format(value.round())}',
                               style: AppTheme.captionSmall.copyWith(
                                 color: AppTheme.textDisabled,
                                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -292,7 +295,7 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                           final date =
                               DateTime.fromMillisecondsSinceEpoch(spot.x.toInt());
                           return LineTooltipItem(
-                            '${sourceDisplayName(source)}  \$${spot.y.toStringAsFixed(2)}\n${DateFormat('d MMM, HH:mm').format(date)}',
+                            '${sourceDisplayName(source)}  ${widget.currency?.format(spot.y) ?? '\$${spot.y.toStringAsFixed(2)}'}\n${DateFormat('d MMM, HH:mm').format(date)}',
                             TextStyle(
                               color: sourceColor(source),
                               fontSize: 12,

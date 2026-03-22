@@ -69,6 +69,7 @@ export const sellOperationSchema = z.object({
     marketHashName: z.string().min(1),
     priceCents: z.number().int().min(0).max(100_000_000),
     accountId: z.number().int().positive().optional(),
+    priceCurrencyId: z.number().int().min(1).max(40).optional(),
   })).min(1).max(50),
 });
 

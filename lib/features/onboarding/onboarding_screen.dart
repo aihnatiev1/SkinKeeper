@@ -58,6 +58,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       title: 'Multiple Steam Accounts',
       subtitle: 'Switch between accounts instantly. All inventory in one place.',
     ),
+    _PageData(
+      image: null, // premium slide uses icon instead
+      title: 'Unlock PRO',
+      subtitle: 'Multi-source prices, profit tracking, bulk sell, unlimited accounts.\nTry free for 7 days.',
+      isPremiumSlide: true,
+    ),
   ];
 
   @override
@@ -78,7 +84,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
-  void _finish() async {
+  void _finish({bool showPaywall = false}) async {
     HapticFeedback.mediumImpact();
     await markOnboardingComplete();
     ref.invalidate(onboardingCompleteProvider);
@@ -87,6 +93,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         context.pop();
       } else {
         context.go('/portfolio');
+      }
+      if (showPaywall) {
+        context.push('/paywall');
       }
     }
   }
@@ -155,8 +164,29 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               // Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppTheme.s32),
-                child: GradientButton(
-                  label: _page == _pages.length - 1 ? 'Get Started' : 'Next',
+                child: _pages[_page].isPremiumSlide
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GradientButton(
+                            label: 'Try PRO Free for 7 Days',
+                            gradient: AppTheme.primaryGradient,
+                            onPressed: () => _finish(showPaywall: true),
+                          ),
+                          const SizedBox(height: 10),
+                          GestureDetector(
+                            onTap: _finish,
+                            child: Text(
+                              'Maybe Later',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.textDisabled,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : GradientButton(
+                  label: _page == _pages.length - 2 ? 'Get Started' : 'Next',
                   gradient: AppTheme.primaryGradient,
                   onPressed: _next,
                 ),
@@ -172,14 +202,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 }
 
 class _PageData {
-  final String image;
+  final String? image;
   final String title;
   final String subtitle;
+  final bool isPremiumSlide;
 
   const _PageData({
     required this.image,
     required this.title,
     required this.subtitle,
+    this.isPremiumSlide = false,
   });
 }
 
@@ -192,28 +224,66 @@ class _OnboardingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Screenshot — upper 60% of slide
+        // Screenshot or premium icon — upper 60% of slide
         Expanded(
           flex: 6,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Image.asset(
-                data.image,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
+            child: data.isPremiumSlide
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          gradient: AppTheme.primaryGradient,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.workspace_premium,
+                            size: 56, color: Colors.white),
+                      ),
+                      const SizedBox(height: 24),
+                      for (final feature in [
+                        'Skinport, CSFloat, DMarket prices',
+                        'Portfolio profit & loss',
+                        'Bulk sell to Steam Market',
+                        'Unlimited Steam accounts',
+                        'CSV/Excel export',
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.check_circle,
+                                  size: 16, color: AppTheme.profit),
+                              const SizedBox(width: 8),
+                              Text(feature,
+                                  style: const TextStyle(
+                                      fontSize: 14, color: AppTheme.textPrimary)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  )
+                : ClipRRect(
                     borderRadius: BorderRadius.circular(20),
+                    child: Image.asset(
+                      data.image!,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.image_outlined,
+                              size: 64, color: AppTheme.textDisabled),
+                        ),
+                      ),
+                    ),
                   ),
-                  child: const Center(
-                    child: Icon(Icons.image_outlined,
-                        size: 64, color: AppTheme.textDisabled),
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
 

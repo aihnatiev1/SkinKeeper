@@ -80,7 +80,7 @@ const RATE_PROBE_ITEMS = [
  * Parse a Steam-formatted price string into a float.
  * Handles: "$12.34", "12,34€", "12,34₴", "123 456,78₽", "¥1,234"
  */
-function parseSteamPrice(s: string | undefined): number | null {
+export function parseSteamPrice(s: string | undefined): number | null {
   if (!s) return null;
   const cleaned = s.replace(/[^\d.,]/g, "").replace(/\s/g, "");
   if (!cleaned) return null;
@@ -231,7 +231,17 @@ export async function convertUsdToWallet(
 
   // Convert: walletSmallestUnit = usdCents * rate
   // Both are in "cents" (smallest unit), so the rate maps directly
-  return Math.round(usdCents * rate);
+  const result = Math.round(usdCents * rate);
+
+  // Sanity check: reject obviously wrong conversions (rate drift, float bugs)
+  if (rate > 0.001 && rate < 100000 && usdCents > 0) {
+    if (result <= 0) {
+      console.error(`[Currency] Conversion produced non-positive result: ${usdCents} * ${rate} = ${result}`);
+      return null;
+    }
+  }
+
+  return result;
 }
 
 // ─── Wallet currency detection ──────────────────────────────────────────

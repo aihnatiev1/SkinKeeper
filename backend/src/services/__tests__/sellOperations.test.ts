@@ -24,6 +24,13 @@ vi.mock("../steamSession.js", () => ({
 // Mock market
 vi.mock("../market.js", () => ({
   sellItem: vi.fn().mockResolvedValue({ success: true, requiresConfirmation: false }),
+  quickSellPrice: vi.fn().mockResolvedValue({ sellerReceivesCents: 1000, source: "live", currencyId: 1 }),
+  checkAssetListed: vi.fn().mockResolvedValue("not_listed"),
+}));
+
+// Mock currency
+vi.mock("../currency.js", () => ({
+  getWalletCurrency: vi.fn().mockResolvedValue(1),
 }));
 
 // Mock profitLoss
@@ -31,7 +38,12 @@ vi.mock("../profitLoss.js", () => ({
   recalculateCostBasis: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { getOperation, cancelOperation, getDailyVolume } from "../sellOperations.js";
+// Mock logger
+vi.mock("../../utils/logger.js", () => ({
+  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import { createOperation, getOperation, cancelOperation, getDailyVolume } from "../sellOperations.js";
 
 describe("getOperation", () => {
   beforeEach(() => {
@@ -171,5 +183,127 @@ describe("getDailyVolume", () => {
 
     const info = await getDailyVolume(1);
     expect(info.remaining).toBe(0);
+  });
+});
+
+// ─── createOperation ────────────────────────────────────────────────
+
+describe("createOperation", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockConnect.mockReset();
+  });
+
+  function setupMockClient(insertedCount: number, totalItems: number) {
+    const mockClient = {
+      query: vi.fn(),
+      release: vi.fn(),
+    };
+    mockConnect.mockResolvedValue(mockClient);
+
+    // BEGIN
+    mockClient.query.mockResolvedValueOnce({});
+    // INSERT sell_operations RETURNING id
+    mockClient.query.mockResolvedValueOnce({ rows: [{ id: "op-test-123" }] });
+
+    // INSERT sell_operation_items (one per item, ON CONFLICT DO NOTHING)
+    for (let i = 0; i < totalItems; i++) {
+      mockClient.query.mockResolvedValueOnce({
+        rowCount: i < insertedCount ? 1 : 0, // first N succeed, rest conflict
+      });
+    }
+
+    // UPDATE total_items (only if some skipped)
+    if (insertedCount < totalItems) {
+      mockClient.query.mockResolvedValueOnce({});
+    }
+
+    // COMMIT
+    mockClient.query.mockResolvedValueOnce({});
+
+    // Background processOperation queries (sell_operations status update)
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    return mockClient;
+  }
+
+  it("creates operation and returns operationId with no skipped items", async () => {
+    setupMockClient(2, 2);
+
+    const result = await createOperation(1, [
+      { assetId: "111", marketHashName: "AK-47", priceCents: 1000 },
+      { assetId: "222", marketHashName: "AWP", priceCents: 2000 },
+    ]);
+
+    expect(result.operationId).toBe("op-test-123");
+    expect(result.skippedAssetIds).toEqual([]);
+  });
+
+  it("detects and reports skipped items (already in active sell operation)", async () => {
+    setupMockClient(1, 2); // first item inserted, second conflicts
+
+    const result = await createOperation(1, [
+      { assetId: "111", marketHashName: "AK-47", priceCents: 1000 },
+      { assetId: "222", marketHashName: "AWP", priceCents: 2000 }, // already active
+    ]);
+
+    expect(result.operationId).toBe("op-test-123");
+    expect(result.skippedAssetIds).toEqual(["222"]);
+  });
+
+  it("skips all items when all are already active (marks operation completed immediately)", async () => {
+    const mockClient = {
+      query: vi.fn(),
+      release: vi.fn(),
+    };
+    mockConnect.mockResolvedValue(mockClient);
+
+    // BEGIN
+    mockClient.query.mockResolvedValueOnce({});
+    // INSERT sell_operations
+    mockClient.query.mockResolvedValueOnce({ rows: [{ id: "op-empty" }] });
+    // Both items conflict
+    mockClient.query.mockResolvedValueOnce({ rowCount: 0 });
+    mockClient.query.mockResolvedValueOnce({ rowCount: 0 });
+    // UPDATE total_items = 0
+    mockClient.query.mockResolvedValueOnce({});
+    // COMMIT
+    mockClient.query.mockResolvedValueOnce({});
+
+    // Mark operation completed immediately (pool.query, not client.query)
+    mockQuery.mockResolvedValueOnce({});
+
+    const result = await createOperation(1, [
+      { assetId: "111", marketHashName: "AK-47", priceCents: 1000 },
+      { assetId: "222", marketHashName: "AWP", priceCents: 2000 },
+    ]);
+
+    expect(result.skippedAssetIds).toEqual(["111", "222"]);
+    // Should mark operation as completed since 0 items to process
+    expect(mockQuery.mock.calls[0][0]).toContain("completed");
+  });
+
+  it("rolls back on DB error", async () => {
+    const mockClient = {
+      query: vi.fn(),
+      release: vi.fn(),
+    };
+    mockConnect.mockResolvedValue(mockClient);
+
+    // BEGIN
+    mockClient.query.mockResolvedValueOnce({});
+    // INSERT fails
+    mockClient.query.mockRejectedValueOnce(new Error("DB connection lost"));
+
+    await expect(
+      createOperation(1, [{ assetId: "111", marketHashName: "AK-47", priceCents: 1000 }])
+    ).rejects.toThrow("DB connection lost");
+
+    // Verify ROLLBACK was called
+    const rollbackCall = mockClient.query.mock.calls.find(
+      (c: any[]) => typeof c[0] === "string" && c[0] === "ROLLBACK"
+    );
+    expect(rollbackCall).toBeDefined();
+    expect(mockClient.release).toHaveBeenCalled();
   });
 });

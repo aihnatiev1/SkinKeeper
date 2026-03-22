@@ -1,6 +1,8 @@
 import { pool } from "../db/pool.js";
+import { log } from "../utils/logger.js";
 import { SteamSessionService } from "./steamSession.js";
-import { sellItem, quickSellPrice } from "./market.js";
+import { sellItem, quickSellPrice, checkAssetListed } from "./market.js";
+import { getWalletCurrency } from "./currency.js";
 import { recalculateCostBasis } from "./profitLoss.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -10,6 +12,7 @@ interface SellOperationItemInput {
   marketHashName: string;
   priceCents: number;
   accountId?: number;
+  priceCurrencyId?: number;
 }
 
 interface SellOperationItem {
@@ -19,7 +22,7 @@ interface SellOperationItem {
   marketHashName: string | null;
   priceCents: number;
   accountId: number | null;
-  status: "queued" | "listing" | "listed" | "failed" | "cancelled";
+  status: "queued" | "listing" | "listed" | "failed" | "cancelled" | "uncertain";
   errorMessage: string | null;
   requiresConfirmation: boolean;
   updatedAt: string;
@@ -65,7 +68,7 @@ export async function createOperation(
   userId: number,
   items: SellOperationItemInput[],
   accountId?: number
-): Promise<string> {
+): Promise<{ operationId: string; skippedAssetIds: string[] }> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -78,51 +81,67 @@ export async function createOperation(
     );
     const operationId: string = opRows[0].id;
 
-    // Batch insert all items
-    const values: unknown[] = [];
-    const placeholders: string[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const offset = i * 5;
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`
+    // Insert items one-by-one with ON CONFLICT to detect duplicates
+    // (partial unique index idx_sell_items_active_asset prevents same asset in multiple active ops)
+    const insertedAssetIds = new Set<string>();
+    for (const item of items) {
+      const { rowCount } = await client.query(
+        `INSERT INTO sell_operation_items (operation_id, asset_id, market_hash_name, price_cents, account_id, price_currency_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (asset_id) WHERE status NOT IN ('failed', 'cancelled')
+         DO NOTHING`,
+        [operationId, item.assetId, item.marketHashName, item.priceCents, item.accountId ?? null, item.priceCurrencyId ?? null]
       );
-      values.push(
-        operationId,
-        items[i].assetId,
-        items[i].marketHashName,
-        items[i].priceCents,
-        items[i].accountId ?? null
+      if (rowCount && rowCount > 0) {
+        insertedAssetIds.add(item.assetId);
+      }
+    }
+
+    const skippedAssetIds = items
+      .filter((i) => !insertedAssetIds.has(i.assetId))
+      .map((i) => i.assetId);
+
+    // Update total_items to reflect actual inserted count
+    if (insertedAssetIds.size !== items.length) {
+      await client.query(
+        `UPDATE sell_operations SET total_items = $1 WHERE id = $2`,
+        [insertedAssetIds.size, operationId]
       );
     }
 
-    await client.query(
-      `INSERT INTO sell_operation_items (operation_id, asset_id, market_hash_name, price_cents, account_id)
-       VALUES ${placeholders.join(", ")}`,
-      values
-    );
-
     await client.query("COMMIT");
 
-    // Fire and forget — processing runs in the background
-    processOperation(operationId, userId).catch(async (err) => {
-      console.error(`[SellOp ${operationId}] Unhandled processing error:`, err);
-      // Mark operation as failed in DB so client can see the error
-      try {
-        await pool.query(
-          `UPDATE sell_operations SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status != 'completed'`,
-          [operationId]
-        );
-        await pool.query(
-          `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW()
-           WHERE operation_id = $2 AND status = 'queued'`,
-          [err instanceof Error ? err.message : "Unexpected processing error", operationId]
-        );
-      } catch (dbErr) {
-        console.error(`[SellOp ${operationId}] Failed to update DB after crash:`, dbErr);
-      }
-    });
+    if (skippedAssetIds.length > 0) {
+      log.warn("sell_items_skipped", { operationId, skippedCount: skippedAssetIds.length });
+    }
 
-    return operationId;
+    // Only process if there are items to sell
+    if (insertedAssetIds.size > 0) {
+      processOperation(operationId, userId).catch(async (err) => {
+        log.error("sell_op_crashed", { operationId }, err);
+        try {
+          await pool.query(
+            `UPDATE sell_operations SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status != 'completed'`,
+            [operationId]
+          );
+          await pool.query(
+            `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW()
+             WHERE operation_id = $2 AND status = 'queued'`,
+            [err instanceof Error ? err.message : "Unexpected processing error", operationId]
+          );
+        } catch (dbErr) {
+          log.error("sell_op_db_cleanup_failed", { operationId }, dbErr);
+        }
+      });
+    } else {
+      // All items skipped — mark operation as completed immediately
+      await pool.query(
+        `UPDATE sell_operations SET status = 'completed', completed_at = NOW() WHERE id = $1`,
+        [operationId]
+      );
+    }
+
+    return { operationId, skippedAssetIds };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -170,9 +189,9 @@ async function processOperation(
       return sessionCache.get(accountId)!;
     };
 
-    // Load queued items WITH per-item account_id
+    // Load queued items WITH per-item account_id and currency
     const { rows: items } = await pool.query(
-      `SELECT id, asset_id, market_hash_name, price_cents, account_id
+      `SELECT id, asset_id, market_hash_name, price_cents, account_id, price_currency_id
        FROM sell_operation_items
        WHERE operation_id = $1 AND status = 'queued'
        ORDER BY id`,
@@ -199,10 +218,15 @@ async function processOperation(
 
       const itemAccountId: number = item.account_id ?? fallbackAccountId;
 
+      // Resolve wallet currency for this account
+      const walletCurrencyId = await getWalletCurrency(itemAccountId) ?? 1;
+
       // Auto-resolve quick price when client sends priceCents=0
       let priceCents: number = item.price_cents;
+      // priceCurrencyId from client: null/undefined = wallet currency, 1 = USD, etc.
+      let priceCurrencyId: number = item.price_currency_id ?? walletCurrencyId;
       if (priceCents <= 0 && item.market_hash_name) {
-        const qpResult = await quickSellPrice(item.market_hash_name);
+        const qpResult = await quickSellPrice(item.market_hash_name, walletCurrencyId);
         const qp = qpResult?.sellerReceivesCents ?? null;
         if (qp === null || qp <= 0) {
           await pool.query(
@@ -219,6 +243,7 @@ async function processOperation(
           continue;
         }
         priceCents = qp;
+        priceCurrencyId = qpResult!.currencyId;
         await pool.query(
           `UPDATE sell_operation_items SET price_cents = $1 WHERE id = $2`,
           [priceCents, item.id]
@@ -227,7 +252,36 @@ async function processOperation(
 
       try {
         const session = await getSession(itemAccountId);
-        const result = await sellItem(session, item.asset_id, priceCents, itemAccountId);
+
+        // Fix 4: Price sanity check — reject prices wildly off from market
+        if (priceCents > 0 && item.market_hash_name) {
+          try {
+            const qp = await quickSellPrice(item.market_hash_name, walletCurrencyId);
+            if (qp && qp.sellerReceivesCents > 0) {
+              const ratio = priceCents / qp.sellerReceivesCents;
+              if (ratio > 5) {
+                await pool.query(
+                  `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2`,
+                  [`Price is ${ratio.toFixed(1)}x above market. Check your price and retry.`, item.id]
+                );
+                await pool.query(`UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`, [operationId]);
+                consecutiveErrors++;
+                continue;
+              }
+              if (ratio < 0.2) {
+                await pool.query(
+                  `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2`,
+                  [`Price is ${(ratio * 100).toFixed(0)}% of market value. Check your price and retry.`, item.id]
+                );
+                await pool.query(`UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`, [operationId]);
+                consecutiveErrors++;
+                continue;
+              }
+            }
+          } catch { /* price check failed — proceed with sell anyway */ }
+        }
+
+        const result = await sellItem(session, item.asset_id, priceCents, itemAccountId, priceCurrencyId);
 
         if (result.success) {
           await pool.query(
@@ -291,19 +345,46 @@ async function processOperation(
           }
         }
       } catch (err: unknown) {
-        const errorMsg =
-          err instanceof Error ? err.message : "Unexpected error";
-        await pool.query(
-          `UPDATE sell_operation_items
-           SET status = 'failed', error_message = $1, updated_at = NOW()
-           WHERE id = $2`,
-          [errorMsg, item.id]
-        );
-        await pool.query(
-          `UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`,
-          [operationId]
-        );
-        consecutiveErrors++;
+        const errorMsg = err instanceof Error ? err.message : "Unexpected error";
+
+        // Fix 2: Before marking as "failed", check if Steam actually listed the item
+        // (network dropout after Steam accepted = phantom listing)
+        let finalStatus: "failed" | "listed" | "uncertain" = "failed";
+        try {
+          const session = await getSession(itemAccountId);
+          const listingCheck = await checkAssetListed(session, item.asset_id);
+          if (listingCheck === "listed") {
+            finalStatus = "listed";
+            log.warn("phantom_listing_detected", { operationId, assetId: item.asset_id });
+          } else if (listingCheck === "unknown") {
+            finalStatus = "uncertain";
+          }
+        } catch {
+          finalStatus = "uncertain";
+        }
+
+        if (finalStatus === "listed") {
+          await pool.query(
+            `UPDATE sell_operation_items SET status = 'listed', updated_at = NOW() WHERE id = $1`,
+            [item.id]
+          );
+          await pool.query(
+            `UPDATE sell_operations SET succeeded = succeeded + 1 WHERE id = $1`,
+            [operationId]
+          );
+          await incrementVolume(userId);
+          consecutiveErrors = 0;
+        } else {
+          await pool.query(
+            `UPDATE sell_operation_items SET status = $1, error_message = $2, updated_at = NOW() WHERE id = $3`,
+            [finalStatus, errorMsg, item.id]
+          );
+          await pool.query(
+            `UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`,
+            [operationId]
+          );
+          consecutiveErrors++;
+        }
       }
 
       // Adaptive delay between items (skip delay after the last item)
@@ -334,7 +415,7 @@ async function processOperation(
     try {
       await recalculateCostBasis(userId);
     } catch (err) {
-      console.error(`[SellOp ${operationId}] Cost basis recalc failed:`, err);
+      log.error("cost_basis_recalc_failed", { operationId }, err);
     }
   } finally {
     activeOperations.delete(operationId);

@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/analytics_service.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../core/constants.dart';
@@ -27,7 +28,9 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
     try {
       dev.log('Token found, fetching /auth/me', name: 'Auth');
       final response = await api.get('/auth/me');
-      return SteamUser.fromJson(response.data as Map<String, dynamic>);
+      final user = SteamUser.fromJson(response.data as Map<String, dynamic>);
+      Analytics.setUserId(user.id.toString());
+      return user;
     } catch (e) {
       dev.log('Auth/me failed: $e', name: 'Auth');
       await api.clearToken();
@@ -42,10 +45,12 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
       final response = await api.post('/auth/steam/verify', data: params);
       final data = response.data as Map<String, dynamic>;
       await api.saveToken(data['token'] as String);
-      state = AsyncData(
-        SteamUser.fromJson(data['user'] as Map<String, dynamic>),
-      );
+      final user = SteamUser.fromJson(data['user'] as Map<String, dynamic>);
+      Analytics.setUserId(user.id.toString());
+      Analytics.login(method: 'steam_openid');
+      state = AsyncData(user);
     } catch (e, st) {
+      Analytics.recordError(e, st, reason: 'login_failed');
       state = AsyncError(e, st);
     }
   }
@@ -66,6 +71,23 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
     await api.clearToken();
     await CacheService.clearAll();
     state = const AsyncData(null);
+  }
+
+  /// Permanently delete user account and all data (GDPR).
+  Future<bool> deleteAccount() async {
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.delete('/auth/user');
+      await PushService.unregister(api);
+      await api.clearToken();
+      await CacheService.clearAll();
+      Analytics.setUserId(null);
+      state = const AsyncData(null);
+      return true;
+    } catch (e, st) {
+      Analytics.recordError(e, st, reason: 'account_deletion_failed');
+      return false;
+    }
   }
 }
 

@@ -135,8 +135,8 @@ class _NavItem extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.s12,
-          vertical: AppTheme.s6,
+          horizontal: AppTheme.s16,
+          vertical: AppTheme.s8,
         ),
         decoration: isActive
             ? BoxDecoration(

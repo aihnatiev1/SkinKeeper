@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api_client.dart';
+import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../portfolio_pl_provider.dart';
 
@@ -160,6 +161,7 @@ class _CsvImportSheetState extends ConsumerState<CsvImportSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final currency = ref.watch(currencyProvider);
     final validCount = _rows?.where((r) => r.error == null).length ?? 0;
     final errorCount = _rows?.where((r) => r.error != null).length ?? 0;
 
@@ -308,7 +310,7 @@ class _CsvImportSheetState extends ConsumerState<CsvImportSheet> {
                           child: Text(
                             hasErr
                                 ? '${r.name.isEmpty ? "(empty)" : r.name} — ${r.error}'
-                                : '${r.type.toUpperCase()}  ${r.name}  ×${r.qty}  \$${r.priceUsd.toStringAsFixed(2)}',
+                                : '${r.type.toUpperCase()}  ${r.name}  ×${r.qty}  ${currency.format(r.priceUsd)}',
                             style: TextStyle(
                                 fontSize: 11,
                                 color: hasErr ? AppTheme.loss : AppTheme.textSecondary),

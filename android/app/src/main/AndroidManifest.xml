@@ -24,12 +24,21 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Deep link for Steam auth callback -->
+            <!-- Deep link: custom scheme (auth, referral, account-linked) -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="skinkeeper" android:host="auth"/>
+                <data android:scheme="skinkeeper" android:host="ref"/>
+                <data android:scheme="skinkeeper" android:host="account-linked"/>
+            </intent-filter>
+            <!-- Deep link: HTTPS (referral links from web, social media) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="skinkeeper.store" android:pathPrefix="/ref/"/>
             </intent-filter>
         </activity>
         <!-- Home screen widget -->

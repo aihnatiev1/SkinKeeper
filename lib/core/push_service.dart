@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api_client.dart';
 import 'push_preferences.dart';
+import 'router.dart';
 
 /// Top-level handler for background messages (must be top-level function).
 @pragma('vm:entry-point')
@@ -63,6 +65,50 @@ class PushService {
 
     // Background handler
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+    // Handle notification tap when app is in background/terminated
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+    // Check if app was opened from a notification (cold start)
+    final initial = await _messaging.getInitialMessage();
+    if (initial != null) _handleNotificationTap(initial);
+  }
+
+  /// Route to the correct screen based on push notification data payload.
+  static void _handleNotificationTap(RemoteMessage message) {
+    final data = message.data;
+    final type = data['type'] as String?;
+    dev.log('Notification tap: type=$type', name: 'Push');
+
+    try {
+      switch (type) {
+        case 'price_alert':
+          _router?.go('/alerts');
+        case 'trade_incoming':
+        case 'trade_accepted':
+        case 'trade_declined':
+        case 'trade_cancelled':
+          final offerId = data['offerId'] as String?;
+          if (offerId != null) {
+            _router?.go('/trades/$offerId');
+          } else {
+            _router?.go('/trades');
+          }
+        case 'sell_completed':
+          _router?.go('/inventory');
+        default:
+          _router?.go('/portfolio');
+      }
+    } catch (e) {
+      dev.log('Failed to route from notification: $e', name: 'Push');
+    }
+  }
+
+  static GoRouter? _router;
+
+  /// Set router reference for notification-based navigation. Call once from app init.
+  static void setRouter(WidgetRef ref) {
+    _router = ref.read(routerProvider);
   }
 
   /// Re-sync push preferences to backend (call after toggling a preference).

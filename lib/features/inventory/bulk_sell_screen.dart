@@ -206,6 +206,7 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
       _BulkSellQuantitySheet(
         group: group,
         preSelectedIds: Set<String>.from(s.selectedIds),
+        currency: ref.read(currencyProvider),
         onConfirm: (chosenIds) {
           setState(() {
             s.selectedIds = chosenIds.toSet();
@@ -871,11 +872,13 @@ class _BulkSellQuantitySheet extends StatefulWidget {
   final _ItemGroup group;
   final Set<String> preSelectedIds;
   final void Function(List<String> assetIds) onConfirm;
+  final CurrencyInfo currency;
 
   const _BulkSellQuantitySheet({
     required this.group,
     required this.preSelectedIds,
     required this.onConfirm,
+    required this.currency,
   });
 
   @override
@@ -964,7 +967,7 @@ class _BulkSellQuantitySheetState extends State<_BulkSellQuantitySheet> {
                         ),
                         if (price > 0)
                           Text(
-                            '\$${price.toStringAsFixed(2)} each',
+                            '${widget.currency.format(price)} each',
                             style: const TextStyle(
                                 fontSize: 12, color: AppTheme.textMuted),
                           ),
@@ -1013,7 +1016,7 @@ class _BulkSellQuantitySheetState extends State<_BulkSellQuantitySheet> {
                               TextStyle(fontSize: 11, color: AppTheme.textMuted),
                         ),
                         Text(
-                          '~\$${totalPrice.toStringAsFixed(2)}',
+                          '~${widget.currency.format(totalPrice)}',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -1301,7 +1304,7 @@ class _BulkSellQuantitySheetState extends State<_BulkSellQuantitySheet> {
                         ),
                       if (item.steamPrice != null)
                         Text(
-                          '\$${item.steamPrice!.toStringAsFixed(2)}',
+                          widget.currency.format(item.steamPrice!),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,

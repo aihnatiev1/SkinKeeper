@@ -193,12 +193,36 @@ router.post(
         [...accountIds].map((id) => SteamSessionService.ensureValidSession(id))
       );
 
-      const operationId = await createOperation(req.userId!, items, activeAccountId);
+      // Fix 6: Validate asset ownership — every item must exist in the user's inventory
+      const assetIds = items.map((i: { assetId: string }) => i.assetId);
+      const { rows: ownedRows } = await pool.query(
+        `SELECT ii.asset_id
+         FROM inventory_items ii
+         JOIN steam_accounts sa ON ii.steam_account_id = sa.id
+         WHERE sa.user_id = $1 AND ii.asset_id = ANY($2::text[])`,
+        [req.userId!, assetIds]
+      );
+      const ownedSet = new Set(ownedRows.map((r: { asset_id: string }) => r.asset_id));
+      const invalidAssetIds = assetIds.filter((id: string) => !ownedSet.has(id));
+      let validItems = items;
+      if (invalidAssetIds.length > 0) {
+        if (invalidAssetIds.length === assetIds.length) {
+          res.status(400).json({
+            error: "None of the items were found in your inventory",
+            invalidAssetIds,
+          });
+          return;
+        }
+        validItems = items.filter((i: { assetId: string }) => ownedSet.has(i.assetId));
+      }
+
+      const { operationId, skippedAssetIds } = await createOperation(req.userId!, validItems, activeAccountId);
 
       res.json({
         operationId,
         status: "pending",
-        totalItems: items.length,
+        totalItems: validItems.length,
+        skippedAssetIds: [...skippedAssetIds, ...invalidAssetIds],
       });
     } catch (err) {
       next(err);
@@ -457,24 +481,41 @@ router.get("/price/:marketHashName", async (req, res) => {
   }
 });
 
-// Get quick sell price (lowest listing - 1 cent)
+// Get quick sell price (lowest listing - 1 smallest unit) in wallet currency
 // GET /api/market/quickprice/:marketHashName
-// Response: { sellerReceivesCents, stale, marketUrl }
+// Query: ?accountId= (optional, uses active account if omitted)
+// Response: { sellerReceivesCents, stale, source, marketUrl, currencyId }
+//   sellerReceivesCents is in the wallet's smallest unit (cents/kopecks/etc.)
 //   stale=true when live Steam API failed and price is from fallback
-router.get("/quickprice/:marketHashName", async (req, res) => {
+router.get("/quickprice/:marketHashName", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const marketHashName = req.params.marketHashName as string;
-    const result = await quickSellPrice(marketHashName);
+
+    // Resolve wallet currency from account
+    const accountId = req.query.accountId
+      ? parseInt(req.query.accountId as string)
+      : await SteamSessionService.getActiveAccountId(req.userId!);
+    let walletCurrencyId = 1; // default USD
+    if (accountId) {
+      const wc = await getWalletCurrency(accountId);
+      if (wc) walletCurrencyId = wc;
+    }
+
+    const result = await quickSellPrice(marketHashName, walletCurrencyId);
     if (result === null) {
       res.status(404).json({ error: "No market price available" });
       return;
     }
     const marketUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}`;
+    const info = getCurrencyInfo(result.currencyId);
     res.json({
       sellerReceivesCents: result.sellerReceivesCents,
       stale: result.source !== "live",
       source: result.source,
       marketUrl,
+      currencyId: result.currencyId,
+      currencyCode: info?.code ?? "USD",
+      currencySymbol: info?.symbol ?? "$",
     });
   } catch (err) {
     console.error("Quick price error:", err);

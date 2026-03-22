@@ -1,7 +1,8 @@
 import axios from "axios";
 import type { SteamSession } from "./steamSession.js";
 import { SteamSessionService } from "./steamSession.js";
-import { convertUsdToWallet, getWalletCurrency, getCurrencyInfo } from "./currency.js";
+import { convertUsdToWallet, getWalletCurrency, getCurrencyInfo, getExchangeRate, parseSteamPrice } from "./currency.js";
+import { log } from "../utils/logger.js";
 import { getLatestPrices } from "./prices.js";
 import { getSteamDepth } from "./steamMarketDepth.js";
 
@@ -18,8 +19,10 @@ interface MarketPriceInfo {
 }
 
 // Get current lowest price from Steam Market
+// currency: Steam currency ID (1=USD, 18=UAH, etc.)
 export async function getMarketPrice(
-  marketHashName: string
+  marketHashName: string,
+  currency: number = 1
 ): Promise<MarketPriceInfo> {
   try {
     const { data } = await axios.get(
@@ -27,7 +30,7 @@ export async function getMarketPrice(
       {
         params: {
           appid: 730,
-          currency: 1, // USD
+          currency,
           market_hash_name: marketHashName,
         },
         timeout: 10000,
@@ -36,10 +39,14 @@ export async function getMarketPrice(
 
     if (!data.success) return { lowestPrice: null, medianPrice: null, volume: null };
 
-    // Parse "$12.34" -> 1234 (cents)
+    const info = getCurrencyInfo(currency);
+    const decimals = info?.decimals ?? 2;
+
+    // Parse any Steam price format ("$12.34", "₴123,45", "¥1,234") into smallest unit
     const parsePrice = (s: string | undefined): number | null => {
-      if (!s) return null;
-      return Math.round(parseFloat(s.replace(/[^0-9.]/g, "")) * 100);
+      const val = parseSteamPrice(s);
+      if (val === null) return null;
+      return Math.round(val * Math.pow(10, decimals));
     };
 
     return {
@@ -104,47 +111,79 @@ async function getFreshSessionId(
       for (const cookie of cookies) {
         const match = cookie.match(/sessionid=([^;]+)/);
         if (match) {
-          console.log(`[Sell] Fresh sessionId obtained: ${match[1].substring(0, 8)}…`);
+          log.info("sell_session_refreshed");
           return match[1]; // raw value, no decode
         }
       }
     }
 
-    console.warn("[Sell] No sessionid in Set-Cookie response");
+    log.warn("sell_no_sessionid");
     return null;
   } catch (err: any) {
-    console.warn("[Sell] Failed to fetch fresh sessionId:", err.message);
+    log.warn("sell_session_refresh_failed", {}, err);
     return null;
   }
 }
 
 // Sell an item on Steam Community Market
+// priceCurrencyId: currency of priceInCents (e.g. 18=UAH when from quickSellPrice with wallet currency)
 export async function sellItem(
   session: SteamSession,
   assetId: string,
-  priceInCents: number, // price seller receives in USD cents
-  accountId?: number // steam_accounts.id — needed for wallet currency conversion
+  priceInCents: number,
+  accountId?: number,
+  priceCurrencyId: number = 1
 ): Promise<SellResult> {
   try {
-    // Convert USD cents to wallet currency if needed
     let walletPriceCents = priceInCents;
-    let currencyLabel = "USD";
+    let currencyLabel = getCurrencyInfo(priceCurrencyId)?.code ?? "USD";
 
     if (accountId) {
       const walletCurrency = await getWalletCurrency(accountId, session.steamLoginSecure);
-      if (walletCurrency && walletCurrency !== 1) {
-        const converted = await convertUsdToWallet(priceInCents, walletCurrency);
-        if (converted !== null) {
-          walletPriceCents = converted;
-          const info = getCurrencyInfo(walletCurrency);
-          currencyLabel = info?.code ?? `currency#${walletCurrency}`;
-          console.log(
-            `[Sell] Currency conversion: ${priceInCents} USD cents → ${walletPriceCents} ${currencyLabel} cents`
-          );
+      if (walletCurrency && walletCurrency !== priceCurrencyId) {
+        // Price is in a different currency than wallet — need conversion
+        // First convert to USD if not already, then to wallet currency
+        let usdCents = priceInCents;
+        if (priceCurrencyId !== 1) {
+          // Convert from source currency to USD (reverse rate)
+          const sourceRate = await getExchangeRate(priceCurrencyId);
+          if (sourceRate && sourceRate > 0) {
+            usdCents = Math.round(priceInCents / sourceRate);
+          } else {
+            log.error("sell_currency_conversion_failed", { from: currencyLabel, to: "USD" });
+            return {
+              success: false,
+              requiresConfirmation: false,
+              message: `Currency conversion from ${currencyLabel} failed. Please try again.`,
+            };
+          }
+        }
+        if (walletCurrency !== 1) {
+          const converted = await convertUsdToWallet(usdCents, walletCurrency);
+          if (converted !== null) {
+            walletPriceCents = converted;
+            const info = getCurrencyInfo(walletCurrency);
+            currencyLabel = info?.code ?? `currency#${walletCurrency}`;
+            log.info("sell_currency_converted", { from: getCurrencyInfo(priceCurrencyId)?.code, to: currencyLabel, inputCents: priceInCents, outputCents: walletPriceCents });
+          } else {
+            const info = getCurrencyInfo(walletCurrency);
+            const code = info?.code ?? `currency#${walletCurrency}`;
+            log.error("sell_currency_conversion_failed", { to: code });
+            return {
+              success: false,
+              requiresConfirmation: false,
+              message: `Currency conversion to ${code} failed. Please try again or set your wallet currency manually in Settings.`,
+            };
+          }
         } else {
-          console.warn(
-            `[Sell] Currency conversion failed for currency ${walletCurrency}, falling back to USD`
-          );
+          walletPriceCents = usdCents;
+          currencyLabel = "USD";
+        }
+      } else {
+        // Price is already in wallet currency — use as-is
+        if (walletCurrency) {
+          const info = getCurrencyInfo(walletCurrency);
+          currencyLabel = info?.code ?? currencyLabel;
         }
       }
     }
@@ -174,12 +213,10 @@ export async function sellItem(
         .map((c: string) => c.split(";")[0])
         .find((c: string) => c.startsWith("webTradeEligibility="));
     } catch (e: any) {
-      console.warn(`[Sell] Eligibility check failed, proceeding without:`, e.message);
+      log.warn("sell_eligibility_check_failed", {}, e);
     }
 
-    console.log(
-      `[Sell] assetId=${assetId} sellerReceives=${walletPriceCents}c buyerPays=${buyerPays}c (${currencyLabel}) sessionId=${sessionId.substring(0, 8)}… fresh=${!!freshSessionId} eligibility=${!!eligCookie}`
-    );
+    log.info("sell_listing", { assetId, sellerReceivesCents: walletPriceCents, buyerPaysCents: buyerPays, currency: currencyLabel });
 
     const formBody = [
       `sessionid=${sessionId}`,
@@ -209,7 +246,7 @@ export async function sellItem(
     );
     const data = resp.data;
 
-    console.log(`[Sell] HTTP ${resp.status} Response:`, JSON.stringify(data));
+    log.info("sell_steam_response", { status: resp.status, success: data.success });
 
     if (data.success) {
       // Update stored sessionId if it changed
@@ -217,13 +254,11 @@ export async function sellItem(
         session.sessionId = freshSessionId;
       }
 
+      const symbol = getCurrencyInfo(priceCurrencyId)?.symbol ?? "$";
       return {
         success: true,
         requiresConfirmation: data.requires_confirmation === 1,
-        message:
-          currencyLabel === "USD"
-            ? `Listed for $${(buyerPays / 100).toFixed(2)} (you receive $${(priceInCents / 100).toFixed(2)})`
-            : `Listed for ${(buyerPays / 100).toFixed(2)} ${currencyLabel} (≈ $${(priceInCents / 100).toFixed(2)} USD)`,
+        message: `Listed for ${(buyerPays / 100).toFixed(2)} ${currencyLabel} (you receive ${symbol}${(walletPriceCents / 100).toFixed(2)})`,
       };
     }
 
@@ -233,7 +268,7 @@ export async function sellItem(
       message: data.message || "Failed to create listing",
     };
   } catch (err: any) {
-    console.error(`[Sell] Error for assetId=${assetId}:`, err.response?.data || err.message);
+    log.error("sell_error", { assetId }, err);
     return {
       success: false,
       requiresConfirmation: false,
@@ -246,15 +281,19 @@ export interface QuickSellResult {
   sellerReceivesCents: number;
   /** "live" = fresh Steam API, "depth" / "cached" = fallback (stale) */
   source: "live" | "depth" | "cached";
+  /** Currency of sellerReceivesCents (Steam currency ID, e.g. 1=USD, 18=UAH) */
+  currencyId: number;
 }
 
-// Quick sell: live Steam price - 1 cent (listing/buyer-pays side).
+// Quick sell: live Steam price - 1 smallest-unit (listing/buyer-pays side).
+// When walletCurrencyId is provided, fetches price directly from Steam in that currency.
 // Fallback chain if Steam API returns 429 or fails:
-//   1. Live Steam API (always try first — freshest data)
-//   2. Steam Market Depth lowestAsk (iflow, refreshed every 12h)
-//   3. Cached steam price from current_prices (if < 48h old)
+//   1. Live Steam API in wallet currency (freshest + native currency = exact undercut)
+//   2. Steam Market Depth lowestAsk (USD, converted to wallet currency)
+//   3. Cached steam price from current_prices (USD, converted to wallet currency)
 export async function quickSellPrice(
-  marketHashName: string
+  marketHashName: string,
+  walletCurrencyId: number = 1
 ): Promise<QuickSellResult | null> {
   const undercut = (buyerPaysCents: number): number => {
     const listing = Math.max(1, buyerPaysCents - 1);
@@ -263,26 +302,43 @@ export async function quickSellPrice(
     return Math.max(1, listing - valveFee - cs2Fee);
   };
 
-  // 1. Live Steam API — always try first
-  const live = await getMarketPrice(marketHashName);
+  // Helper: convert USD cents to wallet currency (for fallback sources stored in USD)
+  const toWallet = async (usdCents: number): Promise<number | null> => {
+    if (walletCurrencyId === 1) return usdCents;
+    return convertUsdToWallet(usdCents, walletCurrencyId);
+  };
+
+  const currencyCode = getCurrencyInfo(walletCurrencyId)?.code ?? "USD";
+
+  // 1. Live Steam API — fetch in wallet currency directly
+  const live = await getMarketPrice(marketHashName, walletCurrencyId);
   if (live.lowestPrice !== null && live.lowestPrice > 0) {
-    return { sellerReceivesCents: undercut(live.lowestPrice), source: "live" };
+    log.info("quicksell_live_price", { marketHashName, currency: currencyCode, price: live.lowestPrice });
+    return { sellerReceivesCents: undercut(live.lowestPrice), source: "live", currencyId: walletCurrencyId };
   }
 
-  // 2. Steam Market Depth (iflow order book, refreshed every 12h)
+  // 2. Steam Market Depth (stored in USD — convert to wallet currency)
   const depth = getSteamDepth(marketHashName);
   if (depth && depth.lowestAsk > 0) {
-    console.warn(`[QuickSell] Steam API failed for "${marketHashName}", using depth lowestAsk=$${depth.lowestAsk}`);
-    return { sellerReceivesCents: undercut(Math.round(depth.lowestAsk * 100)), source: "depth" };
+    const usdCents = Math.round(depth.lowestAsk * 100);
+    const walletCents = await toWallet(usdCents);
+    if (walletCents !== null) {
+      log.warn("quicksell_fallback_depth", { marketHashName, currency: currencyCode, walletCents });
+      return { sellerReceivesCents: undercut(walletCents), source: "depth", currencyId: walletCurrencyId };
+    }
   }
 
-  // 3. Cached steam price from current_prices (already filtered to < 48h)
+  // 3. Cached steam price from current_prices (USD, already filtered to < 48h)
   const priceMap = await getLatestPrices([marketHashName]);
   const sources = priceMap.get(marketHashName);
   const cachedSteam = sources?.["steam"];
   if (cachedSteam && cachedSteam > 0) {
-    console.warn(`[QuickSell] Steam API + depth failed for "${marketHashName}", using cached steam=$${cachedSteam}`);
-    return { sellerReceivesCents: undercut(Math.round(cachedSteam * 100)), source: "cached" };
+    const usdCents = Math.round(cachedSteam * 100);
+    const walletCents = await toWallet(usdCents);
+    if (walletCents !== null) {
+      log.warn("quicksell_fallback_cached", { marketHashName, currency: currencyCode, walletCents });
+      return { sellerReceivesCents: undercut(walletCents), source: "cached", currencyId: walletCurrencyId };
+    }
   }
 
   return null;
@@ -305,4 +361,50 @@ export async function bulkSell(
   }
 
   return results;
+}
+
+/**
+ * Check if a specific asset is currently listed on Steam Market.
+ * Used for phantom listing detection (network dropout after Steam accepted listing).
+ * Returns "listed" if found, "not_listed" if confirmed absent, "unknown" if check failed.
+ */
+export async function checkAssetListed(
+  session: SteamSession,
+  assetId: string
+): Promise<"listed" | "not_listed" | "unknown"> {
+  try {
+    const { data } = await axios.get(
+      "https://steamcommunity.com/market/mylistings",
+      {
+        params: { norender: 1, start: 0, count: 100 },
+        headers: {
+          Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`,
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+        timeout: 15000,
+      }
+    );
+
+    if (!data?.success) return "unknown";
+
+    // Check active listings, to-confirm, and on-hold
+    const allListings = [
+      ...((data.listings as unknown[]) ?? []),
+      ...((data.listings_to_confirm as unknown[]) ?? []),
+      ...((data.listings_on_hold as unknown[]) ?? []),
+    ];
+
+    for (const listing of allListings) {
+      const l = listing as Record<string, unknown>;
+      const asset = l.asset as Record<string, unknown> | undefined;
+      if (asset?.id === assetId || asset?.assetid === assetId) {
+        return "listed";
+      }
+    }
+
+    return "not_listed";
+  } catch {
+    return "unknown";
+  }
 }

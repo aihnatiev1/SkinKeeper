@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { pool } from "../db/pool.js";
@@ -6,6 +7,37 @@ import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { SteamSessionService } from "../services/steamSession.js";
 
 const router = Router();
+
+/** Generate a short alphanumeric referral code and ensure it's set on the user. */
+async function ensureReferralCode(userId: number): Promise<string> {
+  const { rows } = await pool.query(
+    "SELECT referral_code FROM users WHERE id = $1",
+    [userId]
+  );
+  if (rows[0]?.referral_code) return rows[0].referral_code;
+
+  const code = crypto.randomBytes(4).toString("hex").toUpperCase(); // 8 chars
+  await pool.query(
+    "UPDATE users SET referral_code = $1 WHERE id = $2 AND referral_code IS NULL",
+    [code, userId]
+  );
+  return code;
+}
+
+/** Apply referral: link referred user to referrer. Only works on first login. */
+async function applyReferral(userId: number, referralCode: string): Promise<void> {
+  if (!referralCode) return;
+  const { rows } = await pool.query(
+    "SELECT id FROM users WHERE referral_code = $1 AND id != $2",
+    [referralCode.toUpperCase(), userId]
+  );
+  if (rows.length === 0) return;
+  await pool.query(
+    "UPDATE users SET referred_by = $1 WHERE id = $2 AND referred_by IS NULL",
+    [rows[0].id, userId]
+  );
+  console.log(`[Referral] User ${userId} referred by user ${rows[0].id} (code: ${referralCode})`);
+}
 
 // POST /api/auth/refresh — renew JWT before it expires
 router.post("/refresh", async (req: Request, res: Response) => {
@@ -264,7 +296,42 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// (Removed duplicate /auth/token route — the full version with WebView support is below)
+// ─── Referral System ─────────────────────────────────────────────────────
+
+// GET /api/auth/referral — get current user's referral code + stats
+router.get("/referral", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const code = await ensureReferralCode(req.userId!);
+    const { rows } = await pool.query(
+      "SELECT COUNT(*)::int AS referral_count FROM users WHERE referred_by = $1",
+      [req.userId]
+    );
+    res.json({
+      code,
+      referralCount: rows[0]?.referral_count ?? 0,
+      shareUrl: `https://skinkeeper.store/ref/${code}`,
+    });
+  } catch (err) {
+    console.error("Referral error:", err);
+    res.status(500).json({ error: "Failed to get referral info" });
+  }
+});
+
+// POST /api/auth/referral/apply — apply a referral code (called once after first login)
+router.post("/referral/apply", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { code } = req.body;
+    if (!code || typeof code !== "string") {
+      res.status(400).json({ error: "Referral code required" });
+      return;
+    }
+    await applyReferral(req.userId!, code);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Apply referral error:", err);
+    res.status(500).json({ error: "Failed to apply referral" });
+  }
+});
 
 // ─── Account Management ─────────────────────────────────────────────────
 
@@ -451,6 +518,42 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
   } catch (err) {
     console.error("Unlink account error:", err);
     res.status(500).json({ error: "Failed to unlink account" });
+  }
+});
+
+// DELETE /api/auth/user — GDPR: permanently delete user and all associated data
+router.delete("/user", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    // Clear FK reference before cascade delete
+    await pool.query(
+      `UPDATE users SET active_account_id = NULL WHERE id = $1`,
+      [req.userId]
+    );
+
+    // Delete user — CASCADE handles: steam_accounts, inventory_items, transactions,
+    // price_alerts, sell_operations, trade_offers, daily_pl_snapshots, user_devices,
+    // purchase_receipts, portfolios, item_cost_basis, sell_volume
+    const { rows } = await pool.query(
+      `DELETE FROM users WHERE id = $1 RETURNING id, steam_id, display_name, created_at`,
+      [req.userId]
+    );
+
+    if (rows.length === 0) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    console.log(
+      `[GDPR] User ${rows[0].id} (steam: ${rows[0].steam_id}, name: ${rows[0].display_name}) deleted. Account created: ${rows[0].created_at}`
+    );
+
+    res.json({
+      success: true,
+      deletedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("GDPR user deletion error:", err);
+    res.status(500).json({ error: "Failed to delete account" });
   }
 });
 

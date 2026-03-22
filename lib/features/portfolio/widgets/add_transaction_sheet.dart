@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/api_client.dart';
+import '../../../core/settings_provider.dart';
 import '../../../core/steam_image.dart';
 import '../../../core/theme.dart';
 import '../../../models/profit_loss.dart';
@@ -189,6 +190,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     // EditableTextState.dispose() deregisters before keyboard sends didChangeMetrics.
     if (_isClosing) return const SizedBox.shrink();
 
+    final currency = ref.watch(currencyProvider);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
@@ -348,7 +350,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                             ),
                           ),
                           Text(
-                            '\$${_totalPrice.toStringAsFixed(2)}',
+                            currency.format(_totalPrice),
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,

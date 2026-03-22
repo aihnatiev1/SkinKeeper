@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /login
+Disallow: /portfolio
+Disallow: /inventory
+
+Sitemap: https://skinkeeper.store/sitemap.xml

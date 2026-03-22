@@ -5,10 +5,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../core/cache_service.dart';
 import '../../core/router.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../../core/widgets/stale_data_banner.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/profit_loss.dart';
 import '../../widgets/premium_gate.dart';
@@ -98,6 +101,22 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
 
             // ── Sync banner (shows during background sync after login) ──
             SliverToBoxAdapter(child: _SyncBanner()),
+
+            // ── Stale data warning (when portfolio cache is old) ──
+            if (portfolio.hasValue) SliverToBoxAdapter(
+              child: Builder(builder: (_) {
+                final lastSync = CacheService.lastSync;
+                final isStale = lastSync != null &&
+                    DateTime.now().difference(lastSync).inHours >= 2;
+                if (!isStale) return const SizedBox.shrink();
+                return StaleDataBanner(
+                  onRefresh: () {
+                    ref.invalidate(portfolioProvider);
+                    ref.read(portfolioPLProvider.notifier).refresh();
+                  },
+                );
+              }),
+            ),
 
             // ── P/L Summary (always visible, compact) ──
             SliverToBoxAdapter(
@@ -500,6 +519,18 @@ class _PortfolioHeader extends ConsumerWidget {
                     ),
                   ),
                   const Spacer(),
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _sharePortfolio(ref, data, currency);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(Icons.share_outlined,
+                          size: 18, color: AppTheme.textDisabled),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   SyncIndicator(
                     onTap: () async {
                       HapticFeedback.mediumImpact();
@@ -514,6 +545,20 @@ class _PortfolioHeader extends ConsumerWidget {
             error: (_, _) => const SizedBox.shrink(),
           ),
         ],
+      ),
+    );
+  }
+
+  static void _sharePortfolio(WidgetRef ref, PortfolioSummary data, CurrencyInfo currency) {
+    final value = currency.format(data.totalValue);
+    final change = currency.formatWithSign(data.change24h);
+    final pct = AppTheme.pctText(data.change24hPct);
+    final items = data.itemCount;
+
+    SharePlus.instance.share(
+      ShareParams(
+        text: 'My CS2 Portfolio: $value ($change / $pct today)\n'
+            '$items items tracked with SkinKeeper',
       ),
     );
   }

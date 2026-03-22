@@ -3,9 +3,9 @@ import { pool } from "../db/pool.js";
 // ---- Cost Basis ----
 
 /** Recalculate cost basis for all items of a user from transactions.
+ *  Groups by (market_hash_name, steam_account_id) for accurate per-account P&L.
  *  If accountId is provided, recalculates only for that steam_account. */
 export async function recalculateCostBasis(userId: number, accountId?: number): Promise<void> {
-  // Filter condition: either per-account or global (all user transactions)
   const accountFilter = accountId
     ? `AND steam_account_id = ${parseInt(String(accountId))}`
     : "";
@@ -13,24 +13,25 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
   await pool.query(
     `
     WITH buy_agg AS (
-      SELECT market_hash_name,
+      SELECT market_hash_name, steam_account_id,
              COUNT(*)::int AS qty,
              SUM(price_cents)::int AS total
       FROM transactions
       WHERE user_id = $1 AND type = 'buy' ${accountFilter}
-      GROUP BY market_hash_name
+      GROUP BY market_hash_name, steam_account_id
     ),
     sell_agg AS (
-      SELECT market_hash_name,
+      SELECT market_hash_name, steam_account_id,
              COUNT(*)::int AS qty,
              SUM(price_cents)::int AS total
       FROM transactions
       WHERE user_id = $1 AND type = 'sell' ${accountFilter}
-      GROUP BY market_hash_name
+      GROUP BY market_hash_name, steam_account_id
     ),
     combined AS (
       SELECT
         COALESCE(b.market_hash_name, s.market_hash_name) AS market_hash_name,
+        COALESCE(b.steam_account_id, s.steam_account_id) AS steam_account_id,
         COALESCE(b.qty, 0) AS qty_bought,
         COALESCE(b.total, 0) AS total_spent,
         COALESCE(s.qty, 0) AS qty_sold,
@@ -47,15 +48,16 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
           END
         ) AS realized_profit
       FROM buy_agg b
-      FULL OUTER JOIN sell_agg s USING (market_hash_name)
+      FULL OUTER JOIN sell_agg s USING (market_hash_name, steam_account_id)
     )
-    INSERT INTO item_cost_basis (user_id, market_hash_name, avg_buy_price_cents,
-      total_quantity_bought, total_spent_cents, total_quantity_sold,
-      total_earned_cents, current_holding, realized_profit_cents, updated_at)
-    SELECT $1, market_hash_name, avg_buy_price, qty_bought, total_spent,
-      qty_sold, total_earned, current_holding, realized_profit, NOW()
+    INSERT INTO item_cost_basis (user_id, market_hash_name, steam_account_id,
+      avg_buy_price_cents, total_quantity_bought, total_spent_cents,
+      total_quantity_sold, total_earned_cents, current_holding,
+      realized_profit_cents, updated_at)
+    SELECT $1, market_hash_name, steam_account_id, avg_buy_price, qty_bought,
+      total_spent, qty_sold, total_earned, current_holding, realized_profit, NOW()
     FROM combined
-    ON CONFLICT (user_id, market_hash_name) DO UPDATE SET
+    ON CONFLICT (user_id, COALESCE(steam_account_id, 0), market_hash_name) DO UPDATE SET
       avg_buy_price_cents = EXCLUDED.avg_buy_price_cents,
       total_quantity_bought = EXCLUDED.total_quantity_bought,
       total_spent_cents = EXCLUDED.total_spent_cents,

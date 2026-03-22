@@ -9,6 +9,8 @@ import '../../auth/session_provider.dart';
 import '../../auth/steam_auth_service.dart';
 import '../../settings/accounts_provider.dart';
 import '../../../widgets/glass_sheet.dart';
+import '../inventory_provider.dart';
+import '../inventory_selection_provider.dart';
 import '../sell_provider.dart';
 import 'fee_breakdown.dart';
 import 'sell_progress_sheet.dart';
@@ -25,6 +27,8 @@ class SellBottomSheet extends ConsumerStatefulWidget {
 class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   bool _showCustomPrice = false;
   bool _isClosing = false;
+  bool _isSelling = false; // Fix 9: prevent double-tap
+  bool _customPriceInUsd = false; // true = user toggled to USD for custom price
   final _priceController = TextEditingController();
   int? _customPriceCents;
   Animation<double>? _routeAnimation;
@@ -118,7 +122,10 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     );
   }
 
-  Future<void> _startSell(int priceCentsPerItem) async {
+  Future<void> _startSell(int priceCentsPerItem, {int? priceCurrencyId}) async {
+    if (_isSelling) return; // Fix 9: prevent double-tap
+    setState(() => _isSelling = true);
+
     HapticFeedback.mediumImpact();
 
     // Dismiss keyboard before any navigation to prevent
@@ -131,10 +138,16 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               'marketHashName': item.marketHashName,
               'priceCents': priceCentsPerItem,
               if (item.accountId != null) 'accountId': item.accountId,
+              if (priceCurrencyId != null) 'priceCurrencyId': priceCurrencyId,
             })
         .toList();
 
     await ref.read(sellOperationProvider.notifier).startOperation(items);
+
+    // Fix 13: Optimistic update — remove sold items from inventory immediately
+    final soldAssetIds = widget.items.map((i) => i.assetId).toSet();
+    ref.read(inventoryProvider.notifier).removeAssets(soldAssetIds);
+    ref.read(selectionProvider.notifier).clear();
 
     if (!mounted) return;
 
@@ -163,11 +176,12 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     final isNonActiveAccount = item.accountId != null &&
         item.accountId != activeAccountId;
 
-    // Quick price — only fetch for single items or first of batch
+    // Quick price — fetch in wallet currency for the item's account
     final quickPriceAsync = ref.watch(
       quickPriceProvider(QuickPriceRequest(
         marketHashName: item.marketHashName,
         fallbackPriceUsd: item.bestPrice ?? item.steamPrice,
+        accountId: item.accountId ?? activeAccountId,
       )),
     );
 
@@ -476,7 +490,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
         quickPriceAsync.when(
           data: (result) =>
               _buildPriceSection(result.sellerReceivesCents, count, wallet,
-                  stale: result.stale, marketUrl: result.marketUrl),
+                  stale: result.stale, marketUrl: result.marketUrl, quickPriceResult: result),
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
@@ -496,14 +510,12 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   Widget _buildPriceSection(int quickPriceCents, int count, WalletInfo wallet, {
     bool stale = false,
     String? marketUrl,
+    required QuickPriceResult quickPriceResult,
   }) {
-    final priceStr =
-        '\$${(quickPriceCents / 100).toStringAsFixed(2)}';
+    final qp = quickPriceResult;
+    final priceStr = qp.formatPrice(quickPriceCents);
     final totalCents = quickPriceCents * count;
-    final totalStr = '\$${(totalCents / 100).toStringAsFixed(2)}';
-    // Wallet currency strings
-    final walletPriceStr = wallet.isUsd ? null : wallet.formatWalletPrice(quickPriceCents);
-    final walletTotalStr = wallet.isUsd ? null : wallet.formatWalletPrice(totalCents);
+    final totalStr = qp.formatPrice(totalCents);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -563,36 +575,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             ),
           ),
 
-        // Wallet currency notice
-        if (!wallet.isUsd && walletPriceStr != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.currency_exchange,
-                      color: AppTheme.primary, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Steam wallet: ${wallet.code}. Listing at $walletPriceStr (≈ $priceStr)',
-                      style: AppTheme.captionSmall.copyWith(
-                        color: AppTheme.primaryLight,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
         // Fee breakdown for quick price
         FeeBreakdown(sellerReceivesCents: quickPriceCents, currency: ref.watch(currencyProvider)),
         const SizedBox(height: 6),
@@ -633,7 +615,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: stale ? null : () => _startSell(quickPriceCents),
+                  onPressed: stale || _isSelling ? null : () => _startSell(quickPriceCents, priceCurrencyId: qp.currencyId),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: stale ? AppTheme.surface : AppTheme.warning,
                     foregroundColor: stale ? AppTheme.textDisabled : Colors.black,
@@ -662,8 +644,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                         stale
                             ? 'Enter price manually'
                             : count == 1
-                                ? (walletPriceStr ?? priceStr)
-                                : (walletTotalStr ?? totalStr),
+                                ? priceStr
+                                : totalStr,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -725,15 +707,16 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
           child: _showCustomPrice && !_isClosing
-              ? _buildCustomPriceInput(count)
+              ? _buildCustomPriceInput(count,
+                  currencySymbol: qp.currencySymbol,
+                  walletCurrencyId: qp.currencyId,
+                  walletCurrencyCode: qp.currencyCode)
               : const SizedBox.shrink(),
         ),
 
         const SizedBox(height: 6),
         Text(
-          wallet.isUsd
-              ? 'Lowest - 1 cent. Needs Steam Guard confirmation.'
-              : 'Prices in USD, auto-converted to ${wallet.code} on Steam.',
+          'Lowest - 1${qp.currencyCode == 'USD' ? ' cent' : ' ${qp.currencyCode}'}. Needs Steam Guard confirmation.',
           style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
           textAlign: TextAlign.center,
         ),
@@ -741,12 +724,77 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     );
   }
 
-  Widget _buildCustomPriceInput(int count) {
+  Widget _buildCustomPriceInput(int count, {
+    String currencySymbol = '\$',
+    int walletCurrencyId = 1,
+    String walletCurrencyCode = 'USD',
+  }) {
+    final isWalletUsd = walletCurrencyId == 1;
+    final activeSymbol = _customPriceInUsd ? '\$' : currencySymbol;
+    final activeCurrencyId = _customPriceInUsd ? 1 : walletCurrencyId;
+
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Currency toggle (only show when wallet is not USD)
+          if (!isWalletUsd)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _CurrencyToggleButton(
+                      label: walletCurrencyCode,
+                      symbol: currencySymbol,
+                      isActive: !_customPriceInUsd,
+                      onTap: () => setState(() => _customPriceInUsd = false),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _CurrencyToggleButton(
+                      label: 'USD',
+                      symbol: '\$',
+                      isActive: _customPriceInUsd,
+                      onTap: () => setState(() => _customPriceInUsd = true),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // USD conversion warning
+          if (_customPriceInUsd && !isWalletUsd)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.currency_exchange,
+                        color: AppTheme.warning, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your Steam wallet is $walletCurrencyCode. USD price will be converted — actual listing may differ slightly.',
+                        style: AppTheme.captionSmall.copyWith(
+                          color: AppTheme.warning,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Price input
           TextField(
             controller: _priceController,
@@ -757,7 +805,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             ],
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
             decoration: InputDecoration(
-              prefixText: '\$ ',
+              prefixText: '$activeSymbol ',
               prefixStyle: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -800,8 +848,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
-              onPressed: _customPriceCents != null && _customPriceCents! > 0
-                  ? () => _startSell(_customPriceCents!)
+              onPressed: _customPriceCents != null && _customPriceCents! > 0 && !_isSelling
+                  ? () => _startSell(_customPriceCents!, priceCurrencyId: activeCurrencyId)
                   : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
@@ -815,8 +863,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               child: Text(
                 _customPriceCents != null && _customPriceCents! > 0
                     ? count == 1
-                        ? 'List at \$${(_customPriceCents! / 100).toStringAsFixed(2)}'
-                        : 'List $count items at \$${(_customPriceCents! / 100).toStringAsFixed(2)} each'
+                        ? 'List at $activeSymbol${(_customPriceCents! / 100).toStringAsFixed(2)}'
+                        : 'List $count items at $activeSymbol${(_customPriceCents! / 100).toStringAsFixed(2)} each'
                     : 'Enter a price',
                 style: const TextStyle(
                   fontSize: 15,
@@ -866,9 +914,59 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               child: const Text('Set Custom Price'),
             ),
           ),
-          if (_showCustomPrice)
-            _buildCustomPriceInput(widget.items.length),
+          if (_showCustomPrice) ...[
+            Builder(builder: (_) {
+              final w = ref.watch(walletInfoProvider).valueOrNull ?? WalletInfo.usd;
+              return _buildCustomPriceInput(widget.items.length,
+                  currencySymbol: w.symbol,
+                  walletCurrencyId: w.currencyId,
+                  walletCurrencyCode: w.code);
+            }),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _CurrencyToggleButton extends StatelessWidget {
+  final String label;
+  final String symbol;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _CurrencyToggleButton({
+    required this.label,
+    required this.symbol,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.primary.withValues(alpha: 0.15) : AppTheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? AppTheme.primary : AppTheme.border,
+            width: isActive ? 1.5 : 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            '$symbol $label',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              color: isActive ? AppTheme.primary : AppTheme.textSecondary,
+            ),
+          ),
+        ),
       ),
     );
   }

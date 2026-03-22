@@ -18,6 +18,8 @@ class SellProgressSheet extends ConsumerStatefulWidget {
 
 class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
   final _scrollController = ScrollController();
+  final _hapticFiredFor = <String>{}; // track per-item haptic
+  bool _completionHapticFired = false;
 
   @override
   void dispose() {
@@ -87,6 +89,17 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
               ],
             );
           }
+          // Haptic feedback for newly listed items
+          for (final item in operation.items) {
+            if (item.status == SellItemStatus.listed && _hapticFiredFor.add(item.assetId)) {
+              HapticFeedback.lightImpact();
+            }
+          }
+          // Completion haptic
+          if (operation.isCompleted && !_completionHapticFired) {
+            _completionHapticFired = true;
+            HapticFeedback.heavyImpact();
+          }
           // Auto-scroll to active item
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _autoScroll(operation.items);
@@ -142,10 +155,12 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
     final progress = operation.totalItems > 0
         ? (operation.succeeded + operation.failed) / operation.totalItems
         : 0.0;
-    final hasFailures =
-        operation.items.any((i) => i.status == SellItemStatus.failed);
+    final hasFailures = operation.items.any((i) =>
+        i.status == SellItemStatus.failed || i.status == SellItemStatus.uncertain);
     final needsConfirmation =
         operation.items.where((i) => i.requiresConfirmation).length;
+    final uncertainCount =
+        operation.items.where((i) => i.status == SellItemStatus.uncertain).length;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -202,7 +217,18 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        // Rate limit info (when processing many items)
+        if (isActive && operation.totalItems > 5)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Processing one at a time to avoid Steam rate limits',
+              style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
+              textAlign: TextAlign.center,
+            ),
+          ),
+
+        const SizedBox(height: 6),
 
         // Item list
         Flexible(
@@ -218,7 +244,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
         // Summary (when completed)
         if (!isActive) ...[
           const SizedBox(height: 12),
-          _buildSummary(operation, needsConfirmation),
+          _buildSummary(operation, needsConfirmation, uncertainCount),
         ],
 
         const SizedBox(height: 14),
@@ -284,6 +310,17 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             ],
           ) as Widget,
         ),
+      SellItemStatus.uncertain => (
+          Icons.help_outline,
+          AppTheme.warning,
+          Text(
+            'Check Steam',
+            style: AppTheme.captionSmall.copyWith(
+              color: AppTheme.warning,
+              fontWeight: FontWeight.w600,
+            ),
+          ) as Widget,
+        ),
       SellItemStatus.failed => (
           Icons.cancel,
           AppTheme.loss,
@@ -328,7 +365,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
     );
   }
 
-  Widget _buildSummary(SellOperation operation, int needsConfirmation) {
+  Widget _buildSummary(SellOperation operation, int needsConfirmation, int uncertainCount) {
     final currency = ref.read(currencyProvider);
     final totalListedCents = operation.items
         .where((i) => i.status == SellItemStatus.listed)
@@ -388,6 +425,33 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
                     style: AppTheme.captionSmall.copyWith(
                       color: AppTheme.warning,
                       fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (uncertainCount > 0) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.help_outline,
+                      size: 16, color: AppTheme.warning),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$uncertainCount item${uncertainCount > 1 ? 's' : ''} may need manual verification on Steam',
+                      style: AppTheme.captionSmall.copyWith(
+                        color: AppTheme.warning,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],

@@ -1,8 +1,10 @@
 import 'dart:developer' as dev;
 
 import 'package:home_widget/home_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cache_service.dart';
+import 'settings_provider.dart';
 
 /// Cross-platform home screen widget bridge.
 ///
@@ -55,10 +57,10 @@ class WidgetService {
           (portfolio['change_24h_pct'] as num?)?.toDouble() ?? 0;
       final itemCount = (portfolio['item_count'] as int?) ?? 0;
 
+      final currency = await _getDisplayCurrency();
       await updateWidget(
-        totalValue: '\$${totalValue.toStringAsFixed(2)}',
-        change24h:
-            '${change24h >= 0 ? "+" : ""}\$${change24h.toStringAsFixed(2)}',
+        totalValue: currency.format(totalValue),
+        change24h: currency.formatWithSign(change24h),
         change24hPct:
             '${change24hPct >= 0 ? "+" : ""}${change24hPct.toStringAsFixed(1)}%',
         isPositive: change24h >= 0,
@@ -83,10 +85,10 @@ class WidgetService {
         (portfolio['change_24h_pct'] as num?)?.toDouble() ?? 0;
     final itemCount = (portfolio['item_count'] as int?) ?? 0;
 
+    final currency = await _getDisplayCurrency();
     await updateWidget(
-      totalValue: '\$${totalValue.toStringAsFixed(2)}',
-      change24h:
-          '${change24h >= 0 ? "+" : ""}\$${change24h.toStringAsFixed(2)}',
+      totalValue: currency.format(totalValue),
+      change24h: currency.formatWithSign(change24h),
       change24hPct:
           '${change24hPct >= 0 ? "+" : ""}${change24hPct.toStringAsFixed(1)}%',
       isPositive: change24h >= 0,
@@ -133,6 +135,13 @@ class WidgetService {
     } catch (e) {
       dev.log('Widget update error: $e', name: 'Widget');
     }
+  }
+
+  /// Read display currency from SharedPreferences (works in isolates).
+  static Future<CurrencyInfo> _getDisplayCurrency() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString('display_currency') ?? 'USD';
+    return kCurrencies[code] ?? kCurrencies['USD']!;
   }
 
   /// Format current time as HH:mm for the "last updated" label.

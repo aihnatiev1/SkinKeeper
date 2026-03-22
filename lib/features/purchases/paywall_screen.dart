@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/analytics_service.dart';
 import '../../core/theme.dart';
 import 'iap_service.dart';
 
@@ -15,6 +16,12 @@ class PaywallScreen extends ConsumerStatefulWidget {
 class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   bool _selectedYearly = true;
   bool _purchasing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Analytics.paywallViewed();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,8 +123,9 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
 
               // Legal
               const Text(
-                'Payment will be charged to your App Store / Google Play account. '
-                'Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.',
+                'Free trial available for yearly plan. No charge during trial period. '
+                'Cancel anytime before trial ends. After trial, \$29.99/year auto-renews '
+                'unless cancelled at least 24 hours before the end of the current period.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 10,
@@ -275,8 +283,8 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
           child: _PlanCard(
             title: 'Yearly',
             price: '\$29.99',
-            subtitle: 'per year',
-            badge: 'Save 50%',
+            subtitle: '7-day free trial',
+            badge: 'Best Value',
             isSelected: _selectedYearly,
             onTap: () {
               HapticFeedback.selectionClick();
@@ -317,7 +325,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                 )
               : Text(
                   _selectedYearly
-                      ? 'Subscribe Yearly — \$29.99'
+                      ? 'Start 7-Day Free Trial'
                       : 'Subscribe Monthly — \$4.99',
                   style: const TextStyle(
                     fontSize: 16,
@@ -334,10 +342,15 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     setState(() => _purchasing = true);
     HapticFeedback.mediumImpact();
 
+    final plan = _selectedYearly ? 'yearly' : 'monthly';
     final iap = ref.read(iapServiceProvider);
     final success = _selectedYearly
         ? await iap.buyYearly()
         : await iap.buyMonthly();
+
+    if (success) {
+      Analytics.premiumPurchased(plan: plan);
+    }
 
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

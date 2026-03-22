@@ -198,3 +198,88 @@ describe("getPLHistory", () => {
     expect(callArgs[1]).toContain(30);
   });
 });
+
+// ─── Edge Cases ──────────────────────────────────────────────────────
+
+describe("getPortfolioPL edge cases", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  it("handles sell-only user (0 buys, some sells from external trades)", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        total_invested: 0,
+        total_earned: 5000,
+        realized_profit: 5000,
+        holding_cost: 0,
+        holding_count: 0,
+      }],
+    });
+    mockQuery.mockResolvedValueOnce({ rows: [{ current_value: 0 }] });
+
+    const pl = await getPortfolioPL(1);
+
+    expect(pl.totalInvestedCents).toBe(0);
+    expect(pl.realizedProfitCents).toBe(5000);
+    expect(pl.totalProfitPct).toBe(0); // 0 invested → 0% (no division by zero)
+  });
+
+  it("handles very large portfolio values without overflow", async () => {
+    // $50,000 invested, $75,000 current value
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        total_invested: 5000000,
+        total_earned: 0,
+        realized_profit: 0,
+        holding_cost: 5000000,
+        holding_count: 500,
+      }],
+    });
+    mockQuery.mockResolvedValueOnce({ rows: [{ current_value: 7500000 }] });
+
+    const pl = await getPortfolioPL(1);
+
+    expect(pl.unrealizedProfitCents).toBe(2500000); // $25,000
+    expect(pl.totalProfitPct).toBe(50);
+  });
+
+  it("handles negative unrealized profit (price dropped)", async () => {
+    // Bought for $100, now worth $60
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        total_invested: 10000,
+        total_earned: 0,
+        realized_profit: 0,
+        holding_cost: 10000,
+        holding_count: 1,
+      }],
+    });
+    mockQuery.mockResolvedValueOnce({ rows: [{ current_value: 6000 }] });
+
+    const pl = await getPortfolioPL(1);
+
+    expect(pl.unrealizedProfitCents).toBe(-4000);
+    expect(pl.totalProfitCents).toBe(-4000);
+    expect(pl.totalProfitPct).toBe(-40);
+  });
+
+  it("handles null/missing values from DB gracefully", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        total_invested: null,
+        total_earned: null,
+        realized_profit: null,
+        holding_cost: null,
+        holding_count: null,
+      }],
+    });
+    mockQuery.mockResolvedValueOnce({ rows: [{ current_value: null }] });
+
+    const pl = await getPortfolioPL(1);
+
+    expect(pl.totalInvestedCents).toBe(0);
+    expect(pl.totalCurrentValueCents).toBe(0);
+    expect(pl.totalProfitPct).toBe(0);
+  });
+});

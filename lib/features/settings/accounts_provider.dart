@@ -7,6 +7,7 @@ import '../../models/user.dart';
 import '../alerts/alerts_provider.dart';
 import '../auth/session_provider.dart';
 import '../inventory/inventory_provider.dart';
+import '../inventory/inventory_selection_provider.dart';
 import '../portfolio/portfolio_pl_provider.dart';
 import '../portfolio/portfolio_provider.dart';
 import '../trades/trades_provider.dart';
@@ -56,6 +57,7 @@ class AccountsNotifier extends AsyncNotifier<List<SteamAccount>> {
     ref.invalidate(steamFriendsProvider);
     ref.invalidate(linkedAccountsProvider);
     ref.invalidate(sessionStatusProvider);
+    ref.invalidate(selectionProvider); // Fix 10: clear selection on account switch
   }
 
   Future<void> unlinkAccount(int accountId) async {

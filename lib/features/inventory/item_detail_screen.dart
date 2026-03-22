@@ -530,6 +530,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   PriceHistoryChart(
                     history: _history ?? [],
                     period: _period,
+                    currency: currency,
                     onPeriodChanged: (p) {
                       setState(() {
                         _period = p;

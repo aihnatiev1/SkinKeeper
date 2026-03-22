@@ -183,17 +183,11 @@ class IAPService {
       final body = <String, dynamic>{'store': store};
 
       if (store == 'apple') {
-        // Send transaction info as JSON
+        // Send transactionId for server-side verification via Apple App Store Server API.
+        // Backend will call Apple directly to validate — no need to fabricate expiry dates.
         body['receiptData'] = jsonEncode({
-          'productId': purchase.productID,
           'transactionId': purchase.purchaseID,
-          'purchaseDate': DateTime.now().toIso8601String(),
-          // For subscriptions, set expiry based on product
-          'expiresDate': DateTime.now()
-              .add(purchase.productID == _kYearlyId
-                  ? const Duration(days: 365)
-                  : const Duration(days: 30))
-              .toIso8601String(),
+          'productId': purchase.productID,
         });
       } else {
         body['purchaseToken'] = purchase.verificationData.serverVerificationData;

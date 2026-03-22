@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
 import '../../core/review_service.dart';
+import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../features/auth/session_gate.dart';
 import '../../features/auth/session_provider.dart';
@@ -444,6 +445,7 @@ class _TradeOfferTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currency = ref.watch(currencyProvider);
     final giveItems = offer.giveItems;
     final recvItems = offer.receiveItems;
     final isScamWarning =
@@ -554,7 +556,7 @@ class _TradeOfferTile extends ConsumerWidget {
                 Row(
                   children: [
                     Text(
-                      '\$${offer.giveValueUsd.toStringAsFixed(2)}',
+                      currency.format(offer.giveValueUsd),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
@@ -567,7 +569,7 @@ class _TradeOfferTile extends ConsumerWidget {
                           size: 12, color: AppTheme.textDisabled),
                     ),
                     Text(
-                      '\$${offer.recvValueUsd.toStringAsFixed(2)}',
+                      currency.format(offer.recvValueUsd),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
@@ -586,7 +588,7 @@ class _TradeOfferTile extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(AppTheme.r8),
                       ),
                       child: Text(
-                        '${offer.valueDiffCents >= 0 ? '+' : ''}\$${offer.valueDiffUsd.toStringAsFixed(2)}',
+                        currency.formatWithSign(offer.valueDiffUsd),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -937,6 +939,7 @@ class _ItemsPreview extends StatelessWidget {
 class _ListingsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currency = ref.watch(currencyProvider);
     final listingsAsync = ref.watch(listingsProvider);
 
     return listingsAsync.when(
@@ -986,7 +989,7 @@ class _ListingsTab extends ConsumerWidget {
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: state.listings.length,
-            itemBuilder: (_, i) => _ListingTile(listing: state.listings[i])
+            itemBuilder: (_, i) => _ListingTile(listing: state.listings[i], currency: currency)
                 .animate()
                 .fadeIn(duration: 300.ms, delay: (i * 40).ms)
                 .slideX(begin: 0.03, end: 0),
@@ -1018,7 +1021,8 @@ class _ListingsTab extends ConsumerWidget {
 
 class _ListingTile extends StatelessWidget {
   final MarketListing listing;
-  const _ListingTile({required this.listing});
+  final CurrencyInfo currency;
+  const _ListingTile({required this.listing, required this.currency});
 
   @override
   Widget build(BuildContext context) {
@@ -1152,7 +1156,7 @@ class _ListingTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '\$${listing.sellerPriceValue.toStringAsFixed(2)}',
+                  currency.format(listing.sellerPriceValue),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1162,7 +1166,7 @@ class _ListingTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Buyer: \$${listing.buyerPriceValue.toStringAsFixed(2)}',
+                  'Buyer: ${currency.format(listing.buyerPriceValue)}',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppTheme.textMuted,

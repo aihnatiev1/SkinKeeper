@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/settings_provider.dart';
 import '../../core/steam_image.dart';
 import '../../core/theme.dart';
 import '../../widgets/shared_ui.dart';
@@ -159,6 +160,7 @@ class _WatchlistCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final belowTarget = item.isBelowTarget;
     final distPct = item.distancePct;
+    final currency = ref.watch(currencyProvider);
 
     return Dismissible(
       key: ValueKey(item.id),
@@ -239,7 +241,7 @@ class _WatchlistCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Target: \$${item.targetPrice.toStringAsFixed(2)}',
+                    'Target: ${currency.format(item.targetPrice)}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppTheme.textSecondary,
@@ -256,7 +258,7 @@ class _WatchlistCard extends ConsumerWidget {
               children: [
                 if (item.currentPrice != null)
                   Text(
-                    '\$${item.currentPrice!.toStringAsFixed(2)}',
+                    currency.format(item.currentPrice!),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -463,6 +465,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
                 ? _SelectedChip(
                     name: _selectedName!,
                     price: _selectedCurrentPrice,
+                    currency: ref.watch(currencyProvider),
                     onClear: _clearSelection,
                   )
                 : TextField(
@@ -566,7 +569,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
                               ),
                               if (price != null)
                                 Text(
-                                  '\$${price.toStringAsFixed(2)}',
+                                  ref.watch(currencyProvider).format(price),
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
@@ -607,7 +610,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
                     keyboardType: const TextInputType.numberWithOptions(
                         decimal: true),
                     decoration: InputDecoration(
-                      prefixText: '\$ ',
+                      prefixText: '${ref.watch(currencyProvider).symbol} ',
                       prefixStyle: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
@@ -642,7 +645,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
                   if (_selectedCurrentPrice != null) ...[
                     const SizedBox(height: 6),
                     Text(
-                      'Current price: \$${_selectedCurrentPrice!.toStringAsFixed(2)}',
+                      'Current price: ${ref.watch(currencyProvider).format(_selectedCurrentPrice!)}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textMuted,
@@ -730,11 +733,13 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
 class _SelectedChip extends StatelessWidget {
   final String name;
   final double? price;
+  final CurrencyInfo currency;
   final VoidCallback onClear;
 
   const _SelectedChip({
     required this.name,
     this.price,
+    required this.currency,
     required this.onClear,
   });
 
@@ -768,7 +773,7 @@ class _SelectedChip extends StatelessWidget {
           if (price != null) ...[
             const SizedBox(width: 8),
             Text(
-              '\$${price!.toStringAsFixed(2)}',
+              currency.format(price!),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

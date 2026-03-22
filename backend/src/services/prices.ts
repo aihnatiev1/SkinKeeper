@@ -594,8 +594,9 @@ export async function upsertCurrentPrices(
   }
 }
 
-// Ignore prices older than this — stale data from sources that stopped updating
-const PRICE_MAX_AGE = "48 hours";
+// Ignore prices older than this — stale data causes wrong sell pricing.
+// Steam batch crawler runs hourly, so 12h gives plenty of margin.
+const PRICE_MAX_AGE = "12 hours";
 
 // Get latest prices for a list of items (reads from current_prices)
 export async function getLatestPrices(

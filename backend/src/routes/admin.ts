@@ -14,13 +14,13 @@ import { responseCache } from "../infra/ResponseCache.js";
 
 const router = Router();
 
-// Simple admin secret check — not JWT, just a shared secret for monitoring
+// Admin auth via header-only shared secret (never accept in query string — leaks to logs/caches)
 function requireAdminSecret(req: Request, res: Response, next: Function) {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) {
     return res.status(503).json({ error: "Admin endpoint not configured" });
   }
-  const provided = req.headers["x-admin-secret"] || req.query.secret;
+  const provided = req.headers["x-admin-secret"];
   if (provided !== secret) {
     return res.status(403).json({ error: "Forbidden" });
   }

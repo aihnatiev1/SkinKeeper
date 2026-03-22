@@ -178,6 +178,10 @@ export async function fetchSteamTransactions(
 
     // Convert from transaction's actual currency to USD cents
     const walletToUsdRate = await getWalletToUsdRate(txCurrencyId);
+    if (walletToUsdRate < 0.0001 || walletToUsdRate > 1000) {
+      console.warn(`[Transactions] Suspicious walletToUsd rate ${walletToUsdRate} for currency ${txCurrencyId}, skipping transaction`);
+      continue;
+    }
     const priceUsdCents = Math.round(totalPrice * walletToUsdRate);
 
     transactions.push({

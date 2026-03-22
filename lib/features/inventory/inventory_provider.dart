@@ -324,6 +324,14 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
       state = AsyncError(e, st);
     }
   }
+
+  /// Optimistically remove sold items from local state without API call.
+  /// The next refresh() will reconcile with actual server state.
+  void removeAssets(Set<String> assetIds) {
+    final current = state.valueOrNull;
+    if (current == null || assetIds.isEmpty) return;
+    state = AsyncData(current.where((i) => !assetIds.contains(i.assetId)).toList());
+  }
 }
 
 class InventorySummary {

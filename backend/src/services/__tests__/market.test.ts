@@ -24,7 +24,15 @@ vi.mock("../steamSession.js", () => ({
 vi.mock("../currency.js", () => ({
   convertUsdToWallet: vi.fn().mockResolvedValue(null), // null = use USD directly
   getWalletCurrency: vi.fn().mockResolvedValue(null),
-  getCurrencyInfo: vi.fn().mockReturnValue(null),
+  getCurrencyInfo: vi.fn().mockReturnValue({ code: "USD", symbol: "$", decimals: 2 }),
+  getExchangeRate: vi.fn().mockResolvedValue(null),
+  parseSteamPrice: vi.fn().mockImplementation((s: string | undefined) => {
+    if (!s) return null;
+    const cleaned = s.replace(/[^\d.,]/g, "").replace(/\s/g, "");
+    if (!cleaned) return null;
+    const val = parseFloat(cleaned.replace(/,/g, ""));
+    return isNaN(val) ? null : val;
+  }),
 }));
 
 // Mock prices — getLatestPrices should return empty map so quickSellPrice falls through
@@ -244,6 +252,7 @@ describe("quickSellPrice", () => {
     expect(result).not.toBeNull();
     expect(result!.sellerReceivesCents).toBe(851);
     expect(result!.source).toBe("live");
+    expect(result!.currencyId).toBe(1);
   });
 
   it("returns null when no market price available", async () => {

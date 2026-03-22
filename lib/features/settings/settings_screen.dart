@@ -255,8 +255,86 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           ).animate().fadeIn(duration: 300.ms, delay: 300.ms).slideY(begin: 0.05, end: 0),
+
+          // Delete Account
+          const SizedBox(height: 24),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: AppTheme.glass(),
+            child: ListTile(
+              leading: const Icon(Icons.delete_forever, color: AppTheme.textDisabled),
+              title: Text(
+                'Delete Account',
+                style: TextStyle(color: AppTheme.textDisabled, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Permanently delete all data',
+                style: TextStyle(color: AppTheme.textDisabled.withValues(alpha: 0.6), fontSize: 11),
+              ),
+              onTap: () => _showDeleteConfirmation(context, ref),
+            ),
+          ).animate().fadeIn(duration: 300.ms, delay: 350.ms).slideY(begin: 0.05, end: 0),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgSecondary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Account?', style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'This will permanently delete your account, all linked Steam accounts, inventory data, transactions, alerts, and trade history.\n\nThis action cannot be undone.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              // Second confirmation
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx2) => AlertDialog(
+                  backgroundColor: AppTheme.bgSecondary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: const Text('Are you sure?', style: TextStyle(color: AppTheme.loss)),
+                  content: const Text(
+                    'All your data will be permanently deleted. There is no way to recover it.',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx2, false),
+                      child: const Text('Go back'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx2, true),
+                      child: const Text('Delete Everything',
+                          style: TextStyle(color: AppTheme.loss, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                final success = await ref.read(authStateProvider.notifier).deleteAccount();
+                if (!success && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to delete account. Try again.')),
+                  );
+                }
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: AppTheme.loss)),
+          ),
+        ],
       ),
     );
   }

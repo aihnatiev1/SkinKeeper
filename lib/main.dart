@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/analytics_service.dart';
 import 'core/api_client.dart';
 import 'core/cache_service.dart';
 import 'core/push_service.dart';
@@ -33,6 +34,7 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   dev.log('Firebase initialized, apps: ${Firebase.apps.length}', name: 'Firebase');
+  await Analytics.init();
   await CacheService.init();
   await WidgetService.init();
   await WidgetService.registerBackgroundCallback();
@@ -78,6 +80,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       ref.listenManual(authStateProvider, (prev, next) {
         if (!_pushInitialized && next.valueOrNull != null) {
           _pushInitialized = true;
+          PushService.setRouter(ref);
           PushService.init(ref.read(apiClientProvider));
         }
       }, fireImmediately: true);
@@ -134,6 +137,14 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       return;
     }
 
+    // Referral link — skinkeeper://ref?code=XXX or https://skinkeeper.store/ref/XXX
+    final refCode = uri.queryParameters['code'] ??
+        (uri.pathSegments.length >= 2 && uri.pathSegments[0] == 'ref' ? uri.pathSegments[1] : null);
+    if (refCode != null && (uri.host == 'ref' || uri.path.startsWith('/ref/'))) {
+      _saveReferralCode(refCode);
+      return;
+    }
+
     // Auth callback — skinkeeper://auth?token=XXX or https://api.skinkeeper.store/auth/callback?token=XXX
     final token = uri.queryParameters['token'];
     final isAuthCallback =
@@ -142,6 +153,27 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
 
     if (isAuthCallback && token != null) {
       _handleAuthToken(token);
+    }
+  }
+
+  Future<void> _saveReferralCode(String code) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_referral_code', code);
+    debugPrint('REFERRAL: saved pending code $code');
+  }
+
+  /// Apply pending referral code after login (if any)
+  Future<void> _applyPendingReferral() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString('pending_referral_code');
+    if (code == null) return;
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post('/auth/referral/apply', data: {'code': code});
+      await prefs.remove('pending_referral_code');
+      debugPrint('REFERRAL: applied code $code');
+    } catch (e) {
+      debugPrint('REFERRAL: apply failed: $e');
     }
   }
 
@@ -165,6 +197,9 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       ref.invalidate(tradesProvider);
       ref.invalidate(transactionsProvider);
       ref.invalidate(accountsProvider);
+
+      // Apply pending referral code if user came via referral link
+      _applyPendingReferral();
 
       // Trigger background inventory sync from Steam
       debugPrint('AUTH: triggering background sync...');

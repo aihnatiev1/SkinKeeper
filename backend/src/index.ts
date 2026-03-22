@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import { migrate } from "./db/migrate.js";
 import { pool, checkPoolHealth } from "./db/pool.js";
@@ -21,6 +22,7 @@ import manualTxRoutes from "./routes/manualTransactions.js";
 import legalRoutes from "./routes/legal.js";
 import adminRoutes from "./routes/admin.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { log } from "./utils/logger.js";
 import { preloadCSGOData } from "./services/csgoData.js";
 
 dotenv.config({ override: true });
@@ -34,23 +36,72 @@ app.use(express.json());
 
 // Apple App Site Association for Universal Links
 app.get("/.well-known/apple-app-site-association", (_req, res) => {
+  res.set("Content-Type", "application/json");
   res.json({
     applinks: {
       apps: [],
       details: [{
         appIDs: ["QTLQ56U8D2.app.skinkeeper.store"],
-        components: [{ "/": "/auth/callback*" }]
+        components: [
+          { "/": "/auth/callback*" },
+          { "/": "/ref/*" },
+        ]
       }]
     }
   });
 });
 
+// Android Digital Asset Links for App Links verification
+app.get("/.well-known/assetlinks.json", (_req, res) => {
+  res.set("Content-Type", "application/json");
+  res.json([{
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "app.skinkeeper.store",
+      sha256_cert_fingerprints: [process.env.ANDROID_SHA256_FINGERPRINT || "TODO:ADD_YOUR_SHA256"],
+    },
+  }]);
+});
+
 // Legal pages (no auth required)
 app.use("/legal", legalRoutes);
 
-// Request logger
-app.use((req, _res, next) => {
-  console.log(`[REQ] ${req.method} ${req.originalUrl}`);
+// Rate limiting
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120,            // 120 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, slow down" },
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30,                   // 30 auth attempts per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts, try again later" },
+});
+app.use("/api", globalLimiter);
+app.use("/api/auth/steam", authLimiter);
+app.use("/api/auth/token", authLimiter);
+app.use("/api/auth/qr", authLimiter);
+
+// Structured request logger (errors + slow requests only)
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - start;
+    const status = res.statusCode;
+    if (status >= 400 || ms > 2000) {
+      log.info("http_request", {
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        ms,
+      });
+    }
+  });
   next();
 });
 

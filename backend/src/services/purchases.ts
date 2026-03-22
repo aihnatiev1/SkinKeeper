@@ -1,4 +1,5 @@
 import { pool } from "../db/pool.js";
+import { isAppleApiConfigured, getTransactionInfo } from "./appleStoreApi.js";
 
 // Product IDs — must match App Store Connect / Google Play Console
 export const PRODUCTS = {
@@ -24,29 +25,69 @@ interface VerifyResult {
 export async function verifyAppleReceipt(
   receiptData: string
 ): Promise<VerifyResult> {
-  // StoreKit2 uses JWS (JSON Web Signature) transactions
-  // For now, we trust the client-provided transaction info
-  // and store the receipt for server-side validation later.
-  //
-  // In production, use Apple's App Store Server API:
-  // https://developer.apple.com/documentation/appstoreserverapi
-  //
-  // For MVP, we parse the transaction info from the client
-
   try {
-    const transaction = JSON.parse(receiptData);
+    const clientData = JSON.parse(receiptData);
+    const transactionId = clientData.transactionId || clientData.id || "";
+
+    // Server-side validation via Apple App Store Server API
+    if (isAppleApiConfigured() && transactionId) {
+      const info = await getTransactionInfo(transactionId);
+      if (!info) {
+        return {
+          valid: false,
+          productId: clientData.productId || "",
+          transactionId,
+          error: "Apple could not verify this transaction",
+        };
+      }
+
+      if (info.revocationDate) {
+        return {
+          valid: false,
+          productId: info.productId,
+          transactionId: info.transactionId,
+          error: "Transaction was revoked by Apple",
+        };
+      }
+
+      if (!PRODUCT_IDS.includes(info.productId)) {
+        return {
+          valid: false,
+          productId: info.productId,
+          transactionId: info.transactionId,
+          error: `Unknown product: ${info.productId}`,
+        };
+      }
+
+      console.log(
+        `[Purchase] Apple server-verified: ${info.productId} tx=${info.transactionId} env=${info.environment}`
+      );
+
+      return {
+        valid: true,
+        productId: info.productId,
+        transactionId: info.transactionId,
+        originalTransactionId: info.originalTransactionId,
+        purchaseDate: new Date(info.purchaseDate),
+        expiresDate: info.expiresDate ? new Date(info.expiresDate) : undefined,
+        isTrial: false,
+      };
+    }
+
+    // Fallback: trust client data when Apple API not configured
+    console.warn("[Purchase] Apple API not configured — trusting client receipt data (NOT safe for production)");
     return {
       valid: true,
-      productId: transaction.productId || "",
-      transactionId: transaction.transactionId || transaction.id || "",
-      originalTransactionId: transaction.originalTransactionId || "",
-      purchaseDate: transaction.purchaseDate
-        ? new Date(transaction.purchaseDate)
+      productId: clientData.productId || "",
+      transactionId,
+      originalTransactionId: clientData.originalTransactionId || "",
+      purchaseDate: clientData.purchaseDate
+        ? new Date(clientData.purchaseDate)
         : new Date(),
-      expiresDate: transaction.expiresDate
-        ? new Date(transaction.expiresDate)
+      expiresDate: clientData.expiresDate
+        ? new Date(clientData.expiresDate)
         : undefined,
-      isTrial: transaction.offerType === 2, // introductory offer
+      isTrial: clientData.offerType === 2,
     };
   } catch {
     return {
@@ -64,10 +105,9 @@ export async function verifyGoogleReceipt(
   purchaseToken: string,
   productId: string
 ): Promise<VerifyResult> {
-  // In production, use Google Play Developer API:
+  // TODO: Implement Google Play Developer API validation when service account key is available.
   // https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptions
-  //
-  // For MVP, trust client-provided purchase data
+  console.warn("[Purchase] Google receipt not server-verified — no credentials configured");
 
   try {
     return {

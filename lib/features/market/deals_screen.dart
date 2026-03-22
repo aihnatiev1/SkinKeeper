@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../inventory/widgets/price_comparison_table.dart' show sourceColor;
 import '../../widgets/shared_ui.dart';
@@ -111,7 +112,7 @@ class DealsScreen extends ConsumerWidget {
                         final deal = deals[index];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
-                          child: _DealCard(deal: deal)
+                          child: _DealCard(deal: deal, currency: ref.watch(currencyProvider))
                               .animate()
                               .fadeIn(
                                 duration: 300.ms,
@@ -140,7 +141,8 @@ class DealsScreen extends ConsumerWidget {
 
 class _DealCard extends StatelessWidget {
   final Deal deal;
-  const _DealCard({required this.deal});
+  final CurrencyInfo currency;
+  const _DealCard({required this.deal, required this.currency});
 
   Color _sourceColor(String source) => sourceColor(source);
 
@@ -245,7 +247,7 @@ class _DealCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '\$${deal.buyPrice.toStringAsFixed(2)}',
+                      currency.format(deal.buyPrice),
                       style: AppTheme.monoSmall,
                     ),
                     Padding(
@@ -272,7 +274,7 @@ class _DealCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '\$${deal.sellPrice.toStringAsFixed(2)}',
+                      currency.format(deal.sellPrice),
                       style: AppTheme.monoSmall.copyWith(
                         color: AppTheme.textPrimary,
                       ),
@@ -294,7 +296,7 @@ class _DealCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Buff bid \$${deal.buffBidPrice!.toStringAsFixed(2)}',
+                          'Buff bid ${currency.format(deal.buffBidPrice!)}',
                           style: TextStyle(
                             fontSize: 9,
                             color: AppTheme.buffYellow.withValues(alpha: 0.7),
@@ -324,7 +326,7 @@ class _DealCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '+\$${deal.profitUsd.toStringAsFixed(2)}',
+                  currency.formatWithSign(deal.profitUsd),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
+import '../../core/settings_provider.dart';
 import '../../core/widget_service.dart';
 import '../purchases/iap_service.dart';
 
@@ -121,16 +122,16 @@ class PortfolioNotifier extends AsyncNotifier<PortfolioSummary> {
       final cached = CacheService.getPortfolio();
       final totalProfit = (cached?['total_profit'] as num?)?.toDouble();
 
+      final currency = ref.read(currencyProvider);
       WidgetService.updateWidget(
-        totalValue: '\$${summary.totalValue.toStringAsFixed(2)}',
-        change24h:
-            '${summary.change24h >= 0 ? "+" : ""}\$${summary.change24h.toStringAsFixed(2)}',
+        totalValue: currency.format(summary.totalValue),
+        change24h: currency.formatWithSign(summary.change24h),
         change24hPct:
             '${summary.change24hPct >= 0 ? "+" : ""}${summary.change24hPct.toStringAsFixed(1)}%',
         isPositive: summary.change24h >= 0,
         itemCount: summary.itemCount,
         totalProfit: isPremium && totalProfit != null
-            ? '${totalProfit >= 0 ? "+" : ""}\$${totalProfit.toStringAsFixed(2)}'
+            ? currency.formatWithSign(totalProfit)
             : null,
         isProfitable: isPremium && totalProfit != null
             ? totalProfit >= 0

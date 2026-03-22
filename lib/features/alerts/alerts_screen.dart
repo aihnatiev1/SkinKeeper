@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/alert.dart';
 import '../../widgets/shared_ui.dart';
@@ -225,6 +226,7 @@ class _AlertCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currency = ref.watch(currencyProvider);
     final conditionIcon = switch (alert.condition) {
       AlertCondition.above => Icons.trending_up,
       AlertCondition.below => Icons.trending_down,
@@ -254,7 +256,7 @@ class _AlertCard extends ConsumerWidget {
 
     final thresholdStr = alert.condition == AlertCondition.changePct
         ? '${alert.threshold.toStringAsFixed(1)}%'
-        : '\$${alert.threshold.toStringAsFixed(2)}';
+        : currency.format(alert.threshold);
 
     return Dismissible(
       key: ValueKey(alert.id),
