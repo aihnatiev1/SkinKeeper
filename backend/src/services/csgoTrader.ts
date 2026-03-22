@@ -71,11 +71,9 @@ interface SourceDef {
 }
 
 const SOURCES: SourceDef[] = [
-  {
-    file: "steam.json",
-    source: "steam",
-    extract: (e) => e?.last_7d || e?.last_24h || e?.last_30d || 0,
-  },
+  // steam.json excluded — our own Steam batch crawler provides accurate
+  // lowest-listing prices. CSGOTrader steam.json contains 7d/24h/30d averages
+  // which overwrite real sell_price and reset updated_at, masking stale data.
   {
     file: "buff163.json",
     source: "buff",
