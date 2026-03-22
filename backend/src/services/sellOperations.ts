@@ -202,7 +202,8 @@ async function processOperation(
       // Auto-resolve quick price when client sends priceCents=0
       let priceCents: number = item.price_cents;
       if (priceCents <= 0 && item.market_hash_name) {
-        const qp = await quickSellPrice(item.market_hash_name);
+        const qpResult = await quickSellPrice(item.market_hash_name);
+        const qp = qpResult?.sellerReceivesCents ?? null;
         if (qp === null || qp <= 0) {
           await pool.query(
             `UPDATE sell_operation_items

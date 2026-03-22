@@ -242,15 +242,20 @@ export async function sellItem(
   }
 }
 
+export interface QuickSellResult {
+  sellerReceivesCents: number;
+  /** "live" = fresh Steam API, "depth" / "cached" = fallback (stale) */
+  source: "live" | "depth" | "cached";
+}
+
 // Quick sell: live Steam price - 1 cent (listing/buyer-pays side).
 // Fallback chain if Steam API returns 429 or fails:
 //   1. Live Steam API (always try first — freshest data)
 //   2. Steam Market Depth lowestAsk (iflow, refreshed every 12h)
 //   3. Cached steam price from current_prices (if < 48h old)
-// Returns seller receives amount in USD cents.
 export async function quickSellPrice(
   marketHashName: string
-): Promise<number | null> {
+): Promise<QuickSellResult | null> {
   const undercut = (buyerPaysCents: number): number => {
     const listing = Math.max(1, buyerPaysCents - 1);
     const valveFee = Math.max(1, Math.floor(listing * 0.05));
@@ -261,14 +266,14 @@ export async function quickSellPrice(
   // 1. Live Steam API — always try first
   const live = await getMarketPrice(marketHashName);
   if (live.lowestPrice !== null && live.lowestPrice > 0) {
-    return undercut(live.lowestPrice);
+    return { sellerReceivesCents: undercut(live.lowestPrice), source: "live" };
   }
 
   // 2. Steam Market Depth (iflow order book, refreshed every 12h)
   const depth = getSteamDepth(marketHashName);
   if (depth && depth.lowestAsk > 0) {
     console.warn(`[QuickSell] Steam API failed for "${marketHashName}", using depth lowestAsk=$${depth.lowestAsk}`);
-    return undercut(Math.round(depth.lowestAsk * 100));
+    return { sellerReceivesCents: undercut(Math.round(depth.lowestAsk * 100)), source: "depth" };
   }
 
   // 3. Cached steam price from current_prices (already filtered to < 48h)
@@ -277,7 +282,7 @@ export async function quickSellPrice(
   const cachedSteam = sources?.["steam"];
   if (cachedSteam && cachedSteam > 0) {
     console.warn(`[QuickSell] Steam API + depth failed for "${marketHashName}", using cached steam=$${cachedSteam}`);
-    return undercut(Math.round(cachedSteam * 100));
+    return { sellerReceivesCents: undercut(Math.round(cachedSteam * 100)), source: "cached" };
   }
 
   return null;

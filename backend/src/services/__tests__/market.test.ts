@@ -240,14 +240,16 @@ describe("quickSellPrice", () => {
       },
     });
 
-    const price = await quickSellPrice("AK-47 | Redline (Field-Tested)");
-    expect(price).toBe(851);
+    const result = await quickSellPrice("AK-47 | Redline (Field-Tested)");
+    expect(result).not.toBeNull();
+    expect(result!.sellerReceivesCents).toBe(851);
+    expect(result!.source).toBe("live");
   });
 
   it("returns null when no market price available", async () => {
     mockAxiosGet.mockResolvedValue({ data: { success: false } });
 
-    const price = await quickSellPrice("Nonexistent");
-    expect(price).toBeNull();
+    const result = await quickSellPrice("Nonexistent");
+    expect(result).toBeNull();
   });
 });

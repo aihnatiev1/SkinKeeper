@@ -457,17 +457,25 @@ router.get("/price/:marketHashName", async (req, res) => {
   }
 });
 
-// Get quick sell price (lowest - 1 cent)
+// Get quick sell price (lowest listing - 1 cent)
 // GET /api/market/quickprice/:marketHashName
+// Response: { sellerReceivesCents, stale, marketUrl }
+//   stale=true when live Steam API failed and price is from fallback
 router.get("/quickprice/:marketHashName", async (req, res) => {
   try {
     const marketHashName = req.params.marketHashName as string;
-    const price = await quickSellPrice(marketHashName);
-    if (price === null) {
+    const result = await quickSellPrice(marketHashName);
+    if (result === null) {
       res.status(404).json({ error: "No market price available" });
       return;
     }
-    res.json({ sellerReceivesCents: price });
+    const marketUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}`;
+    res.json({
+      sellerReceivesCents: result.sellerReceivesCents,
+      stale: result.source !== "live",
+      source: result.source,
+      marketUrl,
+    });
   } catch (err) {
     console.error("Quick price error:", err);
     res.status(500).json({ error: "Failed to get quick price" });
