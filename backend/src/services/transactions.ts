@@ -340,25 +340,8 @@ export async function getTransactions(
 
   const txWhere = txConditions.join(" AND ");
 
-  // Trade subquery — aggregate item counts + first icon + item summary
-  const tradeSelect = `
-    SELECT to2.id::text AS id, 'trade'::text AS type,
-      COALESCE(NULLIF(agg.item_summary, ''), to2.partner_name, 'Trade #' || to2.steam_offer_id, 'Trade') AS market_hash_name,
-      0 AS price_cents,
-      to2.created_at AS date,
-      to2.partner_steam_id,
-      to2.direction AS trade_direction,
-      to2.status AS trade_status,
-      to2.value_give_cents,
-      to2.value_recv_cents,
-      COALESCE(agg.give_count, 0)::int AS give_count,
-      COALESCE(agg.recv_count, 0)::int AS recv_count,
-      COALESCE(agg.give_total, 0)::int AS give_total,
-      COALESCE(agg.recv_total, 0)::int AS recv_total,
-      agg.first_icon AS icon_url,
-      NULL::text AS note,
-      to2.is_internal
-    FROM trade_offers to2
+  // Aggregate subquery shared by trade selects
+  const tradeAgg = `
     LEFT JOIN (
       SELECT ti.offer_id,
         COUNT(*) FILTER (WHERE ti.side = 'give') AS give_count,
@@ -377,6 +360,74 @@ export async function getTransactions(
       GROUP BY ti.offer_id
     ) agg ON agg.offer_id = to2.id`;
 
+  // Trade subquery — for non-internal trades: one row per trade
+  // For internal trades: two rows — one per account perspective (from/to)
+  const tradeSelect = `
+    SELECT to2.id::text AS id, 'trade'::text AS type,
+      COALESCE(NULLIF(agg.item_summary, ''), to2.partner_name, 'Trade #' || to2.steam_offer_id, 'Trade') AS market_hash_name,
+      0 AS price_cents,
+      to2.created_at AS date,
+      to2.partner_steam_id,
+      to2.direction AS trade_direction,
+      to2.status AS trade_status,
+      to2.value_give_cents,
+      to2.value_recv_cents,
+      COALESCE(agg.give_count, 0)::int AS give_count,
+      COALESCE(agg.recv_count, 0)::int AS recv_count,
+      COALESCE(agg.give_total, 0)::int AS give_total,
+      COALESCE(agg.recv_total, 0)::int AS recv_total,
+      agg.first_icon AS icon_url,
+      NULL::text AS note,
+      to2.is_internal,
+      NULL::int AS perspective_account_id,
+      NULL::text AS perspective
+    FROM trade_offers to2
+    ${tradeAgg}`;
+
+  // Internal trades: two rows — "sent" perspective (from account) + "received" perspective (to account)
+  const internalTradeSelect = `
+    SELECT to2.id::text || '_from' AS id, 'trade'::text AS type,
+      COALESCE(NULLIF(agg.item_summary, ''), 'Transfer') AS market_hash_name,
+      0 AS price_cents,
+      to2.created_at AS date,
+      to2.partner_steam_id,
+      'outgoing'::text AS trade_direction,
+      to2.status AS trade_status,
+      to2.value_give_cents,
+      to2.value_recv_cents,
+      COALESCE(agg.give_count, 0)::int AS give_count,
+      COALESCE(agg.recv_count, 0)::int AS recv_count,
+      COALESCE(agg.give_total, 0)::int AS give_total,
+      COALESCE(agg.recv_total, 0)::int AS recv_total,
+      agg.first_icon AS icon_url,
+      NULL::text AS note,
+      true AS is_internal,
+      to2.account_id_from AS perspective_account_id,
+      'sent'::text AS perspective
+    FROM trade_offers to2
+    ${tradeAgg}
+    UNION ALL
+    SELECT to2.id::text || '_to' AS id, 'trade'::text AS type,
+      COALESCE(NULLIF(agg.item_summary, ''), 'Transfer') AS market_hash_name,
+      0 AS price_cents,
+      to2.created_at AS date,
+      to2.partner_steam_id,
+      'incoming'::text AS trade_direction,
+      to2.status AS trade_status,
+      to2.value_give_cents,
+      to2.value_recv_cents,
+      COALESCE(agg.give_count, 0)::int AS give_count,
+      COALESCE(agg.recv_count, 0)::int AS recv_count,
+      COALESCE(agg.give_total, 0)::int AS give_total,
+      COALESCE(agg.recv_total, 0)::int AS recv_total,
+      agg.first_icon AS icon_url,
+      NULL::text AS note,
+      true AS is_internal,
+      to2.account_id_to AS perspective_account_id,
+      'received'::text AS perspective
+    FROM trade_offers to2
+    ${tradeAgg}`;
+
   const marketSelect = `
     SELECT t.tx_id AS id, t.type, t.market_hash_name, t.price_cents, t.tx_date AS date,
       t.partner_steam_id, NULL AS trade_direction, NULL AS trade_status,
@@ -384,7 +435,9 @@ export async function getTransactions(
       NULL::int AS give_count, NULL::int AS recv_count,
       NULL::int AS give_total, NULL::int AS recv_total,
       t.icon_url, t.note,
-      FALSE AS is_internal
+      FALSE AS is_internal,
+      NULL::int AS perspective_account_id,
+      NULL::text AS perspective
     FROM transactions t`;
 
   const onlyTrades = filters.type === "trade";
@@ -412,21 +465,33 @@ export async function getTransactions(
   let query: string;
   let countQuery: string;
 
+  // Internal trades get split into 2 rows (sent/received perspectives).
+  // Non-internal trades stay as 1 row.
+  const buildTradeUnion = (where: string) => `
+    ${tradeSelect} WHERE ${where} AND NOT to2.is_internal
+    UNION ALL
+    ${internalTradeSelect} WHERE ${where} AND to2.is_internal`;
+
+  // Count: internal trades count as 2 rows
+  const buildTradeCount = (where: string) => `
+    (SELECT COUNT(*) FROM trade_offers to2 WHERE ${where} AND NOT to2.is_internal)
+    + (SELECT COUNT(*) * 2 FROM trade_offers to2 WHERE ${where} AND to2.is_internal)`;
+
   if (onlyTrades) {
     const trWhere = buildTradeWhere();
-    countQuery = `SELECT COUNT(*) FROM trade_offers to2 WHERE ${trWhere}`;
-    query = `${tradeSelect} WHERE ${trWhere} ORDER BY to2.created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`;
+    countQuery = `SELECT ${buildTradeCount(trWhere)} AS count`;
+    query = `SELECT * FROM (${buildTradeUnion(trWhere)}) AS trades ORDER BY date DESC LIMIT $${idx} OFFSET $${idx + 1}`;
   } else if (onlyMarket) {
     countQuery = `SELECT COUNT(*) FROM transactions t WHERE ${txWhere}`;
     query = `${marketSelect} WHERE ${txWhere} ORDER BY t.tx_date DESC LIMIT $${idx} OFFSET $${idx + 1}`;
   } else {
     const trWhere = buildTradeWhere();
-    countQuery = `SELECT ((SELECT COUNT(*) FROM transactions t WHERE ${txWhere}) + (SELECT COUNT(*) FROM trade_offers to2 WHERE ${trWhere})) AS count`;
+    countQuery = `SELECT ((SELECT COUNT(*) FROM transactions t WHERE ${txWhere}) + ${buildTradeCount(trWhere)}) AS count`;
     query = `
       SELECT * FROM (
         ${marketSelect} WHERE ${txWhere}
         UNION ALL
-        ${tradeSelect} WHERE ${trWhere}
+        ${buildTradeUnion(trWhere)}
       ) AS unified
       ORDER BY date DESC
       LIMIT $${idx} OFFSET $${idx + 1}`;
@@ -478,6 +543,8 @@ export async function getTransactions(
         note: r.note ?? null,
         current_price_cents: currentPriceCents,
         is_internal: r.is_internal ?? false,
+        perspective_account_id: r.perspective_account_id ?? null,
+        perspective: r.perspective ?? null,
       };
     }),
     total: parseInt(countResult.rows[0].count),
