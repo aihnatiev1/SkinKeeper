@@ -1763,9 +1763,13 @@ class _PortfolioOptionsSheet extends ConsumerWidget {
                 style: AppTheme.bodySmall
                     .copyWith(color: const Color(0xFFEF4444))),
             onTap: () async {
-              Navigator.of(context).pop();
+              // Capture navigator before popping (context unmounts after pop)
+              final rootNav = Navigator.of(context, rootNavigator: true);
+              final rootContext = rootNav.context;
+              Navigator.of(context).pop(); // close options sheet
+
               final confirmed = await showDialog<bool>(
-                context: context,
+                context: rootContext,
                 builder: (dialogCtx) => AlertDialog(
                   backgroundColor: AppTheme.surface,
                   title: Text(
@@ -1794,11 +1798,10 @@ class _PortfolioOptionsSheet extends ConsumerWidget {
                   ],
                 ),
               );
-              if (confirmed == true && context.mounted) {
+              if (confirmed == true) {
                 await ref
                     .read(portfoliosProvider.notifier)
                     .deletePortfolio(portfolio.id);
-                // Reset selection if this portfolio was active
                 if (ref.read(selectedPortfolioIdProvider) == portfolio.id) {
                   ref.read(selectedPortfolioIdProvider.notifier).state = null;
                 }
