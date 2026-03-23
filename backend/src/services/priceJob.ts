@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices, purgeStaleCurrentPrices } from "./prices.js";
+import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices, purgeStaleCurrentPrices, startHotSteamLoop, stopHotSteamLoop } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
 import { runCSGOTraderDailySeed } from "./csgoTrader.js";
@@ -131,7 +131,15 @@ export function startPriceJobs() {
     }
   }));
 
-  // Steam Market: parallel crawlers (one per proxy slot)
+  // ── PRIMARY: Hot Steam Loop (inventory items) ──────────────────────────
+  // Continuous loop — always-fresh Steam prices for items users actually have.
+  // Parallel workers (one per proxy slot), oldest-first priority queue.
+  // 500 items ≈ 3 min cycle, 5K items ≈ 28 min cycle.
+  startHotSteamLoop();
+
+  // ── SECONDARY: Steam Batch Crawler (full market) ──────────────────────
+  // Background scan of ALL 33K items for analytics, charts, price comparison.
+  // Lower priority — runs every 2.5h, parallel per slot.
   startSteamCrawlers();
 
   // CSFloat: parallel crawlers (one per proxy slot)
@@ -215,6 +223,9 @@ export function startPriceJobs() {
         console.error("[INIT] Initial DMarket fetch failed:", err)
       ),
     ]);
+
+    // Phase 3: Hot Steam Loop is already running (started above).
+    // It will pick up all inventory items automatically, oldest-first.
   })();
 }
 
@@ -227,6 +238,7 @@ export function stopAllJobs(): void {
   scheduledTasks.length = 0;
 
   // Stop crawlers
+  stopHotSteamLoop();
   stopSteamCrawlers();
   stopCSFloatCrawler();
 

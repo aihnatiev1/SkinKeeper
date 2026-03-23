@@ -9,8 +9,10 @@ import {
   getSlot,
   getSlotConfig,
   isSlotAvailable,
+  isSlotReady,
   recordSlot429,
   recordSlotSuccess,
+  waitForRate,
 } from "./proxyPool.js";
 
 interface SkinportItem {
@@ -207,6 +209,12 @@ class AdaptiveCrawler {
       return;
     }
 
+    // Proactive rate limit: wait if this slot sent too recently
+    if (this.slotIndex >= 0 && !isSlotReady(this.slotIndex, this.domain)) {
+      this.timer = setTimeout(() => this.tick(), 5_000);
+      return;
+    }
+
     const endLatency = recordFetchStart(this.source);
     try {
       const itemName = await this.getNextItem();
@@ -215,6 +223,11 @@ class AdaptiveCrawler {
         updateCrawlerState(this.source, this.currentInterval, this.pausedUntil, this.consecutiveSuccesses);
         this.timer = setTimeout(() => this.tick(), 60_000);
         return;
+      }
+
+      // Enforce rate limit before actual request
+      if (this.slotIndex >= 0) {
+        await waitForRate(this.slotIndex, this.domain);
       }
 
       const price = await this.fetchFn(itemName);
@@ -317,8 +330,8 @@ class AdaptiveCrawler {
 //
 // Each page rotates through proxy slots to distribute load across IPs.
 
-const STEAM_SEARCH_GAP_MS = 5000; // 5s between pages (safe margin)
-const STEAM_SEARCH_COUNT = 100;   // items per page (Steam max)
+const STEAM_SEARCH_GAP_MS = 3000; // 3s between pages (was 5s, but 10x more pages now)
+const STEAM_SEARCH_COUNT = 10;    // items per page (Steam capped at 10, was 100)
 const STEAM_SEARCH_429_PAUSE_MS = 5 * 60_000; // 5 min pause on 429
 
 let steamBatchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -380,7 +393,12 @@ async function fetchSteamSearchPage(
 
 /**
  * Run a full batch crawl: page through ALL CS2 market items.
- * One request per 5 seconds, rotating proxy slots.
+ *
+ * Steam now caps results at 10 per page (was 100). With ~33K items that's
+ * ~3,300 pages. To finish in <1h we run parallel streams — one per proxy slot.
+ * Each slot crawls its own segment of the item list.
+ *
+ * 3 slots × 3s gap × ~1,100 pages/slot = ~55 min.
  */
 export async function runSteamBatchCrawl(): Promise<void> {
   if (steamBatchRunning) {
@@ -390,103 +408,150 @@ export async function runSteamBatchCrawl(): Promise<void> {
   steamBatchRunning = true;
   initProxyPool();
 
-  const slotCount = getSlotCount();
-  let start = 0;
-  let totalSaved = 0;
-  let pageNum = 0;
-  let consecutive429s = 0;
-
   const endLatencyOuter = recordFetchStart("steam");
 
   try {
-    while (true) {
-      const slotIdx = slotCount > 0 ? pageNum % slotCount : -1;
-      const slot = slotIdx >= 0 ? getSlot(slotIdx) : undefined;
-      const slotName = slot?.name ?? "direct";
+    // First, get total_count from a probe request
+    const probe = await fetchSteamSearchPage(0, -1);
+    if (!probe?.success || !probe.total_count) {
+      console.warn("[Steam Batch] Probe failed — possible block");
+      return;
+    }
+    const totalItems = probe.total_count;
+    const totalPages = Math.ceil(totalItems / STEAM_SEARCH_COUNT);
 
-      try {
-        const result = await fetchSteamSearchPage(start, slotIdx);
+    const slotCount = Math.max(1, getSlotCount());
 
-        if (!result?.success || !result.results || result.results.length === 0) {
-          if (start === 0) {
-            console.warn("[Steam Batch] First page returned no results — possible block");
-          }
-          break;
-        }
+    // Split page range across slots
+    const pagesPerSlot = Math.ceil(totalPages / slotCount);
 
-        // Extract prices (sell_price is in cents)
-        const prices = new Map<string, number>();
-        for (const item of result.results) {
-          if (item.sell_price > 0 && item.hash_name) {
-            prices.set(item.hash_name, item.sell_price / 100);
-          }
-        }
+    console.log(`[Steam Batch] ${totalItems} items, ${totalPages} pages, ${slotCount} parallel slots (${pagesPerSlot} pages/slot)`);
 
-        if (prices.size > 0) {
-          await savePrices(prices, "steam");
-          totalSaved += prices.size;
-        }
-
-        if (slotIdx >= 0) recordSlotSuccess(slotIdx, "steamcommunity.com");
-        consecutive429s = 0;
-        pageNum++;
-
-        // Check if we've reached the end
-        start += STEAM_SEARCH_COUNT;
-        if (start >= result.total_count) {
-          console.log(`[Steam Batch] Complete: ${totalSaved} prices from ${pageNum} pages (total: ${result.total_count} items)`);
-          break;
-        }
-
-        // Rate limit: 5s between pages
-        await new Promise((r) => setTimeout(r, STEAM_SEARCH_GAP_MS));
-      } catch (err: any) {
-        const status = err?.response?.status;
-
-        if (status === 429) {
-          consecutive429s++;
-          if (slotIdx >= 0) {
-            const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
-            recordSlot429(slotIdx, "steamcommunity.com", retryAfter);
-          }
-          record429("steam");
-
-          if (consecutive429s >= 3) {
-            console.warn(`[Steam Batch] 3 consecutive 429s at page ${pageNum} — pausing ${STEAM_SEARCH_429_PAUSE_MS / 1000}s`);
-            await new Promise((r) => setTimeout(r, STEAM_SEARCH_429_PAUSE_MS));
-            consecutive429s = 0;
-          } else {
-            // Wait longer between retries, try next proxy slot
-            await new Promise((r) => setTimeout(r, 30_000));
-            pageNum++; // rotate to next slot
-          }
-          continue; // Retry same page with different slot
-        }
-
-        // Non-429 error — log and continue to next page
-        console.error(`[Steam Batch] Error on page ${pageNum}:`, err.message || err);
-        recordFailure("steam", err.message || String(err));
-        start += STEAM_SEARCH_COUNT;
-        pageNum++;
-        await new Promise((r) => setTimeout(r, STEAM_SEARCH_GAP_MS));
+    // Save the probe page's results
+    let totalSaved = 0;
+    if (probe.results) {
+      const prices = extractSearchPrices(probe.results);
+      if (prices.size > 0) {
+        await savePrices(prices, "steam");
+        totalSaved += prices.size;
       }
     }
+
+    // Launch parallel crawlers per slot
+    const slotResults = await Promise.allSettled(
+      Array.from({ length: slotCount }, (_, slotIdx) => {
+        const startPage = slotIdx === 0 ? 1 : slotIdx * pagesPerSlot; // slot 0 starts at page 1 (probe was page 0)
+        const endPage = Math.min((slotIdx + 1) * pagesPerSlot, totalPages);
+        return crawlSteamSegment(slotIdx, startPage, endPage, totalItems);
+      })
+    );
+
+    for (const result of slotResults) {
+      if (result.status === "fulfilled") {
+        totalSaved += result.value;
+      } else {
+        console.error("[Steam Batch] Slot failed:", result.reason);
+      }
+    }
+
+    recordSuccess("steam", totalSaved);
+    console.log(`[Steam Batch] Complete: ${totalSaved} prices from ${totalPages} pages (total: ${totalItems} items)`);
+  } catch (err) {
+    recordFailure("steam", (err as Error).message || String(err));
+    console.error("[Steam Batch] Fatal error:", err);
   } finally {
     endLatencyOuter();
     steamBatchRunning = false;
-    recordSuccess("steam", totalSaved);
-    console.log(`[Steam Batch] Finished. Saved ${totalSaved} prices.`);
   }
 }
 
+/** Extract prices from Steam search results array */
+function extractSearchPrices(results: NonNullable<SteamSearchResult["results"]>): Map<string, number> {
+  const prices = new Map<string, number>();
+  for (const item of results) {
+    if (item.sell_price > 0 && item.hash_name) {
+      prices.set(item.hash_name, item.sell_price / 100);
+    }
+  }
+  return prices;
+}
+
+/** Crawl a segment of Steam search pages using a specific proxy slot */
+async function crawlSteamSegment(
+  slotIdx: number,
+  startPage: number,
+  endPage: number,
+  totalItems: number
+): Promise<number> {
+  const slotName = getSlot(slotIdx)?.name ?? "direct";
+  let saved = 0;
+  let consecutive429s = 0;
+
+  for (let page = startPage; page < endPage; page++) {
+    const start = page * STEAM_SEARCH_COUNT;
+    if (start >= totalItems) break;
+
+    // Enforce per-slot rate limit
+    await waitForRate(slotIdx, "steamcommunity.com");
+
+    try {
+      const result = await fetchSteamSearchPage(start, slotIdx);
+
+      if (!result?.success || !result.results || result.results.length === 0) {
+        break;
+      }
+
+      const prices = extractSearchPrices(result.results);
+      if (prices.size > 0) {
+        await savePrices(prices, "steam");
+        saved += prices.size;
+      }
+
+      recordSlotSuccess(slotIdx, "steamcommunity.com");
+      consecutive429s = 0;
+
+      // Rate limit between pages
+      await new Promise((r) => setTimeout(r, STEAM_SEARCH_GAP_MS));
+    } catch (err: any) {
+      const status = err?.response?.status;
+
+      if (status === 429) {
+        consecutive429s++;
+        const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
+        recordSlot429(slotIdx, "steamcommunity.com", retryAfter);
+        record429("steam");
+
+        if (consecutive429s >= 5) {
+          console.warn(`[Steam Batch:${slotName}] 5 consecutive 429s at page ${page} — pausing ${STEAM_SEARCH_429_PAUSE_MS / 1000}s`);
+          await new Promise((r) => setTimeout(r, STEAM_SEARCH_429_PAUSE_MS));
+          consecutive429s = 0;
+        } else {
+          await new Promise((r) => setTimeout(r, 30_000));
+        }
+        page--; // Retry same page
+        continue;
+      }
+
+      // Non-429 error — skip page
+      console.error(`[Steam Batch:${slotName}] Error on page ${page}:`, err.message || err);
+      await new Promise((r) => setTimeout(r, STEAM_SEARCH_GAP_MS));
+    }
+  }
+
+  console.log(`[Steam Batch:${slotName}] Segment done: ${saved} prices (pages ${startPage}-${endPage - 1})`);
+  return saved;
+}
+
 /**
- * Start the Steam batch crawler on a schedule (every 2 hours).
- * First run starts after 30s delay.
+ * Start the Steam batch crawler on a schedule (every 2.5 hours).
+ * SECONDARY to Hot Loop — this covers the full market for analytics/charts.
+ * Parallel streams per proxy slot — ~55 min per full crawl.
+ * First run starts after 2 min delay (let hot loop warm up first).
  */
 export function startSteamCrawlers(): void {
   initProxyPool();
 
-  const INTERVAL_MS = 1 * 3600_000; // 1 hour
+  const INTERVAL_MS = 150 * 60_000; // 2.5h — low priority background scan
 
   async function scheduledRun() {
     try {
@@ -498,8 +563,8 @@ export function startSteamCrawlers(): void {
   }
 
   // Start first run after 30s (let other init complete)
-  steamBatchTimer = setTimeout(scheduledRun, 30_000);
-  console.log("[Steam Batch] Scheduled: runs every 1h, first run in 30s");
+  steamBatchTimer = setTimeout(scheduledRun, 2 * 60_000); // 2 min delay — let hot loop start first
+  console.log("[Steam Batch] Scheduled: runs every 2.5h (background), first run in 2m");
 }
 
 export function stopSteamCrawlers(): void {
@@ -621,6 +686,30 @@ export async function getLatestPrices(
     result.set(row.market_hash_name, existing);
   }
   return result;
+}
+
+/**
+ * Get a fresh cached steam price if it was updated recently.
+ * Returns { priceUsd, ageMs } or null if no fresh steam price exists.
+ */
+export async function getFreshSteamPrice(
+  marketHashName: string,
+  maxAgeMs: number
+): Promise<{ priceUsd: number; ageMs: number } | null> {
+  const { rows } = await pool.query(
+    `SELECT price_usd, EXTRACT(EPOCH FROM (NOW() - updated_at)) * 1000 AS age_ms
+     FROM current_prices
+     WHERE market_hash_name = $1
+       AND source = 'steam'
+       AND price_usd > 0
+       AND updated_at > NOW() - INTERVAL '1 millisecond' * $2`,
+    [marketHashName, maxAgeMs]
+  );
+  if (rows.length === 0) return null;
+  return {
+    priceUsd: parseFloat(rows[0].price_usd),
+    ageMs: parseFloat(rows[0].age_ms),
+  };
 }
 
 // Get best (highest) price for a list of items — returns Map<name, bestPrice>
@@ -792,6 +881,180 @@ export async function pruneOldPrices(): Promise<void> {
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   console.log(`[Prune] Completed in ${elapsed}s`);
+}
+
+// ─── Hot Steam Price Loop ────────────────────────────────────────────────
+//
+// PRIMARY price source for inventory items. Continuous loop that never stops.
+//
+// Architecture:
+//   HOT SET  = all unique items in users' inventories (500–5K items)
+//   Strategy = fetch oldest-first via /market/priceoverview/ (always reliable)
+//   Parallel = one worker per proxy slot, each picks next item from shared queue
+//   Speed    = 3s gap per slot → 500 items ≈ 3 min, 5K items ≈ 28 min
+//
+// The batch crawler (/market/search/render/) is demoted to COLD background —
+// used for analytics, charts, non-inventory items.
+
+const HOT_LOOP_GAP_MS = 3_000;       // 3s between requests per slot
+const HOT_LOOP_PAUSE_MS = 30_000;    // 30s pause when hot set is empty
+const HOT_LOOP_429_PAUSE_MS = 60_000; // 1 min pause per slot on 429
+let hotLoopRunning = false;
+let hotLoopStopped = false;
+
+interface HotLoopStats {
+  running: boolean;
+  cycleCount: number;
+  totalUpdated: number;
+  lastCycleItems: number;
+  lastCycleDurationMs: number;
+}
+
+const hotStats: HotLoopStats = {
+  running: false,
+  cycleCount: 0,
+  totalUpdated: 0,
+  lastCycleItems: 0,
+  lastCycleDurationMs: 0,
+};
+
+export function getHotLoopStats(): HotLoopStats {
+  return { ...hotStats };
+}
+
+/**
+ * Get the next batch of inventory items sorted by oldest steam price.
+ * Returns items that need a refresh — oldest first, NULLs first.
+ */
+async function getHotSet(): Promise<string[]> {
+  const { rows } = await pool.query(
+    `SELECT ii.market_hash_name,
+            cp.updated_at
+     FROM (SELECT DISTINCT market_hash_name FROM inventory_items) ii
+     LEFT JOIN current_prices cp
+       ON cp.market_hash_name = ii.market_hash_name
+       AND cp.source = 'steam'
+     ORDER BY cp.updated_at ASC NULLS FIRST`
+  );
+  return rows.map((r: any) => r.market_hash_name);
+}
+
+/**
+ * Start the hot steam price loop. Runs forever until stopHotSteamLoop().
+ * Parallel workers — one per proxy slot — pull from a shared queue.
+ */
+export function startHotSteamLoop(): void {
+  if (hotLoopRunning) return;
+  hotLoopRunning = true;
+  hotLoopStopped = false;
+  hotStats.running = true;
+
+  initProxyPool();
+  const slotCount = Math.max(1, getSlotCount());
+
+  console.log(`[HotSteam] Starting continuous loop with ${slotCount} parallel workers`);
+
+  // Main loop — runs in background
+  (async () => {
+    while (!hotLoopStopped) {
+      const cycleStart = Date.now();
+
+      try {
+        const hotSet = await getHotSet();
+
+        if (hotSet.length === 0) {
+          await new Promise((r) => setTimeout(r, HOT_LOOP_PAUSE_MS));
+          continue;
+        }
+
+        // Shared queue — workers pull from it concurrently
+        let cursor = 0;
+        const nextItem = (): string | null => {
+          if (cursor >= hotSet.length) return null;
+          return hotSet[cursor++];
+        };
+
+        let cycleUpdated = 0;
+
+        // Launch parallel workers
+        const workers = Array.from({ length: slotCount }, (_, slotIdx) =>
+          hotWorker(slotIdx, nextItem).then((n) => { cycleUpdated += n; })
+        );
+
+        await Promise.allSettled(workers);
+
+        // Update stats
+        hotStats.cycleCount++;
+        hotStats.totalUpdated += cycleUpdated;
+        hotStats.lastCycleItems = hotSet.length;
+        hotStats.lastCycleDurationMs = Date.now() - cycleStart;
+
+        const durationSec = (hotStats.lastCycleDurationMs / 1000).toFixed(0);
+        console.log(
+          `[HotSteam] Cycle #${hotStats.cycleCount}: ${cycleUpdated}/${hotSet.length} updated in ${durationSec}s`
+        );
+      } catch (err) {
+        console.error("[HotSteam] Cycle error:", err);
+        await new Promise((r) => setTimeout(r, HOT_LOOP_PAUSE_MS));
+      }
+    }
+
+    hotLoopRunning = false;
+    hotStats.running = false;
+    console.log("[HotSteam] Loop stopped");
+  })();
+}
+
+/** Single worker — pulls items from shared queue, fetches prices via its slot */
+async function hotWorker(
+  slotIdx: number,
+  nextItem: () => string | null
+): Promise<number> {
+  const { getMarketPrice } = await import("./market.js");
+  const slotName = getSlot(slotIdx)?.name ?? `slot${slotIdx}`;
+  let updated = 0;
+  let consecutive429s = 0;
+
+  while (!hotLoopStopped) {
+    const name = nextItem();
+    if (name === null) break; // queue exhausted
+
+    await waitForRate(slotIdx, "steamcommunity.com");
+
+    try {
+      const info = await getMarketPrice(name);
+      if (info.lowestPrice !== null && info.lowestPrice > 0) {
+        await savePrices(new Map([[name, info.lowestPrice / 100]]), "steam");
+        updated++;
+      }
+      recordSlotSuccess(slotIdx, "steamcommunity.com");
+      consecutive429s = 0;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 429) {
+        consecutive429s++;
+        record429("steam");
+        recordSlot429(slotIdx, "steamcommunity.com");
+        if (consecutive429s >= 3) {
+          console.warn(`[HotSteam:${slotName}] 3× 429 — pausing ${HOT_LOOP_429_PAUSE_MS / 1000}s`);
+          await new Promise((r) => setTimeout(r, HOT_LOOP_429_PAUSE_MS));
+          consecutive429s = 0;
+        } else {
+          await new Promise((r) => setTimeout(r, 30_000));
+        }
+        continue; // retry — nextItem already advanced
+      }
+      // Non-429 — skip item
+    }
+
+    await new Promise((r) => setTimeout(r, HOT_LOOP_GAP_MS));
+  }
+
+  return updated;
+}
+
+export function stopHotSteamLoop(): void {
+  hotLoopStopped = true;
 }
 
 // Export the AdaptiveCrawler class for use by CSFloat

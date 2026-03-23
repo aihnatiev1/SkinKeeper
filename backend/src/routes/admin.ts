@@ -580,9 +580,10 @@ router.get("/health-dashboard", requireAdminSecret, (_req: Request, res: Respons
   });
 });
 
-// GET /api/admin/job-health — cron job health status + proxy pool
-router.get("/job-health", requireAdminSecret, (_req: Request, res: Response) => {
-  res.json({ ...getJobHealth(), inspectCircuit: getInspectCircuitState(), proxyPool: getPoolStats() });
+// GET /api/admin/job-health — cron job health status + proxy pool + hot loop
+router.get("/job-health", requireAdminSecret, async (_req: Request, res: Response) => {
+  const { getHotLoopStats } = await import("../services/prices.js");
+  res.json({ ...getJobHealth(), hotSteamLoop: getHotLoopStats(), inspectCircuit: getInspectCircuitState(), proxyPool: getPoolStats() });
 });
 
 // POST /api/admin/prune-prices — manually trigger price history pruning

@@ -42,7 +42,7 @@ class SelectionTray extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = selectedItems.length;
     final totalValue = selectedItems.fold<double>(
-        0, (sum, i) => sum + (i.steamPrice ?? 0));
+        0, (sum, i) => sum + (i.bestPrice ?? 0));
 
     return Container(
       decoration: BoxDecoration(
@@ -309,8 +309,8 @@ class MiniItemCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(5, 4, 5, 0),
                   child: Text(
-                    item.steamPrice != null
-                        ? currency.format(item.steamPrice!)
+                    item.bestPrice != null
+                        ? currency.format(item.bestPrice!)
                         : '\u2014',
                     style: const TextStyle(
                       fontSize: 10,

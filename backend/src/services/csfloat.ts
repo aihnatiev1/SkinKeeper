@@ -9,6 +9,7 @@ import {
   recordSlot429,
   recordSlotSuccess,
   getAvailableSlot,
+  waitForRate,
 } from "./proxyPool.js";
 
 interface CSFloatListing {
@@ -51,6 +52,7 @@ async function fetchCSFloatItemPrice(
   };
 
   try {
+    await waitForRate(useSlot.index, CSFLOAT_DOMAIN);
     const { data } = await axios.get<{ data: CSFloatListing[] }>(
       "https://csfloat.com/api/v1/listings",
       requestConfig
@@ -114,12 +116,12 @@ export function startCSFloatCrawler(): void {
     const crawler = new AdaptiveCrawler(
       {
         name: "CSFloat",
-        minIntervalMs: 30_000,       // 1 req / 30s per slot
-        maxIntervalMs: 600_000,      // 10 min max (reduced from 1h)
-        startIntervalMs: 60_000,     // start 1 req / 60s (was 90s)
+        minIntervalMs: 45_000,       // 1 req / 45s per slot (was 30s — caused 429s)
+        maxIntervalMs: 600_000,      // 10 min max
+        startIntervalMs: 75_000,     // start 1 req / 75s (conservative ramp-up)
         backoffFactor: 2.5,          // backoff on 429
-        cooldownFactor: 0.93,        // 7% faster per streak (was 5%)
-        successesBeforeSpeedup: 15,  // need 15 successes (was 20)
+        cooldownFactor: 0.95,        // 5% faster per streak (was 7% — too aggressive)
+        successesBeforeSpeedup: 25,  // need 25 successes before speedup (was 15)
         refreshAgeMs: 4 * 3600_000,  // refresh after 4h
       },
       "csfloat",

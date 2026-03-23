@@ -144,7 +144,22 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
 
     await ref.read(sellOperationProvider.notifier).startOperation(items);
 
-    // Fix 13: Optimistic update — remove sold items from inventory immediately
+    // Check if operation actually started — don't remove items on failure
+    final opState = ref.read(sellOperationProvider);
+    if (opState.hasError) {
+      if (mounted) {
+        setState(() => _isSelling = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Sell operation failed. Please try again.'),
+            backgroundColor: AppTheme.loss,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Optimistic update — remove sold items from inventory
     final soldAssetIds = widget.items.map((i) => i.assetId).toSet();
     ref.read(inventoryProvider.notifier).removeAssets(soldAssetIds);
     ref.read(selectionProvider.notifier).clear();
@@ -575,8 +590,11 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             ),
           ),
 
-        // Fee breakdown for quick price
-        FeeBreakdown(sellerReceivesCents: quickPriceCents, currency: ref.watch(currencyProvider)),
+        // Fee breakdown for quick price (amounts are in wallet currency, not USD)
+        FeeBreakdown(
+          sellerReceivesCents: quickPriceCents,
+          currency: CurrencyInfo(code: qp.currencyCode, symbol: qp.currencySymbol, rate: 1.0),
+        ),
         const SizedBox(height: 6),
 
         if (count > 1)
@@ -869,12 +887,12 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
           ),
           const SizedBox(height: 10),
 
-          // Live fee breakdown for custom price
+          // Live fee breakdown for custom price (amounts in active input currency)
           if (_customPriceCents != null && _customPriceCents! > 0) ...[
             FeeBreakdown(
               sellerReceivesCents: _customPriceCents!,
               compact: false,
-              currency: ref.watch(currencyProvider),
+              currency: CurrencyInfo(code: walletCurrencyCode, symbol: activeSymbol, rate: 1.0),
             ),
             const SizedBox(height: 12),
           ],

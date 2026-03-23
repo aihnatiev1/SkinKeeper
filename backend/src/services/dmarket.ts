@@ -7,6 +7,7 @@ import {
   getSlotConfig,
   recordSlot429,
   recordSlotSuccess,
+  waitForRate,
 } from "./proxyPool.js";
 
 interface DMarketItem {
@@ -91,6 +92,7 @@ export async function fetchDMarketItemPrice(
     triedSlots.add(slot.index);
 
     try {
+      await waitForRate(slot.index, DMARKET_DOMAIN);
       const { data } = await axios.get<DMarketResponse>(
         `https://api.dmarket.com${fullPath}`,
         {

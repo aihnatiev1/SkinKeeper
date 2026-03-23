@@ -20,6 +20,8 @@ export interface ProxySlot {
   cooldowns: Map<string, number>;
   /** domain -> consecutive 429 count */
   consecutive429s: Map<string, number>;
+  /** domain -> last request timestamp (for rate limiting) */
+  lastRequestAt: Map<string, number>;
   totalRequests: number;
   total429s: number;
   totalSuccesses: number;
@@ -69,10 +71,65 @@ function makeSlot(index: number, name: string, agent: HttpsProxyAgent<string> | 
     agent,
     cooldowns: new Map(),
     consecutive429s: new Map(),
+    lastRequestAt: new Map(),
     totalRequests: 0,
     total429s: 0,
     totalSuccesses: 0,
   };
+}
+
+// ─── Per-Domain Rate Limits (play rate) ─────────────────────────────────
+//
+// Proactive rate limiting: enforce minimum gap between requests per slot
+// per domain. Prevents 429s instead of reacting to them.
+//
+// Key: domain, Value: minimum ms between requests PER SLOT.
+// With 3 slots, effective rate = 3 × (1000/limitMs) req/s.
+
+const domainRateLimits = new Map<string, number>([
+  ["csfloat.com",          45_000],  // 1 req/45s per slot → ~4 req/min total
+  ["api.dmarket.com",         500],  // 200ms was too tight; 500ms per slot
+  ["skinport",            120_000],  // 1 req/2min per slot (bulk endpoint)
+  ["steamcommunity.com",    6_000],  // 6s per slot (steam batch already uses 5s gap)
+]);
+
+/**
+ * Set or update a per-domain rate limit.
+ */
+export function setDomainRateLimit(domain: string, minIntervalMs: number): void {
+  domainRateLimits.set(domain, minIntervalMs);
+}
+
+/**
+ * Wait until it's safe to send a request to `domain` from `slot`.
+ * Returns immediately if enough time has passed; otherwise sleeps.
+ */
+export async function waitForRate(slotIndex: number, domain: string): Promise<void> {
+  const slot = slots[slotIndex];
+  if (!slot) return;
+
+  const minGap = domainRateLimits.get(domain);
+  if (!minGap) return; // no rate limit configured for this domain
+
+  const lastReq = slot.lastRequestAt.get(domain) ?? 0;
+  const elapsed = Date.now() - lastReq;
+  if (elapsed < minGap) {
+    const waitMs = minGap - elapsed;
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+  slot.lastRequestAt.set(domain, Date.now());
+}
+
+/**
+ * Check if a slot is ready (not rate-limited) for a domain without waiting.
+ */
+export function isSlotReady(slotIndex: number, domain: string): boolean {
+  const slot = slots[slotIndex];
+  if (!slot) return false;
+  const minGap = domainRateLimits.get(domain);
+  if (!minGap) return true;
+  const lastReq = slot.lastRequestAt.get(domain) ?? 0;
+  return (Date.now() - lastReq) >= minGap;
 }
 
 // ─── Slot Selection ──────────────────────────────────────────────────────
@@ -199,6 +256,8 @@ export async function proxyRequest<T = any>(
     }
 
     try {
+      // Proactive rate limit: wait if too soon since last request
+      await waitForRate(slot.index, domain);
       slot.totalRequests++;
       const response: AxiosResponse<T> = await axios(reqConfig);
       recordSlotSuccess(slot.index, domain);
