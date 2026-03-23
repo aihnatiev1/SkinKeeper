@@ -625,7 +625,12 @@ export async function fetchPartnerInventory(
     }
 
     if (!result?.assets?.length) {
-      console.log(`[Trade] IEconService returned 0 assets for partner (page ${page}), total_count=${result?.total_inventory_count}`);
+      if (page === 0) {
+        // First page empty — IEconService can't see this inventory (privacy settings).
+        // Fall back to community endpoint which works regardless.
+        console.log(`[Trade] IEconService returned 0 assets for partner (page 0), falling back to community`);
+        return fetchPartnerInventoryCommunity(partnerSteamId);
+      }
       break;
     }
 
