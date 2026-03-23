@@ -103,6 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ref.invalidate(accountsProvider);
         ref.invalidate(inventoryProvider);
         ref.invalidate(sessionStatusProvider);
+        ref.invalidate(authStateProvider); // refresh account_count for badges
         if (mounted) {
           setState(() { _isPolling = false; });
           ScaffoldMessenger.of(context).showSnackBar(
