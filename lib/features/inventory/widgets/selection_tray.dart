@@ -82,18 +82,11 @@ class SelectionTray extends StatelessWidget {
               ),
             ),
 
-            // -- Header row: "Selected N items $XXX" + Sell button --
+            // -- Header row: "N items: $XXX" + Quick Sell + Sale --
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 2, 10, 8),
               child: Row(
                 children: [
-                  Text(
-                    'Selected ',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
                   Text(
                     '$count ${count == 1 ? 'item' : 'items'}',
                     style: const TextStyle(
@@ -102,7 +95,13 @@ class SelectionTray extends StatelessWidget {
                       color: AppTheme.primary,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  Text(
+                    ': ',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                   Text(
                     currency.format(totalValue),
                     style: const TextStyle(
@@ -156,7 +155,7 @@ class SelectionTray extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Sell button
+                  // Sale button
                   GestureDetector(
                     onTap: () {
                       HapticFeedback.mediumImpact();
@@ -183,7 +182,7 @@ class SelectionTray extends StatelessWidget {
                               size: 15, color: Colors.white),
                           const SizedBox(width: 6),
                           const Text(
-                            'Set Price',
+                            'Sale',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
