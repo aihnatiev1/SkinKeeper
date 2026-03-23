@@ -416,8 +416,38 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
         ? currency.formatWithSign(item.totalProfit)
         : '\u2014';
 
-    return GestureDetector(
+    return Dismissible(
       key: ValueKey(item.marketHashName),
+      background: _swipeBackground(
+        alignment: Alignment.centerLeft,
+        color: AppTheme.primary,
+        icon: Icons.edit_outlined,
+      ),
+      secondaryBackground: _swipeBackground(
+        alignment: Alignment.centerRight,
+        color: AppTheme.loss,
+        icon: Icons.delete_outline,
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          // Swipe right → edit: pre-fill with existing data
+          showGlassSheet(
+            context,
+            AddTransactionSheet(
+              initialItemName: item.marketHashName,
+              initialIconUrl: item.imageUrl,
+              initialPriceUsd: item.avgBuyPrice,
+              initialQty: item.currentHolding,
+              editMode: true,
+            ),
+          );
+          return false;
+        } else {
+          // Swipe left → delete
+          return _confirmDeleteAll(context, item);
+        }
+      },
+      child: GestureDetector(
       onLongPress: () => _showItemActions(context, item),
       child: Container(
           decoration: AppTheme.glass(),
@@ -505,6 +535,7 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
             ],
           ),
         ),
+      ),
     );
   }
 
@@ -577,7 +608,8 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
     HapticFeedback.mediumImpact();
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      useRootNavigator: true,
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('Delete transactions?',
             style: const TextStyle(color: Colors.white, fontSize: 15)),
@@ -587,12 +619,12 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child:
                 Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text('Delete',
                 style: TextStyle(
                     color: AppTheme.loss, fontWeight: FontWeight.w700)),
@@ -600,7 +632,10 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
         ],
       ),
     );
-    return result ?? false;
+    if (result == true) {
+      await _deleteAllForItem(context, item);
+    }
+    return false; // never actually dismiss the Dismissible — we handle removal via provider
   }
 
   Future<void> _deleteAllForItem(BuildContext context, ItemPL item) async {
@@ -609,9 +644,11 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
       final encoded = Uri.encodeQueryComponent(item.marketHashName);
       await api.delete('/transactions?item=$encoded');
       if (!context.mounted) return;
-      // Pop back to portfolio screen before invalidating to avoid black screen
-      ref.invalidate(portfolioPLProvider);
-      ref.invalidate(itemsPLProvider);
+      // Defer invalidation to next frame to avoid black screen
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.invalidate(portfolioPLProvider);
+        ref.invalidate(itemsPLProvider);
+      });
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -626,48 +663,14 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
   // ── Item long-press actions ──────────────────────────────────────────────
   void _showItemActions(BuildContext context, ItemPL item) {
     HapticFeedback.mediumImpact();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(16),
-        decoration: AppTheme.glass(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              item.displayName,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: Icon(Icons.add_circle_outline,
-                  color: AppTheme.primary, size: 20),
-              title: Text(
-                'Log transaction',
-                style:
-                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-              ),
-              onTap: () {
-                context.pop();
-                showGlassSheet(
-                  context,
-                  AddTransactionSheet(
-                    initialItemName: item.marketHashName,
-                    initialIconUrl: item.imageUrl,
-                  ),
-                );
-              },
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-            ),
-          ],
-        ),
+    showGlassSheet(
+      context,
+      AddTransactionSheet(
+        initialItemName: item.marketHashName,
+        initialIconUrl: item.imageUrl,
+        initialPriceUsd: item.avgBuyPrice,
+        initialQty: item.currentHolding,
+        editMode: true,
       ),
     );
   }

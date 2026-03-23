@@ -48,15 +48,18 @@ class TransactionsScreen extends ConsumerWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      AppLocalizations.of(context).historyTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        AppLocalizations.of(context).historyTitle,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
                       ),
                     ),
                   ),

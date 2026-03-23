@@ -109,7 +109,6 @@ class InventoryAppBar extends ConsumerWidget {
                     onToggleSearch();
                   },
                 ),
-                _FilterIconBtn(),
                 SortMenuBtn(
                   currentSort: ref.watch(sortOptionProvider),
                   onSelected: (option) {

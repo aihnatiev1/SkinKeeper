@@ -777,6 +777,16 @@ export async function createAndSendOffer(
     0
   );
 
+  // Detect internal trade (partner is one of user's linked accounts)
+  const { rows: linkedAccounts } = await pool.query(
+    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`,
+    [userId]
+  );
+  const partnerAccount = linkedAccounts.find((a: any) => a.steam_id === input.partnerSteamId);
+  const isInternal = !!partnerAccount;
+  const accountIdFrom = accountId;
+  const accountIdTo = partnerAccount?.id ?? null;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -784,8 +794,9 @@ export async function createAndSendOffer(
     const { rows } = await client.query(
       `INSERT INTO trade_offers
          (user_id, direction, steam_offer_id, partner_steam_id, message,
-          status, is_quick_transfer, value_give_cents, value_recv_cents)
-       VALUES ($1, 'outgoing', $2, $3, $4, 'pending', $5, $6, $7)
+          status, is_quick_transfer, is_internal, account_id_from, account_id_to,
+          value_give_cents, value_recv_cents)
+       VALUES ($1, 'outgoing', $2, $3, $4, 'pending', $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         userId,
@@ -793,6 +804,9 @@ export async function createAndSendOffer(
         input.partnerSteamId,
         input.message ?? null,
         input.isQuickTransfer ?? false,
+        isInternal,
+        accountIdFrom,
+        accountIdTo,
         giveValue,
         recvValue,
       ]
@@ -1219,7 +1233,17 @@ export async function listOffers(
   offset = 0,
   accountId?: number
 ): Promise<{ offers: TradeOffer[]; total: number; hasMore: boolean }> {
-  const activeSteamId = await getActiveSteamId(userId);
+  // Use requested accountId for perspective flip, fall back to active account
+  let viewSteamId: string | null;
+  if (accountId) {
+    const { rows: accRows } = await pool.query(
+      `SELECT steam_id FROM steam_accounts WHERE id = $1 AND user_id = $2`,
+      [accountId, userId]
+    );
+    viewSteamId = accRows[0]?.steam_id ?? null;
+  } else {
+    viewSteamId = await getActiveSteamId(userId);
+  }
 
   // Count query
   let countQuery = `SELECT COUNT(*) FROM trade_offers o WHERE o.user_id = $1`;
@@ -1280,13 +1304,19 @@ export async function listOffers(
   params.push(limit, offset);
 
   const { rows } = await pool.query(query, params);
-  const offers = rows.map((r) => {
+  const offers: TradeOffer[] = [];
+  for (const r of rows) {
     const offer = mapOfferRow(r);
-    if (activeSteamId && offer.partnerSteamId === activeSteamId) {
-      return flipOfferPerspective(offer);
+    if (viewSteamId && offer.partnerSteamId === viewSteamId) {
+      offers.push(flipOfferPerspective(offer));
+    } else if (!accountId && offer.isInternal) {
+      // "All accounts" view: show internal trades from both perspectives
+      offers.push(offer);
+      offers.push(flipOfferPerspective(offer));
+    } else {
+      offers.push(offer);
     }
-    return offer;
-  });
+  }
 
   return { offers, total, hasMore: offset + offers.length < total };
 }

@@ -159,10 +159,12 @@ class ItemCard extends StatelessWidget {
                                   ),
                                 ),
                                 if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
-                                  const SizedBox(width: 6),
-                                  _ArbitrageBadge(
-                                    steamPrice: item.steamPrice!,
-                                    buffPrice: item.prices['buff']!,
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: _ArbitrageBadge(
+                                      steamPrice: item.steamPrice!,
+                                      buffPrice: item.prices['buff']!,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -332,13 +334,13 @@ class ItemCard extends StatelessWidget {
                                 ),
                               )
                             : Positioned(
-                                top: 4,
-                                left: 6,
+                                bottom: 4,
+                                right: 6,
                                 child: GestureDetector(
                                   onTap: onAccountBadgeTap,
                                   child: _AccountNameBadge(
                                     accountName: item.accountName,
-                                    compact: false,
+                                    compact: true,
                                   ),
                                 ),
                               ),
@@ -933,6 +935,8 @@ class _ArbitrageBadge extends StatelessWidget {
       ),
       child: Text(
         'BUFF ${diff > 0 ? '+' : ''}${diff.toStringAsFixed(0)}%',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 8,
           fontWeight: FontWeight.w800,

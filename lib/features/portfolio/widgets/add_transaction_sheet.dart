@@ -418,15 +418,20 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                                             : AppTheme.divider,
                                       ),
                                     ),
-                                    child: Text(
-                                      selected?.name ?? 'None',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: selected?.color ??
-                                            AppTheme.textMuted,
-                                        fontWeight: selected != null
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 160),
+                                      child: Text(
+                                        selected?.name ?? 'None',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: selected?.color ??
+                                              AppTheme.textMuted,
+                                          fontWeight: selected != null
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
                                       ),
                                     ),
                                   ),

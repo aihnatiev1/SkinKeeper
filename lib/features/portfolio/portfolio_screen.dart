@@ -353,9 +353,9 @@ class _PLQuickSummary extends ConsumerWidget {
     return pl.when(
       data: (data) {
         if (!data.hasData) {
+          final hasPortfolioFilter = ref.watch(selectedPortfolioIdProvider) != null;
           return GestureDetector(
             onTap: () {
-              // Show add transaction sheet
               HapticFeedback.mediumImpact();
               showGlassSheet(context, const AddTransactionSheet());
             },
@@ -373,10 +373,12 @@ class _PLQuickSummary extends ConsumerWidget {
                   Icon(Icons.add_circle_outline_rounded,
                       size: 20, color: AppTheme.primary),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Log your first purchase to track profit',
-                      style: TextStyle(
+                      hasPortfolioFilter
+                          ? 'No transactions in this portfolio'
+                          : 'Log your first purchase to track profit',
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: AppTheme.textSecondary,
@@ -463,6 +465,13 @@ class _PLQuickSummary extends ConsumerWidget {
                   _PLMiniRow(
                       label: 'Current',
                       value: currency.format(data.totalCurrentValue, decimals: 0)),
+                  if (data.realizedProfitCents != 0) ...[
+                    const SizedBox(height: 3),
+                    _PLMiniRow(
+                        label: 'Sold profit',
+                        value: currency.formatWithSign(data.realizedProfit, decimals: 0),
+                        valueColor: AppTheme.plColor(data.realizedProfitCents)),
+                  ],
                 ],
               ),
             ],
@@ -478,7 +487,8 @@ class _PLQuickSummary extends ConsumerWidget {
 class _PLMiniRow extends StatelessWidget {
   final String label;
   final String value;
-  const _PLMiniRow({required this.label, required this.value});
+  final Color? valueColor;
+  const _PLMiniRow({required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -494,11 +504,11 @@ class _PLMiniRow extends StatelessWidget {
         ),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: AppTheme.textSecondary,
-            fontFeatures: [FontFeature.tabularFigures()],
+            color: valueColor ?? AppTheme.textSecondary,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
       ],
@@ -1768,13 +1778,13 @@ class _PortfolioOptionsSheet extends ConsumerWidget {
                 style: AppTheme.bodySmall
                     .copyWith(color: const Color(0xFFEF4444))),
             onTap: () async {
-              // Capture navigator before popping (context unmounts after pop)
-              final rootNav = Navigator.of(context, rootNavigator: true);
-              final rootContext = rootNav.context;
               Navigator.of(context).pop(); // close options sheet
+              // Use root navigator context for dialog — sheet context is gone
+              final navContext = Navigator.of(context, rootNavigator: true).context;
+              await Future.delayed(const Duration(milliseconds: 150)); // wait for sheet to close
 
               final confirmed = await showDialog<bool>(
-                context: rootContext,
+                context: navContext,
                 builder: (dialogCtx) => AlertDialog(
                   backgroundColor: AppTheme.surface,
                   title: Text(
