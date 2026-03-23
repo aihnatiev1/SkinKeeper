@@ -624,7 +624,10 @@ export async function fetchPartnerInventory(
       return fetchPartnerInventoryCommunity(partnerSteamId);
     }
 
-    if (!result?.assets?.length) break;
+    if (!result?.assets?.length) {
+      console.log(`[Trade] IEconService returned 0 assets for partner (page ${page}), total_count=${result?.total_inventory_count}`);
+      break;
+    }
 
     const descMap = new Map<string, any>();
     for (const desc of result.descriptions ?? []) {

@@ -321,14 +321,32 @@ class InventoryItem {
   double? get skinportPrice => prices['skinport'];
   double? get buffPrice => prices['buff'];
 
+  /// Primary display price: steam if available, otherwise median of trusted sources.
   double? get bestPrice {
     if (prices.isEmpty) return null;
-    return prices.values.reduce((a, b) => a > b ? a : b);
+    // Prefer steam price
+    final steam = prices['steam'];
+    if (steam != null && steam > 0) return steam;
+    // Median of external sources (excluding outlier-prone ones)
+    final external = prices.entries
+        .where((e) => e.key != 'csgotrader' && e.key != 'buff_bid' && e.value > 0)
+        .map((e) => e.value)
+        .toList()
+      ..sort();
+    if (external.isEmpty) return null;
+    return external[external.length ~/ 2]; // median
   }
 
   String? get bestPriceSource {
     if (prices.isEmpty) return null;
-    return prices.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+    final steam = prices['steam'];
+    if (steam != null && steam > 0) return 'steam';
+    final external = prices.entries
+        .where((e) => e.key != 'csgotrader' && e.key != 'buff_bid' && e.value > 0)
+        .toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+    if (external.isEmpty) return null;
+    return external[external.length ~/ 2].key;
   }
 
   double? get csfloatPrice => prices['csfloat'];

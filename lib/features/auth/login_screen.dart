@@ -220,38 +220,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.invalidate(inventoryProvider);
     ref.invalidate(portfolioProvider);
     ref.invalidate(portfolioPLProvider);
+    ref.invalidate(portfoliosProvider);
     ref.invalidate(tradesProvider);
     ref.invalidate(transactionsProvider);
     ref.invalidate(accountsProvider);
     ref.invalidate(sessionStatusProvider);
 
-    // Background sync from Steam with progress tracking
-    final syncNotifier = ref.read(syncStateProvider.notifier);
-    Future.microtask(() async {
-      syncNotifier.setInventory(true);
-      try {
-        await api.post('/inventory/refresh');
-        ref.invalidate(inventoryProvider);
-        ref.invalidate(portfolioProvider);
-      } catch (_) {}
-      syncNotifier.setInventory(false);
-
-      syncNotifier.setTransactions(true);
-      try {
-        await api.post('/transactions/sync');
-        ref.invalidate(transactionsProvider);
-        ref.invalidate(portfolioPLProvider);
-        ref.invalidate(portfolioProvider);
-      } catch (_) {}
-      syncNotifier.setTransactions(false);
-
-      syncNotifier.setTrades(true);
-      try {
-        await api.post('/trades/sync');
-        ref.invalidate(tradesProvider);
-      } catch (_) {}
-      syncNotifier.setTrades(false);
-    });
+    // Mark that initial sync is needed — portfolio screen will run it with its own ref
+    ref.read(needsInitialSyncProvider.notifier).state = true;
 
     if (mounted) setState(() { _isPolling = false; });
     // Router will redirect to /portfolio automatically

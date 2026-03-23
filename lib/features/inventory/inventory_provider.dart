@@ -75,39 +75,9 @@ class ItemGroup {
   double get totalValue => (bestPrice ?? 0) * count;
 }
 
-/// Free users see only Steam prices. Premium users see all sources.
+/// All users see all price sources. Premium gate moved to specific features (alerts, etc).
 final gatedInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
-  final inventory = ref.watch(filteredInventoryProvider);
-  final isPremium = ref.watch(premiumProvider).valueOrNull ?? false;
-  if (isPremium) return inventory;
-  return inventory.whenData((items) => items
-      .map((item) {
-        final steamOnly = item.prices.containsKey('steam')
-            ? {'steam': item.prices['steam']!}
-            : <String, double>{};
-        return InventoryItem(
-          assetId: item.assetId,
-          marketHashName: item.marketHashName,
-          iconUrl: item.iconUrl,
-          wear: item.wear,
-          floatValue: item.floatValue,
-          tradable: item.tradable,
-          rarity: item.rarity,
-          rarityColor: item.rarityColor,
-          prices: steamOnly,
-          inspectLink: item.inspectLink,
-          paintSeed: item.paintSeed,
-          paintIndex: item.paintIndex,
-          stickers: item.stickers,
-          charms: item.charms,
-          tradeBanUntil: item.tradeBanUntil,
-          accountId: item.accountId,
-          accountSteamId: item.accountSteamId,
-          accountName: item.accountName,
-          accountAvatarUrl: item.accountAvatarUrl,
-        );
-      })
-      .toList());
+  return ref.watch(filteredInventoryProvider);
 });
 
 final groupedInventoryProvider = Provider<AsyncValue<List<ItemGroup>>>((ref) {
@@ -244,12 +214,11 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     // 1. Try cache first for instant display (skip if empty — means account was switched)
     final cached = CacheService.getInventory();
     if (cached != null && cached.isNotEmpty) {
-      // Start background refresh (don't await)
-      _refreshInBackground(_generation);
       return cached.map((j) => InventoryItem.fromJson(j)).toList();
     }
 
-    // 2. No cache — fetch from API, fall back to error
+    // 2. No cache — fetch from API (initial sync from _runInitialSync will
+    //    call /inventory/refresh and then invalidate us for a re-fetch)
     try {
       return await _fetchFromApi();
     } on DioException {

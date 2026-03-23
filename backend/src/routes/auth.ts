@@ -510,6 +510,11 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
     );
 
     if (isLastAccount) {
+      // Clean up user-level data when all accounts removed
+      await pool.query(`DELETE FROM portfolios WHERE user_id = $1`, [req.userId]);
+      await pool.query(`DELETE FROM transactions WHERE user_id = $1`, [req.userId]);
+      await pool.query(`DELETE FROM cost_basis WHERE user_id = $1`, [req.userId]);
+      await pool.query(`UPDATE users SET active_account_id = NULL WHERE id = $1`, [req.userId]);
       res.json({ success: true, lastAccountRemoved: true });
       return;
     }

@@ -113,7 +113,7 @@ const _currencySymbols = <String, String>{
 Map<String, double> _dynamicRates = {};
 
 /// Build a CurrencyInfo from dynamic or fallback rates
-CurrencyInfo _buildCurrency(String code) {
+CurrencyInfo buildCurrency(String code) {
   // Check dynamic rates first
   final dynamicRate = _dynamicRates[code];
   if (dynamicRate != null) {
@@ -166,11 +166,11 @@ class CurrencyNotifier extends Notifier<CurrencyInfo> {
       // Fallback to hardcoded rates silently
     }
 
-    state = _buildCurrency(code);
+    state = buildCurrency(code);
   }
 
   Future<void> setCurrency(String code) async {
-    state = _buildCurrency(code);
+    state = buildCurrency(code);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('display_currency', code);
   }

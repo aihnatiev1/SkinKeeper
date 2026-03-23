@@ -335,8 +335,8 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 250.ms),
 
-            // ── On-demand inspect button (if no float yet) ──
-            if (item.floatValue == null &&
+            // ── On-demand inspect button — disabled (CSFloat API unreliable) ──
+            if (false && item.floatValue == null &&
                 item.inspectLink != null &&
                 !item.isNonWeapon)
               Padding(
@@ -1099,21 +1099,21 @@ class _SellActions extends ConsumerWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: AppTheme.error.withValues(alpha: 0.1),
+                          color: AppTheme.loss.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                          border: Border.all(color: AppTheme.loss.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
                             const Icon(Icons.warning_amber_rounded,
-                                color: AppTheme.error, size: 16),
+                                color: AppTheme.loss, size: 16),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'Price may be outdated',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: AppTheme.error,
+                                  color: AppTheme.loss,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -1487,7 +1487,7 @@ class _BestBuySellSummary extends StatelessWidget {
                 Icon(Icons.shopping_cart_outlined,
                     size: 14, color: buyColor.withValues(alpha: 0.7)),
                 const SizedBox(width: 8),
-                Text('Cheapest', style: TextStyle(
+                Text('Cheapest Buy', style: TextStyle(
                   fontSize: 12, color: AppTheme.textSecondary,
                 )),
                 const Spacer(),
@@ -1632,20 +1632,22 @@ class _BuffSpreadWidget extends StatelessWidget {
           Expanded(
             child: Row(
               children: [
+                Text('Buy ', style: TextStyle(fontSize: 10, color: AppTheme.textDisabled)),
                 Flexible(
-                  child: Text('${currency.format(bid)}', style: const TextStyle(
+                  child: Text(currency.format(bid), style: const TextStyle(
                     fontSize: 12, fontWeight: FontWeight.w600,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ), overflow: TextOverflow.ellipsis),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text('↔', style: TextStyle(
-                    fontSize: 10, color: AppTheme.textDisabled,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text('/', style: TextStyle(
+                    fontSize: 12, color: AppTheme.textDisabled,
                   )),
                 ),
+                Text('Sell ', style: TextStyle(fontSize: 10, color: AppTheme.textDisabled)),
                 Flexible(
-                  child: Text('${currency.format(ask)}', style: const TextStyle(
+                  child: Text(currency.format(ask), style: const TextStyle(
                     fontSize: 12, fontWeight: FontWeight.w600,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ), overflow: TextOverflow.ellipsis),

@@ -271,7 +271,11 @@ class TransactionsScreen extends ConsumerWidget {
                   String? lastDate;
                   for (var i = 0; i < list.length; i++) {
                     final tx = list[i];
-                    final dateStr = DateFormat('MMMM d, yyyy').format(tx.date.toLocal());
+                    final localDate = tx.date.toLocal();
+                    final isThisYear = localDate.year == DateTime.now().year;
+                    final dateStr = isThisYear
+                        ? DateFormat('MMMM d').format(localDate)
+                        : DateFormat('MMMM d, yyyy').format(localDate);
                     if (dateStr != lastDate) {
                       lastDate = dateStr;
                       items.add(_DateHeader(label: dateStr));
@@ -600,15 +604,23 @@ class _DateHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textMuted,
-          letterSpacing: 0.3,
-        ),
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textSecondary,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(height: 0.5, color: AppTheme.divider),
+          ),
+        ],
       ),
     );
   }
@@ -628,7 +640,7 @@ class _TransactionTile extends ConsumerWidget {
 
   Widget _buildMarketTile(BuildContext context, WidgetRef ref, CurrencyInfo currency) {
     final isBuy = tx.isBuy;
-    final color = isBuy ? AppTheme.primary : AppTheme.profit;
+    final badgeColor = isBuy ? AppTheme.accent : AppTheme.loss;
     final delta = tx.plDeltaCents;
     final deltaPct = tx.plDeltaPct;
     final hasDelta = delta != null && tx.currentPriceCents != null;
@@ -640,6 +652,13 @@ class _TransactionTile extends ConsumerWidget {
             ? (delta >= 0 ? AppTheme.profit : AppTheme.loss)
             : (delta <= 0 ? AppTheme.profit : AppTheme.warning))
         : AppTheme.textMuted;
+
+    // Date — short format, no year if current
+    final localDate = tx.date.toLocal();
+    final isThisYear = localDate.year == DateTime.now().year;
+    final dateStr = isThisYear
+        ? DateFormat('MMM d').format(localDate)
+        : DateFormat('MMM d, yy').format(localDate);
 
     return GestureDetector(
       onTap: () => _showPriceCheck(context, ref),
@@ -667,10 +686,10 @@ class _TransactionTile extends ConsumerWidget {
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      _TypeBadge(label: isBuy ? 'Buy' : 'Sell', color: color),
+                      _TypeBadge(label: isBuy ? 'Buy' : 'Sell', color: badgeColor),
                       const SizedBox(width: 6),
                       Text(
-                        DateFormat('dd.MM.yyyy').format(tx.date.toLocal()),
+                        dateStr,
                         style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
                       ),
                     ],
@@ -696,33 +715,29 @@ class _TransactionTile extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${isBuy ? '-' : '+'}${currency.format(tx.priceUsd)}',
-                  style: TextStyle(
+                  currency.format(tx.priceUsd),
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 if (hasDelta) ...[
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        delta >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                        size: 10,
+                  const SizedBox(height: 3),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: deltaColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${currency.formatWithSign(delta / 100)} (${deltaPct!.toStringAsFixed(0)}%)',
+                      style: TextStyle(
+                        fontSize: 10,
                         color: deltaColor,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(width: 2),
-                      Text(
-                        '${currency.formatWithSign(delta / 100)} (${deltaPct!.toStringAsFixed(0)}%)',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: deltaColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ],

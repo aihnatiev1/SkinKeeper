@@ -91,6 +91,7 @@ class QrAuthState {
   final String status; // 'idle' | 'loading' | 'ready' | 'polling' | 'authenticated' | 'expired' | 'error'
   final bool loading;
   final String? error;
+  final String? switchedTo; // non-null when backend auto-switched active account
 
   const QrAuthState({
     this.qrImage,
@@ -99,6 +100,7 @@ class QrAuthState {
     this.status = 'idle',
     this.loading = false,
     this.error,
+    this.switchedTo,
   });
 
   QrAuthState copyWith({
@@ -108,6 +110,7 @@ class QrAuthState {
     String? status,
     bool? loading,
     String? error,
+    String? switchedTo,
   }) {
     return QrAuthState(
       qrImage: qrImage ?? this.qrImage,
@@ -116,6 +119,7 @@ class QrAuthState {
       status: status ?? this.status,
       loading: loading ?? this.loading,
       error: error,
+      switchedTo: switchedTo ?? this.switchedTo,
     );
   }
 }
@@ -177,6 +181,11 @@ class QrAuthNotifier extends StateNotifier<QrAuthState> {
       if (pollStatus == 'authenticated') {
         final token = data['token'] as String?;
         if (token != null) await api.saveToken(token);
+        state = state.copyWith(
+          status: pollStatus,
+          switchedTo: data['switchedTo'] as String?,
+        );
+        return pollStatus;
       }
 
       state = state.copyWith(status: pollStatus);
@@ -305,22 +314,26 @@ class ClientTokenAuthState {
   final String status; // 'idle' | 'loading' | 'authenticated' | 'error'
   final bool loading;
   final String? error;
+  final String? switchedTo; // non-null when backend auto-switched active account
 
   const ClientTokenAuthState({
     this.status = 'idle',
     this.loading = false,
     this.error,
+    this.switchedTo,
   });
 
   ClientTokenAuthState copyWith({
     String? status,
     bool? loading,
     String? error,
+    String? switchedTo,
   }) {
     return ClientTokenAuthState(
       status: status ?? this.status,
       loading: loading ?? this.loading,
       error: error,
+      switchedTo: switchedTo ?? this.switchedTo,
     );
   }
 }
@@ -358,9 +371,10 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
         if (steamRefreshToken != null) 'steamRefreshToken': steamRefreshToken,
       });
 
+      final data = response.data as Map<String, dynamic>;
+
       // Save JWT from initial login
       if (!hasToken && !linkMode) {
-        final data = response.data as Map<String, dynamic>;
         final token = data['token'] as String?;
         if (token != null) await api.saveToken(token);
       }
@@ -368,6 +382,7 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
       state = state.copyWith(
         status: 'authenticated',
         loading: false,
+        switchedTo: data['switchedTo'] as String?,
       );
     } catch (e) {
       dev.log('Token submit failed: $e', name: 'Session');

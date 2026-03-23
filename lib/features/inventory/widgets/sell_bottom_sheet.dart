@@ -527,22 +527,22 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: AppTheme.error.withValues(alpha: 0.1),
+                color: AppTheme.loss.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                border: Border.all(color: AppTheme.loss.withValues(alpha: 0.3)),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
                       const Icon(Icons.warning_amber_rounded,
-                          color: AppTheme.error, size: 18),
+                          color: AppTheme.loss, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Price may be outdated — enter manually or check Steam Market',
                           style: AppTheme.captionSmall.copyWith(
-                            color: AppTheme.error,
+                            color: AppTheme.loss,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -560,8 +560,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                         icon: const Icon(Icons.open_in_new, size: 16),
                         label: const Text('Open on Steam Market'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.error,
-                          side: BorderSide(color: AppTheme.error.withValues(alpha: 0.4)),
+                          foregroundColor: AppTheme.loss,
+                          side: BorderSide(color: AppTheme.loss.withValues(alpha: 0.4)),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -606,68 +606,57 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
 
         const SizedBox(height: 8),
 
-        // Dual buttons
-        Row(
-          children: [
-            // Quick Sell
-            Expanded(
-              flex: 3,
-              child: SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: stale || _isSelling ? null : () => _startSell(quickPriceCents, priceCurrencyId: qp.currencyId),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: stale ? AppTheme.surface : AppTheme.warning,
-                    foregroundColor: stale ? AppTheme.textDisabled : Colors.black,
-                    disabledBackgroundColor: AppTheme.surface,
-                    disabledForegroundColor: AppTheme.textDisabled,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.r16),
+        // Dual buttons (or single Sell button when no price)
+        if (quickPriceCents > 0 && !stale) ...[
+          // Has valid price — show Quick Sell + Sell
+          Row(
+            children: [
+              Expanded(
+                flex: 4,
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isSelling ? null : () => _startSell(quickPriceCents, priceCurrencyId: qp.currencyId),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.warning,
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: AppTheme.surface,
+                      disabledForegroundColor: AppTheme.textDisabled,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.r16),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        stale
-                            ? 'Price Outdated'
-                            : count == 1 ? 'Quick Sell' : 'Quick Sell All',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: count == 1 ? 'Quick Sell ' : 'Quick Sell All ',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text: count == 1 ? priceStr : totalStr,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        stale
-                            ? 'Enter price manually'
-                            : count == 1
-                                ? priceStr
-                                : totalStr,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: stale
-                              ? AppTheme.textDisabled
-                              : Colors.black.withValues(alpha: 0.7),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            // Custom Price
-            Expanded(
-              flex: 2,
-              child: SizedBox(
-                height: 52,
-                child: OutlinedButton(
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton(
                   onPressed: () {
                     HapticFeedback.selectionClick();
                     if (_showCustomPrice) {
@@ -687,7 +676,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                     ),
                   ),
                   child: Text(
-                    'Custom Price',
+                    'Sell',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -700,7 +689,54 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               ),
             ),
           ],
-        ),
+          ),
+        ] else ...[
+          // No valid Steam price — show market link + Sell only
+          if (marketUrl != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () => launchUrl(Uri.parse(marketUrl),
+                      mode: LaunchMode.externalApplication),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Check Price on Steam Market'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.steamBlue,
+                    side: BorderSide(color: AppTheme.steamBlue.withValues(alpha: 0.4)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.r16),
+                    ),
+                    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                setState(() => _showCustomPrice = true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.r16),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Sell at Custom Price',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
 
         // Custom price input (expanded)
         AnimatedSize(

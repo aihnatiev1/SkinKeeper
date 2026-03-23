@@ -131,26 +131,33 @@ class ItemCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // Primary: Steam price (always)
                             Row(
                               children: [
-                                if (item.steamPrice != null)
-                                  Flexible(
-                                    child: Text(
-                                      currency?.format(item.steamPrice!) ??
-                                          '\$${item.steamPrice!.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: compact ? 10 : 13,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white.withValues(alpha: 0.85),
-                                        letterSpacing: -0.3,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures()
-                                        ],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                Flexible(
+                                  child: Text(
+                                    item.steamPrice != null
+                                        ? (currency?.format(item.steamPrice!) ??
+                                            '\$${item.steamPrice!.toStringAsFixed(2)}')
+                                        : (item.bestPrice != null
+                                            ? (currency?.format(item.bestPrice!) ??
+                                                '\$${item.bestPrice!.toStringAsFixed(2)}')
+                                            : '—'),
+                                    style: TextStyle(
+                                      fontSize: compact ? 10 : 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: item.steamPrice != null
+                                          ? Colors.white.withValues(alpha: 0.85)
+                                          : AppTheme.textMuted,
+                                      letterSpacing: -0.3,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
+                                ),
                                 if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
                                   const SizedBox(width: 6),
                                   _ArbitrageBadge(
@@ -160,8 +167,8 @@ class ItemCard extends StatelessWidget {
                                 ],
                               ],
                             ),
-                            // Best external price (non-steam, non-csgotrader)
-                            if (!compact) _BestExternalPrice(item: item, currency: currency),
+                            // Secondary: best external (only when Steam price exists)
+                            if (!compact && item.steamPrice != null) _BestExternalPrice(item: item, currency: currency),
                           ],
                         ),
                       ),
@@ -843,7 +850,7 @@ class _BestExternalPrice extends StatelessWidget {
   Widget build(BuildContext context) {
     // Find best (cheapest) non-steam, non-seed price source
     final external = item.prices.entries
-        .where((e) => e.key != 'steam' && e.key != 'csgotrader' && e.value > 0)
+        .where((e) => e.key != 'steam' && e.key != 'csgotrader' && e.key != 'buff_bid' && e.value > 0)
         .toList();
     if (external.isEmpty) return const SizedBox.shrink();
 

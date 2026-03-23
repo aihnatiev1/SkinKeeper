@@ -46,3 +46,6 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   void setTransactions(bool v) => state = state.copyWith(transactionsSyncing: v);
   void setTrades(bool v) => state = state.copyWith(tradesSyncing: v);
 }
+
+/// Flag set by login screen, consumed by portfolio screen to trigger initial sync
+final needsInitialSyncProvider = StateProvider<bool>((ref) => false);

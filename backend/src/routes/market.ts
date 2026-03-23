@@ -400,23 +400,39 @@ async function fetchListingsForAccount(
       iconUrl: (desc.icon_url as string | undefined) ?? null,
       sellerPrice: (l.original_price as number) ?? 0,
       buyerPrice: (l.price as number) ?? 0,
-      currencyId: (l.currencyid as number) ?? 1,
+      // Steam returns currencyid with +2000-1 offset (e.g. 2017 = UAH id 18)
+      currencyId: ((l.currencyid as number) ?? 2000) >= 2000
+        ? (l.currencyid as number) - 2000 + 1
+        : (l.currencyid as number) ?? 1,
       timeCreated: (l.time_created as number) ?? 0,
     };
   });
 
-  // Convert prices to USD cents
+  // Convert prices to USD cents using wallet rate or per-listing currency rate
   const walletInfo = await getWalletInfo(accountId);
-  const rate = walletInfo?.rate ?? null;
-  return rawMapped.map((l) => {
-    if (!rate || rate === 1 || l.currencyId === 1) return l;
+  const walletRate = walletInfo?.rate ?? null;
+
+  const ratePromises = new Map<number, Promise<number | null>>();
+  return Promise.all(rawMapped.map(async (l) => {
+    if (l.currencyId === 1) return l; // Already USD
+
+    // Try wallet rate first, then fetch rate for the listing's currency
+    let rate = walletRate;
+    if (!rate && l.currencyId > 1) {
+      if (!ratePromises.has(l.currencyId)) {
+        ratePromises.set(l.currencyId, getExchangeRate(l.currencyId));
+      }
+      rate = await ratePromises.get(l.currencyId)!;
+    }
+
+    if (!rate || rate === 1) return l; // Can't convert — return as-is
     return {
       ...l,
       sellerPrice: Math.round(l.sellerPrice / rate),
       buyerPrice: Math.round(l.buyerPrice / rate),
       currencyId: 1,
     };
-  });
+  }));
 }
 
 /**

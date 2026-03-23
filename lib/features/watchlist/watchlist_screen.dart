@@ -380,12 +380,16 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
       setState(() => _error = 'Select an item first');
       return;
     }
-    final price =
+    final inputPrice =
         double.tryParse(_priceController.text.replaceAll(',', '.'));
-    if (price == null || price <= 0) {
+    if (inputPrice == null || inputPrice <= 0) {
       setState(() => _error = 'Enter a valid target price');
       return;
     }
+
+    // Convert from display currency back to USD for storage
+    final rate = ref.read(currencyProvider).rate;
+    final priceUsd = rate > 0 ? inputPrice / rate : inputPrice;
 
     setState(() {
       _loading = true;
@@ -395,7 +399,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
     try {
       await ref.read(watchlistProvider.notifier).add(
             _selectedName!,
-            price,
+            priceUsd,
             iconUrl: _selectedIconUrl,
           );
       HapticFeedback.mediumImpact();
@@ -569,7 +573,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
                               ),
                               if (price != null)
                                 Text(
-                                  ref.watch(currencyProvider).format(price),
+                                  ref.watch(currencyProvider).format(price.toDouble()),
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
@@ -617,7 +621,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
                         color: AppTheme.textPrimary,
                       ),
                       hintText: _selectedCurrentPrice != null
-                          ? _selectedCurrentPrice!.toStringAsFixed(2)
+                          ? (_selectedCurrentPrice! * ref.watch(currencyProvider).rate).toStringAsFixed(2)
                           : '0.00',
                       hintStyle: TextStyle(
                         fontSize: 22,

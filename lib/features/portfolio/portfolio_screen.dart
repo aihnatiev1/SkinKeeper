@@ -8,7 +8,9 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/cache_service.dart';
+import '../../core/api_client.dart';
 import '../../core/router.dart';
+import '../settings/currency_picker_dialog.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/stale_data_banner.dart';
@@ -20,6 +22,8 @@ import '../../widgets/sync_indicator.dart';
 import '../auth/session_gate.dart';
 import '../auth/widgets/session_status_widget.dart';
 import '../inventory/inventory_provider.dart';
+import '../trades/trades_provider.dart';
+import '../transactions/transactions_provider.dart';
 import '../purchases/iap_service.dart';
 import 'portfolio_pl_provider.dart';
 import 'portfolio_provider.dart';
@@ -49,17 +53,72 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeShowOnboarding();
-      // Eagerly warm up P/L data so it's ready when the widget renders
+      _initSequence();
       ref.read(portfolioPLProvider);
     });
   }
 
-  Future<void> _maybeShowOnboarding() async {
+  Future<void> _initSequence() async {
+    // Start sync immediately in background (doesn't need currency or onboarding)
+    _runInitialSync();
+
+    // 1. Onboarding (first launch only)
     final done = await ref.read(onboardingCompleteProvider.future);
     if (!done && mounted) {
-      context.push('/onboarding');
+      await context.push('/onboarding');
     }
+
+    // 2. Currency picker (once, after onboarding closes)
+    if (mounted) {
+      final needsPicker = await shouldShowCurrencyPicker();
+      if (needsPicker && mounted) {
+        await showCurrencyPickerDialog(context, ref);
+      }
+    }
+  }
+
+  /// Runs initial sync in background. Portfolio screen stays mounted under
+  /// onboarding/currency sheets, so ref.invalidate() works fine.
+  Future<void> _runInitialSync() async {
+    final needsSync = ref.read(needsInitialSyncProvider);
+    if (!needsSync) return;
+    ref.read(needsInitialSyncProvider.notifier).state = false;
+
+    final api = ref.read(apiClientProvider);
+    final sync = ref.read(syncStateProvider.notifier);
+
+    sync.setInventory(true);
+    try {
+      await api.post('/inventory/refresh');
+      if (mounted) {
+        ref.invalidate(inventoryProvider);
+        ref.invalidate(portfolioProvider);
+      }
+    } catch (_) {}
+    sync.setInventory(false);
+
+    sync.setTransactions(true);
+    try {
+      await api.post('/transactions/sync');
+      if (mounted) {
+        ref.invalidate(transactionsProvider);
+        ref.invalidate(portfolioPLProvider);
+        ref.invalidate(portfolioProvider);
+        // Also invalidate P&L history chart and item P&L list
+        for (final days in [7, 30, 90, 365]) {
+          ref.invalidate(plHistoryProvider(days));
+        }
+        ref.invalidate(txStatsProvider);
+      }
+    } catch (_) {}
+    sync.setTransactions(false);
+
+    sync.setTrades(true);
+    try {
+      await api.post('/trades/sync');
+      if (mounted) ref.invalidate(tradesProvider);
+    } catch (_) {}
+    sync.setTrades(false);
   }
 
   void _showAddTransaction(BuildContext context) {
@@ -1451,12 +1510,17 @@ class _PortfolioSelectorBar extends ConsumerWidget {
             width: isSelected ? 1.5 : 1,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            color: isSelected ? color : AppTheme.textMuted,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 120),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected ? color : AppTheme.textMuted,
+            ),
           ),
         ),
       ),
@@ -1702,7 +1766,7 @@ class _PortfolioOptionsSheet extends ConsumerWidget {
               Navigator.of(context).pop();
               final confirmed = await showDialog<bool>(
                 context: context,
-                builder: (_) => AlertDialog(
+                builder: (dialogCtx) => AlertDialog(
                   backgroundColor: AppTheme.surface,
                   title: Text(
                     'Delete "${portfolio.name}"?',
@@ -1718,12 +1782,12 @@ class _PortfolioOptionsSheet extends ConsumerWidget {
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.pop(context, false),
+                      onPressed: () => Navigator.pop(dialogCtx, false),
                       child: Text('Cancel',
                           style: TextStyle(color: AppTheme.textMuted)),
                     ),
                     TextButton(
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () => Navigator.pop(dialogCtx, true),
                       child: const Text('Delete',
                           style: TextStyle(color: Color(0xFFEF4444))),
                     ),

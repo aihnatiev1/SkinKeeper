@@ -232,6 +232,136 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
     final items = _collectItems();
     if (items.isEmpty) return;
 
+    // Check for items without Steam price
+    final noPrice = items.where((i) => i.steamPrice == null).toList();
+    if (noPrice.isNotEmpty) {
+      _showNoPriceWarning(noPrice, items);
+      return;
+    }
+
+    _executeSell(items);
+  }
+
+  void _showNoPriceWarning(List<InventoryItem> noPrice, List<InventoryItem> allItems) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.bgSecondary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.textDisabled,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 32),
+            const SizedBox(height: 10),
+            Text(
+              '${noPrice.length} item${noPrice.length > 1 ? 's' : ''} without Steam price',
+              style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'These items have no current Steam Market price. Remove them from selection or sell individually with a custom price.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            // List of items without price
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 150),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: noPrice.length,
+                itemBuilder: (_, i) {
+                  final item = noPrice[i];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.network(item.fullIconUrl, width: 36, height: 28, fit: BoxFit.contain),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            item.marketHashName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                          ),
+                        ),
+                        const Text('No price', style: TextStyle(fontSize: 11, color: AppTheme.loss)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppTheme.borderLight),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Back', style: TextStyle(color: AppTheme.textSecondary)),
+                    ),
+                  ),
+                ),
+                if (allItems.length > noPrice.length) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          final withPrice = allItems.where((i) => i.steamPrice != null).toList();
+                          _executeSell(withPrice);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.warning,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          'Sell ${allItems.length - noPrice.length} with price',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _executeSell(List<InventoryItem> items) {
     HapticFeedback.heavyImpact();
 
     final payload = items

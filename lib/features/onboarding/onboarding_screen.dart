@@ -95,7 +95,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         context.go('/portfolio');
       }
       if (showPaywall) {
-        context.push('/paywall');
+        context.push('/premium');
       }
     }
   }

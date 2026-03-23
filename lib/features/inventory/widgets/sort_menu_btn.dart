@@ -13,8 +13,9 @@ class SortMenuBtn extends StatelessWidget {
     SortOption.dateAsc:   (Icons.arrow_upward_rounded,   'Date: oldest first'),
     SortOption.priceDesc: (Icons.arrow_downward_rounded, 'Price: high \u2192 low'),
     SortOption.priceAsc:  (Icons.arrow_upward_rounded,   'Price: low \u2192 high'),
-    SortOption.floatAsc:  (Icons.arrow_upward_rounded,   'Float: low \u2192 high'),
-    SortOption.floatDesc: (Icons.arrow_downward_rounded, 'Float: high \u2192 low'),
+    // TODO: re-enable when float data is reliable
+    // SortOption.floatAsc:  (Icons.arrow_upward_rounded,   'Float: low \u2192 high'),
+    // SortOption.floatDesc: (Icons.arrow_downward_rounded, 'Float: high \u2192 low'),
     SortOption.stickerValue: (Icons.auto_awesome_rounded, 'Sticker value'),
   };
 

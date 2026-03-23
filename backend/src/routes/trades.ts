@@ -128,7 +128,10 @@ router.get(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const items = await fetchPartnerInventory(req.params.steamId as string);
+      const steamId = req.params.steamId as string;
+      console.log(`[Trade] Fetching partner inventory for ${steamId}`);
+      const items = await fetchPartnerInventory(steamId);
+      console.log(`[Trade] Partner inventory: ${items.length} tradable items for ${steamId}`);
       res.json({ items, count: items.length });
     } catch (err: any) {
       console.error("Partner inventory error:", err.message);

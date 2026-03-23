@@ -29,7 +29,7 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
       dev.log('Token found, fetching /auth/me', name: 'Auth');
       final response = await api.get('/auth/me');
       final user = SteamUser.fromJson(response.data as Map<String, dynamic>);
-      Analytics.setUserId(user.id.toString());
+      Analytics.setUserId(user.steamId);
       return user;
     } catch (e) {
       dev.log('Auth/me failed: $e', name: 'Auth');
@@ -46,7 +46,7 @@ class AuthNotifier extends AsyncNotifier<SteamUser?> {
       final data = response.data as Map<String, dynamic>;
       await api.saveToken(data['token'] as String);
       final user = SteamUser.fromJson(data['user'] as Map<String, dynamic>);
-      Analytics.setUserId(user.id.toString());
+      Analytics.setUserId(user.steamId);
       Analytics.login(method: 'steam_openid');
       state = AsyncData(user);
     } catch (e, st) {
