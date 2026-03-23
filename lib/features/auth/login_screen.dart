@@ -45,6 +45,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await _startWebViewLogin();
   }
 
+  /// Fire-and-forget background sync for a newly linked account.
+  /// Runs inventory refresh, transaction sync, and trade sync in parallel.
+  void _syncNewAccount(dynamic api, WidgetRef ref) {
+    final sync = ref.read(syncStateProvider.notifier);
+
+    // Inventory
+    sync.setInventory(true);
+    api.post('/inventory/refresh').then((_) {
+      ref.invalidate(inventoryProvider);
+      ref.invalidate(portfolioProvider);
+    }).catchError((_) {}).whenComplete(() => sync.setInventory(false));
+
+    // Transactions
+    sync.setTransactions(true);
+    api.post('/transactions/sync').then((_) {
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(portfolioPLProvider);
+      ref.invalidate(portfolioProvider);
+      for (final days in [7, 30, 90, 365]) {
+        ref.invalidate(plHistoryProvider(days));
+      }
+    }).catchError((_) {}).whenComplete(() => sync.setTransactions(false));
+
+    // Trades
+    sync.setTrades(true);
+    api.post('/trades/sync').then((_) {
+      ref.invalidate(tradesProvider);
+    }).catchError((_) {}).whenComplete(() => sync.setTrades(false));
+  }
+
   Future<void> _startWebViewLogin() async {
     final result = await Navigator.of(context).push<SteamWebViewResult>(
       MaterialPageRoute(
@@ -77,10 +107,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           setState(() { _isPolling = false; });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Account linked successfully!'),
+              content: Text('Account linked! Syncing inventory & trades...'),
               backgroundColor: Color(0xFF00E676),
             ),
           );
+          // Trigger background sync for the new account — inventory, transactions, trades
+          _syncNewAccount(api, ref);
           context.pop();
         }
       } else {
