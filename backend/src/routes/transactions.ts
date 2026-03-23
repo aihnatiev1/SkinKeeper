@@ -167,9 +167,12 @@ router.post(
       if (totalFetched > 0) {
         try {
           await recalculateCostBasis(req.userId!);
-          console.log(`[Transactions] Cost basis recalculated for user ${req.userId}`);
+          // Take a P/L snapshot immediately so charts work from day 1
+          const { takeDailySnapshot } = await import("../services/profitLoss.js");
+          await takeDailySnapshot(req.userId!);
+          console.log(`[Transactions] Cost basis + snapshot for user ${req.userId}`);
         } catch (plErr) {
-          console.error("[Transactions] Cost basis recalculation failed:", plErr);
+          console.error("[Transactions] Cost basis/snapshot failed:", plErr);
         }
       }
 

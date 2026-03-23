@@ -94,7 +94,7 @@ router.get(
       const change24h = totalValue - totalValue24hAgo;
       const change7d = totalValue - totalValue7dAgo;
 
-      // Get portfolio history using daily_pl_snapshots (pre-aggregated) instead of scanning price_history
+      // Get portfolio history using daily_pl_snapshots (pre-aggregated)
       const { rows: history } = await pool.query(
         `SELECT snapshot_date AS date,
                 total_current_value_cents / 100.0 AS value
@@ -104,6 +104,21 @@ router.get(
          ORDER BY snapshot_date`,
         [req.userId]
       );
+
+      // Always include today's live value as the last point
+      // so charts work from day 1 (no need to wait for daily cron)
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const historyPoints = history.map((h) => ({
+        date: h.date,
+        value: parseFloat(h.value),
+      }));
+      const lastPoint = historyPoints[historyPoints.length - 1];
+      if (!lastPoint || lastPoint.date !== todayStr) {
+        historyPoints.push({ date: todayStr, value: totalValue });
+      } else {
+        // Update today's point with live value
+        lastPoint.value = totalValue;
+      }
 
       res.json({
         total_value: Math.round(totalValue * 100) / 100,
@@ -118,10 +133,7 @@ router.get(
             ? Math.round((change7d / totalValue7dAgo) * 10000) / 100
             : 0,
         item_count: items.length,
-        history: history.map((h) => ({
-          date: h.date,
-          value: parseFloat(h.value),
-        })),
+        history: historyPoints,
       });
     } catch (err) {
       console.error("Portfolio error:", err);

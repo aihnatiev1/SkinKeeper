@@ -563,7 +563,7 @@ export async function getPLHistory(
     params
   );
 
-  return res.rows.map((r) => ({
+  const points = res.rows.map((r) => ({
     date: r.snapshot_date,
     totalInvestedCents: r.total_invested_cents,
     totalCurrentValueCents: r.total_current_value_cents,
@@ -571,6 +571,24 @@ export async function getPLHistory(
     realizedProfitCents: r.realized_profit_cents,
     unrealizedProfitCents: r.unrealized_profit_cents,
   }));
+
+  // Always include today's live point so charts show data from day 1
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const lastPoint = points[points.length - 1];
+  if (!lastPoint || lastPoint.date !== todayStr) {
+    // Compute live P/L for today
+    const pl = await getPortfolioPL(userId, accountId);
+    points.push({
+      date: todayStr,
+      totalInvestedCents: pl.totalInvestedCents,
+      totalCurrentValueCents: pl.totalCurrentValueCents,
+      cumulativeProfitCents: pl.totalProfitCents,
+      realizedProfitCents: pl.realizedProfitCents,
+      unrealizedProfitCents: pl.unrealizedProfitCents,
+    });
+  }
+
+  return points;
 }
 
 // ---- Daily Cron for All Users ----

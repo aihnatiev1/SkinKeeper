@@ -75,7 +75,9 @@ class PLHistoryChart extends ConsumerWidget {
   }
 
   Widget _buildChart(BuildContext context, CurrencyInfo currency) {
-    final spots = history
+    // If only 1 data point, duplicate it to draw a flat line
+    final chartData = history.length == 1 ? [history.first, history.first] : history;
+    final spots = chartData
         .asMap()
         .entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.cumulativeProfit))

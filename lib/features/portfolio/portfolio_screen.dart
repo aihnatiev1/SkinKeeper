@@ -956,7 +956,7 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
   @override
   Widget build(BuildContext context) {
     final currency = ref.watch(currencyProvider);
-    if (widget.history.length < 2) {
+    if (widget.history.isEmpty) {
       return SizedBox(
         width: double.infinity,
         child: Container(
@@ -985,15 +985,20 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
       );
     }
 
-    final spots = widget.history.asMap().entries
+    // If only 1 data point, duplicate it to draw a flat line
+    final chartHistory = widget.history.length == 1
+        ? [widget.history.first, widget.history.first]
+        : widget.history;
+
+    final spots = chartHistory.asMap().entries
         .map((e) => FlSpot(e.key.toDouble(), e.value.value))
         .toList();
 
-    final minY = widget.history.map((e) => e.value).reduce((a, b) => a < b ? a : b);
-    final maxY = widget.history.map((e) => e.value).reduce((a, b) => a > b ? a : b);
+    final minY = chartHistory.map((e) => e.value).reduce((a, b) => a < b ? a : b);
+    final maxY = chartHistory.map((e) => e.value).reduce((a, b) => a > b ? a : b);
     final range = maxY - minY > 0 ? maxY - minY : maxY.abs() * 0.1 + 1;
     final pad = range * 0.12;
-    final isUp = widget.history.last.value >= widget.history.first.value;
+    final isUp = chartHistory.last.value >= chartHistory.first.value;
     final lineColor = isUp ? AppTheme.profit : AppTheme.loss;
 
     return Container(
