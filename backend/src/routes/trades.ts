@@ -43,6 +43,15 @@ router.get(
         return;
       }
 
+      // Demo account: return fake friends
+      if (rows[0].steam_id === "76561199999999999") {
+        res.json({ friends: [
+          { steamId: "76561198012345678", personaName: "TradeBot", avatarUrl: "", profileUrl: "", onlineStatus: "online" },
+          { steamId: "76561198087654321", personaName: "SkinShark", avatarUrl: "", profileUrl: "", onlineStatus: "offline" },
+        ], count: 2 });
+        return;
+      }
+
       const friends = await fetchSteamFriends(rows[0].steam_id);
       res.json({ friends, count: friends.length });
     } catch (err: any) {
