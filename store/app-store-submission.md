@@ -67,18 +67,19 @@ HOME SCREEN WIDGET
 Check your portfolio value without opening the app. See daily change at a glance.
 
 FREE FEATURES
-• Steam price tracking
-• Inventory management
-• Up to 5 price alerts
-• Trade management
-• Transaction history sync
+• Multi-source price tracking (Steam, Skinport, CSFloat, Buff)
+• Inventory management with float values
+• Up to 2 linked Steam accounts
+• Up to 5 price alerts & manual transactions
+• Trade management & history sync
+• Single item sell on Steam Market
 
 PRO FEATURES (7-day free trial)
-• Multi-source prices (Skinport, CSFloat, DMarket, Buff)
-• Full P&L tracking & analytics
+• Full P&L tracking & analytics with charts
+• Unlimited manual transactions
 • Up to 20 price alerts
 • Unlimited linked accounts
-• Bulk sell operations
+• Bulk sell operations (up to 50 items)
 • CSV export
 
 SkinKeeper PRO is available as an auto-renewable subscription:

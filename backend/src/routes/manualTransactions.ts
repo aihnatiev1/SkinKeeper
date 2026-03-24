@@ -29,6 +29,25 @@ router.post(
         portfolioId,
       } = req.body;
 
+      // Free tier: max 5 manual transactions
+      const { rows: userRows } = await pool.query(
+        `SELECT is_premium FROM users WHERE id = $1`, [req.userId]
+      );
+      const isPremium = userRows[0]?.is_premium ?? false;
+      if (!isPremium) {
+        const { rows: countRows } = await pool.query(
+          `SELECT COUNT(*)::int AS cnt FROM transactions WHERE user_id = $1 AND source = 'manual'`,
+          [req.userId]
+        );
+        if (countRows[0].cnt >= 5) {
+          res.status(403).json({
+            error: "premium_required",
+            message: "Upgrade to PRO to add more than 5 manual transactions",
+          });
+          return;
+        }
+      }
+
       const txId = `manual_${randomUUID()}`;
       const txDate = date ? new Date(date).toISOString() : new Date().toISOString();
 

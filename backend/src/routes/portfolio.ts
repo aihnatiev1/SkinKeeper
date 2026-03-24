@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { pool } from "../db/pool.js";
-import { authMiddleware, AuthRequest /* requirePremium disabled for testing */ } from "../middleware/auth.js";
+import { authMiddleware, requirePremium, AuthRequest } from "../middleware/auth.js";
 import { getLatestPrices } from "../services/prices.js";
 import {
   getPortfolioPL,
@@ -145,7 +145,7 @@ router.get(
 // GET /api/portfolio/pl — Portfolio P/L summary (PREMIUM)
 // Optional ?accountId=X to filter by specific steam account
 // Optional ?portfolioId=X to filter by named portfolio
-router.get("/pl", authMiddleware, /* requirePremium — disabled for testing */ async (req: AuthRequest, res: Response) => {
+router.get("/pl", authMiddleware, requirePremium, async (req: AuthRequest, res: Response) => {
   try {
     const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : undefined;
     const portfolioId = req.query.portfolioId ? parseInt(req.query.portfolioId as string) : undefined;
@@ -178,7 +178,7 @@ router.get(
 router.get(
   "/pl/items",
   authMiddleware,
-  /* requirePremium — disabled for testing */
+  requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const portfolioId = req.query.portfolioId ? parseInt(req.query.portfolioId as string) : undefined;
@@ -198,7 +198,7 @@ router.get(
 router.get(
   "/pl/history",
   authMiddleware,
-  /* requirePremium — disabled for testing */
+  requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const days = parseInt(req.query.days as string) || 30;

@@ -123,11 +123,8 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
 
   void _showAddTransaction(BuildContext context) {
     HapticFeedback.mediumImpact();
-    final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
-    if (!isPremium) {
-      context.push('/premium');
-      return;
-    }
+    // Free users get 5 manual transactions — backend enforces the limit
+    // and returns 403 premium_required when exceeded
     showGlassSheet(context, const AddTransactionSheet());
   }
 

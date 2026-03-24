@@ -722,6 +722,29 @@ export class SteamSessionService {
       throw new Error("Could not extract Steam ID from session cookies");
     }
 
+    // Check account limit: 2 free, unlimited premium
+    const { rows: userRows } = await pool.query(
+      `SELECT is_premium FROM users WHERE id = $1`, [userId]
+    );
+    const isPremium = userRows[0]?.is_premium ?? false;
+    if (!isPremium) {
+      const { rows: countRows } = await pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM steam_accounts WHERE user_id = $1`, [userId]
+      );
+      if (countRows[0].cnt >= 2) {
+        // Check if this is just re-linking an existing account (not a new one)
+        const { rows: existing } = await pool.query(
+          `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`, [userId, steamId]
+        );
+        if (existing.length === 0) {
+          const err = new Error("Upgrade to PRO to link more than 2 Steam accounts");
+          (err as any).code = "premium_required";
+          (err as any).statusCode = 403;
+          throw err;
+        }
+      }
+    }
+
     // Fetch Steam profile for display name + avatar
     let displayName = steamId;
     let avatarUrl = "";

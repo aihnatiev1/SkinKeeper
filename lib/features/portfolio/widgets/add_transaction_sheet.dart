@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -171,6 +172,20 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         ref.invalidate(itemsPLProvider);
         ref.invalidate(portfolioProvider);
         context.pop();
+      }
+    } on DioException catch (e) {
+      final errorCode = (e.response?.data as Map<String, dynamic>?)?['error'];
+      if (errorCode == 'premium_required' && mounted) {
+        context.pop();
+        context.push('/premium');
+        return;
+      }
+      if (mounted) {
+        HapticFeedback.heavyImpact();
+        final msg = (e.response?.data as Map<String, dynamic>?)?['message'] ?? 'Failed to save';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
       }
     } catch (e) {
       if (mounted) {
