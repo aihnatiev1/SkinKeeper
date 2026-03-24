@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -145,6 +146,18 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
           );
       HapticFeedback.mediumImpact();
       if (mounted) context.pop();
+    } on DioException catch (e) {
+      final errorCode = (e.response?.data as Map<String, dynamic>?)?['error'];
+      if (errorCode == 'premium_required' && mounted) {
+        setState(() => _loading = false);
+        context.push('/premium');
+        return;
+      }
+      setState(() {
+        _error = (e.response?.data as Map<String, dynamic>?)?['message']
+            ?? e.message ?? 'Failed to create alert';
+        _loading = false;
+      });
     } catch (e) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
