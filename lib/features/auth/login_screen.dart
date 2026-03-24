@@ -34,6 +34,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Timer? _pollTimer;
   bool _isPolling = false;
   bool _timedOut = false;
+  int _logoTapCount = 0;
 
   @override
   void dispose() {
@@ -43,6 +44,60 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _startLogin() async {
     await _startWebViewLogin();
+  }
+
+  void _showDemoLogin() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Review Access', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter review code',
+            hintStyle: TextStyle(color: AppTheme.textDisabled),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _demoLogin(controller.text.trim());
+            },
+            child: const Text('Enter', style: TextStyle(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _demoLogin(String code) async {
+    if (code.isEmpty) return;
+    try {
+      final api = ref.read(apiClientProvider);
+      final response = await api.post('/auth/demo', data: {'code': code});
+      final data = response.data as Map<String, dynamic>;
+      final token = data['token'] as String;
+      await api.saveToken(token);
+      final user = SteamUser.fromJson(data['user'] as Map<String, dynamic>);
+      ref.read(authStateProvider.notifier).setUser(user);
+      ref.read(needsInitialSyncProvider.notifier).state = false; // demo has pre-seeded data
+      if (mounted) setState(() { _isPolling = false; });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Demo login failed: $e'), backgroundColor: AppTheme.loss),
+        );
+      }
+    }
   }
 
   /// Fire-and-forget background sync for a newly linked account.
@@ -369,7 +424,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ],
           ),
-          child: const Icon(Icons.shield_rounded, size: 40, color: Colors.white),
+          child: GestureDetector(
+            onTap: () {
+              _logoTapCount++;
+              if (_logoTapCount >= 7) {
+                _logoTapCount = 0;
+                _showDemoLogin();
+              }
+            },
+            child: const Icon(Icons.shield_rounded, size: 40, color: Colors.white),
+          ),
         ).animate().fadeIn(duration: 600.ms).scale(
               begin: const Offset(0.8, 0.8),
               duration: 600.ms,

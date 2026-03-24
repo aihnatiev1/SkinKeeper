@@ -840,4 +840,92 @@ router.post("/token", async (req: Request, res: Response) => {
   }
 });
 
+// ─── Demo Account (for App Store Review) ─────────────────────────────────
+// POST /api/auth/demo — returns JWT for a pre-seeded demo account
+// Protected by DEMO_CODE env var — reviewer enters this code in the app
+router.post("/demo", async (req: Request, res: Response) => {
+  try {
+    const { code } = req.body;
+    const demoCode = process.env.DEMO_CODE || "SKINKEEPER_REVIEW_2026";
+
+    if (!code || code !== demoCode) {
+      res.status(401).json({ error: "Invalid demo code" });
+      return;
+    }
+
+    // Demo Steam ID (fake but valid format)
+    const demoSteamId = "76561199999999999";
+    const demoName = "SkinKeeper Demo";
+    const demoAvatar = "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg";
+
+    // Upsert demo user
+    const { rows } = await pool.query(
+      `INSERT INTO users (steam_id, display_name, avatar_url, is_premium)
+       VALUES ($1, $2, $3, TRUE)
+       ON CONFLICT (steam_id)
+       DO UPDATE SET display_name = $2, avatar_url = $3, is_premium = TRUE
+       RETURNING id`,
+      [demoSteamId, demoName, demoAvatar]
+    );
+    const userId = rows[0].id;
+
+    // Upsert demo steam account
+    await pool.query(
+      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4`,
+      [userId, demoSteamId, demoName, demoAvatar]
+    );
+
+    // Set active account
+    await pool.query(
+      `UPDATE users SET active_account_id = sa.id
+       FROM steam_accounts sa
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
+      [userId, demoSteamId]
+    );
+
+    // Seed demo inventory if empty
+    const { rows: invCount } = await pool.query(
+      `SELECT COUNT(*)::int AS cnt FROM inventory_items i
+       JOIN steam_accounts sa ON sa.id = i.account_id
+       WHERE sa.user_id = $1`, [userId]
+    );
+    if (invCount[0].cnt === 0) {
+      const accountId = (await pool.query(
+        `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`, [userId, demoSteamId]
+      )).rows[0].id;
+
+      const demoItems = [
+        { name: "AK-47 | Redline (Field-Tested)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OregKs0h1fDATvzuYSmkb-IkvbiOu_Q2zRu8Mxjr-Sp92ijVGw_0Q_NWCgI4CUdgdrYFnX_gK5xey70cPotcnLzHFqvyIr4XzD30vgEdoL2g0", rarity: "Classified", wear: "Field-Tested", price: 46.50 },
+        { name: "AWP | Asiimov (Field-Tested)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OtfAlf0Ob3djGZ0t-6lYyEhfbhJ7rQhmJf7dJ9j-vE8YjwhQ3lqkRuMD33JISUdQ85NArVqQTqx-_mgcC_vMmYySdn6Shx7SvUykCx1xoaPeMu1_eAHAb", rarity: "Covert", wear: "Field-Tested", price: 35.20 },
+        { name: "Desert Eagle | Blaze (Factory New)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7PxfldT1PL3eTxQ49C5q4yKlPDmOrzQl2Vf18l4meTE8ImgjQfm_kdtYz-hLdeTdFM4YV3VrgKW7we_r15To7cnAn3Qq6SIr5XbH30vgaahGmOI", rarity: "Restricted", wear: "Factory New", price: 92.00 },
+        { name: "M4A4 | Howl (Field-Tested)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OtLgdf2Pz3ZTxQ48ugkJOJkOf1IK_uhmlT4dRpiLuTpIml2wTi_ERuMDjwJ4GXIF8_MQ7Y_1O4kO-50p665MvMzHB9uCF2", rarity: "Contraband", wear: "Field-Tested", price: 1850.00 },
+        { name: "Glock-18 | Fade (Factory New)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7P1JFT1ha-bMDoT7oHiRqCn_5SmDL3fk5Vw8MBi3rHE9Ij3jFXm-EFuZqhOLGcdFNoYQ3T_VK5wu_vgMPu6Jya1yB9-6tJ7G80", rarity: "Restricted", wear: "Factory New", price: 520.00 },
+      ];
+
+      for (const item of demoItems) {
+        await pool.query(
+          `INSERT INTO inventory_items (account_id, asset_id, market_hash_name, icon_url, rarity, wear, tradable, prices)
+           VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7)
+           ON CONFLICT DO NOTHING`,
+          [accountId, `demo_${Math.random().toString(36).slice(2)}`, item.name, item.icon, item.rarity, item.wear, JSON.stringify({ steam: item.price })]
+        );
+      }
+    }
+
+    const token = jwt.sign(
+      { userId },
+      process.env.JWT_SECRET!,
+      { expiresIn: "30d" }
+    );
+
+    console.log(`[Auth] Demo login for user ${userId}`);
+    res.json({ token, user: { steam_id: demoSteamId, display_name: demoName, avatar_url: demoAvatar, is_premium: true } });
+  } catch (err) {
+    console.error("Demo auth error:", err);
+    res.status(500).json({ error: "Demo login failed" });
+  }
+});
+
 export default router;
