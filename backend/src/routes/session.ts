@@ -298,6 +298,27 @@ router.post("/refresh", async (req: AuthRequest, res: Response) => {
  */
 router.get("/status", async (req: AuthRequest, res: Response) => {
   try {
+    // Demo account: fake valid session so reviewer sees all features
+    const { rows: userCheck } = await pool.query(
+      `SELECT steam_id FROM users WHERE id = $1`, [req.userId!]
+    );
+    if (userCheck[0]?.steam_id === "76561199999999999") {
+      const { rows: demoAccs } = await pool.query(
+        `SELECT id, display_name FROM steam_accounts WHERE user_id = $1`, [req.userId!]
+      );
+      res.json({
+        status: "valid",
+        refreshTokenExpiresAt: null,
+        refreshTokenExpired: false,
+        needsReauth: false,
+        accounts: demoAccs.map((a: any) => ({
+          id: a.id, displayName: a.display_name, status: "valid",
+          isActive: true, refreshTokenExpiresAt: null, refreshTokenExpired: false,
+        })),
+      });
+      return;
+    }
+
     const accountId = await resolveAccountId(req);
     const details = await SteamSessionService.getSessionDetails(accountId);
 

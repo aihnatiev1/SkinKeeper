@@ -572,22 +572,19 @@ class _PortfolioHeader extends ConsumerWidget {
               return Row(
                 children: [
                   Flexible(
+                    flex: 0,
                     child: _ChangeBadge(
-                      text: '${isUp ? "↑" : "↓"} ${currency.formatWithSign(data.change24h)}',
+                      text: '${isUp ? "↑" : "↓"} ${currency.formatWithSign(data.change24h, decimals: 0)}',
                       color: color,
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      '${AppTheme.pctText(data.change24hPct)} today',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textDisabled,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
+                  Text(
+                    '${AppTheme.pctText(data.change24hPct)} today',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textDisabled,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const Spacer(),
