@@ -27,7 +27,7 @@ const privacyPolicyHTML = `<!DOCTYPE html>
 </head>
 <body>
   <h1>Privacy Policy</h1>
-  <p><strong>Last updated:</strong> March 9, 2026</p>
+  <p><strong>Last updated:</strong> March 24, 2026</p>
 
   <h2>1. Information We Collect</h2>
   <p>SkinKeeper collects the following data to provide its services:</p>
@@ -91,7 +91,7 @@ const termsOfServiceHTML = `<!DOCTYPE html>
 </head>
 <body>
   <h1>Terms of Service</h1>
-  <p><strong>Last updated:</strong> March 9, 2026</p>
+  <p><strong>Last updated:</strong> March 24, 2026</p>
 
   <h2>1. Acceptance</h2>
   <p>By using SkinKeeper, you agree to these terms. If you do not agree, do not use the app.</p>
@@ -102,30 +102,50 @@ const termsOfServiceHTML = `<!DOCTYPE html>
   <h2>3. Steam Account Access</h2>
   <p>You authorize SkinKeeper to access your Steam account data through the Steam Web API. You are responsible for maintaining the security of your Steam credentials. SkinKeeper stores session data encrypted but cannot guarantee against all security risks.</p>
 
-  <h2>4. Premium Subscriptions</h2>
+  <h2>4. Premium Subscriptions & Payment</h2>
+  <p>Premium features require an active subscription. The following plans are available:</p>
   <ul>
-    <li>Premium features require an active subscription ($4.99/month or $29.99/year)</li>
-    <li>Subscriptions auto-renew unless canceled at least 24 hours before the renewal date</li>
-    <li>Manage subscriptions through App Store / Google Play settings</li>
-    <li>No refunds for partial subscription periods</li>
+    <li><strong>Monthly:</strong> $4.99 per month</li>
+    <li><strong>Yearly:</strong> $34.99 per year (7-day free trial included)</li>
+  </ul>
+  <p><strong>Apple App Store (iOS):</strong></p>
+  <ul>
+    <li>Payment will be charged to your Apple ID account at confirmation of purchase, or at the end of the free trial period if applicable.</li>
+    <li>Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.</li>
+    <li>Your account will be charged for renewal within 24 hours prior to the end of the current period at the rate of your selected plan.</li>
+    <li>You can manage and cancel your subscription at any time by going to your device Settings &gt; Apple ID &gt; Subscriptions.</li>
+    <li>Any unused portion of a free trial period will be forfeited when you purchase a subscription.</li>
+    <li>Refunds are handled by Apple in accordance with their refund policy.</li>
+  </ul>
+  <p><strong>Google Play (Android):</strong></p>
+  <ul>
+    <li>Payment will be charged to your Google Play account at confirmation of purchase.</li>
+    <li>Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.</li>
+    <li>Manage or cancel at any time in Google Play Store &gt; Subscriptions.</li>
   </ul>
 
-  <h2>5. Pricing Data</h2>
+  <h2>5. Free Trial</h2>
+  <p>The yearly plan includes a 7-day free trial. You will not be charged during the trial period. If you do not cancel before the trial ends, your Apple ID or Google Play account will be charged $34.99 for the first year. You may cancel at any time during the trial at no cost.</p>
+
+  <h2>6. Pricing Data</h2>
   <p>Prices are fetched from third-party sources (Steam, Skinport, CSFloat, DMarket) and may be delayed or inaccurate. SkinKeeper does not guarantee pricing accuracy and is not responsible for financial decisions based on displayed prices.</p>
 
-  <h2>6. Market Transactions</h2>
-  <p>Sell and trade operations are executed through Steam's unofficial APIs. SkinKeeper is not responsible for failed transactions, Steam account restrictions, or financial losses resulting from market operations.</p>
+  <h2>7. Market Transactions</h2>
+  <p>Sell and trade operations are executed through Steam's APIs on Valve's platform. SkinKeeper acts as a management interface — all transactions occur on Steam. SkinKeeper is not responsible for failed transactions, Steam account restrictions, or financial losses resulting from market operations.</p>
 
-  <h2>7. Limitation of Liability</h2>
+  <h2>8. Limitation of Liability</h2>
   <p>SkinKeeper is provided "as is" without warranties. We are not liable for any damages arising from the use of this service, including but not limited to financial losses from trading decisions.</p>
 
-  <h2>8. Termination</h2>
+  <h2>9. Intellectual Property</h2>
+  <p>CS2 game content, skin images, and item names are the property of Valve Corporation. SkinKeeper displays this content under the Steam Web API terms of use for the purpose of inventory management.</p>
+
+  <h2>10. Termination</h2>
   <p>We reserve the right to terminate or suspend access to the service at any time, without notice, for conduct that violates these terms.</p>
 
-  <h2>9. Changes</h2>
+  <h2>11. Changes</h2>
   <p>We may modify these terms at any time. Continued use constitutes acceptance.</p>
 
-  <h2>10. Contact</h2>
+  <h2>12. Contact</h2>
   <p>Questions? Contact us at <a href="mailto:support@skinkeeper.app">support@skinkeeper.app</a></p>
 </body>
 </html>`;
