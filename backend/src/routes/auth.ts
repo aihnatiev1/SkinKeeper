@@ -888,7 +888,7 @@ router.post("/demo", async (req: Request, res: Response) => {
     // Seed demo inventory if empty
     const { rows: invCount } = await pool.query(
       `SELECT COUNT(*)::int AS cnt FROM inventory_items i
-       JOIN steam_accounts sa ON sa.id = i.account_id
+       JOIN steam_accounts sa ON sa.id = i.steam_account_id
        WHERE sa.user_id = $1`, [userId]
     );
     if (invCount[0].cnt === 0) {
@@ -906,10 +906,10 @@ router.post("/demo", async (req: Request, res: Response) => {
 
       for (const item of demoItems) {
         await pool.query(
-          `INSERT INTO inventory_items (account_id, asset_id, market_hash_name, icon_url, rarity, wear, tradable, prices)
-           VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7)
+          `INSERT INTO inventory_items (steam_account_id, asset_id, market_hash_name, icon_url, rarity, wear, tradable)
+           VALUES ($1, $2, $3, $4, $5, $6, TRUE)
            ON CONFLICT DO NOTHING`,
-          [accountId, `demo_${Math.random().toString(36).slice(2)}`, item.name, item.icon, item.rarity, item.wear, JSON.stringify({ steam: item.price })]
+          [accountId, `demo_${Math.random().toString(36).slice(2)}`, item.name, item.icon, item.rarity, item.wear]
         );
       }
     }

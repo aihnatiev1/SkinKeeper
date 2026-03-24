@@ -87,8 +87,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final data = response.data as Map<String, dynamic>;
       final token = data['token'] as String;
       await api.saveToken(token);
-      final user = SteamUser.fromJson(data['user'] as Map<String, dynamic>);
+
+      // Fetch full user profile (same as regular login)
+      final resp = await api.get('/auth/me');
+      final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
       ref.read(authStateProvider.notifier).setUser(user);
+
+      // Invalidate all data providers for fresh fetch
+      ref.invalidate(inventoryProvider);
+      ref.invalidate(portfolioProvider);
+      ref.invalidate(portfolioPLProvider);
+      ref.invalidate(portfoliosProvider);
+      ref.invalidate(tradesProvider);
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(accountsProvider);
+      ref.invalidate(sessionStatusProvider);
+
       ref.read(needsInitialSyncProvider.notifier).state = false; // demo has pre-seeded data
       if (mounted) setState(() { _isPolling = false; });
     } catch (e) {
