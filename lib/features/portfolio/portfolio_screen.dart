@@ -571,17 +571,23 @@ class _PortfolioHeader extends ConsumerWidget {
               final color = AppTheme.plColor(data.change24h);
               return Row(
                 children: [
-                  _ChangeBadge(
-                    text: '${isUp ? "↑" : "↓"} ${currency.formatWithSign(data.change24h)}',
-                    color: color,
+                  Flexible(
+                    child: _ChangeBadge(
+                      text: '${isUp ? "↑" : "↓"} ${currency.formatWithSign(data.change24h)}',
+                      color: color,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${AppTheme.pctText(data.change24hPct)} today',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textDisabled,
-                      fontWeight: FontWeight.w500,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      '${AppTheme.pctText(data.change24hPct)} today',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textDisabled,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                   const Spacer(),
@@ -646,6 +652,8 @@ class _ChangeBadge extends StatelessWidget {
       ),
       child: Text(
         text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
