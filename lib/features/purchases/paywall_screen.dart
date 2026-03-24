@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/analytics_service.dart';
 import '../../core/theme.dart';
 import 'iap_service.dart';
@@ -124,13 +125,35 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               // Legal
               const Text(
                 'Free trial available for yearly plan. No charge during trial period. '
-                'Cancel anytime before trial ends. After trial, \$29.99/year auto-renews '
-                'unless cancelled at least 24 hours before the end of the current period.',
+                'Cancel anytime before trial ends. After trial, \$34.99/year auto-renews '
+                'unless cancelled at least 24 hours before the end of the current period. '
+                'Payment will be charged to your Apple ID account. '
+                'Manage subscriptions in Settings > Apple ID > Subscriptions.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 10,
                   color: AppTheme.textMuted,
                 ),
+              ),
+              const SizedBox(height: 8),
+              // Privacy & Terms links (required by Apple)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: () => launchUrl(Uri.parse('https://api.skinkeeper.store/legal/privacy'),
+                        mode: LaunchMode.externalApplication),
+                    child: const Text('Privacy Policy',
+                        style: TextStyle(fontSize: 10, color: AppTheme.textDisabled, decoration: TextDecoration.underline)),
+                  ),
+                  const Text('  •  ', style: TextStyle(fontSize: 10, color: AppTheme.textDisabled)),
+                  GestureDetector(
+                    onTap: () => launchUrl(Uri.parse('https://api.skinkeeper.store/legal/terms'),
+                        mode: LaunchMode.externalApplication),
+                    child: const Text('Terms of Service',
+                        style: TextStyle(fontSize: 10, color: AppTheme.textDisabled, decoration: TextDecoration.underline)),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 80),
@@ -282,7 +305,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
         Expanded(
           child: _PlanCard(
             title: 'Yearly',
-            price: '\$29.99',
+            price: '\$34.99',
             subtitle: '7-day free trial',
             badge: 'Best Value',
             isSelected: _selectedYearly,

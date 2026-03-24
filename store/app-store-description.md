@@ -64,7 +64,7 @@ PRO FEATURES (7-day free trial)
 
 SkinKeeper PRO is available as a subscription:
 - Monthly: $4.99/month
-- Yearly: $29.99/year (save 50%)
+- Yearly: $34.99/year (save 42%)
 
 Free trial: 7 days for yearly plan. Payment charged after trial ends. Cancel anytime in Settings > Subscriptions. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.
 
