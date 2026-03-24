@@ -912,6 +912,58 @@ router.post("/demo", async (req: Request, res: Response) => {
           [accountId, `demo_${Math.random().toString(36).slice(2)}`, item.name, item.icon, item.rarity, item.wear]
         );
       }
+
+      // Seed demo transactions
+      const demoTx = [
+        { name: "AK-47 | Redline (Field-Tested)", type: "buy", price: 3800, days: 30 },
+        { name: "AK-47 | Redline (Field-Tested)", type: "buy", price: 4200, days: 25 },
+        { name: "AWP | Asiimov (Field-Tested)", type: "buy", price: 2900, days: 20 },
+        { name: "Desert Eagle | Blaze (Factory New)", type: "buy", price: 7500, days: 15 },
+        { name: "M4A4 | Howl (Field-Tested)", type: "buy", price: 165000, days: 45 },
+        { name: "Glock-18 | Fade (Factory New)", type: "buy", price: 48000, days: 10 },
+        { name: "AK-47 | Redline (Field-Tested)", type: "sell", price: 4650, days: 5 },
+        { name: "CS:GO Weapon Case", type: "sell", price: 1200, days: 3 },
+        { name: "Sticker | NiKo | Antwerp 2022", type: "sell", price: 850, days: 2 },
+      ];
+      for (const tx of demoTx) {
+        const txDate = new Date(Date.now() - tx.days * 86400000).toISOString();
+        await pool.query(
+          `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source)
+           VALUES ($1, $2, $3, $4, $5, $6, 'steam')
+           ON CONFLICT DO NOTHING`,
+          [userId, `demo_tx_${Math.random().toString(36).slice(2)}`, tx.type, tx.name, tx.price, txDate]
+        );
+      }
+
+      // Seed demo trade offers
+      const demoTrades = [
+        { partner: "76561198012345678", partnerName: "TradeBot", status: "accepted", give: "AK-47 | Redline (Field-Tested)", recv: "AWP | Asiimov (Field-Tested)", days: 7 },
+        { partner: "76561198087654321", partnerName: "SkinShark", status: "pending", give: "Glock-18 | Fade (Factory New)", recv: "M4A1-S | Hyper Beast (Minimal Wear)", days: 1 },
+      ];
+      for (const t of demoTrades) {
+        const { rows: offerRows } = await pool.query(
+          `INSERT INTO trade_offers (user_id, direction, steam_offer_id, partner_steam_id, partner_name, status, is_quick_transfer, created_at, updated_at)
+           VALUES ($1, 'outgoing', $2, $3, $4, $5, FALSE, NOW() - INTERVAL '${t.days} days', NOW() - INTERVAL '${t.days} days')
+           ON CONFLICT DO NOTHING
+           RETURNING id`,
+          [userId, `demo_offer_${Math.random().toString(36).slice(2)}`, t.partner, t.partnerName, t.status]
+        );
+        if (offerRows.length > 0) {
+          const offerId = offerRows[0].id;
+          await pool.query(
+            `INSERT INTO trade_offer_items (offer_id, side, asset_id, market_hash_name)
+             VALUES ($1, 'give', $2, $3), ($1, 'receive', $4, $5)
+             ON CONFLICT DO NOTHING`,
+            [offerId, `demo_g_${offerId}`, t.give, `demo_r_${offerId}`, t.recv]
+          );
+        }
+      }
+
+      // Recalculate cost basis for P&L
+      try {
+        const { recalculateCostBasis } = await import("../services/profitLoss.js");
+        await recalculateCostBasis(userId);
+      } catch {}
     }
 
     const token = jwt.sign(
