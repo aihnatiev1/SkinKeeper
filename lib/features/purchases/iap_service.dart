@@ -48,10 +48,8 @@ final premiumProvider =
 class PremiumNotifier extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {
-    // TODO: restore premium check when IAP is ready
-    // final user = ref.watch(authStateProvider).valueOrNull;
-    // return user?.isPremium ?? false;
-    return true; // All features unlocked for testing
+    final user = ref.watch(authStateProvider).valueOrNull;
+    return user?.isPremium ?? false;
   }
 
   void setPremium(bool value) {
