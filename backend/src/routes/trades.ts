@@ -183,6 +183,15 @@ router.post(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
+      // Demo account: skip real Steam sync
+      const { rows: userCheck } = await pool.query(
+        `SELECT steam_id FROM users WHERE id = $1`, [req.userId!]
+      );
+      if (userCheck[0]?.steam_id === "76561199999999999") {
+        res.json({ synced: 0 });
+        return;
+      }
+
       const result = await syncTradeOffers(req.userId!);
       res.json(result);
     } catch (err) {
@@ -207,11 +216,14 @@ router.get("/", authMiddleware, validateQuery(tradesListQuerySchema), async (req
     const accountIdParam = req.query.accountId as string | undefined;
     const accountId = accountIdParam ? parseInt(accountIdParam) : undefined;
 
-    // Auto-sync on first page load (fire and forget to avoid slowing response)
+    // Auto-sync on first page load (fire and forget — skip for demo account)
     if (offset === 0) {
-      syncTradeOffers(req.userId!).catch((err) =>
-        console.error("[Trade] Background sync error:", err.message)
-      );
+      const { rows: uc } = await pool.query(`SELECT steam_id FROM users WHERE id = $1`, [req.userId!]);
+      if (uc[0]?.steam_id !== "76561199999999999") {
+        syncTradeOffers(req.userId!).catch((err) =>
+          console.error("[Trade] Background sync error:", err.message)
+        );
+      }
     }
 
     const result = await listOffers(req.userId!, status, limit, offset, accountId);
