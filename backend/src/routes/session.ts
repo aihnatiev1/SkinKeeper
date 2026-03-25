@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { SteamSessionService } from "../services/steamSession.js";
-import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, AuthRequest, DEMO_STEAM_ID } from "../middleware/auth.js";
+import { demoStubs } from "../middleware/demoStubs.js";
 import { pool } from "../db/pool.js";
 
 const router = Router();
@@ -108,7 +109,7 @@ router.get("/qr/poll/:nonce", async (req: AuthRequest, res: Response) => {
  * POST /api/session/login?accountId=X&linkMode=true
  * Start a credential login. Body: { username, password }
  */
-router.post("/login", async (req: AuthRequest, res: Response) => {
+router.post("/login", demoStubs.sessionAction, async (req: AuthRequest, res: Response) => {
   try {
     const { username, password } = req.body;
 
@@ -145,7 +146,7 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
  * POST /api/session/guard
  * Submit a Steam Guard code. Body: { nonce, code }
  */
-router.post("/guard", async (req: AuthRequest, res: Response) => {
+router.post("/guard", demoStubs.sessionAction, async (req: AuthRequest, res: Response) => {
   try {
     const { nonce, code } = req.body;
 
@@ -203,7 +204,7 @@ router.post("/guard", async (req: AuthRequest, res: Response) => {
  * POST /api/session/token?accountId=X&linkMode=true
  * Submit a clientjstoken. Body: { steamLoginSecure }
  */
-router.post("/token", async (req: AuthRequest, res: Response) => {
+router.post("/token", demoStubs.sessionAction, async (req: AuthRequest, res: Response) => {
   try {
     const { steamLoginSecure, sessionId: providedSessionId, steamRefreshToken } = req.body;
 
@@ -278,7 +279,7 @@ router.post("/token", async (req: AuthRequest, res: Response) => {
 /**
  * POST /api/session/refresh?accountId=X
  */
-router.post("/refresh", async (req: AuthRequest, res: Response) => {
+router.post("/refresh", demoStubs.sessionAction, async (req: AuthRequest, res: Response) => {
   try {
     const accountId = await resolveAccountId(req);
     const result = await SteamSessionService.refreshSession(accountId);
@@ -299,10 +300,7 @@ router.post("/refresh", async (req: AuthRequest, res: Response) => {
 router.get("/status", async (req: AuthRequest, res: Response) => {
   try {
     // Demo account: fake valid session so reviewer sees all features
-    const { rows: userCheck } = await pool.query(
-      `SELECT steam_id FROM users WHERE id = $1`, [req.userId!]
-    );
-    if (userCheck[0]?.steam_id === "76561199999999999") {
+    if (req.isDemo) {
       const { rows: demoAccs } = await pool.query(
         `SELECT id, display_name FROM steam_accounts WHERE user_id = $1`, [req.userId!]
       );

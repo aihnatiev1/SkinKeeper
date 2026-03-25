@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from "express";
-import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, AuthRequest, DEMO_STEAM_ID } from "../middleware/auth.js";
+import { demoStubs } from "../middleware/demoStubs.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import { sendTradeSchema, quickTransferSchema, tradeTokenSchema, tradesListQuerySchema } from "../middleware/schemas.js";
 import {
@@ -44,7 +45,7 @@ router.get(
       }
 
       // Demo account: return fake friends
-      if (rows[0].steam_id === "76561199999999999") {
+      if (req.isDemo) {
         res.json({ friends: [
           { steamId: "76561198012345678", personaName: "TradeBot", avatarUrl: "https://avatars.steamstatic.com/b5bd56c1aa4644a474a2e4972be27bc9e1e9550f_full.jpg", profileUrl: "https://steamcommunity.com/id/tradebot", onlineStatus: "online" },
           { steamId: "76561198087654321", personaName: "SkinShark", avatarUrl: "https://avatars.steamstatic.com/1d1fa6e08a78c23b0dbeb7ad3d23e39a95dbb4e0_full.jpg", profileUrl: "https://steamcommunity.com/id/skinshark", onlineStatus: "offline" },
@@ -140,10 +141,7 @@ router.get(
       const steamId = req.params.steamId as string;
 
       // Demo account: return fake partner inventory
-      const { rows: userCheck } = await pool.query(
-        `SELECT u.steam_id FROM users u WHERE u.id = $1`, [req.userId!]
-      );
-      if (userCheck[0]?.steam_id === "76561199999999999") {
+      if (req.isDemo) {
         const demoPartnerItems: Record<string, Array<{ assetId: string; marketHashName: string; iconUrl: string; rarity: string; rarityColor: string; wear: string; tradable: boolean }>> = {
           "76561198012345678": [
             { assetId: "dp_1", marketHashName: "USP-S | Kill Confirmed (Minimal Wear)", iconUrl: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpoo6m1FBRp3_bGcjhQ09-jq5WYh8j_OrfdqWhe5sN4mOTE8bP5gVO8v109YDj0do7Dcw9taA6C81K_k-_n1pfp6MnOnSZhu3Qm4SrfzBbkg01McKUx0iC2I2fd", rarity: "Covert", rarityColor: "#EB4B4B", wear: "Minimal Wear", tradable: true },
@@ -181,17 +179,9 @@ router.get(
 router.post(
   "/sync",
   authMiddleware,
+  demoStubs.tradeSync,
   async (req: AuthRequest, res: Response) => {
     try {
-      // Demo account: skip real Steam sync
-      const { rows: userCheck } = await pool.query(
-        `SELECT steam_id FROM users WHERE id = $1`, [req.userId!]
-      );
-      if (userCheck[0]?.steam_id === "76561199999999999") {
-        res.json({ synced: 0 });
-        return;
-      }
-
       const result = await syncTradeOffers(req.userId!);
       res.json(result);
     } catch (err) {
@@ -217,13 +207,10 @@ router.get("/", authMiddleware, validateQuery(tradesListQuerySchema), async (req
     const accountId = accountIdParam ? parseInt(accountIdParam) : undefined;
 
     // Auto-sync on first page load (fire and forget — skip for demo account)
-    if (offset === 0) {
-      const { rows: uc } = await pool.query(`SELECT steam_id FROM users WHERE id = $1`, [req.userId!]);
-      if (uc[0]?.steam_id !== "76561199999999999") {
-        syncTradeOffers(req.userId!).catch((err) =>
-          console.error("[Trade] Background sync error:", err.message)
-        );
-      }
+    if (offset === 0 && !req.isDemo) {
+      syncTradeOffers(req.userId!).catch((err) =>
+        console.error("[Trade] Background sync error:", err.message)
+      );
     }
 
     const result = await listOffers(req.userId!, status, limit, offset, accountId);
@@ -282,6 +269,7 @@ router.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.post(
   "/send",
   authMiddleware,
+  demoStubs.tradeSend,
   validateBody(sendTradeSchema),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -307,6 +295,7 @@ router.post(
 router.post(
   "/:id/accept",
   authMiddleware,
+  demoStubs.tradeAction,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const result = await acceptOffer(req.userId!, req.params.id as string);
@@ -327,6 +316,7 @@ router.post(
 router.post(
   "/:id/decline",
   authMiddleware,
+  demoStubs.tradeAction,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       await declineOffer(req.userId!, req.params.id as string);
@@ -344,6 +334,7 @@ router.post(
 router.post(
   "/:id/cancel",
   authMiddleware,
+  demoStubs.tradeAction,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       await cancelOffer(req.userId!, req.params.id as string);

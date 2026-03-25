@@ -4,17 +4,22 @@ import { pool } from "../db/pool.js";
 import { TTLCache } from "../utils/TTLCache.js";
 import { registerCache } from "../utils/cacheRegistry.js";
 
+export const DEMO_STEAM_ID = "76561199999999999";
+
 export interface AuthRequest extends Request {
   userId?: number;
   steamId?: string;
   isPremium?: boolean;
+  isDemo?: boolean;
 }
 
-export function authMiddleware(
+const demoUserIds = new Set<number>();
+
+export async function authMiddleware(
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
     res.status(401).json({ error: "No token provided" });
@@ -30,6 +35,13 @@ export function authMiddleware(
     };
     req.userId = payload.userId;
     req.steamId = payload.steamId;
+
+    // Check if demo user (cached after first lookup)
+    if (!demoUserIds.has(payload.userId)) {
+      const { rows } = await pool.query(`SELECT steam_id FROM users WHERE id = $1`, [payload.userId]);
+      if (rows[0]?.steam_id === DEMO_STEAM_ID) demoUserIds.add(payload.userId);
+    }
+    req.isDemo = demoUserIds.has(payload.userId);
 
     // Proactive refresh: if token expires within 3 days, send new one in header
     if (payload.exp) {

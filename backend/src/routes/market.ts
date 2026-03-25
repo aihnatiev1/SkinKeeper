@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from "express";
 import axios from "axios";
 import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { demoStubs } from "../middleware/demoStubs.js";
 import { validateBody } from "../middleware/validate.js";
 import { sellOperationSchema, sellItemSchema, sessionCookiesSchema, clientTokenSchema } from "../middleware/schemas.js";
 import {
@@ -165,6 +166,7 @@ router.get("/currencies", (_req, res: Response) => {
 router.post(
   "/sell-operation",
   authMiddleware,
+  demoStubs.sellOperation,
   validateBody(sellOperationSchema),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {

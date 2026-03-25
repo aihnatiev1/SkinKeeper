@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { demoStubs } from "../middleware/demoStubs.js";
 import {
   fetchSteamTransactions,
   saveTransactions,
@@ -21,6 +22,7 @@ const router = Router();
 router.post(
   "/sync",
   authMiddleware,
+  demoStubs.transactionSync,
   async (req: AuthRequest, res: Response) => {
     try {
       const startTime = Date.now();

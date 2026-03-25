@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { demoStubs } from "../middleware/demoStubs.js";
 import { fetchSteamInventory } from "../services/steam.js";
 import { getLatestPrices, getBestPrices, fillMissingPrices } from "../services/prices.js";
 import { getDopplerPrice, isDopplerPaintIndex } from "../services/dopplerPrices.js";
@@ -416,6 +417,7 @@ router.get("/sync-status/:jobId", authMiddleware, (req: AuthRequest, res: Respon
 router.post(
   "/refresh",
   authMiddleware,
+  demoStubs.inventoryRefresh,
   async (req: AuthRequest, res: Response) => {
     try {
       const filterAccountId = parseInt(req.query.accountId as string);
