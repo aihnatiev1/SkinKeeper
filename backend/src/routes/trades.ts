@@ -46,8 +46,8 @@ router.get(
       // Demo account: return fake friends
       if (rows[0].steam_id === "76561199999999999") {
         res.json({ friends: [
-          { steamId: "76561198012345678", personaName: "TradeBot", avatarUrl: "", profileUrl: "", onlineStatus: "online" },
-          { steamId: "76561198087654321", personaName: "SkinShark", avatarUrl: "", profileUrl: "", onlineStatus: "offline" },
+          { steamId: "76561198012345678", personaName: "TradeBot", avatarUrl: "https://avatars.steamstatic.com/b5bd56c1aa4644a474a2e4972be27bc9e1e9550f_full.jpg", profileUrl: "https://steamcommunity.com/id/tradebot", onlineStatus: "online" },
+          { steamId: "76561198087654321", personaName: "SkinShark", avatarUrl: "https://avatars.steamstatic.com/1d1fa6e08a78c23b0dbeb7ad3d23e39a95dbb4e0_full.jpg", profileUrl: "https://steamcommunity.com/id/skinshark", onlineStatus: "offline" },
         ], count: 2 });
         return;
       }
@@ -138,6 +138,28 @@ router.get(
   async (req: AuthRequest, res: Response) => {
     try {
       const steamId = req.params.steamId as string;
+
+      // Demo account: return fake partner inventory
+      const { rows: userCheck } = await pool.query(
+        `SELECT u.steam_id FROM users u WHERE u.id = $1`, [req.userId!]
+      );
+      if (userCheck[0]?.steam_id === "76561199999999999") {
+        const demoPartnerItems: Record<string, Array<{ assetId: string; marketHashName: string; iconUrl: string; rarity: string; rarityColor: string; wear: string; tradable: boolean }>> = {
+          "76561198012345678": [
+            { assetId: "dp_1", marketHashName: "USP-S | Kill Confirmed (Minimal Wear)", iconUrl: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpoo6m1FBRp3_bGcjhQ09-jq5WYh8j_OrfdqWhe5sN4mOTE8bP5gVO8v109YDj0do7Dcw9taA6C81K_k-_n1pfp6MnOnSZhu3Qm4SrfzBbkg01McKUx0iC2I2fd", rarity: "Covert", rarityColor: "#EB4B4B", wear: "Minimal Wear", tradable: true },
+            { assetId: "dp_2", marketHashName: "AK-47 | Neon Rider (Factory New)", iconUrl: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot7HxfDhjxszJegJM6dO4q5KCk_LmDLfYkWNFppwj2rCQrN733QXgqEc5MGD7JYKTIAI5ZV-ErwK2krvrhZHttZrOmnp9-n51haggJHM", rarity: "Classified", rarityColor: "#D32CE6", wear: "Factory New", tradable: true },
+            { assetId: "dp_3", marketHashName: "P250 | See Ya Later (Factory New)", iconUrl: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpopujwezhjxszYI2gS09-vloWZlOX7MITdn2xZ_Isi07_F8N3x3Qfj8kQ6a2H0IdKXdgRqYA2C-VLqxLznhMLv6Z-bm3o2pGB8sr9Yt3dq", rarity: "Classified", rarityColor: "#D32CE6", wear: "Factory New", tradable: true },
+          ],
+          "76561198087654321": [
+            { assetId: "dp_4", marketHashName: "M4A1-S | Hyper Beast (Minimal Wear)", iconUrl: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpou-6kejhz2v_Nfz5H_uO1gb-Gw_alDLPIhm5D18d0i_rVyoD8j1yg5UBta2zzLYWSdAA_aFvVq1G4w7rq05Dq7cvMmHM1uiJ0sS3Un0e_hxlSLrs4IEpMMwQ", rarity: "Covert", rarityColor: "#EB4B4B", wear: "Minimal Wear", tradable: true },
+            { assetId: "dp_5", marketHashName: "AWP | Fever Dream (Field-Tested)", iconUrl: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot621FAR17PLfYQJS_8W1nI-bluP8DLbUkmJE5Ysji7vHrNjxjgKw_RVtazr3INWddQRsYljS-QLql-e9hJXt75ucm3BlpGB8snSRBTot", rarity: "Classified", rarityColor: "#D32CE6", wear: "Field-Tested", tradable: true },
+          ],
+        };
+        const items = demoPartnerItems[steamId] || [];
+        res.json({ items, count: items.length });
+        return;
+      }
+
       console.log(`[Trade] Fetching partner inventory for ${steamId}`);
       const items = await fetchPartnerInventory(steamId);
       console.log(`[Trade] Partner inventory: ${items.length} tradable items for ${steamId}`);

@@ -885,31 +885,36 @@ router.post("/demo", async (req: Request, res: Response) => {
       [userId, demoSteamId]
     );
 
-    // Seed demo inventory if empty
-    const { rows: invCount } = await pool.query(
-      `SELECT COUNT(*)::int AS cnt FROM inventory_items i
-       JOIN steam_accounts sa ON sa.id = i.steam_account_id
-       WHERE sa.user_id = $1`, [userId]
-    );
-    if (invCount[0].cnt === 0) {
-      const accountId = (await pool.query(
-        `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`, [userId, demoSteamId]
-      )).rows[0].id;
+    // Seed demo data — clear and re-seed every login for freshness
+    const accountId = (await pool.query(
+      `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`, [userId, demoSteamId]
+    )).rows[0].id;
+
+    // Clean up old demo data
+    await pool.query(`DELETE FROM daily_pl_snapshots WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM alert_history WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM price_alerts WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM item_cost_basis WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM trade_offer_items WHERE offer_id IN (SELECT id FROM trade_offers WHERE user_id = $1)`, [userId]);
+    await pool.query(`DELETE FROM trade_offers WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM transactions WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM inventory_items WHERE steam_account_id = $1`, [accountId]);
+    {
 
       const demoItems = [
-        { name: "AK-47 | Redline (Field-Tested)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OregKs0h1fDATvzuYSmkb-IkvbiOu_Q2zRu8Mxjr-Sp92ijVGw_0Q_NWCgI4CUdgdrYFnX_gK5xey70cPotcnLzHFqvyIr4XzD30vgEdoL2g0", rarity: "Classified", wear: "Field-Tested", price: 46.50 },
-        { name: "AWP | Asiimov (Field-Tested)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OtfAlf0Ob3djGZ0t-6lYyEhfbhJ7rQhmJf7dJ9j-vE8YjwhQ3lqkRuMD33JISUdQ85NArVqQTqx-_mgcC_vMmYySdn6Shx7SvUykCx1xoaPeMu1_eAHAb", rarity: "Covert", wear: "Field-Tested", price: 35.20 },
-        { name: "Desert Eagle | Blaze (Factory New)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7PxfldT1PL3eTxQ49C5q4yKlPDmOrzQl2Vf18l4meTE8ImgjQfm_kdtYz-hLdeTdFM4YV3VrgKW7we_r15To7cnAn3Qq6SIr5XbH30vgaahGmOI", rarity: "Restricted", wear: "Factory New", price: 92.00 },
-        { name: "M4A4 | Howl (Field-Tested)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OtLgdf2Pz3ZTxQ48ugkJOJkOf1IK_uhmlT4dRpiLuTpIml2wTi_ERuMDjwJ4GXIF8_MQ7Y_1O4kO-50p665MvMzHB9uCF2", rarity: "Contraband", wear: "Field-Tested", price: 1850.00 },
-        { name: "Glock-18 | Fade (Factory New)", icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7P1JFT1ha-bMDoT7oHiRqCn_5SmDL3fk5Vw8MBi3rHE9Ij3jFXm-EFuZqhOLGcdFNoYQ3T_VK5wu_vgMPu6Jya1yB9-6tJ7G80", rarity: "Restricted", wear: "Factory New", price: 520.00 },
+        { name: "AK-47 | Redline (Field-Tested)", icon: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot7HxfDhjxszJemkV09-5lpKKqPrxN7LEmyVQ7MEpiLuSrYmnjQO3-UdsZGHyd4_Bd1RvNQ7T_FDrw-_ng5Pu75iY1zI97bhLsvQz", rarity: "Classified", rarityColor: "#D32CE6", wear: "Field-Tested", floatVal: 0.26148322, price: 46.50, stickers: [{ name: "NiKo | Antwerp 2022" }, { name: "s1mple | Antwerp 2022" }] },
+        { name: "AWP | Asiimov (Field-Tested)", icon: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot621FAR17PLfYQJD_9W7m5a0mvLwOq7c2G9SupUijOjAotyg3w2x_0ZkZ2rzd4OXdgRoYQuE8gDtyL_mg5K4tJ7XiSw0WqKv8kM", rarity: "Covert", rarityColor: "#EB4B4B", wear: "Field-Tested", floatVal: 0.31057841, price: 35.20, stickers: [{ name: "Fnatic | Katowice 2015" }] },
+        { name: "Desert Eagle | Blaze (Factory New)", icon: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgposr-kLAtl7PLJTjtO7dGzh7-HnvD8J_XVkjoFuMYiiLqUrI-k3le3r0s5amj7d9eTI1I-M1rW-Fm_xO-50Jfvot2XnhS4_w8U", rarity: "Restricted", rarityColor: "#8847FF", wear: "Factory New", floatVal: 0.00842107, price: 92.00, stickers: [] },
+        { name: "M4A4 | Howl (Field-Tested)", icon: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpou-6kejhjxszFJTwT09S5g4yCmfDLPr7Vn35cppYo0riZp4-t3Q2x_UVpYGr6LIXHJABrYVGB_QS5k72905S_75ycm3t9-n51e4WtYjg", rarity: "Contraband", rarityColor: "#E4AE39", wear: "Field-Tested", floatVal: 0.15723690, price: 1850.00, stickers: [{ name: "Crown (Foil)" }, { name: "Crown (Foil)" }] },
+        { name: "Glock-18 | Fade (Factory New)", icon: "-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgposbaqKAxf0vL3dzxG6eO6nYeDg7miYr7VlWgHscN32LyT8dmm31XgrxdtZzvzJYDGIFM2Y16D-FfvlOu9m9bi66Oq9HyE", rarity: "Restricted", rarityColor: "#8847FF", wear: "Factory New", floatVal: 0.01205438, price: 520.00, stickers: [{ name: "Titan | Katowice 2014" }] },
       ];
 
       for (const item of demoItems) {
         await pool.query(
-          `INSERT INTO inventory_items (steam_account_id, asset_id, market_hash_name, icon_url, rarity, wear, tradable)
-           VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+          `INSERT INTO inventory_items (steam_account_id, asset_id, market_hash_name, icon_url, rarity, rarity_color, wear, float_value, tradable, stickers)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)
            ON CONFLICT DO NOTHING`,
-          [accountId, `demo_${Math.random().toString(36).slice(2)}`, item.name, item.icon, item.rarity, item.wear]
+          [accountId, `demo_${Math.random().toString(36).slice(2)}`, item.name, item.icon, item.rarity, item.rarityColor, item.wear, item.floatVal, JSON.stringify(item.stickers)]
         );
       }
 
@@ -928,10 +933,10 @@ router.post("/demo", async (req: Request, res: Response) => {
       for (const tx of demoTx) {
         const txDate = new Date(Date.now() - tx.days * 86400000).toISOString();
         await pool.query(
-          `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source)
-           VALUES ($1, $2, $3, $4, $5, $6, 'steam')
+          `INSERT INTO transactions (user_id, tx_id, type, market_hash_name, price_cents, tx_date, source, steam_account_id)
+           VALUES ($1, $2, $3, $4, $5, $6, 'steam', $7)
            ON CONFLICT DO NOTHING`,
-          [userId, `demo_tx_${Math.random().toString(36).slice(2)}`, tx.type, tx.name, tx.price, txDate]
+          [userId, `demo_tx_${Math.random().toString(36).slice(2)}`, tx.type, tx.name, tx.price, txDate, accountId]
         );
       }
 
@@ -946,15 +951,16 @@ router.post("/demo", async (req: Request, res: Response) => {
            VALUES ($1, 'outgoing', $2, $3, $4, $5, FALSE, NOW() - INTERVAL '${t.days} days', NOW() - INTERVAL '${t.days} days')
            ON CONFLICT DO NOTHING
            RETURNING id`,
-          [userId, `demo_offer_${Math.random().toString(36).slice(2)}`, t.partner, t.partnerName, t.status]
+          [userId, `d${Math.random().toString(36).slice(2, 12)}`, t.partner, t.partnerName, t.status]
         );
         if (offerRows.length > 0) {
           const offerId = offerRows[0].id;
+          const shortId = Math.random().toString(36).slice(2, 12);
           await pool.query(
             `INSERT INTO trade_offer_items (offer_id, side, asset_id, market_hash_name)
              VALUES ($1, 'give', $2, $3), ($1, 'receive', $4, $5)
              ON CONFLICT DO NOTHING`,
-            [offerId, `demo_g_${offerId}`, t.give, `demo_r_${offerId}`, t.recv]
+            [offerId, `dg${shortId}`, t.give, `dr${shortId}`, t.recv]
           );
         }
       }
@@ -964,6 +970,76 @@ router.post("/demo", async (req: Request, res: Response) => {
         const { recalculateCostBasis } = await import("../services/profitLoss.js");
         await recalculateCostBasis(userId);
       } catch {}
+
+      // Seed daily P&L snapshots (30 days) — realistic portfolio growth curve
+      const totalInvested = 269400; // sum of all buys in cents
+      const baseTotalValue = 240000; // starting value ~$2400
+      for (let d = 30; d >= 1; d--) {
+        // Simulate gradual growth with minor fluctuation
+        const progress = (30 - d) / 30;
+        const growthFactor = 1 + progress * 0.08; // ~8% growth over 30 days
+        const noise = 1 + (Math.sin(d * 1.7) * 0.015); // ±1.5% daily noise
+        const dayValue = Math.round(baseTotalValue * growthFactor * noise);
+        const unrealized = dayValue - totalInvested;
+        const realized = 6700; // from sold items ($46.50 + $12 + $8.50 earned vs cost)
+        await pool.query(
+          `INSERT INTO daily_pl_snapshots (user_id, snapshot_date, total_invested_cents, total_current_value_cents, realized_profit_cents, unrealized_profit_cents, cumulative_profit_cents)
+           VALUES ($1, CURRENT_DATE - $2::int, $3, $4, $5, $6, $7)
+           ON CONFLICT (user_id, snapshot_date) DO NOTHING`,
+          [userId, d, totalInvested, dayValue, realized, unrealized, realized + unrealized]
+        );
+      }
+
+      // Seed price alerts (so the alerts screen isn't empty)
+      const demoAlerts = [
+        { name: "AK-47 | Redline (Field-Tested)", condition: "below", threshold: 40.00, source: "steam", active: true },
+        { name: "M4A4 | Howl (Field-Tested)", condition: "above", threshold: 2000.00, source: "steam", active: true },
+        { name: "AWP | Asiimov (Field-Tested)", condition: "below", threshold: 30.00, source: "any", active: false },
+      ];
+      const alertIds: number[] = [];
+      for (const a of demoAlerts) {
+        const { rows: aRows } = await pool.query(
+          `INSERT INTO price_alerts (user_id, market_hash_name, condition, threshold, source, is_active, cooldown_minutes)
+           VALUES ($1, $2, $3, $4, $5, $6, 60)
+           ON CONFLICT DO NOTHING
+           RETURNING id`,
+          [userId, a.name, a.condition, a.threshold, a.source, a.active]
+        );
+        if (aRows.length > 0) alertIds.push(aRows[0].id);
+      }
+
+      // Seed watchlist items
+      const demoWatchlist = [
+        { name: "AWP | Dragon Lore (Factory New)", threshold: 8500.00, icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OtfAlf0Ob3djGZ0t-6lYyEhfbhJ7rQhmJf7dJ9j-vE8YjwhQ3lqkRuMD33JISUdQ85NArVqQTqx" },
+        { name: "★ Karambit | Doppler (Factory New)", threshold: 750.00, icon: "-9a81dlWLwJ2UXnSI7KLp8KJw8KJwPBTifFLlaLImGs0g67mSbqL0gDN4fGJ453VJfSCLxEMuw5Ayo4F1fdnSAfSOrEBbU6lAJ4Ev7OtfAlf0Ob3djGZ0t-6lYyEhfbhJ7rQhmJf7dJ9" },
+        { name: "Sticker | Titan | Katowice 2014", threshold: 45000.00, icon: "" },
+      ];
+      for (const w of demoWatchlist) {
+        await pool.query(
+          `INSERT INTO price_alerts (user_id, market_hash_name, condition, threshold, source, is_watchlist, icon_url, cooldown_minutes)
+           VALUES ($1, $2, 'below', $3, 'any', TRUE, $4, 60)
+           ON CONFLICT DO NOTHING`,
+          [userId, w.name, w.threshold, w.icon]
+        );
+      }
+
+      // Seed alert history (so notification history isn't empty)
+      if (alertIds.length > 0) {
+        const historyEntries = [
+          { alertIdx: 0, source: "steam", price: 39.50, message: "AK-47 | Redline (FT) dropped below $40.00 — now $39.50", daysAgo: 3 },
+          { alertIdx: 0, source: "steam", price: 38.20, message: "AK-47 | Redline (FT) dropped below $40.00 — now $38.20", daysAgo: 1 },
+          { alertIdx: 1, source: "steam", price: 2050.00, message: "M4A4 | Howl (FT) rose above $2,000 — now $2,050", daysAgo: 2 },
+        ];
+        for (const h of historyEntries) {
+          if (alertIds[h.alertIdx]) {
+            await pool.query(
+              `INSERT INTO alert_history (alert_id, user_id, source, price_usd, message, sent_at)
+               VALUES ($1, $2, $3, $4, $5, NOW() - INTERVAL '${h.daysAgo} days')`,
+              [alertIds[h.alertIdx], userId, h.source, h.price, h.message]
+            );
+          }
+        }
+      }
     }
 
     const token = jwt.sign(
