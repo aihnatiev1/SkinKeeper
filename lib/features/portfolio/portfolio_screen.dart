@@ -2267,7 +2267,7 @@ class _RarityBreakdown extends StatelessWidget {
               child: Row(
                 children: entries.map((e) {
                   final color = e.color != null
-                      ? Color(int.parse('FF${e.color}', radix: 16))
+                      ? Color(int.parse('FF${e.color!.replaceAll('#', '')}', radix: 16))
                       : AppTheme.textDisabled;
                   return Expanded(
                     flex: e.count,
@@ -2284,7 +2284,7 @@ class _RarityBreakdown extends StatelessWidget {
             runSpacing: 6,
             children: entries.map((e) {
               final color = e.color != null
-                  ? Color(int.parse('FF${e.color}', radix: 16))
+                  ? Color(int.parse('FF${e.color!.replaceAll('#', '')}', radix: 16))
                   : AppTheme.textDisabled;
               final pct = total > 0 ? (e.count / total * 100).round() : 0;
               return Row(
