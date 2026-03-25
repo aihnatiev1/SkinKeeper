@@ -41,7 +41,7 @@ class _QuantityPickerSheetState extends State<QuantityPickerSheet> {
     final totalPrice = unitPrice * _quantity;
 
     final rarityColor = rep.rarityColor != null
-        ? Color(int.parse('FF${rep.rarityColor}', radix: 16))
+        ? Color(int.parse('FF${rep.rarityColor!.replaceAll('#', '')}', radix: 16))
         : AppTheme.textDisabled;
 
     return Container(

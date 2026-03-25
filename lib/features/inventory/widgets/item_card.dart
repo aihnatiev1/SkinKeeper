@@ -50,7 +50,7 @@ class ItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rarityColor = item.rarityColor != null
-        ? Color(int.parse('FF${item.rarityColor}', radix: 16))
+        ? Color(int.parse('FF${item.rarityColor!.replaceAll('#', '')}', radix: 16))
         : AppTheme.textDisabled;
 
     final borderWidth = isSelected ? 1.5 : 0.5;

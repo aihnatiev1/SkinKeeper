@@ -133,7 +133,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     final item = _item;
     final currency = ref.watch(currencyProvider);
     final rarityColor = item.rarityColor != null
-        ? Color(int.parse('FF${item.rarityColor}', radix: 16))
+        ? Color(int.parse('FF${item.rarityColor!.replaceAll('#', '')}', radix: 16))
         : AppTheme.textDisabled;
 
     return Scaffold(
