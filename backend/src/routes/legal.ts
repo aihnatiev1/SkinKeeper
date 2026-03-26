@@ -10,6 +10,10 @@ router.get("/terms", (_req: Request, res: Response) => {
   res.type("html").send(termsOfServiceHTML);
 });
 
+router.get("/support", (_req: Request, res: Response) => {
+  res.type("html").send(supportHTML);
+});
+
 export default router;
 
 const privacyPolicyHTML = `<!DOCTYPE html>
@@ -72,7 +76,7 @@ const privacyPolicyHTML = `<!DOCTYPE html>
   <p>We may update this policy. Continued use of the app constitutes acceptance of changes.</p>
 
   <h2>9. Contact</h2>
-  <p>Questions? Contact us at <a href="mailto:support@skinkeeper.app">support@skinkeeper.app</a></p>
+  <p>Questions? Contact us at <a href="mailto:skillar.app@gmail.com">skillar.app@gmail.com</a></p>
 </body>
 </html>`;
 
@@ -146,6 +150,45 @@ const termsOfServiceHTML = `<!DOCTYPE html>
   <p>We may modify these terms at any time. Continued use constitutes acceptance.</p>
 
   <h2>12. Contact</h2>
-  <p>Questions? Contact us at <a href="mailto:support@skinkeeper.app">support@skinkeeper.app</a></p>
+  <p>Questions? Contact us at <a href="mailto:skillar.app@gmail.com">skillar.app@gmail.com</a></p>
+</body>
+</html>`;
+
+const supportHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkinKeeper — Support</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #e0e0e0; background: #1a1a2e; line-height: 1.6; }
+    h1 { color: #6c5ce7; } h2 { color: #00d2d3; margin-top: 2em; } h3 { color: #dfe6e9; margin-top: 1.5em; }
+    a { color: #6c5ce7; }
+  </style>
+</head>
+<body>
+  <h1>Support</h1>
+  <p>Need help with <strong>SkinKeeper</strong>? We're here to assist.</p>
+
+  <h2>Contact Us</h2>
+  <p>Email: <a href="mailto:skillar.app@gmail.com">skillar.app@gmail.com</a></p>
+  <p>We typically respond within 24 hours.</p>
+
+  <h2>Common Questions</h2>
+
+  <h3>How do I connect my Steam account?</h3>
+  <p>Open the app, tap "Sign in with Steam", and follow the authentication flow. Your Steam credentials are handled securely through Steam's official login.</p>
+
+  <h3>How do I cancel my subscription?</h3>
+  <p>Go to your device's app store settings (App Store or Google Play) and manage your subscriptions there. Cancel at least 24 hours before the renewal date.</p>
+
+  <h3>Why are my prices outdated?</h3>
+  <p>Prices are updated regularly from multiple sources. Pull down to refresh your inventory, or check back shortly — price updates may be temporarily delayed.</p>
+
+  <h3>How do I delete my account?</h3>
+  <p>Send us an email at <a href="mailto:skillar.app@gmail.com">skillar.app@gmail.com</a> with your request. We will permanently delete all your data from our servers.</p>
+
+  <h3>Can I link multiple Steam accounts?</h3>
+  <p>Yes. Go to Settings and tap "Link Account" to add additional Steam accounts. You can switch between them at any time.</p>
 </body>
 </html>`;
