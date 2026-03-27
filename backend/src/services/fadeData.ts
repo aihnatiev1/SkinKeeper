@@ -8,13 +8,12 @@
 import axios from "axios";
 
 const BLUEPERCENT_URL =
-  "https://raw.githubusercontent.com/niclas-niclas/csgo-trader-extension/master/extension/datasources/bluepercent.json";
+  "https://raw.githubusercontent.com/gergelyszabo94/csgo-trader-extension/master/extension/src/utils/static/bluepercent.json";
 
 // Alternative URLs to try if the primary fails
 const FALLBACK_URLS = [
-  "https://raw.githubusercontent.com/niclas-niclas/csgo-trader-extension/refs/heads/master/extension/datasources/bluepercent.json",
-  "https://raw.githubusercontent.com/niclas-niclas/csgo-trader-extension/main/extension/datasources/bluepercent.json",
-  "https://raw.githubusercontent.com/gergelyszabo94/csgo-trader-extension/master/extension/datasources/bluepercent.json",
+  "https://raw.githubusercontent.com/gergelyszabo94/csgo-trader-extension/main/extension/src/utils/static/bluepercent.json",
+  "https://raw.githubusercontent.com/niclas-niclas/csgo-trader-extension/master/extension/src/utils/static/bluepercent.json",
 ];
 
 /**
@@ -64,23 +63,34 @@ export async function initFadeData(): Promise<void> {
 
       const newCache = new Map<string, Map<number, number>>();
 
-      for (const [knifeType, seeds] of Object.entries(data)) {
-        if (!seeds || typeof seeds !== "object") continue;
+      for (const [knifeType, value] of Object.entries(data)) {
+        if (!value || typeof value !== "object") continue;
         const seedMap = new Map<number, number>();
 
-        for (const [seedStr, value] of Object.entries(seeds as Record<string, any>)) {
-          const seed = parseInt(seedStr);
-          // value can be a number or { playside: N, backside: N }
-          let percent: number;
-          if (typeof value === "number") {
-            percent = value;
-          } else if (typeof value === "object" && value?.playside != null) {
-            percent = value.playside;
-          } else {
-            continue;
+        // New format: { playside: { seed: percent }, backside: { ... } }
+        const playside = (value as any).playside;
+        if (playside && typeof playside === "object") {
+          for (const [seedStr, pct] of Object.entries(playside as Record<string, number>)) {
+            const seed = parseInt(seedStr);
+            if (!isNaN(seed) && typeof pct === "number" && pct > 0) {
+              seedMap.set(seed, pct);
+            }
           }
-          if (!isNaN(seed) && percent > 0) {
-            seedMap.set(seed, percent);
+        } else {
+          // Legacy format: { seed: percent } or { seed: { playside: N } }
+          for (const [seedStr, seedVal] of Object.entries(value as Record<string, any>)) {
+            const seed = parseInt(seedStr);
+            let percent: number;
+            if (typeof seedVal === "number") {
+              percent = seedVal;
+            } else if (typeof seedVal === "object" && seedVal?.playside != null) {
+              percent = seedVal.playside;
+            } else {
+              continue;
+            }
+            if (!isNaN(seed) && percent > 0) {
+              seedMap.set(seed, percent);
+            }
           }
         }
 
