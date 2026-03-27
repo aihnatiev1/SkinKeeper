@@ -17,11 +17,21 @@ class PaywallScreen extends ConsumerStatefulWidget {
 class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   bool _selectedYearly = true;
   bool _purchasing = false;
+  bool _loadingProducts = true;
 
   @override
   void initState() {
     super.initState();
     Analytics.paywallViewed();
+    _loadProducts();
+  }
+
+  Future<void> _loadProducts() async {
+    final iap = ref.read(iapServiceProvider);
+    if (iap.products.isEmpty) {
+      await iap.loadProducts();
+    }
+    if (mounted) setState(() => _loadingProducts = false);
   }
 
   @override
@@ -96,6 +106,12 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
             const SizedBox(height: 28),
 
             if (!isPremium) ...[
+              if (_loadingProducts)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: CircularProgressIndicator(color: AppTheme.primary),
+                )
+              else ...[
               // Plan selector
               _buildPlanSelector()
                   .animate()
@@ -122,6 +138,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               ),
               const SizedBox(height: 8),
 
+              ], // end of !_loadingProducts
               // Legal
               const Text(
                 'Free trial available for yearly plan. No charge during trial period. '
@@ -287,12 +304,16 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   }
 
   Widget _buildPlanSelector() {
+    final iap = ref.read(iapServiceProvider);
+    final monthly = iap.monthlyProduct;
+    final yearly = iap.yearlyProduct;
+
     return Row(
       children: [
         Expanded(
           child: _PlanCard(
             title: 'Monthly',
-            price: '\$4.99',
+            price: monthly?.price ?? '\$4.99',
             subtitle: 'per month',
             isSelected: !_selectedYearly,
             onTap: () {
@@ -305,7 +326,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
         Expanded(
           child: _PlanCard(
             title: 'Yearly',
-            price: '\$34.99',
+            price: yearly?.price ?? '\$34.99',
             subtitle: '7-day free trial',
             badge: 'Best Value',
             isSelected: _selectedYearly,
@@ -349,7 +370,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               : Text(
                   _selectedYearly
                       ? 'Start 7-Day Free Trial'
-                      : 'Subscribe Monthly — \$4.99',
+                      : 'Subscribe Monthly — ${ref.read(iapServiceProvider).monthlyProduct?.price ?? '\$4.99'}',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
