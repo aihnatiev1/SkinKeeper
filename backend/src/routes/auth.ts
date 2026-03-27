@@ -461,6 +461,12 @@ router.put("/accounts/:accountId/active", authMiddleware, async (req: AuthReques
 // DELETE /api/auth/accounts/:accountId — Unlink an account
 router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    // Block demo account from deleting
+    if (req.isDemo) {
+      res.status(403).json({ error: "Cannot modify demo account" });
+      return;
+    }
+
     const accountId = parseInt(req.params.accountId as string);
 
     // Verify the account belongs to this user
@@ -861,9 +867,9 @@ router.post("/demo", async (req: Request, res: Response) => {
     // Upsert demo user
     const { rows } = await pool.query(
       `INSERT INTO users (steam_id, display_name, avatar_url, is_premium)
-       VALUES ($1, $2, $3, TRUE)
+       VALUES ($1, $2, $3, FALSE)
        ON CONFLICT (steam_id)
-       DO UPDATE SET display_name = $2, avatar_url = $3, is_premium = TRUE
+       DO UPDATE SET display_name = $2, avatar_url = $3, is_premium = FALSE
        RETURNING id`,
       [demoSteamId, demoName, demoAvatar]
     );
@@ -1049,7 +1055,7 @@ router.post("/demo", async (req: Request, res: Response) => {
     );
 
     console.log(`[Auth] Demo login for user ${userId}`);
-    res.json({ token, user: { steam_id: demoSteamId, display_name: demoName, avatar_url: demoAvatar, is_premium: true } });
+    res.json({ token, user: { steam_id: demoSteamId, display_name: demoName, avatar_url: demoAvatar, is_premium: false } });
   } catch (err) {
     console.error("Demo auth error:", err);
     res.status(500).json({ error: "Demo login failed" });

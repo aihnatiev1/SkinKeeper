@@ -380,6 +380,11 @@ ALTER TABLE steam_accounts ALTER COLUMN session_method TYPE VARCHAR(30);
 ALTER TABLE price_alerts ADD COLUMN IF NOT EXISTS is_watchlist BOOLEAN DEFAULT FALSE;
 ALTER TABLE price_alerts ADD COLUMN IF NOT EXISTS icon_url TEXT;
 
+-- 028: Fix sell_operations FK — allow account deletion
+ALTER TABLE sell_operations DROP CONSTRAINT IF EXISTS sell_operations_steam_account_id_fkey;
+ALTER TABLE sell_operations ADD CONSTRAINT sell_operations_steam_account_id_fkey
+  FOREIGN KEY (steam_account_id) REFERENCES steam_accounts(id) ON DELETE SET NULL;
+
 -- 026: Shared current_prices table — one row per item per source, UPSERT on refresh
 CREATE TABLE IF NOT EXISTS current_prices (
   market_hash_name VARCHAR(255) NOT NULL,
