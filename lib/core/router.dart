@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/steam_auth_service.dart';
 import '../features/auth/login_screen.dart';
+import '../features/auth/initial_sync_screen.dart';
 import '../features/auth/session_provider.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/portfolio/portfolio_screen.dart';
@@ -17,6 +18,7 @@ import '../features/transactions/transactions_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/settings/linked_accounts_screen.dart';
 import '../features/purchases/paywall_screen.dart';
+import '../core/sync_state_provider.dart';
 import '../features/alerts/alerts_screen.dart';
 import '../features/alerts/create_alert_screen.dart';
 import '../features/market/deals_screen.dart';
@@ -64,7 +66,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // 3. Якщо залогінені, але ми на сервісних екранах - на головну
       if (isOnLogin || isOnLoading) {
-        return '/portfolio';
+        final needsSync = ref.read(needsInitialSyncProvider);
+        return needsSync ? '/initial-sync' : '/portfolio';
       }
 
       // Session reauth is NOT forced — user can browse with public data.
@@ -75,6 +78,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/loading', builder: (_, _) => const _LoadingScreen()),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/initial-sync', builder: (_, _) => const InitialSyncScreen()),
       // Використовуємо LoginScreen для сесії, але з розумінням контексту
       GoRoute(path: '/session', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/link-account', builder: (_, _) => const LoginScreen(isLinking: true)),
