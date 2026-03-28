@@ -236,20 +236,25 @@ class _PriceHistoryChartState extends State<PriceHistoryChart> {
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 52,
+                        reservedSize: 62,
                         interval: _interval(minY, maxY),
                         getTitlesWidget: (value, meta) {
                           if (value <= meta.min || value >= meta.max) {
                             return const SizedBox.shrink();
                           }
+                          final label = widget.currency != null
+                              ? widget.currency!.format(value, decimals: value >= 100 ? 0 : 2)
+                              : '\$${value < 10 ? value.toStringAsFixed(2) : NumberFormat('#,##0', 'en_US').format(value.round())}';
                           return Padding(
-                            padding: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.only(right: 4),
                             child: Text(
-                              widget.currency?.format(value) ?? '\$${value < 10 ? value.toStringAsFixed(2) : NumberFormat('#,##0', 'en_US').format(value.round())}',
+                              label,
                               style: AppTheme.captionSmall.copyWith(
+                                fontSize: 9,
                                 color: AppTheme.textDisabled,
                                 fontFeatures: const [FontFeature.tabularFigures()],
                               ),
+                              maxLines: 1,
                             ),
                           );
                         },
