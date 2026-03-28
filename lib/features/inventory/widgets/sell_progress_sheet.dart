@@ -282,7 +282,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                ref.read(currencyProvider).format(item.priceCents / 100),
+                '${ref.read(currencyProvider).symbol}${CurrencyInfo.groupThousands((item.priceCents / 100).toStringAsFixed(2))}',
                 style: AppTheme.mono.copyWith(
                   fontWeight: FontWeight.w600,
                   color: AppTheme.profit,
@@ -370,7 +370,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
     final totalListedCents = operation.items
         .where((i) => i.status == SellItemStatus.listed)
         .fold<int>(0, (sum, i) => sum + i.priceCents);
-    final totalListedStr = currency.format(totalListedCents / 100);
+    final totalListedStr = '${currency.symbol}${CurrencyInfo.groupThousands((totalListedCents / 100).toStringAsFixed(2))}';
 
     return Container(
       padding: const EdgeInsets.all(14),
