@@ -459,6 +459,22 @@ class QuickPriceResult {
   }
 }
 
+QuickPriceResult? _localFallback(QuickPriceRequest request) {
+  final price = request.fallbackPriceUsd;
+  if (price == null || price <= 0) return null;
+  final cents = (price * 100).round();
+  final valveFee = (cents * 0.05).floor().clamp(1, cents);
+  final cs2Fee = (cents * 0.10).floor().clamp(1, cents);
+  final sellerReceives = cents - valveFee - cs2Fee;
+  final marketUrl = 'https://steamcommunity.com/market/listings/730/${Uri.encodeComponent(request.marketHashName)}';
+  return QuickPriceResult(
+    sellerReceivesCents: (sellerReceives - 1).clamp(1, sellerReceives),
+    stale: true,
+    source: 'local',
+    marketUrl: marketUrl,
+  );
+}
+
 final quickPriceProvider =
     AutoDisposeFutureProvider.family<QuickPriceResult, QuickPriceRequest>((ref, request) async {
   final api = ref.read(apiClientProvider);
@@ -468,7 +484,13 @@ final quickPriceProvider =
     if (request.accountId != null) {
       params['accountId'] = request.accountId.toString();
     }
-    final response = await api.get('/market/quickprice/$encoded', queryParameters: params);
+    // Race: backend has 3s to respond, otherwise use local fallback
+    final response = await api.get(
+      '/market/quickprice/$encoded',
+      queryParameters: params,
+    ).timeout(const Duration(seconds: 3), onTimeout: () {
+      throw TimeoutException('quickprice timeout');
+    });
     return QuickPriceResult(
       sellerReceivesCents: response.data['sellerReceivesCents'] as int,
       stale: response.data['stale'] as bool? ?? false,
@@ -479,21 +501,8 @@ final quickPriceProvider =
       currencySymbol: response.data['currencySymbol'] as String? ?? '\$',
     );
   } catch (_) {
-    // Fallback: calculate from local price data if backend has no Steam price
-    final price = request.fallbackPriceUsd;
-    if (price != null && price > 0) {
-      final cents = (price * 100).round();
-      final valveFee = (cents * 0.05).floor().clamp(1, cents);
-      final cs2Fee = (cents * 0.10).floor().clamp(1, cents);
-      final sellerReceives = cents - valveFee - cs2Fee;
-      final marketUrl = 'https://steamcommunity.com/market/listings/730/${Uri.encodeComponent(request.marketHashName)}';
-      return QuickPriceResult(
-        sellerReceivesCents: (sellerReceives - 1).clamp(1, sellerReceives),
-        stale: true,
-        source: 'local',
-        marketUrl: marketUrl,
-      );
-    }
+    final fallback = _localFallback(request);
+    if (fallback != null) return fallback;
     rethrow;
   }
 });
