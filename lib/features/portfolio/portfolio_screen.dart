@@ -530,37 +530,43 @@ class _PortfolioHeader extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'TOTAL PORTFOLIO',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                      color: AppTheme.textDisabled,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  portfolio.when(
-                    data: (data) => AnimatedNumber(
-                      value: data.totalValue,
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1.5,
-                        color: Colors.white,
-                        fontFeatures: [FontFeature.tabularFigures()],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TOTAL PORTFOLIO',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: AppTheme.textDisabled,
                       ),
-                      formatter: (v) => currency.format(v),
-                    ).animate().fadeIn(duration: 600.ms),
-                    loading: () => const ShimmerBox(width: 200, height: 40),
-                    error: (_, _) => const SizedBox.shrink(),
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 6),
+                    portfolio.when(
+                      data: (data) => FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: AnimatedNumber(
+                          value: data.totalValue,
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1.5,
+                            color: Colors.white,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                          formatter: (v) => currency.format(v),
+                        ),
+                      ).animate().fadeIn(duration: 600.ms),
+                      loading: () => const ShimmerBox(width: 200, height: 40),
+                      error: (_, _) => const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               const AccountScopeChip(),
             ],
           ),
@@ -849,12 +855,19 @@ class _PillTabs extends StatelessWidget {
                   ] : [],
                 ),
                 child: Center(
-                  child: Text(
-                    e.value,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: active ? Colors.white : AppTheme.textMuted,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        e.value,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: active ? Colors.white : AppTheme.textMuted,
+                        ),
+                      ),
                     ),
                   ),
                 ),
