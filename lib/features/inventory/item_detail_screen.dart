@@ -1,6 +1,7 @@
 import 'dart:developer' as dev;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -616,11 +617,6 @@ class _PLSection extends ConsumerWidget {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
-                  if (!isPremium) {
-                    context.push('/premium');
-                    return;
-                  }
                   showGlassSheet(
                     context,
                     _AddPurchaseSheet(
@@ -784,6 +780,21 @@ class _AddPurchaseSheetState extends State<_AddPurchaseSheet> {
 
       HapticFeedback.mediumImpact();
       if (mounted) context.pop();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403 &&
+          (e.response?.data as Map<String, dynamic>?)?['error'] == 'premium_required') {
+        if (mounted) {
+          context.pop(); // close sheet
+          context.push('/premium');
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to save'),
+            backgroundColor: AppTheme.loss,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
