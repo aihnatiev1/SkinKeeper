@@ -193,7 +193,9 @@ class TransactionsScreen extends ConsumerWidget {
             // Filters — single row: type chips + item/date icon buttons
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                 children: [
                   for (final entry in [
                     (null, 'All'),
@@ -213,7 +215,7 @@ class TransactionsScreen extends ConsumerWidget {
                         },
                       ),
                     ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   // Item search
                   _IconFilterButton(
                     icon: Icons.search,
@@ -251,6 +253,7 @@ class TransactionsScreen extends ConsumerWidget {
                   ],
                 ],
               ),
+            ),
             ),
             const SizedBox(height: 4),
 

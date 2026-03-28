@@ -224,8 +224,7 @@ class SettingsScreen extends ConsumerWidget {
                   title: Text(l10n.privacyPolicy),
                   trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
                   onTap: () {
-                    final baseUrl = AppConstants.apiBaseUrl.replaceAll('/api', '');
-                    launchUrl(Uri.parse('$baseUrl/legal/privacy'));
+                    launchUrl(Uri.parse('https://api.skinkeeper.store/legal/privacy'));
                   },
                 ),
                 const Divider(height: 1),
@@ -234,8 +233,7 @@ class SettingsScreen extends ConsumerWidget {
                   title: Text(l10n.termsOfService),
                   trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
                   onTap: () {
-                    final baseUrl = AppConstants.apiBaseUrl.replaceAll('/api', '');
-                    launchUrl(Uri.parse('$baseUrl/legal/terms'));
+                    launchUrl(Uri.parse('https://api.skinkeeper.store/legal/terms'));
                   },
                 ),
               ],
