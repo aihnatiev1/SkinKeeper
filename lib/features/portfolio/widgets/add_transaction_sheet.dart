@@ -313,8 +313,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                     RegExp(r'^\d*[.,]?\d{0,2}')),
+                                TextInputFormatter.withFunction((oldValue, newValue) {
+                                  return newValue.copyWith(text: newValue.text.replaceAll(',', '.'));
+                                }),
                                 TextInputFormatter.withFunction((old, next) {
-                                  final v = double.tryParse(next.text.replaceAll(',', '.')) ?? 0;
+                                  final v = double.tryParse(next.text) ?? 0;
                                   return v <= 100000 ? next : old;
                                 }),
                               ],

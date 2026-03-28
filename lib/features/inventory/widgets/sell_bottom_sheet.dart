@@ -881,7 +881,10 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             onChanged: _onCustomPriceChanged,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d{0,2}')),
+              TextInputFormatter.withFunction((oldValue, newValue) {
+                return newValue.copyWith(text: newValue.text.replaceAll(',', '.'));
+              }),
             ],
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
             decoration: InputDecoration(
