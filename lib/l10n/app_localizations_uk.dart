@@ -27,7 +27,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get tabHistory => 'Історія';
 
   @override
-  String get tabSettings => 'Налаштування';
+  String get tabSettings => 'Меню';
 
   @override
   String get portfolioTitle => 'Портфель';
