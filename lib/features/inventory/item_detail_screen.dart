@@ -1090,7 +1090,7 @@ class _SellActions extends ConsumerWidget {
             data: (result) {
               final priceCents = result.sellerReceivesCents;
               final stale = result.stale;
-              final priceStr = currency.format(priceCents / 100);
+              final priceStr = result.formatPrice(priceCents);
               return Column(
                 children: [
                   if (stale)
@@ -1122,7 +1122,7 @@ class _SellActions extends ConsumerWidget {
                         ),
                       ),
                     ),
-                  FeeBreakdown(sellerReceivesCents: priceCents, currency: currency),
+                  FeeBreakdown(sellerReceivesCents: priceCents, walletSymbol: result.currencySymbol),
                   const SizedBox(height: AppTheme.s10),
                   Row(
                     children: [

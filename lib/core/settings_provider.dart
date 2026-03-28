@@ -20,17 +20,17 @@ class CurrencyInfo {
 
   String format(double usd, {int decimals = 2}) {
     final converted = usd * rate;
-    return '$symbol${_groupThousands(converted.toStringAsFixed(decimals))}';
+    return '$symbol${groupThousands(converted.toStringAsFixed(decimals))}';
   }
 
   String formatWithSign(double usd, {int decimals = 2}) {
     final converted = usd * rate;
     final prefix = converted >= 0 ? '+' : '';
-    return '$prefix$symbol${_groupThousands(converted.abs().toStringAsFixed(decimals))}';
+    return '$prefix$symbol${groupThousands(converted.abs().toStringAsFixed(decimals))}';
   }
 
   /// Insert comma as thousands separator: 15860.47 → 15,860.47
-  static String _groupThousands(String formatted) {
+  static String groupThousands(String formatted) {
     final parts = formatted.split('.');
     final intPart = parts[0];
     final buf = StringBuffer();

@@ -10,6 +10,7 @@ class FeeBreakdown extends StatelessWidget {
   final bool compact;
   final WalletInfo? wallet;
   final CurrencyInfo? currency;
+  final String? walletSymbol;
 
   const FeeBreakdown({
     super.key,
@@ -17,9 +18,16 @@ class FeeBreakdown extends StatelessWidget {
     this.compact = false,
     this.wallet,
     this.currency,
+    this.walletSymbol,
   });
 
-  String _fmt(int cents) => currency?.format(cents / 100) ?? '\$${(cents / 100).toStringAsFixed(2)}';
+  String _fmt(int cents) {
+    // If walletSymbol is provided, format in native wallet currency (no conversion)
+    if (walletSymbol != null) {
+      return '$walletSymbol${CurrencyInfo.groupThousands((cents / 100).toStringAsFixed(2))}';
+    }
+    return currency?.format(cents / 100) ?? '\$${(cents / 100).toStringAsFixed(2)}';
+  }
 
   @override
   Widget build(BuildContext context) {
