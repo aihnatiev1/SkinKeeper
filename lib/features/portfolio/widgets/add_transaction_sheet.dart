@@ -95,7 +95,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       _selectedIconUrl = widget.initialIconUrl;
     }
     if (widget.initialPriceUsd != null) {
-      _priceController.text = widget.initialPriceUsd!.toStringAsFixed(2);
+      final rate = ref.read(currencyProvider).rate;
+      final priceInUserCurrency = widget.initialPriceUsd! * rate;
+      _priceController.text = priceInUserCurrency.toStringAsFixed(2);
     }
     if (widget.initialQty != null) {
       _qtyController.text = widget.initialQty!.toString();
@@ -141,12 +143,16 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     setState(() => _saving = true);
 
     try {
+      final currency = ref.read(currencyProvider);
+      // Convert from user currency to USD cents for backend storage
+      final usdCents = (currency.rate > 0) ? (_priceCents / currency.rate).round() : _priceCents;
+
       if (widget.editMode) {
         final api = ref.read(apiClientProvider);
         await api.put('/transactions/item/replace', data: {
           'marketHashName': _selectedItem!,
           'qty': _quantity,
-          'priceCentsPerUnit': _priceCents,
+          'priceCentsPerUnit': usdCents,
           'type': _type,
           if (_portfolioId != null) 'portfolioId': _portfolioId,
         });
@@ -154,7 +160,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         final service = ref.read(manualTxServiceProvider);
         await service.addTransaction(
           marketHashName: _selectedItem!,
-          priceCentsPerUnit: _priceCents,
+          priceCentsPerUnit: usdCents,
           quantity: _quantity,
           type: _type,
           date: _date,
@@ -208,9 +214,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     final currency = ref.watch(currencyProvider);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    return Container(
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.92,
+        maxHeight: MediaQuery.of(context).size.height * 0.92 - bottomInset,
       ),
       decoration: const BoxDecoration(
         color: AppTheme.bgSecondary,
@@ -301,7 +309,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                               keyboardType:
                                   const TextInputType.numberWithOptions(
                                       decimal: true),
-                              prefixIcon: Icons.attach_money_rounded,
+                              prefixText: currency.symbol,
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                     RegExp(r'^\d*[.,]?\d{0,2}')),
@@ -365,7 +373,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                             ),
                           ),
                           Text(
-                            currency.format(_totalPrice),
+                            '${currency.symbol}${CurrencyInfo.groupThousands(_totalPrice.toStringAsFixed(2))}',
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
@@ -498,6 +506,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -577,6 +586,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     required TextEditingController controller,
     required String hint,
     IconData? prefixIcon,
+    String? prefixText,
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     ValueChanged<String>? onChanged,
@@ -615,6 +625,8 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           prefixIcon: prefixIcon != null
               ? Icon(prefixIcon, size: 18, color: AppTheme.textMuted)
               : null,
+          prefixText: prefixText,
+          prefixStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textMuted),
           border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
