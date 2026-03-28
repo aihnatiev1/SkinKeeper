@@ -1487,10 +1487,11 @@ class _BestBuySellSummary extends StatelessWidget {
                 Icon(Icons.shopping_cart_outlined,
                     size: 14, color: buyColor.withValues(alpha: 0.7)),
                 const SizedBox(width: 8),
-                Text('Cheapest Buy', style: TextStyle(
-                  fontSize: 12, color: AppTheme.textSecondary,
-                )),
-                const Spacer(),
+                Expanded(
+                  child: Text('Cheapest Buy', style: TextStyle(
+                    fontSize: 12, color: AppTheme.textSecondary,
+                  )),
+                ),
                 Container(
                   width: 6, height: 6,
                   decoration: BoxDecoration(color: buyColor, shape: BoxShape.circle),
@@ -1501,15 +1502,11 @@ class _BestBuySellSummary extends StatelessWidget {
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
                 ),
                 const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    currency.format(cheapest.value),
-                    style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w700,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
+                Text(
+                  currency.format(cheapest.value),
+                  style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w700,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
@@ -1547,34 +1544,45 @@ class _BestBuySellSummary extends StatelessWidget {
                   Icon(Icons.trending_up_rounded,
                       size: 14, color: AppTheme.profit),
                   const SizedBox(width: 8),
-                  Text('Potential', style: TextStyle(
-                    fontSize: 12, color: AppTheme.textSecondary,
-                  )),
-                  const Spacer(),
-                  Text(
-                    '+${currency.format(profit)}',
-                    style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.profit,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                  Expanded(
+                    child: Text('Potential', style: TextStyle(
+                      fontSize: 12, color: AppTheme.textSecondary,
+                    )),
+                  ),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '+${currency.format(profit)}',
+                            style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.profit,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          if (profitPct != null) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.profit.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '+${profitPct.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 10, fontWeight: FontWeight.w700,
+                                  color: AppTheme.profit,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                  if (profitPct != null) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.profit.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        '+${profitPct.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: 10, fontWeight: FontWeight.w700,
-                          color: AppTheme.profit,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ],
