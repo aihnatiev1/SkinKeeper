@@ -551,8 +551,11 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     required QuickPriceResult quickPriceResult,
   }) {
     final qp = quickPriceResult;
-    final priceStr = qp.formatPrice(quickPriceCents);
-    final totalCents = quickPriceCents * count;
+    // quickPriceCents = sellerReceives — calculate buyerPays for display
+    final fees = calculateFees(quickPriceCents);
+    final buyerPaysCents = fees.buyerPaysCents;
+    final priceStr = qp.formatPrice(buyerPaysCents);
+    final totalCents = buyerPaysCents * count;
     final totalStr = qp.formatPrice(totalCents);
 
     return Column(
@@ -910,10 +913,11 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
           ),
           const SizedBox(height: 10),
 
-          // Live fee breakdown for custom price (amounts in active input currency)
+          // Live fee breakdown for custom price — user enters buyer-pays (listing price)
           if (_customPriceCents != null && _customPriceCents! > 0) ...[
             FeeBreakdown(
               sellerReceivesCents: _customPriceCents!,
+              fromBuyerPays: true,
               compact: false,
               currency: CurrencyInfo(code: walletCurrencyCode, symbol: activeSymbol, rate: 1.0),
             ),
@@ -926,7 +930,11 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             height: 48,
             child: ElevatedButton(
               onPressed: _customPriceCents != null && _customPriceCents! > 0 && !_isSelling
-                  ? () => _startSell(_customPriceCents!, priceCurrencyId: activeCurrencyId)
+                  ? () {
+                      // User enters buyer-pays price — convert to seller-receives for backend
+                      final fees = calculateFeesFromBuyerPays(_customPriceCents!);
+                      _startSell(fees.sellerReceivesCents, priceCurrencyId: activeCurrencyId);
+                    }
                   : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,

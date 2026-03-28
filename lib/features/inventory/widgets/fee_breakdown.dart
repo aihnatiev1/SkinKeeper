@@ -11,6 +11,8 @@ class FeeBreakdown extends StatelessWidget {
   final WalletInfo? wallet;
   final CurrencyInfo? currency;
   final String? walletSymbol;
+  /// When true, sellerReceivesCents is actually buyerPaysCents (listing price input)
+  final bool fromBuyerPays;
 
   const FeeBreakdown({
     super.key,
@@ -19,6 +21,7 @@ class FeeBreakdown extends StatelessWidget {
     this.wallet,
     this.currency,
     this.walletSymbol,
+    this.fromBuyerPays = false,
   });
 
   String _fmt(int cents) {
@@ -31,7 +34,9 @@ class FeeBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fees = calculateFees(sellerReceivesCents);
+    final fees = fromBuyerPays
+        ? calculateFeesFromBuyerPays(sellerReceivesCents)
+        : calculateFees(sellerReceivesCents);
 
     if (compact) {
       return Row(
