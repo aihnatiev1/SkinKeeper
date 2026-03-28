@@ -37,6 +37,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   int _logoTapCount = 0;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.isLinking) {
+      AccountsNotifier.markLinkPending();
+    }
+  }
+
+  @override
   void dispose() {
     _pollTimer?.cancel();
     super.dispose();
