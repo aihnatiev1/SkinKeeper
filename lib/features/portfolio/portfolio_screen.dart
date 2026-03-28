@@ -1331,11 +1331,14 @@ class _MiniStat extends StatelessWidget {
         children: [
           Text(label.toUpperCase(), style: AppTheme.label.copyWith(fontSize: 9)),
           const SizedBox(height: 3),
-          Text(value, style: TextStyle(
-            fontSize: 13, fontWeight: FontWeight.w600,
-            color: valueColor ?? AppTheme.textPrimary,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          )),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w600,
+              color: valueColor ?? AppTheme.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            )),
+          ),
         ],
       ),
     );
