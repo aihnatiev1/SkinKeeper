@@ -28,7 +28,8 @@ class SellBottomSheet extends ConsumerStatefulWidget {
 class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   bool _showCustomPrice = false;
   bool _isClosing = false;
-  bool _isSelling = false; // Fix 9: prevent double-tap
+  bool _isSelling = false;
+  bool _refreshScheduled = false; // Fix 9: prevent double-tap
   bool _customPriceInUsd = false; // true = user toggled to USD for custom price
   final _priceController = TextEditingController();
   int? _customPriceCents;
@@ -252,6 +253,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                     count: count,
                     sessionWarning: ss.status == 'expiring',
                     wallet: wallet,
+                    item: item,
+                    activeAccountId: activeAccountId,
                   );
                 }
                 // Session expired while sheet is open -- minimal prompt
@@ -438,6 +441,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     required int count,
     required bool sessionWarning,
     required WalletInfo wallet,
+    required InventoryItem item,
+    required int? activeAccountId,
   }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -506,9 +511,24 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
 
         // Price section
         quickPriceAsync.when(
-          data: (result) =>
-              _buildPriceSection(result.sellerReceivesCents, count, wallet,
-                  stale: result.stale, marketUrl: result.marketUrl, quickPriceResult: result),
+          data: (result) {
+              // Auto-refresh stale price — backend caches live price in background,
+              // so the second request will return the exact price from cache
+              if (result.stale && !_refreshScheduled) {
+                _refreshScheduled = true;
+                Future.delayed(const Duration(seconds: 2), () {
+                  if (mounted) {
+                    ref.invalidate(quickPriceProvider(QuickPriceRequest(
+                      marketHashName: item.marketHashName,
+                      fallbackPriceUsd: item.bestPrice ?? item.steamPrice,
+                      accountId: item.accountId ?? activeAccountId,
+                    )));
+                  }
+                });
+              }
+              return _buildPriceSection(result.sellerReceivesCents, count, wallet,
+                  stale: result.stale, marketUrl: result.marketUrl, quickPriceResult: result);
+          },
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Center(
