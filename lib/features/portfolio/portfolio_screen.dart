@@ -418,35 +418,39 @@ class _PLQuickSummary extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          currency.formatWithSign(data.totalProfit),
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: plColor,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: plColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            AppTheme.pctText(data.totalProfitPct),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          Text(
+                            currency.formatWithSign(data.totalProfit),
                             style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
                               color: plColor,
+                              fontFeatures: const [FontFeature.tabularFigures()],
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: plColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              AppTheme.pctText(data.totalProfitPct),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: plColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
