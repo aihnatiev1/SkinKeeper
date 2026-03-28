@@ -293,9 +293,9 @@ export interface QuickSellResult {
 //   2. Steam Market Depth lowestAsk (USD, converted to wallet currency)
 //   3. Cached steam price from current_prices (USD, converted to wallet currency)
 //
-// Step 0 saves ~90% of Steam API calls — batch crawler refreshes every 90 min,
-// so most items have a recent price. Only truly stale items hit the live API.
-const QUICK_SELL_FRESH_MS = 15 * 60_000; // 15 min — cached price considered fresh
+// In-memory cache for quickSellPrice per (item, currency) — avoids hitting Steam API repeatedly
+const quickPriceCache = new Map<string, { sellerReceivesCents: number; ts: number }>();
+const QUICK_PRICE_CACHE_MS = 15 * 60_000; // 15 min
 
 export async function quickSellPrice(
   marketHashName: string,
@@ -315,23 +315,22 @@ export async function quickSellPrice(
   };
 
   const currencyCode = getCurrencyInfo(walletCurrencyId)?.code ?? "USD";
+  const cacheKey = `${marketHashName}:${walletCurrencyId}`;
 
-  // 0. Fresh cached steam price (< 15 min) — use only for USD wallets (no conversion needed)
-  if (walletCurrencyId === 1) {
-    const fresh = await getFreshSteamPrice(marketHashName, QUICK_SELL_FRESH_MS);
-    if (fresh) {
-      const usdCents = Math.round(fresh.priceUsd * 100);
-      const ageSec = Math.round(fresh.ageMs / 1000);
-      log.info("quicksell_cached_fresh", { marketHashName, currency: currencyCode, usdCents, ageSec });
-      return { sellerReceivesCents: undercut(usdCents), source: "live", currencyId: walletCurrencyId };
-    }
+  // 0. In-memory cache per (item, currency) — exact price, no conversion
+  const cached = quickPriceCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < QUICK_PRICE_CACHE_MS) {
+    log.info("quicksell_mem_cache", { marketHashName, currency: currencyCode });
+    return { sellerReceivesCents: cached.sellerReceivesCents, source: "live", currencyId: walletCurrencyId };
   }
 
   // 1. Live Steam API — fetch in wallet currency directly (always accurate)
   const live = await getMarketPrice(marketHashName, walletCurrencyId);
   if (live.lowestPrice !== null && live.lowestPrice > 0) {
+    const receives = undercut(live.lowestPrice);
+    quickPriceCache.set(cacheKey, { sellerReceivesCents: receives, ts: Date.now() });
     log.info("quicksell_live_price", { marketHashName, currency: currencyCode, price: live.lowestPrice });
-    return { sellerReceivesCents: undercut(live.lowestPrice), source: "live", currencyId: walletCurrencyId };
+    return { sellerReceivesCents: receives, source: "live", currencyId: walletCurrencyId };
   }
 
   // 2. Steam Market Depth (stored in USD — convert to wallet currency)
