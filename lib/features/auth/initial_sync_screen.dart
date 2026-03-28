@@ -77,10 +77,18 @@ class _InitialSyncScreenState extends ConsumerState<InitialSyncScreen> {
       if (mounted) setState(() => _trades = _StepStatus.error);
     }
 
-    // Done — navigate after short delay
+    // Done — invalidate all portfolio data and navigate
     if (mounted) {
       setState(() => _done = true);
       ref.read(needsInitialSyncProvider.notifier).state = false;
+
+      // Force refresh all portfolio-related providers before navigating
+      ref.invalidate(inventoryProvider);
+      ref.invalidate(portfolioProvider);
+      ref.invalidate(portfolioPLProvider);
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(tradesProvider);
+
       await Future.delayed(const Duration(milliseconds: 800));
       if (mounted) context.go('/portfolio');
     }
