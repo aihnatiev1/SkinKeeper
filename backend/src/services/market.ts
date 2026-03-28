@@ -316,19 +316,18 @@ export async function quickSellPrice(
 
   const currencyCode = getCurrencyInfo(walletCurrencyId)?.code ?? "USD";
 
-  // 0. Fresh cached steam price (< 15 min) — skip Steam API entirely
-  const fresh = await getFreshSteamPrice(marketHashName, QUICK_SELL_FRESH_MS);
-  if (fresh) {
-    const usdCents = Math.round(fresh.priceUsd * 100);
-    const walletCents = await toWallet(usdCents);
-    if (walletCents !== null) {
+  // 0. Fresh cached steam price (< 15 min) — use only for USD wallets (no conversion needed)
+  if (walletCurrencyId === 1) {
+    const fresh = await getFreshSteamPrice(marketHashName, QUICK_SELL_FRESH_MS);
+    if (fresh) {
+      const usdCents = Math.round(fresh.priceUsd * 100);
       const ageSec = Math.round(fresh.ageMs / 1000);
-      log.info("quicksell_cached_fresh", { marketHashName, currency: currencyCode, walletCents, ageSec });
-      return { sellerReceivesCents: undercut(walletCents), source: "live", currencyId: walletCurrencyId };
+      log.info("quicksell_cached_fresh", { marketHashName, currency: currencyCode, usdCents, ageSec });
+      return { sellerReceivesCents: undercut(usdCents), source: "live", currencyId: walletCurrencyId };
     }
   }
 
-  // 1. Live Steam API — fetch in wallet currency directly
+  // 1. Live Steam API — fetch in wallet currency directly (always accurate)
   const live = await getMarketPrice(marketHashName, walletCurrencyId);
   if (live.lowestPrice !== null && live.lowestPrice > 0) {
     log.info("quicksell_live_price", { marketHashName, currency: currencyCode, price: live.lowestPrice });
