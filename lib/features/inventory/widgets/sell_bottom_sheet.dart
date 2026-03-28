@@ -770,7 +770,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
 
         const SizedBox(height: 6),
         Text(
-          'Lowest - 1${qp.currencyCode == 'USD' ? ' cent' : ' ${qp.currencyCode}'}. Needs Steam Guard confirmation.',
+          'Lowest - 1${qp.currencyCode == 'USD' ? ' cent' : ' ${qp.currencyCode}'}. Requires Steam Guard confirmation.',
           style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
           textAlign: TextAlign.center,
         ),
