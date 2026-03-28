@@ -54,8 +54,9 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initSequence();
-      // Force fresh P&L fetch on every mount (covers post-sync-screen navigation)
-      ref.invalidate(portfolioPLProvider);
+      // Force fresh P&L fetch on every mount (same as pull-to-refresh)
+      ref.invalidate(portfolioProvider);
+      ref.read(portfolioPLProvider.notifier).refresh();
     });
   }
 
