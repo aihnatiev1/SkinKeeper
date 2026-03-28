@@ -22,9 +22,9 @@ class FeeBreakdown extends StatelessWidget {
   });
 
   String _fmt(int cents) {
-    // If walletSymbol is provided, format in native wallet currency (no conversion)
+    // walletSymbol = already in wallet currency, no conversion needed
     if (walletSymbol != null) {
-      return '$walletSymbol${CurrencyInfo.groupThousands((cents / 100).toStringAsFixed(2))}';
+      return CurrencyInfo(code: '', symbol: walletSymbol!, rate: 1.0).formatRaw(cents / 100);
     }
     return currency?.format(cents / 100) ?? '\$${(cents / 100).toStringAsFixed(2)}';
   }

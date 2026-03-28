@@ -373,7 +373,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                             ),
                           ),
                           Text(
-                            '${currency.symbol}${CurrencyInfo.groupThousands(_totalPrice.toStringAsFixed(2))}',
+                            currency.formatRaw(_totalPrice),
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,

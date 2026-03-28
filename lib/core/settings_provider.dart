@@ -29,6 +29,18 @@ class CurrencyInfo {
     return '$prefix$symbol${groupThousands(converted.abs().toStringAsFixed(decimals))}';
   }
 
+  /// Format a value that is ALREADY in user's currency (e.g. from Steam wallet).
+  /// Does NOT multiply by rate — use this for sell prices, quickprice, fee breakdowns.
+  String formatRaw(double value, {int decimals = 2}) {
+    return '$symbol${groupThousands(value.toStringAsFixed(decimals))}';
+  }
+
+  /// Same as formatRaw but with +/- sign prefix.
+  String formatRawWithSign(double value, {int decimals = 2}) {
+    final prefix = value >= 0 ? '+' : '';
+    return '$prefix$symbol${groupThousands(value.abs().toStringAsFixed(decimals))}';
+  }
+
   /// Insert comma as thousands separator: 15860.47 → 15,860.47
   static String groupThousands(String formatted) {
     final parts = formatted.split('.');
