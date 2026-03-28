@@ -166,25 +166,16 @@ router.get(
     }
 
     try {
-      // Use LATERAL JOIN instead of DISTINCT ON (price_history has 10M+ rows)
       const { rows } = await pool.query(
-        `SELECT n.market_hash_name, lp.price_usd::float AS price, n.icon_url
-         FROM (
-           SELECT DISTINCT ph.market_hash_name,
-             (SELECT ii.icon_url FROM inventory_items ii
-              WHERE ii.market_hash_name = ph.market_hash_name AND ii.icon_url IS NOT NULL
-              LIMIT 1) AS icon_url
-           FROM price_history ph
-           WHERE ph.market_hash_name ILIKE $1
-             AND ph.price_usd > 0
-             AND ph.recorded_at > NOW() - INTERVAL '7 days'
-         ) n
-         JOIN LATERAL (
-           SELECT price_usd FROM price_history ph2
-           WHERE ph2.market_hash_name = n.market_hash_name AND ph2.price_usd > 0
-           ORDER BY ph2.recorded_at DESC LIMIT 1
-         ) lp ON true
-         ORDER BY n.market_hash_name
+        `SELECT cp.market_hash_name, cp.price_usd::float AS price,
+                (SELECT ii.icon_url FROM inventory_items ii
+                 WHERE ii.market_hash_name = cp.market_hash_name AND ii.icon_url IS NOT NULL
+                 LIMIT 1) AS icon_url
+         FROM current_prices cp
+         WHERE cp.market_hash_name ILIKE $1
+           AND cp.price_usd > 0
+           AND cp.source = 'steam'
+         ORDER BY cp.market_hash_name
          LIMIT 15`,
         [`%${q}%`]
       );
@@ -207,13 +198,12 @@ router.get(
         `SELECT a.id, a.market_hash_name, a.condition, a.threshold::float,
                 a.source, a.is_active, a.cooldown_minutes, a.last_triggered_at,
                 a.created_at, a.icon_url, a.is_watchlist,
-                lp.price_usd AS current_price
+                cp.price_usd::float AS current_price
          FROM price_alerts a
-         LEFT JOIN LATERAL (
-           SELECT price_usd::float FROM price_history ph
-           WHERE ph.market_hash_name = a.market_hash_name AND ph.price_usd > 0
-           ORDER BY ph.recorded_at DESC LIMIT 1
-         ) lp ON true
+         LEFT JOIN current_prices cp
+           ON cp.market_hash_name = a.market_hash_name
+           AND cp.source = 'steam'
+           AND cp.price_usd > 0
          WHERE a.user_id = $1 AND a.is_watchlist = TRUE
          ORDER BY a.created_at DESC`,
         [req.userId]

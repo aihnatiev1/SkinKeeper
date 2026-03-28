@@ -394,6 +394,11 @@ CREATE TABLE IF NOT EXISTS current_prices (
   PRIMARY KEY (market_hash_name, source)
 );
 CREATE INDEX IF NOT EXISTS idx_current_prices_name ON current_prices(market_hash_name);
+
+-- 027: Covering partial index for price_history — speeds up all "latest price" lookups
+CREATE INDEX IF NOT EXISTS idx_price_history_steam_latest
+  ON price_history(market_hash_name, recorded_at DESC)
+  WHERE source = 'steam' AND price_usd > 0;
 `;
 
 export async function migrate() {

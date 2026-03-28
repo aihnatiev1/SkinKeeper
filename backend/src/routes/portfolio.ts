@@ -45,44 +45,40 @@ router.get(
         }
       }
 
-      // Get value from 24h ago and 7d ago using LATERAL for fast index lookups
-      const [{ rows: hist24h }, { rows: hist7d }] = await Promise.all([
-        pool.query(
-          `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name)
-           SELECT n.market_hash_name, lp.price_usd
-           FROM names n
-           JOIN LATERAL (
-             SELECT price_usd FROM price_history ph
-             WHERE ph.market_hash_name = n.market_hash_name
-               AND ph.source = 'steam'
-               AND ph.price_usd > 0
-               AND ph.recorded_at < NOW() - INTERVAL '24 hours'
-             ORDER BY ph.recorded_at DESC LIMIT 1
-           ) lp ON true`,
-          [names]
-        ),
-        pool.query(
-          `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name)
-           SELECT n.market_hash_name, lp.price_usd
-           FROM names n
-           JOIN LATERAL (
-             SELECT price_usd FROM price_history ph
-             WHERE ph.market_hash_name = n.market_hash_name
-               AND ph.source = 'steam'
-               AND ph.price_usd > 0
-               AND ph.recorded_at < NOW() - INTERVAL '7 days'
-             ORDER BY ph.recorded_at DESC LIMIT 1
-           ) lp ON true`,
-          [names]
-        ),
-      ]);
+      // Get value from 24h ago and 7d ago in a single query using DISTINCT ON
+      const { rows: histRows } = await pool.query(
+        `SELECT market_hash_name, price_usd, period
+         FROM (
+           SELECT DISTINCT ON (ph.market_hash_name)
+             ph.market_hash_name, ph.price_usd, '24h' AS period
+           FROM price_history ph
+           WHERE ph.market_hash_name = ANY($1::text[])
+             AND ph.source = 'steam'
+             AND ph.price_usd > 0
+             AND ph.recorded_at < NOW() - INTERVAL '24 hours'
+           ORDER BY ph.market_hash_name, ph.recorded_at DESC
+         ) d24
+         UNION ALL
+         SELECT market_hash_name, price_usd, period
+         FROM (
+           SELECT DISTINCT ON (ph.market_hash_name)
+             ph.market_hash_name, ph.price_usd, '7d' AS period
+           FROM price_history ph
+           WHERE ph.market_hash_name = ANY($1::text[])
+             AND ph.source = 'steam'
+             AND ph.price_usd > 0
+             AND ph.recorded_at < NOW() - INTERVAL '7 days'
+           ORDER BY ph.market_hash_name, ph.recorded_at DESC
+         ) d7`,
+        [names]
+      );
 
-      const oldPrices24h = new Map(
-        hist24h.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)])
-      );
-      const oldPrices7d = new Map(
-        hist7d.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)])
-      );
+      const oldPrices24h = new Map<string, number>();
+      const oldPrices7d = new Map<string, number>();
+      for (const r of histRows) {
+        if (r.period === '24h') oldPrices24h.set(r.market_hash_name, parseFloat(r.price_usd));
+        else oldPrices7d.set(r.market_hash_name, parseFloat(r.price_usd));
+      }
 
       let totalValue24hAgo = 0;
       let totalValue7dAgo = 0;

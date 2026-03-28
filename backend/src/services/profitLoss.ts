@@ -162,17 +162,11 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
     if (holdings.length > 0) {
       const names = holdings.map((h) => h.name);
       const priceRes = await pool.query(
-        `WITH names AS (SELECT unnest($1::text[]) AS market_hash_name)
-         SELECT n.market_hash_name, lp.price_usd
-         FROM names n
-         JOIN LATERAL (
-           SELECT price_usd FROM price_history ph
-           WHERE ph.market_hash_name = n.market_hash_name AND ph.price_usd > 0
-           ORDER BY
-             CASE WHEN ph.source = 'steam' THEN 0 ELSE 1 END,
-             ph.recorded_at DESC
-           LIMIT 1
-         ) lp ON true`,
+        `SELECT cp.market_hash_name, cp.price_usd
+         FROM current_prices cp
+         WHERE cp.market_hash_name = ANY($1::text[])
+           AND cp.price_usd > 0
+           AND cp.source = 'steam'`,
         [names]
       );
       const priceMap = new Map(priceRes.rows.map((r: any) => [r.market_hash_name, parseFloat(r.price_usd)]));
@@ -225,16 +219,12 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
       WHERE user_id = $1 AND current_holding > 0
     )
     SELECT
-      COALESCE(SUM((lp.price_usd * 100)::int * h.current_holding), 0)::int AS current_value
+      COALESCE(SUM((cp.price_usd * 100)::int * h.current_holding), 0)::int AS current_value
     FROM holdings h
-    LEFT JOIN LATERAL (
-      SELECT price_usd FROM price_history ph
-      WHERE ph.market_hash_name = h.market_hash_name AND ph.price_usd > 0
-      ORDER BY
-        CASE WHEN ph.source = 'steam' THEN 0 ELSE 1 END,
-        ph.recorded_at DESC
-      LIMIT 1
-    ) lp ON true
+    LEFT JOIN current_prices cp
+      ON cp.market_hash_name = h.market_hash_name
+      AND cp.source = 'steam'
+      AND cp.price_usd > 0
     `,
     [userId]
   );

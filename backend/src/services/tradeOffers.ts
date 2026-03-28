@@ -7,7 +7,7 @@ import { SteamSessionService, type SteamSession } from "./steamSession.js";
 import { sendPush, isFirebaseReady } from "./firebase.js";
 import { TTLCache } from "../utils/TTLCache.js";
 import { registerCache } from "../utils/cacheRegistry.js";
-import { SessionExpiredError } from "../utils/errors.js";
+import { SessionExpiredError, SteamError } from "../utils/errors.js";
 import { SteamSessionError } from "../utils/SteamClient.js";
 
 // ─── Trade Push Notifications ───────────────────────────────────────────
@@ -401,7 +401,7 @@ async function sendSteamTradeOffer(
 
   if (resp.status !== 200) {
     const msg = typeof data === "object" ? (data.strError || JSON.stringify(data)) : String(data).substring(0, 200);
-    throw new Error(`Steam returned ${resp.status}: ${msg}`);
+    throw new SteamError(`Steam returned ${resp.status}: ${msg}`, resp.status);
   }
 
   if (data.tradeofferid) {
