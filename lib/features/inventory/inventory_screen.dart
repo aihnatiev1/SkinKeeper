@@ -192,13 +192,30 @@ class _InventoryStatsAndFilters extends ConsumerWidget {
               const SizedBox(width: 16),
               _statItem('Value', currency.format(summary.totalValue)),
               const Spacer(),
-              // Optional: Sync indicator or small sync button
-              Text(
-                'Market Prices',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppTheme.textMuted.withValues(alpha: 0.5),
-                  fontWeight: FontWeight.w500,
+              GestureDetector(
+                onTap: () async {
+                  HapticFeedback.mediumImpact();
+                  await ref.read(inventoryProvider.notifier).refresh();
+                },
+                child: Icon(Icons.refresh_rounded, size: 18, color: AppTheme.textMuted),
+              ),
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  context.push('/inventory/bulk-sell');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warning.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppTheme.r8),
+                    border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2), width: 0.5),
+                  ),
+                  child: Text(
+                    'Bulk Sale',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.warning),
+                  ),
                 ),
               ),
             ],
