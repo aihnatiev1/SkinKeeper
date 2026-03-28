@@ -219,8 +219,9 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
-                const Expanded(flex: 3, child: SizedBox.shrink()),
-                Expanded(
+                const Expanded(child: SizedBox.shrink()),
+                SizedBox(
+                  width: 44,
                   child: Center(
                     child: Text(
                       'Free',
@@ -232,7 +233,8 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                     ),
                   ),
                 ),
-                Expanded(
+                SizedBox(
+                  width: 44,
                   child: Center(
                     child: Text(
                       'PRO',
@@ -253,11 +255,11 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
           _featureRow('Up to 5 price alerts', true, true),
           _featureRow('Up to 2 Steam accounts', true, true),
           const Divider(height: 24),
-          _featureRow('DMarket, Skinport & more prices', false, true),
+          _featureRow('Multi-source pricing', false, true),
           _featureRow('Portfolio profit & charts', false, true),
           _featureRow('Per-item profit breakdown', false, true),
           _featureRow('Up to 20 price alerts', false, true),
-          _featureRow('Sell multiple items at once', false, true),
+          _featureRow('Bulk sell items', false, true),
           _featureRow('Unlimited accounts', false, true),
           _featureRow('CSV/Excel export', false, true),
         ],
@@ -271,7 +273,6 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
       child: Row(
         children: [
           Expanded(
-            flex: 3,
             child: Text(
               feature,
               style: const TextStyle(
@@ -280,7 +281,8 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               ),
             ),
           ),
-          Expanded(
+          SizedBox(
+            width: 44,
             child: Center(
               child: Icon(
                 free ? Icons.check_circle : Icons.remove_circle_outline,
@@ -289,7 +291,8 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               ),
             ),
           ),
-          Expanded(
+          SizedBox(
+            width: 44,
             child: Center(
               child: Icon(
                 pro ? Icons.check_circle : Icons.remove_circle_outline,
@@ -497,11 +500,15 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              price,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                price,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(height: 2),

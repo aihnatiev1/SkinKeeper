@@ -119,7 +119,9 @@ class InventoryAppBar extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 10),
-            Row(
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
               children: [
                 SyncIndicator(
                   onTap: () async {
@@ -129,7 +131,7 @@ class InventoryAppBar extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 const AccountScopeChip(),
-                const Spacer(),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () {
                     HapticFeedback.mediumImpact();
@@ -165,6 +167,7 @@ class InventoryAppBar extends ConsumerWidget {
                   ),
                 ),
               ],
+            ),
             ),
           ],
         ),

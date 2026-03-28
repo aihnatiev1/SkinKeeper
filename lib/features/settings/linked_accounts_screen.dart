@@ -178,8 +178,8 @@ class _AccountCard extends ConsumerWidget {
               if (!account.isActive)
                 Expanded(
                   child: OutlinedButton.icon(
-                    icon: const Icon(Icons.check_circle_outline, size: 16),
-                    label: const Text('Set Active'),
+                    icon: const Icon(Icons.check_circle_outline, size: 14),
+                    label: const Text('Activate', style: TextStyle(fontSize: 12)),
                     onPressed: () async {
                       HapticFeedback.mediumImpact();
                       await ref.read(accountsProvider.notifier).setActive(account.id);
@@ -194,12 +194,15 @@ class _AccountCard extends ConsumerWidget {
                     account.sessionStatus == 'valid' || account.sessionStatus == 'expiring'
                         ? Icons.check_circle_outline
                         : Icons.lock_open_rounded,
-                    size: 16,
+                    size: 14,
                   ),
                   label: Text(
                     account.sessionStatus == 'valid' || account.sessionStatus == 'expiring'
                         ? 'Reconnect'
                         : 'Enable Trading',
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   onPressed: () async {
                     // If not active, switch to this account first
