@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/analytics_service.dart';
 import 'core/api_client.dart';
@@ -35,6 +36,12 @@ void main() async {
   );
   dev.log('Firebase initialized, apps: ${Firebase.apps.length}', name: 'Firebase');
   await Analytics.init();
+  // Clear keychain on fresh install (iOS keeps keychain after app deletion)
+  final prefs = await SharedPreferences.getInstance();
+  if (prefs.getBool('has_launched') != true) {
+    await const FlutterSecureStorage().deleteAll();
+    await prefs.setBool('has_launched', true);
+  }
   await CacheService.init();
   await WidgetService.init();
   await WidgetService.registerBackgroundCallback();

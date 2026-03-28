@@ -155,7 +155,23 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       }
     }
 
-    // Normal login flow: upsert user
+    // Check if this Steam ID is linked to another user as a secondary account
+    const { rows: linkedRow } = await pool.query(
+      `SELECT sa.user_id FROM steam_accounts sa
+       JOIN users u ON u.id = sa.user_id
+       WHERE sa.steam_id = $1 AND u.steam_id != $1`,
+      [steamId]
+    );
+
+    // If linked elsewhere, unlink it first — login always gives you YOUR account only
+    if (linkedRow.length > 0) {
+      await pool.query(
+        `DELETE FROM steam_accounts WHERE steam_id = $1 AND user_id = $2`,
+        [steamId, linkedRow[0].user_id]
+      );
+    }
+
+    // Upsert user by steam_id
     const { rows } = await pool.query(
       `INSERT INTO users (steam_id, display_name, avatar_url)
        VALUES ($1, $2, $3)
@@ -166,7 +182,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     );
     const user = rows[0];
 
-    // Also create a steam_accounts entry for the primary account
+    // Create steam_accounts entry for this account
     await pool.query(
       `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
        VALUES ($1, $2, $3, $4)
@@ -174,12 +190,11 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
 
-    // Set active_account_id if not set
+    // Set active account to the one used for login
     await pool.query(
       `UPDATE users SET active_account_id = sa.id
        FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2
-         AND users.active_account_id IS NULL`,
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
       [user.id, steamId]
     );
 
