@@ -324,27 +324,27 @@ export async function quickSellPrice(
     return { sellerReceivesCents: cached.sellerReceivesCents, source: "live", currencyId: walletCurrencyId };
   }
 
-  // 1. Live Steam API — fetch in wallet currency directly (always accurate)
-  const live = await getMarketPrice(marketHashName, walletCurrencyId);
-  if (live.lowestPrice !== null && live.lowestPrice > 0) {
-    const receives = undercut(live.lowestPrice);
-    quickPriceCache.set(cacheKey, { sellerReceivesCents: receives, ts: Date.now() });
-    log.info("quicksell_live_price", { marketHashName, currency: currencyCode, price: live.lowestPrice });
-    return { sellerReceivesCents: receives, source: "live", currencyId: walletCurrencyId };
-  }
+  // 1. Try fast sources first (no network call to Steam)
 
-  // 2. Steam Market Depth (stored in USD — convert to wallet currency)
+  // 1a. Steam Market Depth (in-memory, stored in USD — convert to wallet currency)
   const depth = getSteamDepth(marketHashName);
   if (depth && depth.lowestAsk > 0) {
     const usdCents = Math.round(depth.lowestAsk * 100);
     const walletCents = await toWallet(usdCents);
     if (walletCents !== null) {
-      log.warn("quicksell_fallback_depth", { marketHashName, currency: currencyCode, walletCents });
-      return { sellerReceivesCents: undercut(walletCents), source: "depth", currencyId: walletCurrencyId };
+      const receives = undercut(walletCents);
+      log.info("quicksell_fast_depth", { marketHashName, currency: currencyCode, walletCents });
+      // Fire-and-forget: refresh exact price in background for next request
+      getMarketPrice(marketHashName, walletCurrencyId).then(live => {
+        if (live.lowestPrice && live.lowestPrice > 0) {
+          quickPriceCache.set(cacheKey, { sellerReceivesCents: undercut(live.lowestPrice), ts: Date.now() });
+        }
+      }).catch(() => {});
+      return { sellerReceivesCents: receives, source: "depth", currencyId: walletCurrencyId };
     }
   }
 
-  // 3. Cached steam price from current_prices (USD, any age up to PRICE_MAX_AGE)
+  // 1b. Cached steam price from current_prices table (USD, fast DB query)
   const priceMap = await getLatestPrices([marketHashName]);
   const sources = priceMap.get(marketHashName);
   const cachedSteam = sources?.["steam"];
@@ -352,9 +352,25 @@ export async function quickSellPrice(
     const usdCents = Math.round(cachedSteam * 100);
     const walletCents = await toWallet(usdCents);
     if (walletCents !== null) {
-      log.warn("quicksell_fallback_cached", { marketHashName, currency: currencyCode, walletCents });
-      return { sellerReceivesCents: undercut(walletCents), source: "cached", currencyId: walletCurrencyId };
+      const receives = undercut(walletCents);
+      log.info("quicksell_fast_cached", { marketHashName, currency: currencyCode, walletCents });
+      // Fire-and-forget: refresh exact price in background
+      getMarketPrice(marketHashName, walletCurrencyId).then(live => {
+        if (live.lowestPrice && live.lowestPrice > 0) {
+          quickPriceCache.set(cacheKey, { sellerReceivesCents: undercut(live.lowestPrice), ts: Date.now() });
+        }
+      }).catch(() => {});
+      return { sellerReceivesCents: receives, source: "cached", currencyId: walletCurrencyId };
     }
+  }
+
+  // 2. No fast source available — fall back to live Steam API (slow but accurate)
+  const live = await getMarketPrice(marketHashName, walletCurrencyId);
+  if (live.lowestPrice !== null && live.lowestPrice > 0) {
+    const receives = undercut(live.lowestPrice);
+    quickPriceCache.set(cacheKey, { sellerReceivesCents: receives, ts: Date.now() });
+    log.info("quicksell_live_price", { marketHashName, currency: currencyCode, price: live.lowestPrice });
+    return { sellerReceivesCents: receives, source: "live", currencyId: walletCurrencyId };
   }
 
   return null;
