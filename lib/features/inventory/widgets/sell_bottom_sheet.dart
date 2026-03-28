@@ -11,6 +11,7 @@ import '../../settings/accounts_provider.dart';
 import '../../../widgets/glass_sheet.dart';
 import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
+import '../../../core/push_service.dart';
 import '../sell_provider.dart';
 import 'fee_breakdown.dart';
 import 'sell_progress_sheet.dart';
@@ -158,6 +159,8 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
       }
       return;
     }
+
+    PushService.requestPermissionAndRegister();
 
     // Optimistic update — remove sold items from inventory
     final soldAssetIds = widget.items.map((i) => i.assetId).toSet();

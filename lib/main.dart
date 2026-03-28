@@ -88,7 +88,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
         if (!_pushInitialized && next.valueOrNull != null) {
           _pushInitialized = true;
           PushService.setRouter(ref);
-          PushService.init(ref.read(apiClientProvider));
+          PushService.initHandlers(ref.read(apiClientProvider));
         }
       }, fireImmediately: true);
     });

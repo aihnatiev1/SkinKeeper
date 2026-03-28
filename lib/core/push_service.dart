@@ -18,43 +18,18 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 class PushService {
   static FirebaseMessaging get _messaging => FirebaseMessaging.instance;
+  static ApiClient? _api;
+  static bool _permissionRequested = false;
 
-  /// Request permission + register FCM token with backend.
-  static Future<void> init(ApiClient api, {PushPreferences? prefs}) async {
-    // Ensure Firebase is initialized
+  /// Set up message handlers only (no permission dialog).
+  /// Call once after login.
+  static Future<void> initHandlers(ApiClient api) async {
+    _api = api;
+
     if (Firebase.apps.isEmpty) {
       dev.log('Firebase not initialized, skipping push init', name: 'Push');
       return;
     }
-
-    final settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      dev.log('Push permission denied', name: 'Push');
-      return;
-    }
-
-    // Get APNs token first on iOS (required before FCM token)
-    if (Platform.isIOS) {
-      final apns = await _messaging.getAPNSToken();
-      if (apns == null) {
-        dev.log('APNs token not available yet', name: 'Push');
-      }
-    }
-
-    final token = await _messaging.getToken();
-    if (token != null) {
-      await _registerToken(api, token, prefs);
-    }
-
-    // Listen for token refresh
-    _messaging.onTokenRefresh.listen((newToken) {
-      _registerToken(api, newToken, prefs);
-    });
 
     // Foreground message handler
     FirebaseMessaging.onMessage.listen((message) {
@@ -73,6 +48,55 @@ class PushService {
     // Check if app was opened from a notification (cold start)
     final initial = await _messaging.getInitialMessage();
     if (initial != null) _handleNotificationTap(initial);
+
+    // If permission was already granted before, register token silently
+    final settings = await _messaging.getNotificationSettings();
+    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional) {
+      await _obtainAndRegisterToken(api);
+    }
+  }
+
+  /// Request push permission and register FCM token.
+  /// Safe to call multiple times — shows system dialog only once per install.
+  static Future<void> requestPermissionAndRegister({PushPreferences? prefs}) async {
+    final api = _api;
+    if (api == null || Firebase.apps.isEmpty) return;
+    if (_permissionRequested) return;
+    _permissionRequested = true;
+
+    final settings = await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.denied) {
+      dev.log('Push permission denied', name: 'Push');
+      return;
+    }
+
+    await _obtainAndRegisterToken(api, prefs: prefs);
+  }
+
+  static Future<void> _obtainAndRegisterToken(ApiClient api, {PushPreferences? prefs}) async {
+    // Get APNs token first on iOS (required before FCM token)
+    if (Platform.isIOS) {
+      final apns = await _messaging.getAPNSToken();
+      if (apns == null) {
+        dev.log('APNs token not available yet', name: 'Push');
+      }
+    }
+
+    final token = await _messaging.getToken();
+    if (token != null) {
+      await _registerToken(api, token, prefs);
+    }
+
+    // Listen for token refresh
+    _messaging.onTokenRefresh.listen((newToken) {
+      _registerToken(api, newToken, prefs);
+    });
   }
 
   /// Route to the correct screen based on push notification data payload.

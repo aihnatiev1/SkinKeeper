@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/push_service.dart';
 import '../../core/theme.dart';
 import '../../models/alert.dart';
 import '../inventory/inventory_provider.dart';
@@ -145,6 +146,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
             cooldownMinutes: _cooldownMinutes,
           );
       HapticFeedback.mediumImpact();
+      PushService.requestPermissionAndRegister();
       if (mounted) context.pop();
     } on DioException catch (e) {
       final errorCode = (e.response?.data as Map<String, dynamic>?)?['error'];

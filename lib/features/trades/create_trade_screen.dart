@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
+import '../../core/push_service.dart';
 import '../../core/review_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
@@ -432,6 +433,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
 
       ref.invalidate(tradesProvider);
       ReviewService.maybeRequestReview();
+      PushService.requestPermissionAndRegister();
 
       if (mounted) {
         FocusScope.of(context).unfocus();
