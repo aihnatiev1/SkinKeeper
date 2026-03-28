@@ -39,9 +39,11 @@ void main() async {
   await Analytics.init();
   // Clear keychain + Hive on fresh install (iOS keeps keychain after app deletion)
   final prefs = await SharedPreferences.getInstance();
-  if (prefs.getBool('has_launched') != true) {
-    await const FlutterSecureStorage().deleteAll();
-    await prefs.setBool('has_launched', true);
+  if (prefs.getBool('has_launched_v2') != true) {
+    await const FlutterSecureStorage(
+      iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+    ).deleteAll();
+    await prefs.setBool('has_launched_v2', true);
     // Purge Hive cache so stale demo/old-account data doesn't persist
     await Hive.initFlutter();
     await Hive.deleteBoxFromDisk('prices');
