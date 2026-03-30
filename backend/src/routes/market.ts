@@ -4,7 +4,7 @@ import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { demoStubs } from "../middleware/demoStubs.js";
 import { validateBody } from "../middleware/validate.js";
-import { sellOperationSchema, sellItemSchema, sessionCookiesSchema, clientTokenSchema } from "../middleware/schemas.js";
+import { sellOperationSchema, sellItemSchema, sessionCookiesSchema, clientTokenSchema, refreshPricesSchema } from "../middleware/schemas.js";
 import {
   sellItem,
   quickSellPrice,
@@ -31,6 +31,7 @@ import {
 import { SessionExpiredError } from "../utils/errors.js";
 import { getExchangeRates, getExchangeRatesUpdatedAt } from "../services/csgoTrader.js";
 import { getMarketplaceLinks } from "../services/buffIds.js";
+import { refreshPricesOnDemand } from "../services/steamHistogram.js";
 
 const router = Router();
 
@@ -522,7 +523,7 @@ router.get("/quickprice/:marketHashName", authMiddleware, async (req: AuthReques
     const info = getCurrencyInfo(result.currencyId);
     res.json({
       sellerReceivesCents: result.sellerReceivesCents,
-      stale: result.source !== "live",
+      stale: result.source !== "live" && result.source !== "histogram",
       source: result.source,
       marketUrl,
       currencyId: result.currencyId,
@@ -534,6 +535,70 @@ router.get("/quickprice/:marketHashName", authMiddleware, async (req: AuthReques
     res.status(500).json({ error: "Failed to get quick price" });
   }
 });
+
+/**
+ * POST /api/market/refresh-prices
+ * On-demand price refresh via Steam histogram API.
+ * Call when user opens sell UI to get fresh prices for selected items.
+ * Body: { names: string[], accountId?: number }
+ * Returns prices in wallet currency with real-time buy/sell order data.
+ */
+router.post(
+  "/refresh-prices",
+  authMiddleware,
+  validateBody(refreshPricesSchema),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { names, accountId: bodyAccountId } = req.body;
+
+      const accountId = bodyAccountId
+        ?? await SteamSessionService.getActiveAccountId(req.userId!);
+      let walletCurrencyId = 1;
+      if (accountId) {
+        const wc = await getWalletCurrency(accountId);
+        if (wc) walletCurrencyId = wc;
+      }
+
+      const priceMap = await refreshPricesOnDemand(names, walletCurrencyId);
+
+      // Build response: compute sellerReceivesCents (undercut lowest sell)
+      const prices: Record<string, {
+        sellerReceivesCents: number;
+        highestBuyOrder: number;
+        lowestSellOrder: number;
+        currencyId: number;
+        fresh: boolean;
+      }> = {};
+
+      for (const [name, p] of priceMap) {
+        // Undercut: lowest listing - 1, minus fees
+        const listing = Math.max(1, p.lowestSellOrder - 1);
+        const valveFee = Math.max(1, Math.floor(listing * 0.05));
+        const cs2Fee = Math.max(1, Math.floor(listing * 0.10));
+        const sellerReceives = Math.max(1, listing - valveFee - cs2Fee);
+
+        prices[name] = {
+          sellerReceivesCents: sellerReceives,
+          highestBuyOrder: p.highestBuyOrder,
+          lowestSellOrder: p.lowestSellOrder,
+          currencyId: p.currencyId,
+          fresh: p.fresh,
+        };
+      }
+
+      const info = getCurrencyInfo(walletCurrencyId);
+      res.json({
+        prices,
+        currencyId: walletCurrencyId,
+        currencyCode: info?.code ?? "USD",
+        currencySymbol: info?.symbol ?? "$",
+      });
+    } catch (err) {
+      console.error("Refresh prices error:", err);
+      res.status(500).json({ error: "Failed to refresh prices" });
+    }
+  }
+);
 
 // @deprecated — Use POST /api/market/sell-operation instead
 router.post(

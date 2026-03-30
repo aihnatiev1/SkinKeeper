@@ -152,6 +152,11 @@ async function start() {
   // Pre-warm CSGO-API static data cache
   preloadCSGOData();
 
+  // Seed Steam item_nameids for histogram API (non-blocking)
+  import("./services/steamHistogram.js").then(({ seedItemNameIds }) =>
+    seedItemNameIds().catch((err) => console.warn("[Seed] item_nameids failed:", err.message))
+  );
+
   // Start background price fetching
   startPriceJobs();
 

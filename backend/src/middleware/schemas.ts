@@ -63,6 +63,11 @@ export const tradeTokenSchema = z.object({
 
 // ─── Market / Sell ───────────────────────────────────────────────────────
 
+export const refreshPricesSchema = z.object({
+  names: z.array(z.string().min(1).max(255)).min(1).max(100),
+  accountId: z.number().int().positive().optional(),
+});
+
 export const sellOperationSchema = z.object({
   items: z.array(z.object({
     assetId: z.string().min(1),

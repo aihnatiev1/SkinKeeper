@@ -5,6 +5,7 @@ import { convertUsdToWallet, getWalletCurrency, getCurrencyInfo, getExchangeRate
 import { log } from "../utils/logger.js";
 import { getLatestPrices, getFreshSteamPrice } from "./prices.js";
 import { getSteamDepth } from "./steamMarketDepth.js";
+import { fetchHistogramPrice } from "./steamHistogram.js";
 
 interface SellResult {
   success: boolean;
@@ -279,8 +280,8 @@ export async function sellItem(
 
 export interface QuickSellResult {
   sellerReceivesCents: number;
-  /** "live" = fresh Steam API, "depth" / "cached" = fallback (stale) */
-  source: "live" | "depth" | "cached";
+  /** "live" = fresh Steam API, "histogram" = real-time order book, "depth" / "cached" = fallback (stale) */
+  source: "live" | "histogram" | "depth" | "cached";
   /** Currency of sellerReceivesCents (Steam currency ID, e.g. 1=USD, 18=UAH) */
   currencyId: number;
 }
@@ -344,7 +345,18 @@ export async function quickSellPrice(
     }
   }
 
-  // 1b. Cached steam price from current_prices table (USD, fast DB query)
+  // 1b. Histogram: real-time order book (returns price in wallet currency — no conversion)
+  try {
+    const histo = await fetchHistogramPrice(marketHashName, walletCurrencyId);
+    if (histo && histo.lowestSellOrder > 0) {
+      const receives = undercut(histo.lowestSellOrder);
+      quickPriceCache.set(cacheKey, { sellerReceivesCents: receives, ts: Date.now() });
+      log.info("quicksell_histogram", { marketHashName, currency: currencyCode, lowestSell: histo.lowestSellOrder });
+      return { sellerReceivesCents: receives, source: "histogram", currencyId: walletCurrencyId };
+    }
+  } catch { /* histogram failed — continue to cached/live fallback */ }
+
+  // 1c. Cached steam price from current_prices table (USD, fast DB query)
   const priceMap = await getLatestPrices([marketHashName]);
   const sources = priceMap.get(marketHashName);
   const cachedSteam = sources?.["steam"];
