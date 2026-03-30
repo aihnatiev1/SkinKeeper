@@ -298,7 +298,7 @@ class TransactionsScreen extends ConsumerWidget {
                         child: Column(
                           children: [
                             Text(
-                              'Showing ${transactions.length} of $total',
+                              'Showing ${list.length} items',
                               style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
                             ),
                             const SizedBox(height: 8),
