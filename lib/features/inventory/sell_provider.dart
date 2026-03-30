@@ -524,3 +524,92 @@ class QuickPriceRequest {
   @override
   int get hashCode => Object.hash(marketHashName, accountId);
 }
+
+// ---------------------------------------------------------------------------
+// Batch refresh prices (histogram-based, on-demand)
+// ---------------------------------------------------------------------------
+
+class RefreshPriceItem {
+  final int sellerReceivesCents;
+  final int highestBuyOrder;
+  final int lowestSellOrder;
+  final int currencyId;
+  final bool fresh;
+
+  const RefreshPriceItem({
+    required this.sellerReceivesCents,
+    required this.highestBuyOrder,
+    required this.lowestSellOrder,
+    required this.currencyId,
+    required this.fresh,
+  });
+}
+
+class RefreshPricesResult {
+  final Map<String, RefreshPriceItem> prices;
+  final int currencyId;
+  final String currencyCode;
+  final String currencySymbol;
+
+  const RefreshPricesResult({
+    required this.prices,
+    required this.currencyId,
+    required this.currencyCode,
+    required this.currencySymbol,
+  });
+}
+
+class RefreshPricesRequest {
+  final List<String> names;
+  final int? accountId;
+
+  const RefreshPricesRequest({required this.names, this.accountId});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RefreshPricesRequest &&
+          names.length == other.names.length &&
+          accountId == other.accountId &&
+          names.join(',') == other.names.join(',');
+
+  @override
+  int get hashCode => Object.hash(names.join(','), accountId);
+}
+
+final refreshPricesProvider =
+    AutoDisposeFutureProvider.family<RefreshPricesResult, RefreshPricesRequest>((ref, request) async {
+  final api = ref.read(apiClientProvider);
+  final response = await api.post(
+    '/market/refresh-prices',
+    data: {
+      'names': request.names,
+      if (request.accountId != null) 'accountId': request.accountId,
+    },
+  ).timeout(
+    Duration(seconds: 10 + request.names.length * 2), // ~2s per stale item
+    onTimeout: () => throw TimeoutException('refresh-prices timeout'),
+  );
+
+  final data = response.data as Map<String, dynamic>;
+  final pricesMap = data['prices'] as Map<String, dynamic>? ?? {};
+  final prices = <String, RefreshPriceItem>{};
+
+  for (final entry in pricesMap.entries) {
+    final v = entry.value as Map<String, dynamic>;
+    prices[entry.key] = RefreshPriceItem(
+      sellerReceivesCents: v['sellerReceivesCents'] as int? ?? 0,
+      highestBuyOrder: v['highestBuyOrder'] as int? ?? 0,
+      lowestSellOrder: v['lowestSellOrder'] as int? ?? 0,
+      currencyId: v['currencyId'] as int? ?? 1,
+      fresh: v['fresh'] as bool? ?? false,
+    );
+  }
+
+  return RefreshPricesResult(
+    prices: prices,
+    currencyId: data['currencyId'] as int? ?? 1,
+    currencyCode: data['currencyCode'] as String? ?? 'USD',
+    currencySymbol: data['currencySymbol'] as String? ?? '\$',
+  );
+});

@@ -195,6 +195,15 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     final isNonActiveAccount = item.accountId != null &&
         item.accountId != activeAccountId;
 
+    // Pre-fetch fresh prices for all items via histogram (warms backend cache)
+    if (count > 1) {
+      final uniqueNames = widget.items.map((i) => i.marketHashName).toSet().toList();
+      ref.watch(refreshPricesProvider(RefreshPricesRequest(
+        names: uniqueNames,
+        accountId: item.accountId ?? activeAccountId,
+      )));
+    }
+
     // Quick price — fetch in wallet currency for the item's account
     final quickPriceAsync = ref.watch(
       quickPriceProvider(QuickPriceRequest(
