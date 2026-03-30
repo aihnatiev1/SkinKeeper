@@ -87,7 +87,7 @@ function makeSlot(index: number, name: string, agent: HttpsProxyAgent<string> | 
 // With 3 slots, effective rate = 3 × (1000/limitMs) req/s.
 
 const domainRateLimits = new Map<string, number>([
-  ["csfloat.com",          45_000],  // 1 req/45s per slot → ~4 req/min total
+  ["csfloat.com",         120_000],  // 1 req/2min per slot → ~1.5 req/min total
   ["api.dmarket.com",         500],  // 200ms was too tight; 500ms per slot
   ["skinport",            120_000],  // 1 req/2min per slot (bulk endpoint)
   ["steamcommunity.com",    6_000],  // 6s per slot (steam batch already uses 5s gap)

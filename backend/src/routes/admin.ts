@@ -62,9 +62,9 @@ router.get("/price-health", requireAdminSecret, async (_req: Request, res: Respo
   // Check DB for price freshness
   try {
     const { rows } = await pool.query(
-      `SELECT source, MAX(recorded_at) AS last_at, COUNT(DISTINCT market_hash_name) AS items
-       FROM price_history
-       WHERE recorded_at > NOW() - INTERVAL '1 hour'
+      `SELECT source, MAX(updated_at) AS last_at, COUNT(DISTINCT market_hash_name) AS items
+       FROM current_prices
+       WHERE updated_at > NOW() - INTERVAL '1 hour'
        GROUP BY source`
     );
     const dbSources: Record<string, { lastAt: string; items: number }> = {};
@@ -99,15 +99,11 @@ router.get("/price-freshness", requireAdminSecret, async (_req: Request, res: Re
     const { rows } = await pool.query(
       `SELECT source,
               COUNT(DISTINCT market_hash_name) AS total_items,
-              MIN(last_at) AS oldest_price,
-              MAX(last_at) AS newest_price,
-              AVG(EXTRACT(EPOCH FROM (NOW() - last_at))) AS avg_age_seconds
-       FROM (
-         SELECT market_hash_name, source, MAX(recorded_at) AS last_at
-         FROM price_history
-         WHERE price_usd > 0
-         GROUP BY market_hash_name, source
-       ) sub
+              MIN(updated_at) AS oldest_price,
+              MAX(updated_at) AS newest_price,
+              AVG(EXTRACT(EPOCH FROM (NOW() - updated_at))) AS avg_age_seconds
+       FROM current_prices
+       WHERE price_usd > 0
        GROUP BY source
        ORDER BY source`
     );

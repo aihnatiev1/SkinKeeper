@@ -380,9 +380,9 @@ export async function getItemsPL(
         SELECT n.market_hash_name, lp.price_usd
         FROM names n
         JOIN LATERAL (
-          SELECT price_usd FROM price_history ph
-          WHERE ph.market_hash_name = n.market_hash_name AND ph.price_usd > 0
-          ORDER BY CASE WHEN ph.source = 'steam' THEN 0 ELSE 1 END, ph.recorded_at DESC
+          SELECT price_usd FROM current_prices cp
+          WHERE cp.market_hash_name = n.market_hash_name AND cp.price_usd > 0
+          ORDER BY CASE WHEN cp.source = 'steam' THEN 0 ELSE 1 END
           LIMIT 1
         ) lp ON true
       `, [names]);
@@ -441,14 +441,10 @@ export async function getItemsPL(
       COUNT(*) OVER () AS total_count
     FROM holdings h
     LEFT JOIN LATERAL (
-      SELECT COALESCE(
-        (SELECT price_usd FROM price_history ph
-         WHERE ph.market_hash_name = h.market_hash_name AND ph.source = 'steam' AND ph.price_usd > 0
-         ORDER BY ph.recorded_at DESC LIMIT 1),
-        (SELECT price_usd FROM price_history ph
-         WHERE ph.market_hash_name = h.market_hash_name AND ph.price_usd > 0
-         ORDER BY ph.recorded_at DESC LIMIT 1)
-      ) AS price_usd
+      SELECT price_usd FROM current_prices cp
+      WHERE cp.market_hash_name = h.market_hash_name AND cp.price_usd > 0
+      ORDER BY CASE WHEN cp.source = 'steam' THEN 0 ELSE 1 END
+      LIMIT 1
     ) lp ON true
     LEFT JOIN LATERAL (
       SELECT MAX(created_at) AS last_created_at FROM transactions t

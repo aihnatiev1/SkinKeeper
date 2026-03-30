@@ -1,6 +1,7 @@
 import axios from "axios";
 import { pool } from "../db/pool.js";
 import { evaluateAlerts } from "./alertEngine.js";
+import { steamRequest } from "../utils/SteamClient.js";
 import { recordFetchStart, recordSuccess, recordFailure, record429, updateCrawlerState } from "./priceStats.js";
 import {
   initProxyPool,
@@ -392,15 +393,18 @@ async function fetchSteamSearchPage(
 }
 
 /**
- * Run a full batch crawl: page through ALL CS2 market items.
+ * Run a batch crawl of Steam market items.
  *
- * Steam now caps results at 10 per page (was 100). With ~33K items that's
- * ~3,300 pages. To finish in <1h we run parallel streams — one per proxy slot.
- * Each slot crawls its own segment of the item list.
+ * Steam sorts by popularity — first pages = valuable items, last = cheap junk.
+ * Two modes:
+ *   - "top" (default): first 500 pages (~5K items, everything >$0.10) — runs every 2.5h
+ *   - "full": all pages — runs once daily at 03:00 UTC for completeness
  *
- * 3 slots × 3s gap × ~1,100 pages/slot = ~55 min.
+ * Steam caps results at 10 per page. Parallel streams per proxy slot.
  */
-export async function runSteamBatchCrawl(): Promise<void> {
+const STEAM_BATCH_TOP_PAGES = 500; // ~5K items — the valuable portion of the market
+
+export async function runSteamBatchCrawl(mode: "top" | "full" = "top"): Promise<void> {
   if (steamBatchRunning) {
     console.log("[Steam Batch] Already running, skipping");
     return;
@@ -418,14 +422,15 @@ export async function runSteamBatchCrawl(): Promise<void> {
       return;
     }
     const totalItems = probe.total_count;
-    const totalPages = Math.ceil(totalItems / STEAM_SEARCH_COUNT);
+    const allPages = Math.ceil(totalItems / STEAM_SEARCH_COUNT);
+    const totalPages = mode === "full" ? allPages : Math.min(allPages, STEAM_BATCH_TOP_PAGES);
 
     const slotCount = Math.max(1, getSlotCount());
 
     // Split page range across slots
     const pagesPerSlot = Math.ceil(totalPages / slotCount);
 
-    console.log(`[Steam Batch] ${totalItems} items, ${totalPages} pages, ${slotCount} parallel slots (${pagesPerSlot} pages/slot)`);
+    console.log(`[Steam Batch] ${mode} mode: ${totalPages}/${allPages} pages, ${slotCount} slots`);
 
     // Save the probe page's results
     let totalSaved = 0;
@@ -455,7 +460,7 @@ export async function runSteamBatchCrawl(): Promise<void> {
     }
 
     recordSuccess("steam", totalSaved);
-    console.log(`[Steam Batch] Complete: ${totalSaved} prices from ${totalPages} pages (total: ${totalItems} items)`);
+    console.log(`[Steam Batch] Complete (${mode}): ${totalSaved} prices from ${totalPages} pages`);
   } catch (err) {
     recordFailure("steam", (err as Error).message || String(err));
     console.error("[Steam Batch] Fatal error:", err);
@@ -543,28 +548,28 @@ async function crawlSteamSegment(
 }
 
 /**
- * Start the Steam batch crawler on a schedule (every 2.5 hours).
- * SECONDARY to Hot Loop — this covers the full market for analytics/charts.
- * Parallel streams per proxy slot — ~55 min per full crawl.
- * First run starts after 2 min delay (let hot loop warm up first).
+ * Start the Steam batch crawler on a schedule.
+ * - "top" (500 pages, ~5K valuable items): every 2.5 hours
+ * - "full" (all ~3300 pages): once daily via cron at 03:00 UTC
+ *
+ * SECONDARY to Hot Loop — this covers the broader market for search/analytics.
  */
 export function startSteamCrawlers(): void {
   initProxyPool();
 
-  const INTERVAL_MS = 150 * 60_000; // 2.5h — low priority background scan
+  const TOP_INTERVAL_MS = 150 * 60_000; // 2.5h
 
-  async function scheduledRun() {
+  async function scheduledTopRun() {
     try {
-      await runSteamBatchCrawl();
+      await runSteamBatchCrawl("top");
     } catch (err) {
       console.error("[Steam Batch] Unhandled error:", err);
     }
-    steamBatchTimer = setTimeout(scheduledRun, INTERVAL_MS);
+    steamBatchTimer = setTimeout(scheduledTopRun, TOP_INTERVAL_MS);
   }
 
-  // Start first run after 30s (let other init complete)
-  steamBatchTimer = setTimeout(scheduledRun, 2 * 60_000); // 2 min delay — let hot loop start first
-  console.log("[Steam Batch] Scheduled: runs every 2.5h (background), first run in 2m");
+  steamBatchTimer = setTimeout(scheduledTopRun, 2 * 60_000);
+  console.log("[Steam Batch] Scheduled: top-500 every 2.5h, full daily at 03:00 UTC");
 }
 
 export function stopSteamCrawlers(): void {
@@ -588,30 +593,57 @@ export async function savePrices(
 ): Promise<void> {
   if (prices.size === 0) return;
 
-  // Batch insert into price_history in chunks of 500
-  const entries = [...prices.entries()];
-  const chunkSize = 500;
+  // Only steam prices go into price_history (for 7-day charts, alerts, portfolio).
+  // All other sources are available via external APIs for historical data.
+  // Every source still updates current_prices for live lookups.
+  if (source === "steam") {
+    const allEntries = [...prices.entries()];
+    const changedEntries: [string, number][] = [];
 
-  for (let c = 0; c < entries.length; c += chunkSize) {
-    const chunk = entries.slice(c, c + chunkSize);
-    const values: string[] = [];
-    const params: (string | number)[] = [];
-    let i = 1;
-
-    for (const [name, price] of chunk) {
-      values.push(`($${i}, $${i + 1}, $${i + 2})`);
-      params.push(name, source, price);
-      i += 3;
+    // Only record prices that actually changed
+    const names = allEntries.map(([n]) => n);
+    const { rows: currentRows } = await pool.query(
+      `SELECT market_hash_name, price_usd::float AS price
+       FROM current_prices
+       WHERE source = $1 AND market_hash_name = ANY($2::text[])`,
+      [source, names]
+    );
+    const currentMap = new Map<string, number>();
+    for (const r of currentRows) {
+      currentMap.set(r.market_hash_name, r.price);
     }
 
-    await pool.query(
-      `INSERT INTO price_history (market_hash_name, source, price_usd)
-       VALUES ${values.join(",")}`,
-      params
-    );
+    for (const [name, price] of allEntries) {
+      const prev = currentMap.get(name);
+      if (prev === undefined || prev !== price) {
+        changedEntries.push([name, price]);
+      }
+    }
+
+    if (changedEntries.length > 0) {
+      const chunkSize = 500;
+      for (let c = 0; c < changedEntries.length; c += chunkSize) {
+        const chunk = changedEntries.slice(c, c + chunkSize);
+        const values: string[] = [];
+        const params: (string | number)[] = [];
+        let i = 1;
+
+        for (const [name, price] of chunk) {
+          values.push(`($${i}, $${i + 1}, $${i + 2})`);
+          params.push(name, source, price);
+          i += 3;
+        }
+
+        await pool.query(
+          `INSERT INTO price_history (market_hash_name, source, price_usd)
+           VALUES ${values.join(",")}`,
+          params
+        );
+      }
+    }
   }
 
-  // Also update current_prices for fast lookups
+  // Update current_prices for ALL sources (live lookups)
   await upsertCurrentPrices(prices, source);
 
   // Evaluate alerts after saving prices
@@ -821,11 +853,12 @@ export async function getUniqueInventoryNames(): Promise<string[]> {
   return rows.map((r) => r.market_hash_name);
 }
 
-// Get price history for a specific item
+// Get local price history (steam only, max 7 days)
 export async function getPriceHistory(
   marketHashName: string,
-  days: number = 30
+  days: number = 7
 ): Promise<Array<{ source: string; price_usd: number; recorded_at: string }>> {
+  const localDays = Math.min(days, 7);
   const { rows } = await pool.query(
     `SELECT source, price_usd, recorded_at
      FROM price_history
@@ -834,7 +867,7 @@ export async function getPriceHistory(
        AND price_usd > 0
      ORDER BY recorded_at ASC
      LIMIT 2000`,
-    [marketHashName, days]
+    [marketHashName, localDays]
   );
   return rows.map((r) => ({
     source: r.source,
@@ -844,43 +877,69 @@ export async function getPriceHistory(
 }
 
 /**
- * Prune old price_history to keep DB size manageable.
+ * Fetch price history from Steam Community Market API.
+ * Returns daily data points for up to 1 year+.
+ * Requires an authenticated Steam session.
+ */
+export async function getSteamPriceHistory(
+  marketHashName: string,
+  days: number,
+  session: { sessionId: string; steamLoginSecure: string }
+): Promise<Array<{ source: string; price_usd: number; recorded_at: string }>> {
+  const { data } = await steamRequest<{
+    success: boolean;
+    prices: [string, number, string][];
+  }>({
+    url: `https://steamcommunity.com/market/pricehistory/`,
+    params: { appid: 730, market_hash_name: marketHashName },
+    cookies: session,
+    timeout: 15000,
+  });
+
+  if (!data?.success || !Array.isArray(data.prices)) return [];
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  return data.prices
+    .map(([dateStr, price]) => {
+      // Steam format: "Mar 15 2026 01: +0"
+      const date = new Date(dateStr.replace(": +0", ":00 +0000"));
+      return { source: "steam", price_usd: price, recorded_at: date.toISOString(), _date: date };
+    })
+    .filter((p) => p._date >= cutoff)
+    .map(({ source, price_usd, recorded_at }) => ({ source, price_usd, recorded_at }));
+}
+
+/**
+ * Prune old price_history — delete everything older than 7 days.
  *
- * Strategy:
- * 1. Delete rows older than 90 days entirely
- * 2. For rows 7-90 days old: keep only 1 per item/source/day (the latest)
- * 3. Keep last 7 days untouched (full detail for charts)
- *
- * This reduces ~14M skinport rows to manageable levels.
+ * Only steam prices are stored locally (for 7-day charts, alerts, portfolio).
+ * Longer history is fetched on-demand from Steam API.
  */
 export async function pruneOldPrices(): Promise<void> {
   const start = Date.now();
+  const BATCH = 50_000;
+  let totalDeleted = 0;
 
-  // Step 1: Delete everything older than 90 days
-  const { rowCount: deletedOld } = await pool.query(
-    `DELETE FROM price_history WHERE recorded_at < NOW() - INTERVAL '90 days'`
-  );
-  console.log(`[Prune] Deleted ${deletedOld ?? 0} rows older than 90 days`);
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { rowCount } = await pool.query(
+      `DELETE FROM price_history
+       WHERE id IN (
+         SELECT id FROM price_history
+         WHERE recorded_at < NOW() - INTERVAL '7 days'
+         LIMIT $1
+       )`,
+      [BATCH]
+    );
+    const deleted = rowCount ?? 0;
+    totalDeleted += deleted;
+    if (deleted < BATCH) break;
+  }
 
-  // Step 2: For 7-90 days, keep only latest per item/source/day
-  // Delete duplicates — keep the one with MAX(id) per (name, source, date)
-  const { rowCount: deletedDups } = await pool.query(
-    `DELETE FROM price_history ph
-     WHERE recorded_at >= NOW() - INTERVAL '90 days'
-       AND recorded_at < NOW() - INTERVAL '7 days'
-       AND id NOT IN (
-         SELECT DISTINCT ON (market_hash_name, source, recorded_at::date)
-                id
-         FROM price_history
-         WHERE recorded_at >= NOW() - INTERVAL '90 days'
-           AND recorded_at < NOW() - INTERVAL '7 days'
-         ORDER BY market_hash_name, source, recorded_at::date, recorded_at DESC
-       )`
-  );
-  console.log(`[Prune] Deleted ${deletedDups ?? 0} duplicate rows (7-90 days, keeping 1/day/item/source)`);
-
-  const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-  console.log(`[Prune] Completed in ${elapsed}s`);
+  if (totalDeleted > 0) console.log(`[Prune] Deleted ${totalDeleted} rows older than 7 days`);
+  console.log(`[Prune] Completed in ${((Date.now() - start) / 1000).toFixed(1)}s`);
 }
 
 // ─── Hot Steam Price Loop ────────────────────────────────────────────────

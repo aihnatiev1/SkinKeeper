@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, pruneOldPrices, purgeStaleCurrentPrices, startHotSteamLoop, stopHotSteamLoop } from "./prices.js";
+import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, runSteamBatchCrawl, pruneOldPrices, purgeStaleCurrentPrices, startHotSteamLoop, stopHotSteamLoop } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
 import { runCSGOTraderDailySeed } from "./csgoTrader.js";
@@ -176,8 +176,18 @@ export function startPriceJobs() {
     }
   }));
 
+  // Full Steam batch crawl (all pages) at 03:00 UTC daily — cheap items included
+  scheduledTasks.push(cron.schedule("0 3 * * *", async () => {
+    try {
+      await runSteamBatchCrawl("full");
+      recordJobRun("steamBatchFull", true);
+    } catch (err) {
+      recordJobRun("steamBatchFull", false, err instanceof Error ? err.message : String(err));
+      console.error("[CRON] Full Steam batch failed:", err);
+    }
+  }));
+
   // Prune old price_history at 02:00 UTC daily
-  // Strategy: keep 7 days detailed, aggregate 7-90d to daily, delete >90d
   scheduledTasks.push(cron.schedule("0 2 * * *", async () => {
     try {
       await pruneOldPrices();

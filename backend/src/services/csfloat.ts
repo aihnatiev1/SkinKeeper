@@ -107,34 +107,30 @@ export function startCSFloatCrawler(): void {
   }
 
   initProxyPool();
-  const slotCount = getSlotCount();
 
-  for (let i = 0; i < slotCount; i++) {
-    const slot = getSlot(i);
-    if (!slot) continue;
+  // Single slot (direct only) — CSFloat aggressively rate-limits.
+  // 1 req / 2 min = ~30 req/hour. With ~160 inventory items → full cycle ~5h.
+  // CSGOTrader daily seed covers the gap.
+  const crawler = new AdaptiveCrawler(
+    {
+      name: "CSFloat",
+      minIntervalMs: 60_000,       // floor: 1 req / 1 min (never faster)
+      maxIntervalMs: 1800_000,     // ceiling: 1 req / 30 min after repeated 429s
+      startIntervalMs: 300_000,    // start very slow: 1 req / 5 min
+      backoffFactor: 4,            // harsh backoff on 429 (5min → 20min)
+      cooldownFactor: 0.98,        // 2% faster per success (very gradual)
+      successesBeforeSpeedup: 50,  // need 50 successes before any speedup
+      refreshAgeMs: 8 * 3600_000,  // refresh after 8h
+    },
+    "csfloat",
+    (name) => fetchCSFloatItemPrice(name, 0), // slot 0 = direct only
+    { slotIndex: 0, domain: CSFLOAT_DOMAIN }
+  );
 
-    const crawler = new AdaptiveCrawler(
-      {
-        name: "CSFloat",
-        minIntervalMs: 45_000,       // 1 req / 45s per slot (was 30s — caused 429s)
-        maxIntervalMs: 600_000,      // 10 min max
-        startIntervalMs: 75_000,     // start 1 req / 75s (conservative ramp-up)
-        backoffFactor: 2.5,          // backoff on 429
-        cooldownFactor: 0.95,        // 5% faster per streak (was 7% — too aggressive)
-        successesBeforeSpeedup: 25,  // need 25 successes before speedup (was 15)
-        refreshAgeMs: 4 * 3600_000,  // refresh after 4h
-      },
-      "csfloat",
-      (name) => fetchCSFloatItemPrice(name, i),
-      { slotIndex: i, domain: CSFLOAT_DOMAIN }
-    );
+  csfloatCrawlers.push(crawler);
+  crawler.start(120_000);
 
-    csfloatCrawlers.push(crawler);
-    // Stagger: each slot starts 20s apart
-    crawler.start(60_000 + i * 20_000);
-  }
-
-  console.log(`[CSFloat] Started ${csfloatCrawlers.length} parallel crawlers (via proxy pool)`);
+  console.log(`[CSFloat] Started single crawler (direct, 1 req/2min)`);
 }
 
 export function stopCSFloatCrawler(): void {

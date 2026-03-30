@@ -153,13 +153,9 @@ export async function evaluateAlerts(
       case "arbitrage": {
         // Cross-market price gap
         const { rows: allPrices } = await pool.query(
-          `SELECT source, lp.price_usd::float AS price
-           FROM (SELECT DISTINCT source FROM price_history WHERE market_hash_name = $1 AND price_usd > 0) s
-           JOIN LATERAL (
-             SELECT price_usd FROM price_history ph
-             WHERE ph.market_hash_name = $1 AND ph.source = s.source AND ph.price_usd > 0
-             ORDER BY ph.recorded_at DESC LIMIT 1
-           ) lp ON true`,
+          `SELECT source, price_usd::float AS price
+           FROM current_prices
+           WHERE market_hash_name = $1 AND price_usd > 0`,
           [alert.market_hash_name]
         );
         if (allPrices.length < 2) break;

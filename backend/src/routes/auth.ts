@@ -476,12 +476,6 @@ router.put("/accounts/:accountId/active", authMiddleware, async (req: AuthReques
 // DELETE /api/auth/accounts/:accountId — Unlink an account
 router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    // Block demo account from deleting
-    if (req.isDemo) {
-      res.status(403).json({ error: "Cannot modify demo account" });
-      return;
-    }
-
     const accountId = parseInt(req.params.accountId as string);
 
     // Verify the account belongs to this user
