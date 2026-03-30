@@ -4,6 +4,7 @@ import { SteamSessionService } from "./steamSession.js";
 import { sellItem, quickSellPrice, checkAssetListed } from "./market.js";
 import { getWalletCurrency } from "./currency.js";
 import { recalculateCostBasis } from "./profitLoss.js";
+import { refreshPricesOnDemand } from "./steamHistogram.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -201,6 +202,22 @@ async function processOperation(
        ORDER BY id`,
       [operationId]
     );
+
+    // Pre-fetch prices for items that need quickprice (priceCents=0).
+    // Runs histogram calls in parallel across proxy slots — much faster than
+    // fetching one-by-one inside the sell loop.
+    const needsPrice = items.filter((i) => i.price_cents <= 0 && i.market_hash_name);
+    if (needsPrice.length > 0) {
+      const uniqueNames = [...new Set(needsPrice.map((i) => i.market_hash_name as string))];
+      const walletCurrencyId = await getWalletCurrency(fallbackAccountId) ?? 1;
+      try {
+        await refreshPricesOnDemand(uniqueNames, walletCurrencyId);
+        log.info("sell_prices_prefetched", { operationId, count: uniqueNames.length });
+      } catch (err) {
+        log.warn("sell_prices_prefetch_failed", { operationId }, err);
+        // Non-fatal: quickSellPrice will still work via other fallbacks
+      }
+    }
 
     let consecutiveErrors = 0;
 
