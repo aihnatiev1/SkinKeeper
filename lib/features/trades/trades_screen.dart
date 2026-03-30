@@ -12,6 +12,7 @@ import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../features/auth/session_gate.dart';
 import '../../features/auth/session_provider.dart';
+import '../../features/auth/widgets/session_status_widget.dart';
 import '../../features/settings/accounts_provider.dart';
 import '../../models/market_listing.dart';
 import '../../models/trade_offer.dart';
@@ -79,6 +80,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                           ),
                         ),
                       ),
+                      const SessionStatusWidget(),
                       _SyncButton(ref: ref),
                     ],
                   ),

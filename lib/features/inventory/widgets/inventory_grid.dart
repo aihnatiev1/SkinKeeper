@@ -34,13 +34,19 @@ class InventoryGrid extends ConsumerWidget {
           ? AppRefreshIndicator(
               onRefresh: () => ref.read(inventoryProvider.notifier).refresh(),
               child: ListView(
-                children: const [
-                  SizedBox(height: 120),
-                  EmptyState(
-                    icon: Icons.inventory_2_outlined,
-                    title: 'No items in inventory',
-                    subtitle: 'Pull down to refresh or link a Steam account',
-                  ),
+                children: [
+                  const SizedBox(height: 120),
+                  ref.read(searchQueryProvider).isNotEmpty
+                    ? const EmptyState(
+                        icon: Icons.search_off_rounded,
+                        title: 'No items match your search',
+                        subtitle: 'Try a different search term',
+                      )
+                    : const EmptyState(
+                        icon: Icons.inventory_2_outlined,
+                        title: 'No items in inventory',
+                        subtitle: 'Pull down to refresh or link a Steam account',
+                      ),
                 ],
               ),
             )

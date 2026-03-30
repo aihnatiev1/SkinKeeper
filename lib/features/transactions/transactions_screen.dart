@@ -262,9 +262,12 @@ class TransactionsScreen extends ConsumerWidget {
               child: transactions.when(
                 data: (list) {
                   if (list.isEmpty) {
+                    final activeFilter = ref.read(txTypeFilterProvider);
                     return Center(
                       child: Text(
-                        'No transactions.\nTap sync to fetch from Steam.',
+                        activeFilter != null
+                            ? 'No ${activeFilter} transactions found.'
+                            : 'No transactions.\nTap sync to fetch from Steam.',
                         textAlign: TextAlign.center,
                         style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
                       ),

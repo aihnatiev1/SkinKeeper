@@ -250,6 +250,24 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             ),
           ),
         ),
+        // Running total of listed value
+        if (operation.succeeded > 0) ...[
+          const SizedBox(height: 6),
+          Builder(builder: (_) {
+            final listedCents = operation.items
+                .where((i) => i.status == SellItemStatus.listed)
+                .fold<int>(0, (sum, i) => sum + i.priceCents);
+            if (listedCents > 0) {
+              final currency = ref.read(currencyProvider);
+              return Text(
+                'Listed: ${currency.formatRaw(listedCents / 100)}',
+                style: AppTheme.mono.copyWith(color: AppTheme.profit, fontSize: 13),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
+        ],
+
         // Rate limit info (when processing many items)
         if (isActive && operation.totalItems > 5)
           Padding(

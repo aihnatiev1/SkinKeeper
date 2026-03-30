@@ -192,6 +192,19 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
               ),
             ),
 
+            // ── Thin progress bar during background sync ──
+            SliverToBoxAdapter(
+              child: Consumer(builder: (_, ref, __) {
+                final syncing = ref.watch(syncStateProvider.select((s) => s.isSyncing));
+                if (!syncing) return const SizedBox.shrink();
+                return const LinearProgressIndicator(
+                  minHeight: 2,
+                  backgroundColor: Colors.transparent,
+                  color: AppTheme.accent,
+                );
+              }),
+            ),
+
             // ── Sync banner (shows during background sync after login) ──
             SliverToBoxAdapter(child: _SyncBanner()),
 
