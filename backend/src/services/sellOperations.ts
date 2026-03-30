@@ -158,15 +158,18 @@ async function processOperation(
   operationId: string,
   userId: number
 ): Promise<void> {
-  if (activeOperations.has(operationId)) return;
+  // Atomic lock: only one process can transition pending → in_progress.
+  // Prevents race condition when two requests trigger processOperation concurrently.
+  const { rowCount: claimed } = await pool.query(
+    `UPDATE sell_operations SET status = 'in_progress'
+     WHERE id = $1 AND status = 'pending'`,
+    [operationId]
+  );
+  if (!claimed || claimed === 0) return; // already processing or cancelled
+
   activeOperations.add(operationId);
 
   try {
-    // Mark operation as in_progress
-    await pool.query(
-      `UPDATE sell_operations SET status = 'in_progress' WHERE id = $1`,
-      [operationId]
-    );
 
     // Resolve fallback accountId from the operation
     const { rows: opData } = await pool.query(

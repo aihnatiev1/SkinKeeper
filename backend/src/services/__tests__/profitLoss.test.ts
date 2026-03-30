@@ -154,6 +154,7 @@ describe("getPLHistory", () => {
   });
 
   it("returns daily snapshots for specified days", async () => {
+    const today = new Date().toISOString().slice(0, 10);
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -165,7 +166,7 @@ describe("getPLHistory", () => {
           unrealized_profit_cents: 1500,
         },
         {
-          snapshot_date: "2025-12-02",
+          snapshot_date: today,
           total_invested_cents: 10000,
           total_current_value_cents: 11000,
           cumulative_profit_cents: 1000,
@@ -181,7 +182,7 @@ describe("getPLHistory", () => {
     expect(history[0].date).toBe("2025-12-01");
     expect(history[0].totalInvestedCents).toBe(10000);
     expect(history[0].cumulativeProfitCents).toBe(2000);
-    expect(history[1].date).toBe("2025-12-02");
+    expect(history[1].date).toBe(today);
   });
 
   it("returns empty array when no history", async () => {

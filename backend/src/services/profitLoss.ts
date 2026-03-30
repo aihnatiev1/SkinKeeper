@@ -210,6 +210,19 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
 
   const basis = basisRes.rows[0];
 
+  if (!basis) {
+    return {
+      totalInvestedCents: 0,
+      totalEarnedCents: 0,
+      realizedProfitCents: 0,
+      unrealizedProfitCents: 0,
+      totalProfitCents: 0,
+      totalProfitPct: 0,
+      holdingCount: 0,
+      totalCurrentValueCents: 0,
+    };
+  }
+
   // Get current value of holdings using LATERAL for fast index lookups
   const holdingsRes = await pool.query(
     `
@@ -559,19 +572,21 @@ export async function getPLHistory(
   }));
 
   // Always include today's live point so charts show data from day 1
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const lastPoint = points[points.length - 1];
-  if (!lastPoint || lastPoint.date !== todayStr) {
-    // Compute live P/L for today
-    const pl = await getPortfolioPL(userId, accountId);
-    points.push({
-      date: todayStr,
-      totalInvestedCents: pl.totalInvestedCents,
-      totalCurrentValueCents: pl.totalCurrentValueCents,
-      cumulativeProfitCents: pl.totalProfitCents,
-      realizedProfitCents: pl.realizedProfitCents,
-      unrealizedProfitCents: pl.unrealizedProfitCents,
-    });
+  // (skip if no snapshots at all — user has no portfolio data yet)
+  if (points.length > 0) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const lastPoint = points[points.length - 1];
+    if (lastPoint.date !== todayStr) {
+      const pl = await getPortfolioPL(userId, accountId);
+      points.push({
+        date: todayStr,
+        totalInvestedCents: pl.totalInvestedCents,
+        totalCurrentValueCents: pl.totalCurrentValueCents,
+        cumulativeProfitCents: pl.totalProfitCents,
+        realizedProfitCents: pl.realizedProfitCents,
+        unrealizedProfitCents: pl.unrealizedProfitCents,
+      });
+    }
   }
 
   return points;
