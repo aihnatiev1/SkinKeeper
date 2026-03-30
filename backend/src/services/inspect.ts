@@ -184,7 +184,7 @@ export async function inspectItem(
   const { rows } = await pool.query(
     `SELECT i.id, i.inspect_link, i.float_value, i.paint_seed, i.paint_index, i.stickers, i.charms, i.inspected_at
      FROM inventory_items i
-     JOIN steam_accounts sa ON i.steam_account_id = sa.id
+     JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
      WHERE sa.user_id = $1 AND i.asset_id = $2`,
     [userId, assetId]
   );

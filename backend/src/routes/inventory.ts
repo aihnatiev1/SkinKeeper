@@ -64,7 +64,7 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
        SELECT COUNT(*)::int as total,
               COALESCE(SUM(b.best_price), 0)::float as total_value
        FROM inventory_items i
-       JOIN steam_accounts sa ON i.steam_account_id = sa.id
+       JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
        LEFT JOIN best b ON b.market_hash_name = i.market_hash_name
        WHERE ${whereClause}`,
       params
@@ -95,7 +95,7 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
               sa.avatar_url as account_avatar_url,
               COALESCE(b.best_price, 0)::float as best_price
        FROM inventory_items i
-       JOIN steam_accounts sa ON i.steam_account_id = sa.id
+       JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
        LEFT JOIN best b ON b.market_hash_name = i.market_hash_name
        WHERE ${whereClause}
        ORDER BY ${orderBy}
@@ -197,10 +197,10 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
         ? pool.query(
             filterAccountId && !isNaN(filterAccountId)
               ? `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
-                 JOIN steam_accounts sa ON i.steam_account_id = sa.id
+                 JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
                  WHERE sa.user_id = $1 AND sa.id = $2`
               : `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
-                 JOIN steam_accounts sa ON i.steam_account_id = sa.id
+                 JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
                  WHERE sa.user_id = $1`,
             filterAccountId && !isNaN(filterAccountId) ? [req.userId, filterAccountId] : [req.userId])
         : null,
@@ -240,7 +240,7 @@ router.get(
            ARRAY_AGG(i.asset_id ORDER BY i.asset_id) AS asset_ids,
            (ARRAY_AGG(i.icon_url))[1] AS icon_url
          FROM inventory_items i
-         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
          WHERE sa.user_id = $1
          GROUP BY i.market_hash_name
          HAVING COUNT(*) > 1
@@ -382,7 +382,7 @@ inventoryQueue.process(async (job, updateProgress) => {
   // Background: inspect items missing float values (only skins with wear)
   const { rows: uninspected } = await pool.query(
     `SELECT i.asset_id FROM inventory_items i
-     JOIN steam_accounts sa ON i.steam_account_id = sa.id
+     JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
      WHERE sa.user_id = $1 AND i.float_value IS NULL
        AND i.inspect_link IS NOT NULL AND i.wear IS NOT NULL
      ORDER BY i.updated_at DESC
@@ -426,7 +426,7 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const filterAccountId = parseInt(req.query.accountId as string);
-      let accountQuery = `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`;
+      let accountQuery = `SELECT id, steam_id FROM active_steam_accounts WHERE user_id = $1`;
       const accountParams: any[] = [req.userId];
 
       if (filterAccountId && !isNaN(filterAccountId)) {

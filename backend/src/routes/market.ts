@@ -201,7 +201,7 @@ router.post(
       const { rows: ownedRows } = await pool.query(
         `SELECT ii.asset_id
          FROM inventory_items ii
-         JOIN steam_accounts sa ON ii.steam_account_id = sa.id
+         JOIN active_steam_accounts sa ON ii.steam_account_id = sa.id
          WHERE sa.user_id = $1 AND ii.asset_id = ANY($2::text[])`,
         [req.userId!, assetIds]
       );
@@ -450,7 +450,7 @@ router.get(
       if (paramId && !isNaN(paramId)) {
         // Single account mode
         const { rows } = await pool.query(
-          "SELECT id, display_name FROM steam_accounts WHERE id = $1 AND user_id = $2",
+          "SELECT id, display_name FROM active_steam_accounts WHERE id = $1 AND user_id = $2",
           [paramId, req.userId]
         );
         if (!rows[0]) {
@@ -462,7 +462,7 @@ router.get(
       } else {
         // All accounts mode: fetch in parallel, skip accounts without active sessions
         const { rows: accounts } = await pool.query(
-          "SELECT id, display_name FROM steam_accounts WHERE user_id = $1",
+          "SELECT id, display_name FROM active_steam_accounts WHERE user_id = $1",
           [req.userId]
         );
         const results = await Promise.all(

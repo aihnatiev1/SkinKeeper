@@ -48,7 +48,7 @@ router.post(
       if (requestedAccountId) {
         // Verify this account belongs to the user
         const { rows } = await pool.query(
-          "SELECT id FROM steam_accounts WHERE id = $1 AND user_id = $2",
+          "SELECT id FROM active_steam_accounts WHERE id = $1 AND user_id = $2",
           [requestedAccountId, req.userId]
         );
         if (!rows.length) {
@@ -70,7 +70,7 @@ router.post(
 
       // Get wallet currency for price conversion
       const { rows: accRows } = await pool.query(
-        "SELECT id, wallet_currency FROM steam_accounts WHERE id = $1",
+        "SELECT id, wallet_currency FROM active_steam_accounts WHERE id = $1",
         [accountId]
       );
       const steamAccountId = accRows[0]?.id;

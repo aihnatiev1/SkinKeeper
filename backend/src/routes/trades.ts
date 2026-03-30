@@ -36,7 +36,7 @@ router.get(
       // Get steam_id from active account (respects account switch)
       const accountId = await SteamSessionService.getActiveAccountId(req.userId!);
       const { rows } = await pool.query(
-        `SELECT steam_id FROM steam_accounts WHERE id = $1`,
+        `SELECT steam_id FROM active_steam_accounts WHERE id = $1`,
         [accountId]
       );
       if (rows.length === 0) {
@@ -83,7 +83,7 @@ router.get(
       const { rows } = await pool.query(
         `SELECT id, steam_id, display_name, avatar_url,
                 trade_token IS NOT NULL AS has_trade_token
-         FROM steam_accounts WHERE user_id = $1
+         FROM active_steam_accounts WHERE user_id = $1
          ORDER BY id`,
         [req.userId!]
       );
@@ -362,7 +362,7 @@ router.post(
 
       // Verify both accounts belong to this user
       const { rows: accounts } = await pool.query(
-        `SELECT id, steam_id, trade_token FROM steam_accounts
+        `SELECT id, steam_id, trade_token FROM active_steam_accounts
          WHERE user_id = $1 AND id IN ($2, $3)`,
         [req.userId!, fromAccountId, toAccountId]
       );

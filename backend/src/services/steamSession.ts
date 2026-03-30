@@ -129,9 +129,9 @@ export class SteamSessionService {
     );
     if (rows[0]?.active_account_id) return rows[0].active_account_id;
 
-    // Fallback: first linked account
+    // Fallback: first active account
     const { rows: accounts } = await pool.query(
-      `SELECT id FROM steam_accounts WHERE user_id = $1 ORDER BY added_at LIMIT 1`,
+      `SELECT id FROM active_steam_accounts WHERE user_id = $1 ORDER BY added_at LIMIT 1`,
       [userId]
     );
     if (accounts.length === 0) {

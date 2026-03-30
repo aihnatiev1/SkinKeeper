@@ -20,7 +20,7 @@ export async function checkPriceChanges(): Promise<void> {
     WITH user_items AS (
       SELECT DISTINCT sa.user_id, ii.market_hash_name
       FROM inventory_items ii
-      JOIN steam_accounts sa ON ii.steam_account_id = sa.id
+      JOIN active_steam_accounts sa ON ii.steam_account_id = sa.id
       WHERE EXISTS (SELECT 1 FROM user_devices ud WHERE ud.user_id = sa.user_id)
     ),
     price_now AS (

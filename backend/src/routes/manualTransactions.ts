@@ -197,7 +197,7 @@ router.get(
         `(
           SELECT DISTINCT market_hash_name, icon_url
           FROM inventory_items i
-          JOIN steam_accounts sa ON i.steam_account_id = sa.id
+          JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
           WHERE sa.user_id = $1 AND i.market_hash_name ILIKE $2
           LIMIT 20
         )

@@ -274,7 +274,7 @@ export interface AccountPL {
 
 export async function getPortfolioPLByAccount(userId: number): Promise<AccountPL[]> {
   const { rows: accounts } = await pool.query(
-    `SELECT id, steam_id, display_name, avatar_url FROM steam_accounts WHERE user_id = $1 ORDER BY id`,
+    `SELECT id, steam_id, display_name, avatar_url FROM active_steam_accounts WHERE user_id = $1 ORDER BY id`,
     [userId]
   );
 
@@ -627,7 +627,7 @@ export async function runDailyPLSnapshot(): Promise<void> {
       await takeDailySnapshot(user.id);
       // Per-account snapshots for multi-account users
       const { rows: accounts } = await pool.query(
-        `SELECT id FROM steam_accounts WHERE user_id = $1`,
+        `SELECT id FROM active_steam_accounts WHERE user_id = $1`,
         [user.id]
       );
       for (const acc of accounts) {

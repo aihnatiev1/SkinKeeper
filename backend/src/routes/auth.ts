@@ -143,11 +143,11 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     if (state?.startsWith("link:")) {
       const userId = parseInt(state.split(":")[1]);
       if (userId) {
-        // Link additional account
+        // Link additional account — immediately active
         await pool.query(
-          `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4`,
+          `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+           VALUES ($1, $2, $3, $4, 'active')
+           ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
           [userId, steamId, profile.personaname, profile.avatarfull]
         );
         res.redirect(`skinkeeper://account-linked?steamId=${steamId}`);
@@ -184,10 +184,16 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
 
     // Create steam_accounts entry for this account
     await pool.query(
-      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4`,
+      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+       VALUES ($1, $2, $3, $4, 'active')
+       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
       [user.id, steamId, profile.personaname, profile.avatarfull]
+    );
+
+    // Disable all other accounts — fresh login = clean slate with 1 account
+    await pool.query(
+      `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
+      [user.id, steamId]
     );
 
     // Set active account to the one used for login
@@ -247,18 +253,23 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     const user = rows[0];
 
     await pool.query(
-      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4`,
+      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+       VALUES ($1, $2, $3, $4, 'active')
+       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
 
-    // Set active_account_id if not set
+    // Disable all other accounts — fresh login = clean slate
+    await pool.query(
+      `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
+      [user.id, steamId]
+    );
+
+    // Set active_account_id to the login account
     await pool.query(
       `UPDATE users SET active_account_id = sa.id
        FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2
-         AND users.active_account_id IS NULL`,
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
       [user.id, steamId]
     );
 
@@ -294,9 +305,9 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
          COALESCE(sa.avatar_url, u.avatar_url) AS avatar_url,
          u.is_premium, u.premium_until,
          u.active_account_id,
-         (SELECT COUNT(*)::int FROM steam_accounts WHERE user_id = u.id) AS account_count
+         (SELECT COUNT(*)::int FROM active_steam_accounts WHERE user_id = u.id) AS account_count
        FROM users u
-       LEFT JOIN steam_accounts sa ON sa.id = u.active_account_id
+       LEFT JOIN active_steam_accounts sa ON sa.id = u.active_account_id
        WHERE u.id = $1`,
       [req.userId]
     );
@@ -355,6 +366,7 @@ router.get("/accounts", authMiddleware, async (req: AuthRequest, res: Response) 
   try {
     const { rows: accounts } = await pool.query(
       `SELECT sa.id, sa.steam_id, sa.display_name, sa.avatar_url, sa.added_at,
+              sa.status,
               sa.steam_login_secure IS NOT NULL as has_session,
               sa.session_updated_at
        FROM steam_accounts sa
@@ -387,6 +399,7 @@ router.get("/accounts", authMiddleware, async (req: AuthRequest, res: Response) 
         displayName: a.display_name,
         avatarUrl: a.avatar_url,
         isActive: a.id === activeAccountId,
+        status: a.status,
         sessionStatus,
         addedAt: a.added_at,
       };
@@ -451,9 +464,9 @@ router.put("/accounts/:accountId/active", authMiddleware, async (req: AuthReques
   try {
     const accountId = parseInt(req.params.accountId as string);
 
-    // Verify the account belongs to this user
+    // Verify the account belongs to this user and is active
     const { rows } = await pool.query(
-      `SELECT id FROM steam_accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT id FROM active_steam_accounts WHERE id = $1 AND user_id = $2`,
       [accountId, req.userId]
     );
     if (rows.length === 0) {
@@ -473,14 +486,14 @@ router.put("/accounts/:accountId/active", authMiddleware, async (req: AuthReques
   }
 });
 
-// DELETE /api/auth/accounts/:accountId — Unlink an account
+// DELETE /api/auth/accounts/:accountId — Disable an account (soft-delete)
 router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const accountId = parseInt(req.params.accountId as string);
 
     // Verify the account belongs to this user
     const { rows: accounts } = await pool.query(
-      `SELECT id FROM steam_accounts WHERE user_id = $1 ORDER BY added_at`,
+      `SELECT id, status FROM steam_accounts WHERE user_id = $1 ORDER BY added_at`,
       [req.userId]
     );
 
@@ -490,48 +503,45 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
       return;
     }
 
-    const isLastAccount = accounts.length <= 1;
+    const activeAccounts = accounts.filter((a) => a.status === "active");
+    const isLastActive = activeAccounts.length <= 1 && activeAccounts[0]?.id === accountId;
 
-    // Must clear/update active_account_id BEFORE deleting due to FK constraint
-    if (isLastAccount) {
+    // Soft-delete: disable instead of deleting
+    await pool.query(
+      `UPDATE steam_accounts SET status = 'disabled' WHERE id = $1 AND user_id = $2`,
+      [accountId, req.userId]
+    );
+
+    if (isLastActive) {
       await pool.query(
         `UPDATE users SET active_account_id = NULL WHERE id = $1`,
         [req.userId]
       );
-    } else {
-      // If this account is active, switch to another before deleting
-      const { rows: userRow } = await pool.query(
-        `SELECT active_account_id FROM users WHERE id = $1`,
-        [req.userId]
-      );
-      if (userRow[0]?.active_account_id === accountId) {
-        const { rows: remaining } = await pool.query(
-          `SELECT id FROM steam_accounts WHERE user_id = $1 AND id != $2 ORDER BY added_at LIMIT 1`,
-          [req.userId, accountId]
-        );
-        if (remaining.length > 0) {
-          await pool.query(
-            `UPDATE users SET active_account_id = $1 WHERE id = $2`,
-            [remaining[0].id, req.userId]
-          );
-        }
-      }
-    }
-
-    // Now safe to delete (CASCADE handles inventory_items)
-    await pool.query(
-      `DELETE FROM steam_accounts WHERE id = $1 AND user_id = $2`,
-      [accountId, req.userId]
-    );
-
-    if (isLastAccount) {
-      // Clean up user-level data when all accounts removed
-      await pool.query(`DELETE FROM portfolios WHERE user_id = $1`, [req.userId]);
-      await pool.query(`DELETE FROM transactions WHERE user_id = $1`, [req.userId]);
-      await pool.query(`DELETE FROM cost_basis WHERE user_id = $1`, [req.userId]);
-      await pool.query(`UPDATE users SET active_account_id = NULL WHERE id = $1`, [req.userId]);
       res.json({ success: true, lastAccountRemoved: true });
       return;
+    }
+
+    // If this account was the active one, switch to another active account
+    const { rows: userRow } = await pool.query(
+      `SELECT active_account_id FROM users WHERE id = $1`,
+      [req.userId]
+    );
+    if (userRow[0]?.active_account_id === accountId) {
+      const { rows: remaining } = await pool.query(
+        `SELECT id FROM steam_accounts WHERE user_id = $1 AND id != $2 AND status = 'active' ORDER BY added_at LIMIT 1`,
+        [req.userId, accountId]
+      );
+      if (remaining.length > 0) {
+        await pool.query(
+          `UPDATE users SET active_account_id = $1 WHERE id = $2`,
+          [remaining[0].id, req.userId]
+        );
+      } else {
+        await pool.query(
+          `UPDATE users SET active_account_id = NULL WHERE id = $1`,
+          [req.userId]
+        );
+      }
     }
 
     res.json({ success: true });
@@ -666,9 +676,9 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
       }
       const profile = await getSteamProfile(steamId);
       const { rows: saRows } = await pool.query(
-        `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4
+        `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+         VALUES ($1, $2, $3, $4, 'active')
+         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
          RETURNING id`,
         [pending.linkUserId, steamId, profile.personaname, profile.avatarfull]
       );
@@ -700,20 +710,24 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
     const user = rows[0];
 
     const { rows: saRows } = await pool.query(
-      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4
+      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+       VALUES ($1, $2, $3, $4, 'active')
+       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
        RETURNING id`,
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
     const accountId = saRows[0].id;
 
+    // Disable all other accounts — fresh login = clean slate
     await pool.query(
-      `UPDATE users SET active_account_id = sa.id
-       FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2
-         AND users.active_account_id IS NULL`,
+      `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
       [user.id, steamId]
+    );
+
+    // Set active account to the one used for login
+    await pool.query(
+      `UPDATE users SET active_account_id = $1 WHERE id = $2`,
+      [accountId, user.id]
     );
 
     await SteamSessionService.saveSession(accountId, pending.cookies);

@@ -24,11 +24,11 @@ router.get(
         accountId
           ? `SELECT i.market_hash_name
              FROM inventory_items i
-             JOIN steam_accounts sa ON i.steam_account_id = sa.id
+             JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
              WHERE sa.user_id = $1 AND sa.id = $2`
           : `SELECT i.market_hash_name
              FROM inventory_items i
-             JOIN steam_accounts sa ON i.steam_account_id = sa.id
+             JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
              WHERE sa.user_id = $1`,
         accountId ? [req.userId, accountId] : [req.userId]
       );
@@ -245,7 +245,7 @@ router.get(
                 COUNT(*)::int AS item_count
          FROM current_prices cp
          INNER JOIN inventory_items ii ON ii.market_hash_name = cp.market_hash_name
-         INNER JOIN steam_accounts sa ON ii.steam_account_id = sa.id
+         INNER JOIN active_steam_accounts sa ON ii.steam_account_id = sa.id
          WHERE sa.user_id = $1 AND cp.price_usd > 0
            AND cp.source NOT IN ('csgotrader', 'buff_bid')
          GROUP BY cp.source
@@ -280,7 +280,7 @@ router.get(
                 i.rarity_color,
                 COUNT(*)::int AS count
          FROM inventory_items i
-         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
          WHERE sa.user_id = $1
          GROUP BY i.rarity, i.rarity_color
          ORDER BY count DESC`,
@@ -304,7 +304,7 @@ router.get(
            END AS item_type,
            COUNT(*)::int AS count
          FROM inventory_items i
-         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
          WHERE sa.user_id = $1
          GROUP BY item_type
          ORDER BY count DESC`,
@@ -317,7 +317,7 @@ router.get(
            SELECT s->>'name' AS sticker_name,
                   COUNT(*)::int AS applied_count
            FROM inventory_items i
-           JOIN steam_accounts sa ON i.steam_account_id = sa.id,
+           JOIN active_steam_accounts sa ON i.steam_account_id = sa.id,
            jsonb_array_elements(
              CASE WHEN i.stickers IS NOT NULL AND i.stickers::text != '[]'
                   THEN i.stickers::jsonb

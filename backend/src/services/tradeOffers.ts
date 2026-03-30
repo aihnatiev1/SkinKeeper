@@ -777,9 +777,9 @@ export async function createAndSendOffer(
     0
   );
 
-  // Detect internal trade (partner is one of user's linked accounts)
+  // Detect internal trade (partner is one of user's active accounts)
   const { rows: linkedAccounts } = await pool.query(
-    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`,
+    `SELECT id, steam_id FROM active_steam_accounts WHERE user_id = $1`,
     [userId]
   );
   const partnerAccount = linkedAccounts.find((a: any) => a.steam_id === input.partnerSteamId);
@@ -862,7 +862,7 @@ async function resolvePartnerForSteamApi(
     // Active account is the receiver — find sender's steam_id
     // Sender is the other linked account
     const { rows } = await pool.query(
-      `SELECT sa.steam_id FROM steam_accounts sa
+      `SELECT sa.steam_id FROM active_steam_accounts sa
        WHERE sa.user_id = $1 AND sa.steam_id != $2
        ORDER BY sa.id LIMIT 1`,
       [userId, activeSteamId]
@@ -893,9 +893,9 @@ async function resolveAccountForTradeAction(
     if (action === "accept" || action === "decline") return offer.accountIdTo;
   }
 
-  // Detect internal by checking partner against linked accounts
+  // Detect internal by checking partner against active accounts
   const { rows: linkedAccs } = await pool.query(
-    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+    `SELECT id, steam_id FROM active_steam_accounts WHERE user_id = $1`, [userId]
   );
   const partnerAcc = linkedAccs.find((a: any) => a.steam_id === offer.partnerSteamId);
 
@@ -1198,7 +1198,7 @@ export async function cancelOffer(
 async function getActiveSteamId(userId: number): Promise<string | null> {
   const { rows } = await pool.query(
     `SELECT sa.steam_id FROM users u
-     JOIN steam_accounts sa ON sa.id = u.active_account_id
+     JOIN active_steam_accounts sa ON sa.id = u.active_account_id
      WHERE u.id = $1`,
     [userId]
   );
@@ -1237,7 +1237,7 @@ export async function listOffers(
   let viewSteamId: string | null;
   if (accountId) {
     const { rows: accRows } = await pool.query(
-      `SELECT steam_id FROM steam_accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT steam_id FROM active_steam_accounts WHERE id = $1 AND user_id = $2`,
       [accountId, userId]
     );
     viewSteamId = accRows[0]?.steam_id ?? null;
@@ -1626,9 +1626,9 @@ function accountIdToSteamId64(accountId: number): string {
  * Fetches both sent and received active offers.
  */
 export async function syncTradeOffers(userId: number): Promise<{ synced: number }> {
-  // Sync from ALL linked accounts, not just active — trades exist on both sides
+  // Sync from active accounts only — disabled accounts are not visible
   const { rows: allAccounts } = await pool.query(
-    `SELECT id FROM steam_accounts WHERE user_id = $1`,
+    `SELECT id FROM active_steam_accounts WHERE user_id = $1`,
     [userId]
   );
 
@@ -1832,9 +1832,9 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
   if (!accRows.length) return { synced: 0 };
   const userId = accRows[0].user_id;
 
-  // Load linked accounts for internal detection
+  // Load active accounts for internal detection
   const { rows: userAccounts } = await pool.query(
-    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+    `SELECT id, steam_id FROM active_steam_accounts WHERE user_id = $1`, [userId]
   );
   const userSteamIds = new Map(userAccounts.map((a: any) => [a.steam_id, a.id]));
 
@@ -2082,9 +2082,9 @@ async function syncTradeOffersForAccount(userId: number, accountId: number): Pro
   const sentOffers = (data.trade_offers_sent ?? []) as SteamTradeOfferRaw[];
   const recvOffers = (data.trade_offers_received ?? []) as SteamTradeOfferRaw[];
 
-  // Load user's linked accounts to detect internal transfers
+  // Load user's active accounts to detect internal transfers
   const { rows: userAccounts } = await pool.query(
-    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`,
+    `SELECT id, steam_id FROM active_steam_accounts WHERE user_id = $1`,
     [userId]
   );
   const userSteamIds = new Map(userAccounts.map((a) => [a.steam_id, a.id]));
@@ -2415,9 +2415,9 @@ async function scrapeTradeHistoryHtml(
   );
   if (!accRows.length) return 0;
 
-  // Load linked accounts for internal detection
+  // Load active accounts for internal detection
   const { rows: userAccounts } = await pool.query(
-    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+    `SELECT id, steam_id FROM active_steam_accounts WHERE user_id = $1`, [userId]
   );
   const userSteamIds = new Map(userAccounts.map((a: any) => [a.steam_id, a.id]));
 
@@ -2647,9 +2647,9 @@ async function syncTradeHistoryForAccount(userId: number, accountId: number): Pr
   const mySteamId = accRows[0]?.steam_id;
   if (!mySteamId) return 0;
 
-  // Load user's linked accounts for internal detection
+  // Load user's active accounts for internal detection
   const { rows: userAccounts } = await pool.query(
-    `SELECT id, steam_id FROM steam_accounts WHERE user_id = $1`, [userId]
+    `SELECT id, steam_id FROM active_steam_accounts WHERE user_id = $1`, [userId]
   );
   const userSteamIds = new Map(userAccounts.map((a) => [a.steam_id, a.id]));
 

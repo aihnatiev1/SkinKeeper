@@ -95,7 +95,7 @@ router.get(
       const { rows: userItems } = await pool.query(
         `SELECT DISTINCT i.market_hash_name
          FROM inventory_items i
-         JOIN steam_accounts sa ON i.steam_account_id = sa.id
+         JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
          WHERE sa.user_id = $1`,
         [req.userId]
       );

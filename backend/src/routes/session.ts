@@ -302,7 +302,7 @@ router.get("/status", async (req: AuthRequest, res: Response) => {
     // Demo account: fake valid session so reviewer sees all features
     if (req.isDemo) {
       const { rows: demoAccs } = await pool.query(
-        `SELECT id, display_name FROM steam_accounts WHERE user_id = $1`, [req.userId!]
+        `SELECT id, display_name FROM active_steam_accounts WHERE user_id = $1`, [req.userId!]
       );
       res.json({
         status: "valid",
@@ -324,7 +324,7 @@ router.get("/status", async (req: AuthRequest, res: Response) => {
     const { rows: accounts } = await pool.query(
       `SELECT id, steam_id, display_name, session_updated_at,
               steam_login_secure IS NOT NULL AS has_session
-       FROM steam_accounts WHERE user_id = $1 ORDER BY id`,
+       FROM active_steam_accounts WHERE user_id = $1 ORDER BY id`,
       [req.userId!]
     );
 

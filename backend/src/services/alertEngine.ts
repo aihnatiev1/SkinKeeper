@@ -129,7 +129,7 @@ export async function evaluateAlerts(
         // Price spiked above 7-day average — only for items user owns
         const { rows: owned } = await pool.query(
           `SELECT 1 FROM inventory_items i
-           JOIN steam_accounts sa ON i.steam_account_id = sa.id
+           JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
            WHERE sa.user_id = $1 AND i.market_hash_name = $2 LIMIT 1`,
           [alert.user_id, alert.market_hash_name]
         );

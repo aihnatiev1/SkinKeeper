@@ -785,7 +785,7 @@ export async function fillMissingPrices(userId: number): Promise<number> {
   const { rows } = await pool.query(
     `SELECT DISTINCT ii.market_hash_name
      FROM inventory_items ii
-     JOIN steam_accounts sa ON ii.steam_account_id = sa.id
+     JOIN active_steam_accounts sa ON ii.steam_account_id = sa.id
      WHERE sa.user_id = $1
        AND NOT EXISTS (
          SELECT 1 FROM current_prices cp

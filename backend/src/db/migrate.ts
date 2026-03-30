@@ -412,6 +412,13 @@ CREATE TABLE IF NOT EXISTS steam_item_nameids (
 ALTER TABLE daily_pl_snapshots DROP CONSTRAINT IF EXISTS daily_pl_snapshots_user_id_snapshot_date_key;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_pl_user_account_date
   ON daily_pl_snapshots (user_id, COALESCE(steam_account_id, 0), snapshot_date);
+
+-- 030: Account status — controls visibility of linked accounts
+ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS status VARCHAR(10) DEFAULT 'active' NOT NULL;
+
+-- View for all user-facing queries — only returns active accounts
+CREATE OR REPLACE VIEW active_steam_accounts AS
+  SELECT * FROM steam_accounts WHERE status = 'active';
 `;
 
 export async function migrate() {
