@@ -1156,17 +1156,17 @@ class _SellActions extends ConsumerWidget {
                               {
                                 'assetId': item.assetId,
                                 'marketHashName': item.marketHashName,
-                                'priceCents': priceCents,
+                                'priceCents': 0,
                                 if (item.accountId != null) 'accountId': item.accountId,
                               },
                             ];
-                            await ref
-                                .read(sellOperationProvider.notifier)
-                                .startOperation(items);
                             if (context.mounted) {
                               showGlassSheetLocked(
                                   context, const SellProgressSheet());
                             }
+                            await ref
+                                .read(sellOperationProvider.notifier)
+                                .startQuickSell(items, accountId: item.accountId);
                           },
                           child: Stack(
                             clipBehavior: Clip.none,

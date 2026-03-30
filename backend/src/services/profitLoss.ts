@@ -234,7 +234,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
       WHERE user_id = $1 AND current_holding > 0
     )
     SELECT
-      COALESCE(SUM((cp.price_usd * 100)::bigint * h.current_holding), 0)::bigint AS current_value
+      COALESCE(SUM((cp.price_usd * 100)::bigint * h.current_holding), 0)::int AS current_value
     FROM holdings h
     LEFT JOIN current_prices cp
       ON cp.market_hash_name = h.market_hash_name
@@ -451,7 +451,7 @@ export async function getItemsPL(
       h.realized_profit_cents,
       lt.last_created_at AS updated_at,
       COALESCE((lp.price_usd * 100)::int, 0) AS current_price_cents,
-      COALESCE((lp.price_usd * 100)::bigint * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding) AS unrealized_profit_cents,
+      (COALESCE((lp.price_usd * 100)::bigint * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding))::int AS unrealized_profit_cents,
       ti.icon_url,
       COUNT(*) OVER () AS total_count
     FROM holdings h
@@ -509,13 +509,15 @@ export async function getItemsPL(
 
 export async function takeDailySnapshot(userId: number, accountId?: number): Promise<void> {
   const pl = await getPortfolioPL(userId, accountId);
+  // Use the composite unique index idx_daily_pl_user_account_date
+  // which covers (user_id, COALESCE(steam_account_id, 0), snapshot_date)
   await pool.query(
     `
     INSERT INTO daily_pl_snapshots (user_id, steam_account_id, snapshot_date,
       total_invested_cents, total_current_value_cents, realized_profit_cents,
       unrealized_profit_cents, cumulative_profit_cents)
     VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6, $7)
-    ON CONFLICT (user_id, snapshot_date) WHERE steam_account_id IS NOT DISTINCT FROM $2
+    ON CONFLICT (user_id, COALESCE(steam_account_id, 0), snapshot_date)
     DO UPDATE SET
       total_invested_cents = EXCLUDED.total_invested_cents,
       total_current_value_cents = EXCLUDED.total_current_value_cents,
