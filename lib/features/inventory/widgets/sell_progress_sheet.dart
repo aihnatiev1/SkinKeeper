@@ -418,10 +418,17 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
 
   Widget _buildSummary(SellOperation operation, int needsConfirmation, int uncertainCount) {
     final currency = ref.read(currencyProvider);
-    final totalListedCents = operation.items
-        .where((i) => i.status == SellItemStatus.listed)
-        .fold<int>(0, (sum, i) => sum + i.priceCents);
-    final totalListedStr = currency.formatRaw(totalListedCents / 100);
+    final listedItems = operation.items.where((i) => i.status == SellItemStatus.listed).toList();
+    final totalSellerReceivesCents = listedItems.fold<int>(0, (sum, i) => sum + i.priceCents);
+
+    // Estimate buyer-pays and fees from seller-receives
+    int totalBuyerPays = 0;
+    for (final item in listedItems) {
+      // Reverse: buyer_pays ≈ seller_receives / 0.8696
+      final bp = (item.priceCents / 0.8696).ceil();
+      totalBuyerPays += bp;
+    }
+    final totalFees = totalBuyerPays - totalSellerReceivesCents;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -445,15 +452,34 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             ],
           ),
           if (operation.succeeded > 0) ...[
-            const SizedBox(height: 6),
+            const Divider(height: 16, color: AppTheme.divider),
+            // Buyer pays (listing price)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Total listed value', style: AppTheme.bodySmall),
-                Text(
-                  totalListedStr,
-                  style: AppTheme.price,
-                ),
+                Text('Buyer pays', style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted)),
+                Text(currency.formatRaw(totalBuyerPays / 100),
+                    style: AppTheme.captionSmall.copyWith(color: AppTheme.textSecondary)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Steam + CS2 fee
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Steam + CS2 fee (15%)', style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted)),
+                Text('-${currency.formatRaw(totalFees / 100)}',
+                    style: AppTheme.captionSmall.copyWith(color: AppTheme.loss)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // You receive (bold, green)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('You receive', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                Text(currency.formatRaw(totalSellerReceivesCents / 100),
+                    style: AppTheme.price.copyWith(color: AppTheme.profit)),
               ],
             ),
           ],

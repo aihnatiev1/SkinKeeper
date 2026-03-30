@@ -10,6 +10,7 @@ import { refreshSteamDepthData } from "./steamMarketDepth.js";
 import { runDailyPLSnapshot } from "./profitLoss.js";
 import { checkExpiredSubscriptions } from "./purchases.js";
 import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js";
+import { checkPriceChanges } from "./priceChangeNotifier.js";
 import { initProxyPool } from "./proxyPool.js";
 
 // ─── Job Health Tracking ────────────────────────────────────────────────
@@ -154,6 +155,15 @@ export function startPriceJobs() {
     } catch (err) {
       recordJobRun("plSnapshot", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] Daily P/L snapshot failed:", err);
+    }
+  }));
+
+  // Price change push notifications every 4 hours (06:15, 10:15, 14:15, 18:15, 22:15)
+  scheduledTasks.push(cron.schedule("15 6,10,14,18,22 * * *", async () => {
+    try {
+      await checkPriceChanges();
+    } catch (err) {
+      console.error("[CRON] Price change notifications failed:", err);
     }
   }));
 

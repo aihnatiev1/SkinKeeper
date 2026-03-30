@@ -71,6 +71,10 @@ vi.mock("../proxyPool.js", () => ({
   initProxyPool: vi.fn(),
 }));
 
+vi.mock("../priceChangeNotifier.js", () => ({
+  checkPriceChanges: vi.fn().mockResolvedValue(undefined),
+}));
+
 import cron from "node-cron";
 import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers } from "../prices.js";
 import { startCSFloatCrawler } from "../csfloat.js";
@@ -99,9 +103,9 @@ describe("priceJob", () => {
     // Wait for the initial async IIFE to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    // 7 cron jobs: Skinport, CSGOTrader, SteamAnalyst, DMarket, P/L snapshot, subscriptions, price pruning
-    // 8 cron jobs: Skinport, CSGOTrader, SteamAnalyst, DMarket, SteamDepth, P/L, subscriptions, pruning
-    expect(mockedCron.schedule).toHaveBeenCalledTimes(8);
+    // 9 cron jobs: Skinport, CSGOTrader, DMarket, P/L, priceChangeNotify,
+    //   subscriptions, SteamDepth, steamBatchFull, pruning
+    expect(mockedCron.schedule).toHaveBeenCalledTimes(9);
 
     // Background crawlers started
     expect(startSteamCrawlers).toHaveBeenCalled();
