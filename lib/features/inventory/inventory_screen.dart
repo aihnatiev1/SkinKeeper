@@ -53,52 +53,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     if (!mounted) return;
     HapticFeedback.mediumImpact();
 
-    try {
-      // Fetch quick price per unique market hash name in parallel
-      final uniqueItems = <String, InventoryItem>{};
-      for (final item in items) {
-        uniqueItems.putIfAbsent(item.marketHashName, () => item);
-      }
-      final resultEntries = await Future.wait(
-        uniqueItems.entries.map((e) async {
-          final result = await ref.read(quickPriceProvider(QuickPriceRequest(
-            marketHashName: e.key,
-            fallbackPriceUsd: e.value.bestPrice ?? e.value.steamPrice,
-          )).future);
-          return MapEntry(e.key, result);
-        }),
-      );
-      final resultMap = Map.fromEntries(resultEntries);
+    // Show progress sheet immediately — it will display "Fetching prices..."
+    showGlassSheetLocked(context, const SellProgressSheet());
 
-      // If any price is stale, open sell sheet so user can review/set prices
-      final hasStale = resultMap.values.any((r) => r.stale);
-      if (hasStale && mounted) {
-        showGlassSheet(context, SellBottomSheet(items: items));
-        return;
-      }
+    final sellItems = items
+        .map((item) => {
+              'assetId': item.assetId,
+              'marketHashName': item.marketHashName,
+              'priceCents': 0, // resolved by startQuickSell via histogram
+              if (item.accountId != null) 'accountId': item.accountId,
+            })
+        .toList();
 
-      final sellItems = items
-          .map((item) => {
-                'assetId': item.assetId,
-                'marketHashName': item.marketHashName,
-                'priceCents': resultMap[item.marketHashName]?.sellerReceivesCents ?? 0,
-                if (item.accountId != null) 'accountId': item.accountId,
-              })
-          .toList();
-
-      await ref.read(sellOperationProvider.notifier).startOperation(sellItems);
-
-      if (!mounted) return;
-      showGlassSheetLocked(context, const SellProgressSheet());
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Quick sell failed: $e'),
-          backgroundColor: AppTheme.loss,
-        ),
-      );
-    }
+    // startQuickSell handles: fetch prices → create operation → poll progress
+    await ref.read(sellOperationProvider.notifier).startQuickSell(
+      sellItems,
+      accountId: items.first.accountId,
+    );
   }
 
   @override

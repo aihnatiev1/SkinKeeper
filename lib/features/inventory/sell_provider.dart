@@ -149,11 +149,13 @@ class SellOperationItem {
 
 class SellOperation {
   final String operationId;
-  final String status; // 'pending' | 'processing' | 'completed' | 'cancelled'
+  final String status; // 'fetching_prices' | 'pending' | 'processing' | 'completed' | 'cancelled'
   final int totalItems;
   final int succeeded;
   final int failed;
   final List<SellOperationItem> items;
+  /// Progress message shown during fetching_prices phase
+  final String? progressMessage;
 
   const SellOperation({
     required this.operationId,
@@ -162,9 +164,11 @@ class SellOperation {
     this.succeeded = 0,
     this.failed = 0,
     this.items = const [],
+    this.progressMessage,
   });
 
-  bool get isActive => status == 'pending' || status == 'processing';
+  bool get isFetchingPrices => status == 'fetching_prices';
+  bool get isActive => status == 'pending' || status == 'processing' || status == 'fetching_prices';
   bool get isCompleted => status == 'completed' || status == 'cancelled';
 
   factory SellOperation.fromJson(Map<String, dynamic> json) {
@@ -218,6 +222,64 @@ class SellOperationNotifier extends AsyncNotifier<SellOperation?> {
     } catch (e, st) {
       dev.log('Sell operation start failed: $e', name: 'Sell');
       Analytics.recordError(e, st, reason: 'sell_start_failed');
+      state = AsyncError(e, st);
+    }
+  }
+
+  /// Quick sell: fetch fresh prices via histogram, then create sell operation.
+  /// Shows "Fetching prices..." phase in progress sheet immediately.
+  Future<void> startQuickSell(List<Map<String, dynamic>> items, {int? accountId}) async {
+    final itemCount = items.length;
+    try {
+      // Phase 1: show fetching_prices state immediately
+      state = AsyncData(SellOperation(
+        operationId: '',
+        status: 'fetching_prices',
+        totalItems: itemCount,
+        progressMessage: 'Fetching prices for $itemCount items...',
+      ));
+
+      // Batch refresh prices via histogram API
+      final uniqueNames = items
+          .map((i) => i['marketHashName'] as String)
+          .toSet()
+          .toList();
+
+      final api = ref.read(apiClientProvider);
+      final refreshResponse = await api.post('/market/refresh-prices', data: {
+        'names': uniqueNames,
+        if (accountId != null) 'accountId': accountId,
+      }).timeout(
+        Duration(seconds: 10 + uniqueNames.length * 2),
+        onTimeout: () => throw TimeoutException('refresh-prices timeout'),
+      );
+
+      final pricesData = (refreshResponse.data as Map<String, dynamic>)['prices']
+          as Map<String, dynamic>? ?? {};
+
+      // Build sell items with fresh prices
+      final sellItems = items.map((item) {
+        final name = item['marketHashName'] as String;
+        final priceInfo = pricesData[name] as Map<String, dynamic>?;
+        final priceCents = priceInfo?['sellerReceivesCents'] as int? ?? 0;
+        return {
+          ...item,
+          'priceCents': priceCents, // 0 = backend quickprice fallback
+        };
+      }).toList();
+
+      // Phase 2: create the actual sell operation
+      state = AsyncData(SellOperation(
+        operationId: '',
+        status: 'fetching_prices',
+        totalItems: itemCount,
+        progressMessage: 'Starting sell operation...',
+      ));
+
+      await startOperation(sellItems);
+    } catch (e, st) {
+      dev.log('Quick sell failed: $e', name: 'Sell');
+      Analytics.recordError(e, st, reason: 'quick_sell_failed');
       state = AsyncError(e, st);
     }
   }

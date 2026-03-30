@@ -89,6 +89,29 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
               ],
             );
           }
+          // Fetching prices phase — show spinner with message
+          if (operation.isFetchingPrices) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHandle(),
+                const SizedBox(height: 32),
+                const CircularProgressIndicator(color: AppTheme.primary),
+                const SizedBox(height: 16),
+                Text(
+                  operation.progressMessage ?? 'Fetching prices...',
+                  style: AppTheme.body,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${operation.totalItems} items',
+                  style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
+                ),
+                const SizedBox(height: 32),
+              ],
+            );
+          }
           // Haptic feedback for newly listed items
           for (final item in operation.items) {
             if (item.status == SellItemStatus.listed && _hapticFiredFor.add(item.assetId)) {

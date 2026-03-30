@@ -368,19 +368,22 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
         .map((i) => {
               'assetId': i.assetId,
               'marketHashName': i.marketHashName,
-              'priceCents': 0, // quickprice on backend
+              'priceCents': 0, // resolved by startQuickSell via histogram
               if (i.accountId != null) 'accountId': i.accountId,
             })
         .toList();
 
-    ref.read(sellOperationProvider.notifier).startOperation(payload);
-
-    // Pop bulk sell screen first, then show progress on parent
+    // Pop bulk sell screen first, then show progress sheet immediately
+    // startQuickSell handles: fetch prices → create operation → poll
     if (mounted) {
       final nav = Navigator.of(context);
       nav.pop();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showGlassSheetLocked(nav.context, const SellProgressSheet());
+        ref.read(sellOperationProvider.notifier).startQuickSell(
+          payload,
+          accountId: items.first.accountId,
+        );
       });
     }
   }
