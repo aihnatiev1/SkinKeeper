@@ -1942,17 +1942,15 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
     }
   }
 
-  // Mark stale pending offers as expired if not found on Steam
-  // Don't touch awaiting_confirmation or on_hold — they may not appear in scrape
-  if (allScrapedIds.size > 0) {
+  // Mark stale pending offers as expired if not found on Steam.
+  // Only do this when scrape returned a meaningful number of results
+  // (avoids false expiry when scrape fails or returns partial data).
+  if (allScrapedIds.size >= 3) {
     const { rows: pendingOffers } = await pool.query(
       `SELECT id, steam_offer_id, status FROM trade_offers
-       WHERE user_id = $1 AND status IN ('pending', 'awaiting_confirmation')
+       WHERE user_id = $1 AND status = 'pending'
        AND steam_offer_id IS NOT NULL
-       AND (
-         (status = 'pending' AND created_at < NOW() - INTERVAL '30 minutes')
-         OR (status = 'awaiting_confirmation' AND created_at < NOW() - INTERVAL '2 hours')
-       )`,
+       AND created_at < NOW() - INTERVAL '2 hours'`,
       [userId]
     );
     for (const po of pendingOffers) {
@@ -1961,7 +1959,7 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
           `UPDATE trade_offers SET status = 'expired', updated_at = NOW() WHERE id = $1`,
           [po.id]
         );
-        console.log(`[Trade] Marked stale ${po.status} offer ${po.steam_offer_id} as expired (not found on Steam)`);
+        console.log(`[Trade] Marked stale pending offer ${po.steam_offer_id} as expired (not found in ${allScrapedIds.size} scraped offers)`);
       }
     }
   }

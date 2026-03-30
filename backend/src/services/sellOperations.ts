@@ -227,9 +227,9 @@ async function processOperation(
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
 
-      // Check if operation was cancelled
+      // Check if operation was cancelled (consistent read)
       const { rows: opCheck } = await pool.query(
-        `SELECT status FROM sell_operations WHERE id = $1`,
+        `SELECT status FROM sell_operations WHERE id = $1 FOR SHARE`,
         [operationId]
       );
       if (opCheck[0]?.status === "cancelled") break;
@@ -308,19 +308,20 @@ async function processOperation(
         const result = await sellItem(session, item.asset_id, priceCents, itemAccountId, priceCurrencyId);
 
         if (result.success) {
+          // Atomic: update item + operation + volume in one shot
           await pool.query(
-            `UPDATE sell_operation_items
-             SET status = 'listed', requires_confirmation = $1, updated_at = NOW()
-             WHERE id = $2`,
-            [result.requiresConfirmation, item.id]
+            `WITH item_upd AS (
+               UPDATE sell_operation_items
+               SET status = 'listed', requires_confirmation = $1, updated_at = NOW()
+               WHERE id = $2
+             ), op_upd AS (
+               UPDATE sell_operations SET succeeded = succeeded + 1 WHERE id = $3
+             )
+             INSERT INTO sell_volume (user_id, day, count)
+             VALUES ($4, CURRENT_DATE, 1)
+             ON CONFLICT (user_id, day) DO UPDATE SET count = sell_volume.count + 1`,
+            [result.requiresConfirmation, item.id, operationId, userId]
           );
-          await pool.query(
-            `UPDATE sell_operations SET succeeded = succeeded + 1 WHERE id = $1`,
-            [operationId]
-          );
-          // Note: sell transaction is NOT created here — it will appear
-          // via /transactions/sync when the item is actually purchased on Steam Market.
-          await incrementVolume(userId);
           consecutiveErrors = 0;
         } else {
           await pool.query(
