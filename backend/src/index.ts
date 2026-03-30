@@ -149,6 +149,11 @@ async function start() {
   // Initialize Firebase for push notifications
   initFirebase();
 
+  // Cleanup orphaned sell operations from previous crash
+  import("./services/sellOperations.js").then(({ cleanupOrphanedOperations }) =>
+    cleanupOrphanedOperations().catch((err) => console.warn("[Cleanup] sell ops:", err.message))
+  );
+
   // Pre-warm CSGO-API static data cache
   preloadCSGOData();
 

@@ -6,8 +6,10 @@ import { pool } from "../db/pool.js";
  *  Groups by (market_hash_name, steam_account_id) for accurate per-account P&L.
  *  If accountId is provided, recalculates only for that steam_account. */
 export async function recalculateCostBasis(userId: number, accountId?: number): Promise<void> {
+  // Build parameterized account filter
+  const params: (number)[] = [userId];
   const accountFilter = accountId
-    ? `AND steam_account_id = ${parseInt(String(accountId))}`
+    ? `AND steam_account_id = $${params.push(accountId)}`
     : "";
 
   await pool.query(
@@ -15,7 +17,7 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
     WITH buy_agg AS (
       SELECT market_hash_name, steam_account_id,
              COUNT(*)::int AS qty,
-             SUM(price_cents)::int AS total
+             SUM(price_cents)::bigint AS total
       FROM transactions
       WHERE user_id = $1 AND type = 'buy' ${accountFilter}
       GROUP BY market_hash_name, steam_account_id
@@ -23,7 +25,7 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
     sell_agg AS (
       SELECT market_hash_name, steam_account_id,
              COUNT(*)::int AS qty,
-             SUM(price_cents)::int AS total
+             SUM(price_cents)::bigint AS total
       FROM transactions
       WHERE user_id = $1 AND type = 'sell' ${accountFilter}
       GROUP BY market_hash_name, steam_account_id
@@ -43,7 +45,7 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
         END AS avg_buy_price,
         COALESCE(s.total, 0) - (
           CASE WHEN COALESCE(b.qty, 0) > 0
-            THEN (COALESCE(b.total, 0)::float / b.qty * COALESCE(s.qty, 0))::int
+            THEN (COALESCE(b.total, 0)::float / COALESCE(b.qty, 1) * COALESCE(s.qty, 0))::int
             ELSE 0
           END
         ) AS realized_profit
@@ -67,7 +69,7 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
       realized_profit_cents = EXCLUDED.realized_profit_cents,
       updated_at = NOW()
     `,
-    [userId]
+    params
   );
 }
 
@@ -505,15 +507,16 @@ export async function getItemsPL(
 
 // ---- Daily Snapshot ----
 
-export async function takeDailySnapshot(userId: number): Promise<void> {
-  const pl = await getPortfolioPL(userId);
+export async function takeDailySnapshot(userId: number, accountId?: number): Promise<void> {
+  const pl = await getPortfolioPL(userId, accountId);
   await pool.query(
     `
-    INSERT INTO daily_pl_snapshots (user_id, snapshot_date, total_invested_cents,
-      total_current_value_cents, realized_profit_cents, unrealized_profit_cents,
-      cumulative_profit_cents)
-    VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6)
-    ON CONFLICT (user_id, snapshot_date) DO UPDATE SET
+    INSERT INTO daily_pl_snapshots (user_id, steam_account_id, snapshot_date,
+      total_invested_cents, total_current_value_cents, realized_profit_cents,
+      unrealized_profit_cents, cumulative_profit_cents)
+    VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6, $7)
+    ON CONFLICT (user_id, snapshot_date) WHERE steam_account_id IS NOT DISTINCT FROM $2
+    DO UPDATE SET
       total_invested_cents = EXCLUDED.total_invested_cents,
       total_current_value_cents = EXCLUDED.total_current_value_cents,
       realized_profit_cents = EXCLUDED.realized_profit_cents,
@@ -522,6 +525,7 @@ export async function takeDailySnapshot(userId: number): Promise<void> {
     `,
     [
       userId,
+      accountId ?? null,
       pl.totalInvestedCents,
       pl.totalCurrentValueCents,
       pl.realizedProfitCents,
@@ -599,7 +603,16 @@ export async function runDailyPLSnapshot(): Promise<void> {
   for (const user of usersRes.rows) {
     try {
       await recalculateCostBasis(user.id);
+      // Global snapshot (all accounts)
       await takeDailySnapshot(user.id);
+      // Per-account snapshots for multi-account users
+      const { rows: accounts } = await pool.query(
+        `SELECT id FROM steam_accounts WHERE user_id = $1`,
+        [user.id]
+      );
+      for (const acc of accounts) {
+        await takeDailySnapshot(user.id, acc.id);
+      }
     } catch (err) {
       console.error(`[PL Snapshot] Failed for user ${user.id}:`, err);
     }

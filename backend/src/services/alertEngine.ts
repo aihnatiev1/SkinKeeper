@@ -77,17 +77,21 @@ export async function evaluateAlerts(
         break;
 
       case "changePct": {
-        // Get previous price for this item+source
+        // Get previous price: try price_history first, fallback to current_prices
         const { rows: prevRows } = await pool.query(
-          `SELECT price_usd::float AS price
-           FROM price_history
+          `SELECT price_usd::float AS price FROM (
+             SELECT price_usd, recorded_at FROM price_history
+             WHERE market_hash_name = $1 AND source = $2 AND price_usd > 0
+             ORDER BY recorded_at DESC OFFSET 1 LIMIT 1
+           ) ph
+           UNION ALL
+           SELECT price_usd::float AS price FROM current_prices
            WHERE market_hash_name = $1 AND source = $2 AND price_usd > 0
-           ORDER BY recorded_at DESC
-           OFFSET 1 LIMIT 1`,
+           LIMIT 1`,
           [alert.market_hash_name, source]
         );
-        if (prevRows.length > 0) {
-          const prevPrice = prevRows[0].price;
+        const prevPrice = prevRows[0]?.price;
+        if (prevPrice && prevPrice > 0) {
           const pctChange = Math.abs(
             ((currentPrice - prevPrice) / prevPrice) * 100
           );

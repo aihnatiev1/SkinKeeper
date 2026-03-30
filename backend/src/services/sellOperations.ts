@@ -70,6 +70,9 @@ export async function createOperation(
   items: SellOperationItemInput[],
   accountId?: number
 ): Promise<{ operationId: string; skippedAssetIds: string[] }> {
+  // Resolve accountId now so account switches during processing don't affect it
+  const resolvedAccountId = accountId ?? await SteamSessionService.getActiveAccountId(userId);
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -78,7 +81,7 @@ export async function createOperation(
       `INSERT INTO sell_operations (user_id, total_items, steam_account_id)
        VALUES ($1, $2, $3)
        RETURNING id`,
-      [userId, items.length, accountId ?? null]
+      [userId, items.length, resolvedAccountId]
     );
     const operationId: string = opRows[0].id;
 
@@ -555,4 +558,27 @@ export async function incrementVolume(userId: number): Promise<void> {
      ON CONFLICT (user_id, day) DO UPDATE SET count = sell_volume.count + 1`,
     [userId]
   );
+}
+
+/**
+ * Cleanup orphaned sell operations stuck in 'pending' or 'in_progress' after crash.
+ * Called once on server startup. Marks them as completed + items as failed.
+ */
+export async function cleanupOrphanedOperations(): Promise<void> {
+  const { rowCount } = await pool.query(
+    `UPDATE sell_operations SET status = 'completed', completed_at = NOW()
+     WHERE status IN ('pending', 'in_progress')
+       AND created_at < NOW() - INTERVAL '15 minutes'`
+  );
+  if (rowCount && rowCount > 0) {
+    await pool.query(
+      `UPDATE sell_operation_items SET status = 'failed',
+              error_message = 'Server restarted during operation', updated_at = NOW()
+       WHERE status IN ('queued', 'listing')
+         AND operation_id IN (
+           SELECT id FROM sell_operations WHERE status = 'completed' AND completed_at > NOW() - INTERVAL '1 minute'
+         )`
+    );
+    console.log(`[SellOps] Cleaned up ${rowCount} orphaned operations`);
+  }
 }

@@ -1885,7 +1885,11 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
                    $7, $8, $9, NOW(), NOW())
            ON CONFLICT (user_id, steam_offer_id) WHERE steam_offer_id IS NOT NULL
            DO UPDATE SET
-             status = CASE WHEN trade_offers.status IN ('cancelled','declined','accepted','expired') THEN trade_offers.status ELSE EXCLUDED.status END,
+             status = CASE
+               WHEN trade_offers.status IN ('accepted','declined','cancelled') THEN trade_offers.status
+               WHEN EXCLUDED.status IN ('accepted','declined','cancelled','expired') THEN EXCLUDED.status
+               ELSE COALESCE(EXCLUDED.status, trade_offers.status)
+             END,
              updated_at = NOW(),
              is_internal = EXCLUDED.is_internal,
              account_id_from = COALESCE(trade_offers.account_id_from, EXCLUDED.account_id_from),

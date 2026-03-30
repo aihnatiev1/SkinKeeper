@@ -131,7 +131,12 @@ export async function fetchSteamTransactions(
     if (cached !== undefined) return cached;
 
     const usdToWallet = await getExchangeRate(currencyId);
-    const rate = (usdToWallet && usdToWallet > 0) ? 1 / usdToWallet : 1;
+    if (!usdToWallet || usdToWallet <= 0 || !isFinite(usdToWallet)) {
+      console.warn(`[Transactions] No exchange rate for currency ${currencyId}, assuming USD`);
+      rateCache.set(currencyId, 1);
+      return 1;
+    }
+    const rate = 1 / usdToWallet;
     rateCache.set(currencyId, rate);
     return rate;
   }
