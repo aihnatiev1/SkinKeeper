@@ -305,7 +305,12 @@ class SellOperationNotifier extends AsyncNotifier<SellOperation?> {
       }
     } catch (e) {
       dev.log('Sell operation poll failed: $e', name: 'Sell');
-      // Don't stop polling on transient errors
+      // Stop polling on 404 (operation deleted/not found)
+      if (e.toString().contains('404') || e.toString().contains('Not Found')) {
+        _pollTimer?.cancel();
+        state = const AsyncData(null);
+      }
+      // Otherwise keep polling — transient errors recover on next tick
     }
   }
 
@@ -546,11 +551,12 @@ final quickPriceProvider =
     if (request.accountId != null) {
       params['accountId'] = request.accountId.toString();
     }
-    // Race: backend has 3s to respond, otherwise use local fallback
+    // Race: backend has 5s to respond (histogram can take 4s via proxy),
+    // otherwise use local fallback
     final response = await api.get(
       '/market/quickprice/$encoded',
       queryParameters: params,
-    ).timeout(const Duration(seconds: 3), onTimeout: () {
+    ).timeout(const Duration(seconds: 5), onTimeout: () {
       throw TimeoutException('quickprice timeout');
     });
     return QuickPriceResult(

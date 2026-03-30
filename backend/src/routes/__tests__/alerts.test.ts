@@ -156,6 +156,7 @@ describe("Alerts routes", () => {
       mockDemoCheck();
       mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] }); // premium check
       mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 0 }] }); // count check
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // duplicate check — no existing
       mockQuery.mockResolvedValueOnce({
         rows: [{
           id: 1,
@@ -225,7 +226,8 @@ describe("Alerts routes", () => {
 
     it("deletes alert belonging to user", async () => {
       mockDemoCheck();
-      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete alert_history
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 }); // delete alert
 
       const res = await request(app)
         .delete("/api/alerts/1")
@@ -236,7 +238,8 @@ describe("Alerts routes", () => {
 
     it("returns 404 when alert not found or belongs to different user", async () => {
       mockDemoCheck();
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete alert_history
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete alert
 
       const res = await request(app)
         .delete("/api/alerts/999")

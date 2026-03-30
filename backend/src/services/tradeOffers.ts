@@ -1638,14 +1638,14 @@ export async function syncTradeOffers(userId: number): Promise<{ synced: number 
     totalSynced += result.synced;
   }
 
-  // Sync trade history less frequently (at most once per 10 minutes per user)
-  const historyKey = `trade_history_${userId}`;
-  const lastHistorySync = tradeHistorySyncCache.get(historyKey) ?? 0;
-  if (Date.now() - lastHistorySync > 10 * 60 * 1000) {
-    for (const acc of allAccounts) {
+  // Sync trade history less frequently (at most once per 10 minutes per account)
+  for (const acc of allAccounts) {
+    const historyKey = `trade_history_${userId}_${acc.id}`;
+    const lastHistorySync = tradeHistorySyncCache.get(historyKey) ?? 0;
+    if (Date.now() - lastHistorySync > 10 * 60 * 1000) {
       totalSynced += await syncTradeHistoryForAccount(userId, acc.id);
+      tradeHistorySyncCache.set(historyKey, Date.now());
     }
-    tradeHistorySyncCache.set(historyKey, Date.now());
   }
 
   return { synced: totalSynced };

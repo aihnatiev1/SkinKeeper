@@ -69,6 +69,18 @@ router.post(
         return;
       }
 
+      // Prevent duplicate alerts (same item + condition + threshold + source)
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM price_alerts
+         WHERE user_id = $1 AND market_hash_name = $2 AND condition = $3
+           AND threshold = $4 AND source = $5 AND is_active = TRUE`,
+        [req.userId, market_hash_name, condition, threshold, alertSource]
+      );
+      if (existing.length > 0) {
+        res.status(409).json({ error: "Identical alert already exists" });
+        return;
+      }
+
       const { rows } = await pool.query(
         `INSERT INTO price_alerts (user_id, market_hash_name, condition, threshold, source, cooldown_minutes)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -293,6 +305,11 @@ router.delete(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
+      // Delete history first (no FK cascade), then the alert
+      await pool.query(
+        `DELETE FROM alert_history WHERE alert_id = $1 AND user_id = $2`,
+        [req.params.id, req.userId]
+      );
       const { rowCount } = await pool.query(
         `DELETE FROM price_alerts WHERE id = $1 AND user_id = $2`,
         [req.params.id, req.userId]

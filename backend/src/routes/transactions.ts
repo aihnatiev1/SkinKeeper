@@ -31,6 +31,19 @@ router.post(
       const requestedAccountId = req.query.accountId ? parseInt(req.query.accountId as string) : null;
       console.log(`[Transactions] Sync requested for user ${req.userId}${forceFullSync ? " (FULL)" : ""}${requestedAccountId ? ` (accountId=${requestedAccountId})` : ""}`);
 
+      // Prevent parallel syncs for the same user — use advisory lock
+      const lockKey = req.userId! + 1000000; // offset to avoid collisions
+      const { rows: lockResult } = await pool.query(
+        `SELECT pg_try_advisory_lock($1) AS acquired`,
+        [lockKey]
+      );
+      if (!lockResult[0]?.acquired) {
+        res.json({ success: true, message: "Sync already in progress", fetched: 0, newCount: 0 });
+        return;
+      }
+
+      try {
+
       let accountId: number;
       if (requestedAccountId) {
         // Verify this account belongs to the user
@@ -181,6 +194,10 @@ router.post(
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`[Transactions] Sync complete: ${totalFetched} fetched, ${totalNew} new in ${elapsed}s`);
       res.json({ success: true, fetched: totalFetched, newCount: totalNew, elapsed: parseFloat(elapsed) });
+
+      } finally {
+        await pool.query(`SELECT pg_advisory_unlock($1)`, [lockKey]);
+      }
     } catch (err: any) {
       console.error("[Transactions] Sync error:", err?.response?.status ?? err?.message ?? err);
       res.status(500).json({ error: "Failed to sync transactions" });
