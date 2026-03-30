@@ -54,9 +54,9 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initSequence();
-      // Force fresh P&L fetch on every mount (same as pull-to-refresh)
-      ref.invalidate(portfolioProvider);
-      ref.read(portfolioPLProvider.notifier).refresh();
+      // Background sync on every mount so P/L block shows up immediately.
+      // _runInitialSync only runs after login (needsSync guard); this covers cold starts.
+      _backgroundRefresh();
     });
   }
 
@@ -77,6 +77,41 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
         await showCurrencyPickerDialog(context, ref);
       }
     }
+  }
+
+  /// Background refresh on every mount: sync inventory + transactions, then
+  /// invalidate portfolio/PL providers. Same as pull-to-refresh but automatic.
+  /// Skips if _runInitialSync already running (first login).
+  Future<void> _backgroundRefresh() async {
+    final needsSync = ref.read(needsInitialSyncProvider);
+    if (needsSync) return; // _runInitialSync will handle it
+
+    final api = ref.read(apiClientProvider);
+    final sync = ref.read(syncStateProvider.notifier);
+
+    // Sync inventory in background
+    sync.setInventory(true);
+    try {
+      await api.post('/inventory/refresh');
+      if (mounted) {
+        ref.invalidate(inventoryProvider);
+        ref.invalidate(portfolioProvider);
+      }
+    } catch (_) {}
+    if (mounted) sync.setInventory(false);
+
+    // Sync transactions → triggers cost basis recalc → P/L data appears
+    sync.setTransactions(true);
+    try {
+      await api.post('/transactions/sync');
+      if (mounted) {
+        ref.invalidate(transactionsProvider);
+        ref.invalidate(portfolioPLProvider);
+        ref.invalidate(portfolioProvider);
+        ref.invalidate(txStatsProvider);
+      }
+    } catch (_) {}
+    if (mounted) sync.setTransactions(false);
   }
 
   /// Runs initial sync in background. Portfolio screen stays mounted under
