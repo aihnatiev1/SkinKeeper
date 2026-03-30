@@ -25,7 +25,7 @@ class CurrencyInfo {
 
   String formatWithSign(double usd, {int decimals = 2}) {
     final converted = usd * rate;
-    final prefix = converted >= 0 ? '+' : '';
+    final prefix = converted >= 0 ? '+' : '-';
     return '$prefix$symbol${groupThousands(converted.abs().toStringAsFixed(decimals))}';
   }
 
@@ -37,7 +37,7 @@ class CurrencyInfo {
 
   /// Same as formatRaw but with +/- sign prefix.
   String formatRawWithSign(double value, {int decimals = 2}) {
-    final prefix = value >= 0 ? '+' : '';
+    final prefix = value >= 0 ? '+' : '-';
     return '$prefix$symbol${groupThousands(value.abs().toStringAsFixed(decimals))}';
   }
 
