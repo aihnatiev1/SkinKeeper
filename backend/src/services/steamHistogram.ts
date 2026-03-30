@@ -240,7 +240,7 @@ export async function refreshPricesOnDemand(
 
 // ─── Seed item_nameids from GitHub ──────────────────────────────────────
 
-const SEED_URL = "https://raw.githubusercontent.com/somespecialone/steam-item-name-ids/main/data/730.json";
+const SEED_URL = "https://raw.githubusercontent.com/Olimp666/steam-market-item-nameids/master/ids.json";
 
 /**
  * Seed steam_item_nameids table from GitHub JSON dump.
