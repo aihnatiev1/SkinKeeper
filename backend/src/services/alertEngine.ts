@@ -52,7 +52,7 @@ export async function evaluateAlerts(
     if (alert.last_triggered_at) {
       const cooldownMs = alert.cooldown_minutes * 60_000;
       const lastTriggered = new Date(alert.last_triggered_at).getTime();
-      if (Date.now() - lastTriggered < cooldownMs) continue;
+      if (Date.now() - lastTriggered <= cooldownMs) continue;
     }
 
     const currentPrice = prices.get(alert.market_hash_name);
@@ -155,11 +155,12 @@ export async function evaluateAlerts(
       }
 
       case "arbitrage": {
-        // Cross-market price gap
+        // Cross-market price gap — only compare prices updated within 1 hour
         const { rows: allPrices } = await pool.query(
           `SELECT source, price_usd::float AS price
            FROM current_prices
-           WHERE market_hash_name = $1 AND price_usd > 0`,
+           WHERE market_hash_name = $1 AND price_usd > 0
+             AND updated_at > NOW() - INTERVAL '1 hour'`,
           [alert.market_hash_name]
         );
         if (allPrices.length < 2) break;

@@ -74,7 +74,9 @@ export async function sendPush(
       const code = resp.error?.code;
       if (
         code === "messaging/invalid-registration-token" ||
-        code === "messaging/registration-token-not-registered"
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-argument" ||
+        code === "messaging/third-party-auth-error"
       ) {
         failedTokens.push(tokens[idx]);
       }

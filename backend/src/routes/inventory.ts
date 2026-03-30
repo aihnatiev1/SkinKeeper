@@ -195,9 +195,14 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       SteamSessionService.getActiveAccountId(req.userId!),
       total > 0
         ? pool.query(
-            `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
-             JOIN steam_accounts sa ON i.steam_account_id = sa.id
-             WHERE sa.user_id = $1`, [req.userId])
+            filterAccountId && !isNaN(filterAccountId)
+              ? `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
+                 JOIN steam_accounts sa ON i.steam_account_id = sa.id
+                 WHERE sa.user_id = $1 AND sa.id = $2`
+              : `SELECT MAX(i.updated_at) as last_update FROM inventory_items i
+                 JOIN steam_accounts sa ON i.steam_account_id = sa.id
+                 WHERE sa.user_id = $1`,
+            filterAccountId && !isNaN(filterAccountId) ? [req.userId, filterAccountId] : [req.userId])
         : null,
     ]);
     const session = activeAccountId ? await SteamSessionService.getSession(activeAccountId) : null;

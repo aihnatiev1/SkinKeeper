@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import { pool } from "../db/pool.js";
 import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, runSteamBatchCrawl, pruneOldPrices, purgeStaleCurrentPrices, startHotSteamLoop, stopHotSteamLoop } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
 import { fetchDMarketPrices } from "./dmarket.js";
@@ -192,6 +193,8 @@ export function startPriceJobs() {
     try {
       await pruneOldPrices();
       await purgeStaleCurrentPrices();
+      // Cleanup push tokens older than 90 days
+      await pool.query(`DELETE FROM user_devices WHERE updated_at < NOW() - INTERVAL '90 days'`);
       recordJobRun("pricePruning", true);
     } catch (err) {
       recordJobRun("pricePruning", false, err instanceof Error ? err.message : String(err));

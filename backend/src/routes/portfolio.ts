@@ -91,14 +91,22 @@ router.get(
       const change7d = totalValue - totalValue7dAgo;
 
       // Get portfolio history using daily_pl_snapshots (pre-aggregated)
+      // Filter by account if specified; global snapshots have steam_account_id = NULL
       const { rows: history } = await pool.query(
-        `SELECT snapshot_date AS date,
-                total_current_value_cents / 100.0 AS value
-         FROM daily_pl_snapshots
-         WHERE user_id = $1
-           AND snapshot_date > CURRENT_DATE - 30
-         ORDER BY snapshot_date`,
-        [req.userId]
+        accountId
+          ? `SELECT snapshot_date AS date,
+                    total_current_value_cents / 100.0 AS value
+             FROM daily_pl_snapshots
+             WHERE user_id = $1 AND steam_account_id = $2
+               AND snapshot_date > CURRENT_DATE - 30
+             ORDER BY snapshot_date`
+          : `SELECT snapshot_date AS date,
+                    total_current_value_cents / 100.0 AS value
+             FROM daily_pl_snapshots
+             WHERE user_id = $1 AND steam_account_id IS NULL
+               AND snapshot_date > CURRENT_DATE - 30
+             ORDER BY snapshot_date`,
+        accountId ? [req.userId, accountId] : [req.userId]
       );
 
       // Always include today's live value as the last point
