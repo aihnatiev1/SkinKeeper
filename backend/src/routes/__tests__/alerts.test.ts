@@ -51,6 +51,9 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
 describe("Alerts routes", () => {
   beforeEach(() => {
     mockQuery.mockReset();
@@ -63,6 +66,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns empty alerts list", async () => {
+      mockDemoCheck();
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const res = await request(app)
@@ -74,6 +78,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns user's alerts", async () => {
+      mockDemoCheck();
       mockQuery.mockResolvedValueOnce({
         rows: [
           {
@@ -109,6 +114,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns 400 for invalid condition", async () => {
+      mockDemoCheck();
       const res = await request(app)
         .post("/api/alerts")
         .set("Authorization", `Bearer ${jwt}`)
@@ -123,6 +129,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns 400 when threshold is not positive", async () => {
+      mockDemoCheck();
       const res = await request(app)
         .post("/api/alerts")
         .set("Authorization", `Bearer ${jwt}`)
@@ -136,6 +143,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns 400 for missing market_hash_name", async () => {
+      mockDemoCheck();
       const res = await request(app)
         .post("/api/alerts")
         .set("Authorization", `Bearer ${jwt}`)
@@ -145,6 +153,7 @@ describe("Alerts routes", () => {
     });
 
     it("creates alert successfully", async () => {
+      mockDemoCheck();
       mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] }); // premium check
       mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 0 }] }); // count check
       mockQuery.mockResolvedValueOnce({
@@ -172,6 +181,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns 400 when premium user hits 20 alert limit", async () => {
+      mockDemoCheck();
       mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] }); // premium check
       mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 20 }] }); // count check
 
@@ -189,6 +199,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns 403 when free user hits 5 alert limit", async () => {
+      mockDemoCheck();
       mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: false }] }); // premium check
       mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 5 }] }); // count check
 
@@ -213,6 +224,7 @@ describe("Alerts routes", () => {
     });
 
     it("deletes alert belonging to user", async () => {
+      mockDemoCheck();
       mockQuery.mockResolvedValueOnce({ rowCount: 1 });
 
       const res = await request(app)
@@ -223,6 +235,7 @@ describe("Alerts routes", () => {
     });
 
     it("returns 404 when alert not found or belongs to different user", async () => {
+      mockDemoCheck();
       mockQuery.mockResolvedValueOnce({ rowCount: 0 });
 
       const res = await request(app)

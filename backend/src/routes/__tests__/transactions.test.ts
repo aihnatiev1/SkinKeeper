@@ -73,6 +73,9 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
 describe("Transactions routes", () => {
   beforeEach(() => {
     mockQuery.mockReset();
@@ -85,6 +88,7 @@ describe("Transactions routes", () => {
     });
 
     it("returns empty transactions list", async () => {
+      mockDemoCheck();
       const { getTransactions } = await import("../../services/transactions.js");
       vi.mocked(getTransactions).mockResolvedValueOnce({ transactions: [], total: 0 } as any);
 
@@ -98,6 +102,7 @@ describe("Transactions routes", () => {
     });
 
     it("returns transactions with pagination", async () => {
+      mockDemoCheck();
       const { getTransactions } = await import("../../services/transactions.js");
       vi.mocked(getTransactions).mockResolvedValueOnce({
         transactions: [
@@ -123,8 +128,9 @@ describe("Transactions routes", () => {
     });
 
     it("filters by type when provided", async () => {
+      mockDemoCheck();
       const { getTransactions } = await import("../../services/transactions.js");
-      vi.mocked(getTransactions).mockResolvedValueOnce([]);
+      vi.mocked(getTransactions).mockResolvedValueOnce({ transactions: [], total: 0 } as any);
 
       const res = await request(app)
         .get("/api/transactions?type=sell")
@@ -141,6 +147,7 @@ describe("Transactions routes", () => {
     });
 
     it("returns transaction statistics", async () => {
+      mockDemoCheck();
       const { getTransactionStats } = await import("../../services/transactions.js");
       vi.mocked(getTransactionStats).mockResolvedValueOnce({
         totalBuys: 10,

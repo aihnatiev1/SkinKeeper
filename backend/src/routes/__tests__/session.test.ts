@@ -119,6 +119,9 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
 // ─── POST /api/session/qr/start ──────────────────────────────────────────
 
 describe("POST /api/session/qr/start", () => {
@@ -132,6 +135,7 @@ describe("POST /api/session/qr/start", () => {
   });
 
   it("returns 200 with nonce and qrUrl when session starts", async () => {
+    mockDemoCheck();
     // getActiveAccountId is mocked → returns 1
     // startQRSession is mocked → returns { nonce, qrUrl }
     const res = await request(app)
@@ -156,31 +160,32 @@ describe("GET /api/session/qr/poll/:nonce", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 200 with pending status when nonce not in pendingSessions (normal poll mode)", async () => {
-    // pendingSessions is empty Map → .get(nonce) returns undefined
-    // Route goes to normal mode: resolveAccountId → pollQRSession
-    // pollQRSession mock returns { status: "pending" }
-    const { SteamSessionService } = await import("../../services/steamSession.js");
-    vi.mocked(SteamSessionService.pollQRSession).mockResolvedValueOnce({ status: "pending" } as any);
-
+  it("returns expired status when nonce not in pendingSessions", async () => {
+    mockDemoCheck();
+    // pendingSessions is empty Map → .get(nonce) returns undefined → { status: "expired" }
     const res = await request(app)
       .get("/api/session/qr/poll/unknown-nonce")
       .set("Authorization", `Bearer ${jwt}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.status).toBeDefined();
+    expect(res.body.status).toBe("expired");
   });
 
-  it("returns polling result from pollQRSession in normal mode", async () => {
-    // Normal mode calls pollQRSession which we mock to return { status: "pending" }
+  it("returns polling result from pollQRSession when nonce exists (non-link mode)", async () => {
+    mockDemoCheck();
+    // Populate pendingSessions so route reaches normal poll mode
     const { SteamSessionService } = await import("../../services/steamSession.js");
+    (SteamSessionService as any).pendingSessions.set("test-nonce", { status: "pending" });
     vi.mocked(SteamSessionService.pollQRSession).mockResolvedValueOnce({ status: "pending" } as any);
 
     const res = await request(app)
-      .get("/api/session/qr/poll/abc123")
+      .get("/api/session/qr/poll/test-nonce")
       .set("Authorization", `Bearer ${jwt}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.status).toBeDefined();
+    expect(res.body.status).toBe("pending");
+
+    // Cleanup
+    (SteamSessionService as any).pendingSessions.delete("test-nonce");
   });
 });

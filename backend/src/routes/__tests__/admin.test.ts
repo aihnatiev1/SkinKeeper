@@ -98,9 +98,10 @@ describe("Admin routes", () => {
       expect(res.status).toBe(403);
     });
 
-    it("accepts secret as query param", async () => {
+    it("accepts secret as header", async () => {
       const res = await request(app)
-        .get(`/api/admin/price-stats?secret=${ADMIN_SECRET}`);
+        .get("/api/admin/price-stats")
+        .set("x-admin-secret", ADMIN_SECRET);
       expect(res.status).toBe(200);
     });
   });

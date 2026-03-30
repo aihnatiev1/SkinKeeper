@@ -15,7 +15,11 @@ vi.mock("../prices.js", () => ({
   stopSteamCrawlers: vi.fn(),
   startSteamCrawler: vi.fn(),
   stopSteamCrawler: vi.fn(),
+  runSteamBatchCrawl: vi.fn().mockResolvedValue(undefined),
   pruneOldPrices: vi.fn().mockResolvedValue(undefined),
+  purgeStaleCurrentPrices: vi.fn().mockResolvedValue(undefined),
+  startHotSteamLoop: vi.fn(),
+  stopHotSteamLoop: vi.fn(),
 }));
 
 vi.mock("../csfloat.js", () => ({
@@ -179,7 +183,7 @@ describe("priceJob", () => {
     const health = getJobHealth();
 
     expect(health).toHaveProperty("skinport");
-    expect(health).toHaveProperty("csgotrader");
+    expect(health).toHaveProperty("csgotrader_seed");
     expect(health).toHaveProperty("buff");
     expect(health).toHaveProperty("buff_bid");
     expect(health).toHaveProperty("bitskins");

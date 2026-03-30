@@ -117,21 +117,22 @@ export async function createOperation(
 
     // Only process if there are items to sell
     if (insertedAssetIds.size > 0) {
-      processOperation(operationId, userId).catch(async (err) => {
+      // Fire-and-forget but ensure cleanup errors are always caught
+      void processOperation(operationId, userId).catch((err) => {
         log.error("sell_op_crashed", { operationId }, err);
-        try {
-          await pool.query(
-            `UPDATE sell_operations SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status != 'completed'`,
-            [operationId]
-          );
-          await pool.query(
+        // Synchronous-style cleanup: chain promises so inner errors are caught too
+        pool.query(
+          `UPDATE sell_operations SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status != 'completed'`,
+          [operationId]
+        )
+          .then(() => pool.query(
             `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW()
              WHERE operation_id = $2 AND status = 'queued'`,
             [err instanceof Error ? err.message : "Unexpected processing error", operationId]
-          );
-        } catch (dbErr) {
-          log.error("sell_op_db_cleanup_failed", { operationId }, dbErr);
-        }
+          ))
+          .catch((dbErr) => {
+            log.error("sell_op_db_cleanup_failed", { operationId }, dbErr);
+          });
       });
     } else {
       // All items skipped — mark operation as completed immediately

@@ -71,6 +71,9 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
 describe("Portfolio routes", () => {
   beforeEach(() => {
     mockQuery.mockReset();
@@ -96,6 +99,7 @@ describe("Portfolio routes", () => {
     });
 
     it("returns total value calculated from prices", async () => {
+      mockDemoCheck();
       const { getLatestPrices } = await import("../../services/prices.js");
       vi.mocked(getLatestPrices).mockResolvedValueOnce(
         new Map([["AK-47 | Redline (Field-Tested)", { skinport: 12.34 }]])
@@ -128,6 +132,7 @@ describe("Portfolio routes", () => {
     });
 
     it("returns P/L history snapshots", async () => {
+      mockDemoCheck(); // auth middleware demo check
       const { getPLHistory } = await import("../../services/profitLoss.js");
       vi.mocked(getPLHistory).mockResolvedValueOnce([
         {

@@ -119,6 +119,10 @@ const jwt = createTestJwt(1);
 
 // ─── GET /api/trades/friends ─────────────────────────────────────────────
 
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+// This must be mocked before any route-specific queries.
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
 describe("GET /api/trades/friends", () => {
   beforeEach(() => {
     mockQuery.mockReset();
@@ -130,7 +134,7 @@ describe("GET /api/trades/friends", () => {
   });
 
   it("returns 200 with friends list when successful", async () => {
-    // getActiveAccountId → 1
+    mockDemoCheck(); // auth middleware demo check
     // pool.query to get steam_id from steam_accounts
     mockQuery.mockResolvedValueOnce({
       rows: [{ steam_id: "76561198000000001" }],
@@ -148,6 +152,7 @@ describe("GET /api/trades/friends", () => {
   });
 
   it("returns 404 when no active account found", async () => {
+    mockDemoCheck(); // auth middleware demo check
     // pool.query returns empty (no steam account)
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
@@ -160,6 +165,7 @@ describe("GET /api/trades/friends", () => {
   });
 
   it("returns 403 when friends list is private (Steam returns 401)", async () => {
+    mockDemoCheck(); // auth middleware demo check
     mockQuery.mockResolvedValueOnce({
       rows: [{ steam_id: "76561198000000001" }],
     });
@@ -191,6 +197,7 @@ describe("GET /api/trades/accounts", () => {
   });
 
   it("returns 200 with accounts array", async () => {
+    mockDemoCheck(); // auth middleware demo check
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -229,6 +236,7 @@ describe("PUT /api/trades/accounts/:id/trade-token", () => {
   });
 
   it("returns 200 with success true when trade token set", async () => {
+    mockDemoCheck(); // auth middleware demo check
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
 
     const res = await request(app)
@@ -241,6 +249,7 @@ describe("PUT /api/trades/accounts/:id/trade-token", () => {
   });
 
   it("returns 404 when account not found (rowCount 0)", async () => {
+    mockDemoCheck(); // auth middleware demo check
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
 
     const res = await request(app)
@@ -253,6 +262,7 @@ describe("PUT /api/trades/accounts/:id/trade-token", () => {
   });
 
   it("returns 400 when tradeToken is missing from body", async () => {
+    mockDemoCheck(); // auth middleware demo check
     const res = await request(app)
       .put("/api/trades/accounts/1/trade-token")
       .set("Authorization", `Bearer ${jwt}`)
@@ -266,6 +276,7 @@ describe("PUT /api/trades/accounts/:id/trade-token", () => {
 
 describe("SESSION_EXPIRED propagation", () => {
   it("POST /send returns 401 SESSION_EXPIRED when service throws SessionExpiredError", async () => {
+    mockDemoCheck();
     const { createAndSendOffer } = await import("../../services/tradeOffers.js");
     vi.mocked(createAndSendOffer).mockRejectedValueOnce(new SessionExpiredError());
     const jwt = createTestJwt(1);
@@ -278,6 +289,7 @@ describe("SESSION_EXPIRED propagation", () => {
   });
 
   it("POST /:id/accept returns 401 SESSION_EXPIRED", async () => {
+    mockDemoCheck();
     const { acceptOffer } = await import("../../services/tradeOffers.js");
     vi.mocked(acceptOffer).mockRejectedValueOnce(new SessionExpiredError());
     const jwt = createTestJwt(1);
@@ -289,6 +301,7 @@ describe("SESSION_EXPIRED propagation", () => {
   });
 
   it("POST /:id/decline returns 401 SESSION_EXPIRED", async () => {
+    mockDemoCheck();
     const { declineOffer } = await import("../../services/tradeOffers.js");
     vi.mocked(declineOffer).mockRejectedValueOnce(new SessionExpiredError());
     const jwt = createTestJwt(1);
@@ -300,6 +313,7 @@ describe("SESSION_EXPIRED propagation", () => {
   });
 
   it("POST /:id/cancel returns 401 SESSION_EXPIRED", async () => {
+    mockDemoCheck();
     const { cancelOffer } = await import("../../services/tradeOffers.js");
     vi.mocked(cancelOffer).mockRejectedValueOnce(new SessionExpiredError());
     const jwt = createTestJwt(1);

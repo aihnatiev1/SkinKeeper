@@ -112,6 +112,9 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
 // ─── POST /api/auth/steam/verify ─────────────────────────────────────────
 
 describe("POST /api/auth/steam/verify", () => {
@@ -165,6 +168,7 @@ describe("GET /api/auth/me", () => {
   });
 
   it("returns 200 with profile fields when user exists", async () => {
+    mockDemoCheck();
     mockQuery.mockResolvedValueOnce({
       rows: [mockUser({ account_count: 1, active_account_id: 1 })],
     });
@@ -180,6 +184,7 @@ describe("GET /api/auth/me", () => {
   });
 
   it("returns 404 when user not found in DB", async () => {
+    mockDemoCheck();
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)
@@ -204,6 +209,7 @@ describe("GET /api/auth/accounts", () => {
   });
 
   it("returns 200 with accounts list and active account info", async () => {
+    mockDemoCheck();
     // accounts query
     mockQuery.mockResolvedValueOnce({
       rows: [
@@ -248,6 +254,7 @@ describe("DELETE /api/auth/accounts/:accountId", () => {
   });
 
   it("returns 404 when account not found", async () => {
+    mockDemoCheck();
     // list accounts query — returns empty (account 99 not in user's accounts)
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
@@ -260,6 +267,7 @@ describe("DELETE /api/auth/accounts/:accountId", () => {
   });
 
   it("returns 200 with success true when account deleted (multiple accounts)", async () => {
+    mockDemoCheck();
     // list accounts — returns 2 accounts, target is first one (id=1)
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 1 }, { id: 2 }],
@@ -278,6 +286,7 @@ describe("DELETE /api/auth/accounts/:accountId", () => {
   });
 
   it("returns 200 with lastAccountRemoved when deleting only account", async () => {
+    mockDemoCheck();
     // list accounts — returns only 1 account (the one being deleted)
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 1 }] });
     // DELETE query
@@ -302,9 +311,10 @@ describe("POST /api/auth/accounts/link — premium gate", () => {
     mockQuery.mockReset();
   });
 
-  it("returns 403 premium_required for free user who already has 1 account", async () => {
+  it("returns 403 premium_required for free user who already has 2 accounts", async () => {
+    mockDemoCheck();
     mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: false }] });
-    mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 1 }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 2 }] });
 
     const res = await request(app)
       .post("/api/auth/accounts/link")
@@ -315,6 +325,7 @@ describe("POST /api/auth/accounts/link — premium gate", () => {
   });
 
   it("returns 200 for free user with no accounts yet", async () => {
+    mockDemoCheck();
     mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: false }] });
     mockQuery.mockResolvedValueOnce({ rows: [{ cnt: 0 }] });
 
@@ -327,6 +338,7 @@ describe("POST /api/auth/accounts/link — premium gate", () => {
   });
 
   it("returns 200 for premium user regardless of account count", async () => {
+    mockDemoCheck();
     mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] });
 
     const res = await request(app)

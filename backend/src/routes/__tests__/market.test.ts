@@ -122,7 +122,10 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
-// ─── POST /api/market/session ────────────────────────────────────────────
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
+// ─── POST /api/market/session (deprecated → 410) ────────────────────────
 
 describe("POST /api/market/session", () => {
   beforeEach(() => {
@@ -136,30 +139,18 @@ describe("POST /api/market/session", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 400 when required fields missing (no sessionId)", async () => {
-    const res = await request(app)
-      .post("/api/market/session")
-      .set("Authorization", `Bearer ${jwt}`)
-      .send({});
-
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 200 with success true on valid session data", async () => {
-    const { SteamSessionService } = await import("../../services/steamSession.js");
-    vi.mocked(SteamSessionService.saveSession).mockResolvedValueOnce(undefined);
-
+  it("returns 410 (deprecated)", async () => {
+    mockDemoCheck();
     const res = await request(app)
       .post("/api/market/session")
       .set("Authorization", `Bearer ${jwt}`)
       .send({ sessionId: "abc123", steamLoginSecure: "def456" });
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.status).toBe(410);
   });
 });
 
-// ─── GET /api/market/session/status ──────────────────────────────────────
+// ─── GET /api/market/session/status (deprecated → 410) ──────────────────
 
 describe("GET /api/market/session/status", () => {
   beforeEach(() => {
@@ -171,34 +162,13 @@ describe("GET /api/market/session/status", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 200 with session status fields when session exists", async () => {
-    const { SteamSessionService } = await import("../../services/steamSession.js");
-    vi.mocked(SteamSessionService.getSession).mockResolvedValueOnce({
-      sessionId: "s",
-      steamLoginSecure: "sl",
-    } as any);
-
+  it("returns 410 (deprecated)", async () => {
+    mockDemoCheck();
     const res = await request(app)
       .get("/api/market/session/status")
       .set("Authorization", `Bearer ${jwt}`);
 
-    expect(res.status).toBe(200);
-    expect(res.body.hasSession).toBe(true);
-    expect(res.body.configured).toBe(true);
-    expect(typeof res.body.hasToken).toBe("boolean");
-  });
-
-  it("returns configured: false when no session", async () => {
-    const { SteamSessionService } = await import("../../services/steamSession.js");
-    vi.mocked(SteamSessionService.getSession).mockResolvedValueOnce(null as any);
-
-    const res = await request(app)
-      .get("/api/market/session/status")
-      .set("Authorization", `Bearer ${jwt}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.hasSession).toBe(false);
-    expect(res.body.configured).toBe(false);
+    expect(res.status).toBe(410);
   });
 });
 
@@ -215,6 +185,7 @@ describe("GET /api/market/wallet-info", () => {
   });
 
   it("returns 200 with wallet info when available", async () => {
+    mockDemoCheck();
     const { getWalletInfo } = await import("../../services/currency.js");
     vi.mocked(getWalletInfo).mockResolvedValueOnce({
       currency: "USD",
@@ -233,6 +204,7 @@ describe("GET /api/market/wallet-info", () => {
   });
 
   it("returns default USD info when wallet info not available", async () => {
+    mockDemoCheck();
     const { getWalletInfo } = await import("../../services/currency.js");
     vi.mocked(getWalletInfo).mockResolvedValueOnce(null);
 
@@ -254,6 +226,7 @@ describe("GET /api/market/wallet-info", () => {
 
 describe("SESSION_EXPIRED propagation", () => {
   it("POST /sell-operation returns 401 when ensureValidSession throws SessionExpiredError", async () => {
+    mockDemoCheck();
     const { SteamSessionService } = await import("../../services/steamSession.js");
     vi.mocked(SteamSessionService.ensureValidSession).mockRejectedValueOnce(new SessionExpiredError());
     const jwt = createTestJwt(1);
@@ -266,6 +239,7 @@ describe("SESSION_EXPIRED propagation", () => {
   });
 
   it("POST /sell returns 401 when session is invalid", async () => {
+    mockDemoCheck();
     const { SteamSessionService } = await import("../../services/steamSession.js");
     vi.mocked(SteamSessionService.validateSession).mockResolvedValueOnce(false);
     const jwt = createTestJwt(1);

@@ -66,8 +66,13 @@ import { createTestApp } from "../../__tests__/app.js";
 const app = createTestApp();
 const jwt = createTestJwt(1);
 
+// Auth middleware does a demo-check query: SELECT steam_id FROM users WHERE id = $1
+const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
+
 // Helper: mock the 2 queries the paginated endpoint makes (summary + page)
+// Prepends demo-check mock for auth middleware.
 function mockPaginatedQueries(items: any[], total?: number) {
+  mockDemoCheck();
   const count = total ?? items.length;
   // 1st call: summary query (total + totalValue)
   mockQuery.mockResolvedValueOnce({ rows: [{ total: count, total_value: 0 }] });
@@ -160,8 +165,8 @@ describe("GET /api/inventory", () => {
       .set("Authorization", `Bearer ${jwt}`);
 
     expect(res.status).toBe(200);
-    // Verify the summary query was called with accountId filter
-    const queryCall = mockQuery.mock.calls[0];
+    // Verify the summary query was called with accountId filter (call[0] = demo check, call[1] = summary)
+    const queryCall = mockQuery.mock.calls[1];
     expect(queryCall[1]).toContain(2);
   });
 
