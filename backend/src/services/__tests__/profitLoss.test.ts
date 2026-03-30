@@ -155,10 +155,11 @@ describe("getPLHistory", () => {
 
   it("returns daily snapshots for specified days", async () => {
     const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
-          snapshot_date: "2025-12-01",
+          snapshot_date: yesterday,
           total_invested_cents: 10000,
           total_current_value_cents: 12000,
           cumulative_profit_cents: 2000,
@@ -179,7 +180,7 @@ describe("getPLHistory", () => {
     const history = await getPLHistory(1, 7);
 
     expect(history).toHaveLength(2);
-    expect(history[0].date).toBe("2025-12-01");
+    expect(history[0].date).toBe(yesterday);
     expect(history[0].totalInvestedCents).toBe(10000);
     expect(history[0].cumulativeProfitCents).toBe(2000);
     expect(history[1].date).toBe(today);

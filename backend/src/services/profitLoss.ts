@@ -110,7 +110,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
       WITH buy_agg AS (
         SELECT market_hash_name,
                COUNT(*)::int AS qty,
-               SUM(price_cents)::int AS total
+               SUM(price_cents)::bigint AS total
         FROM transactions
         WHERE user_id = $1 AND type = 'buy' ${accountCond} ${portfolioCond}
         GROUP BY market_hash_name
@@ -118,7 +118,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
       sell_agg AS (
         SELECT market_hash_name,
                COUNT(*)::int AS qty,
-               SUM(price_cents)::int AS total
+               SUM(price_cents)::bigint AS total
         FROM transactions
         WHERE user_id = $1 AND type = 'sell' ${accountCond} ${portfolioCond}
         GROUP BY market_hash_name
@@ -137,7 +137,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
           END AS avg_buy_price,
           COALESCE(s.total, 0) - (
             CASE WHEN COALESCE(b.qty, 0) > 0
-              THEN (COALESCE(b.total, 0)::float / b.qty * COALESCE(s.qty, 0))::int
+              THEN (COALESCE(b.total, 0)::float / COALESCE(b.qty, 1) * COALESCE(s.qty, 0))::int
               ELSE 0
             END
           ) AS realized_profit
@@ -234,7 +234,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
       WHERE user_id = $1 AND current_holding > 0
     )
     SELECT
-      COALESCE(SUM((cp.price_usd * 100)::int * h.current_holding), 0)::int AS current_value
+      COALESCE(SUM((cp.price_usd * 100)::bigint * h.current_holding), 0)::bigint AS current_value
     FROM holdings h
     LEFT JOIN current_prices cp
       ON cp.market_hash_name = h.market_hash_name
@@ -451,7 +451,7 @@ export async function getItemsPL(
       h.realized_profit_cents,
       lt.last_created_at AS updated_at,
       COALESCE((lp.price_usd * 100)::int, 0) AS current_price_cents,
-      COALESCE((lp.price_usd * 100)::int * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding) AS unrealized_profit_cents,
+      COALESCE((lp.price_usd * 100)::bigint * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding) AS unrealized_profit_cents,
       ti.icon_url,
       COUNT(*) OVER () AS total_count
     FROM holdings h
@@ -471,7 +471,7 @@ export async function getItemsPL(
         AND t.icon_url IS NOT NULL AND t.icon_url != ''
       ORDER BY t.created_at DESC LIMIT 1
     ) ti ON true
-    ORDER BY ABS(h.realized_profit_cents + COALESCE((lp.price_usd * 100)::int * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding)) DESC
+    ORDER BY ABS(h.realized_profit_cents + COALESCE((lp.price_usd * 100)::bigint * h.current_holding, 0) - (h.avg_buy_price_cents * h.current_holding)) DESC
     LIMIT $2 OFFSET $3
     `,
     [userId, limit, offset]
@@ -566,7 +566,7 @@ export async function getPLHistory(
     params
   );
 
-  const points = res.rows.map((r) => ({
+  const rawPoints = res.rows.map((r) => ({
     date: r.snapshot_date,
     totalInvestedCents: r.total_invested_cents,
     totalCurrentValueCents: r.total_current_value_cents,
@@ -575,22 +575,38 @@ export async function getPLHistory(
     unrealizedProfitCents: r.unrealized_profit_cents,
   }));
 
-  // Always include today's live point so charts show data from day 1
-  // (skip if no snapshots at all — user has no portfolio data yet)
-  if (points.length > 0) {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const lastPoint = points[points.length - 1];
-    if (lastPoint.date !== todayStr) {
-      const pl = await getPortfolioPL(userId, accountId);
-      points.push({
-        date: todayStr,
-        totalInvestedCents: pl.totalInvestedCents,
-        totalCurrentValueCents: pl.totalCurrentValueCents,
-        cumulativeProfitCents: pl.totalProfitCents,
-        realizedProfitCents: pl.realizedProfitCents,
-        unrealizedProfitCents: pl.unrealizedProfitCents,
-      });
+  if (rawPoints.length === 0) return [];
+
+  // Fill gaps: if days are missing, carry forward previous day's values
+  const points: PLHistoryPoint[] = [rawPoints[0]];
+  for (let i = 1; i < rawPoints.length; i++) {
+    const prev = rawPoints[i - 1];
+    const curr = rawPoints[i];
+    // Fill gap days between prev.date and curr.date
+    const prevDate = new Date(prev.date);
+    const currDate = new Date(curr.date);
+    const dayDiff = Math.round((currDate.getTime() - prevDate.getTime()) / 86400000);
+    for (let d = 1; d < dayDiff; d++) {
+      const gapDate = new Date(prevDate);
+      gapDate.setDate(gapDate.getDate() + d);
+      points.push({ ...prev, date: gapDate.toISOString().slice(0, 10) });
     }
+    points.push(curr);
+  }
+
+  // Always include today's live point
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const lastPoint = points[points.length - 1];
+  if (lastPoint.date !== todayStr) {
+    const pl = await getPortfolioPL(userId, accountId);
+    points.push({
+      date: todayStr,
+      totalInvestedCents: pl.totalInvestedCents,
+      totalCurrentValueCents: pl.totalCurrentValueCents,
+      cumulativeProfitCents: pl.totalProfitCents,
+      realizedProfitCents: pl.realizedProfitCents,
+      unrealizedProfitCents: pl.unrealizedProfitCents,
+    });
   }
 
   return points;
@@ -600,6 +616,8 @@ export async function getPLHistory(
 
 export async function runDailyPLSnapshot(): Promise<void> {
   const usersRes = await pool.query("SELECT id FROM users");
+  const failedUserIds: number[] = [];
+
   for (const user of usersRes.rows) {
     try {
       await recalculateCostBasis(user.id);
@@ -615,7 +633,23 @@ export async function runDailyPLSnapshot(): Promise<void> {
       }
     } catch (err) {
       console.error(`[PL Snapshot] Failed for user ${user.id}:`, err);
+      failedUserIds.push(user.id);
     }
   }
-  console.log(`[PL Snapshot] Completed for ${usersRes.rows.length} users`);
+
+  // Retry failed users once after a short delay
+  if (failedUserIds.length > 0) {
+    console.log(`[PL Snapshot] Retrying ${failedUserIds.length} failed users...`);
+    await new Promise((r) => setTimeout(r, 5000));
+    for (const userId of failedUserIds) {
+      try {
+        await recalculateCostBasis(userId);
+        await takeDailySnapshot(userId);
+      } catch (err) {
+        console.error(`[PL Snapshot] Retry failed for user ${userId}:`, err);
+      }
+    }
+  }
+
+  console.log(`[PL Snapshot] Completed for ${usersRes.rows.length} users (${failedUserIds.length} retried)`);
 }
