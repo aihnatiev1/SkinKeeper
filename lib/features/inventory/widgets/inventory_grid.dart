@@ -30,7 +30,21 @@ class InventoryGrid extends ConsumerWidget {
 
     return Expanded(
       child: groupedInventory.when(
-        data: (groups) => AppRefreshIndicator(
+        data: (groups) => groups.isEmpty
+          ? AppRefreshIndicator(
+              onRefresh: () => ref.read(inventoryProvider.notifier).refresh(),
+              child: ListView(
+                children: const [
+                  SizedBox(height: 120),
+                  EmptyState(
+                    icon: Icons.inventory_2_outlined,
+                    title: 'No items in inventory',
+                    subtitle: 'Pull down to refresh or link a Steam account',
+                  ),
+                ],
+              ),
+            )
+          : AppRefreshIndicator(
           onRefresh: () => ref.read(inventoryProvider.notifier).refresh(),
           child: GridView.builder(
             padding: EdgeInsets.fromLTRB(

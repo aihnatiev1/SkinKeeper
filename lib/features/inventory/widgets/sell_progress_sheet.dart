@@ -148,8 +148,18 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             const Icon(Icons.error_outline, color: AppTheme.loss, size: 40),
             const SizedBox(height: 12),
             Text(
-              'Operation failed',
+              e.toString().contains('timeout')
+                  ? 'Price fetch timed out'
+                  : 'Operation failed',
               style: AppTheme.body.copyWith(color: AppTheme.loss),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              e.toString().contains('timeout')
+                  ? 'Steam is slow. Try again or sell with manual price.'
+                  : 'Check your connection and try again.',
+              style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

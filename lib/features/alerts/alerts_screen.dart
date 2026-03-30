@@ -273,7 +273,28 @@ class _AlertCard extends ConsumerWidget {
       ),
       confirmDismiss: (_) async {
         HapticFeedback.mediumImpact();
-        return true;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppTheme.bgSecondary,
+            title: const Text('Delete Alert?', style: TextStyle(color: Colors.white)),
+            content: Text(
+              'Remove alert for ${alert.marketHashName}?',
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Delete', style: TextStyle(color: AppTheme.loss)),
+              ),
+            ],
+          ),
+        );
+        return confirmed ?? false;
       },
       onDismissed: (_) {
         ref.read(alertsProvider.notifier).deleteAlert(alert.id);

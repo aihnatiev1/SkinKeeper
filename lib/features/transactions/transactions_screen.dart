@@ -290,17 +290,24 @@ class TransactionsScreen extends ConsumerWidget {
                   }
                   if (hasMore) {
                     items.add(
-                      const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.primary,
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Showing ${transactions.length} of $total',
+                              style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                            const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     );
