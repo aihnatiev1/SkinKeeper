@@ -389,6 +389,23 @@ class MiniItemCard extends StatelessWidget {
                               ),
                             ),
                           ],
+                          if (item.accountName != null && item.accountName!.isNotEmpty) ...[
+                            const Spacer(),
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.25),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.5), width: 0.5),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                item.accountName![0].toUpperCase(),
+                                style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: AppTheme.primaryLight),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ],

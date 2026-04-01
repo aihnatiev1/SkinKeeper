@@ -499,7 +499,8 @@ class _FooterSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasWear = !item.isNonWeapon && item.wearShort != null;
     final hasBan = !item.tradable;
-    if (!hasWear && !hasBan) return const SizedBox.shrink();
+    final hasAccount = item.accountName != null && item.accountName!.isNotEmpty;
+    if (!hasWear && !hasBan && !hasAccount) return const SizedBox.shrink();
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -515,26 +516,32 @@ class _FooterSection extends StatelessWidget {
           // Wear pills + account badge on same row
           Row(
             children: [
-              if (!item.isNonWeapon && item.wearShort != null) ...[
-                if (item.isSouvenir)
-                  Text('SV ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9)))
-                else if (item.isStatTrak)
-                  Text('ST ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9))),
-                _WearPill(wear: item.wearShort!, compact: compact),
-                if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
-                  const Padding(padding: EdgeInsets.only(left: 3), child: Text('🔥', style: TextStyle(fontSize: 9))),
-              ],
-              if (hasBan) ...[
-                const SizedBox(width: 4),
-                _TradeBanBadge(item: item, compact: compact),
-              ],
-              const Spacer(),
-              if (item.accountName != null && item.accountName!.isNotEmpty)
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!item.isNonWeapon && item.wearShort != null) ...[
+                      if (item.isSouvenir)
+                        Text('SV ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9)))
+                      else if (item.isStatTrak)
+                        Text('ST ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9))),
+                      _WearPill(wear: item.wearShort!, compact: compact),
+                      if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
+                        const Padding(padding: EdgeInsets.only(left: 3), child: Text('🔥', style: TextStyle(fontSize: 9))),
+                    ],
+                    if (hasBan) ...[
+                      const SizedBox(width: 4),
+                      _TradeBanBadge(item: item, compact: compact),
+                    ],
+                  ],
+                ),
+              ),
+              if (hasAccount) ...[
+                const SizedBox(width: 2),
                 compact
                     ? _AccountLetterDot(name: item.accountName)
-                    : Flexible(
-                        child: _AccountNameBadge(accountName: item.accountName, compact: true),
-                      ),
+                    : _AccountNameBadge(accountName: item.accountName, compact: true),
+              ],
             ],
           ),
           // Float bar below

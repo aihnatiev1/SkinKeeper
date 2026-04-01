@@ -145,7 +145,7 @@ class _GridItem extends ConsumerWidget {
 
     return ItemCard(
       item: item,
-      compact: columns >= 4,
+      compact: columns >= 3,
       itemPL: itemPL,
       currency: currency,
       groupCount: group.isGroup ? group.count : null,

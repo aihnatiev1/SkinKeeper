@@ -145,27 +145,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           if (!isSelecting)
             Positioned(
               right: 16,
-              bottom: 80,
+              bottom: MediaQuery.of(context).padding.bottom + 60,
               child: GestureDetector(
                 onTap: () {
                   HapticFeedback.mediumImpact();
                   context.push('/inventory/bulk-sell');
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: AppTheme.warning,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     boxShadow: [BoxShadow(color: AppTheme.warning.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))],
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.sell_rounded, color: Colors.black, size: 16),
-                      const SizedBox(width: 6),
-                      Text('Bulk Sale', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black)),
-                    ],
-                  ),
+                  child: Icon(Icons.sell_rounded, color: Colors.black, size: 22),
                 ),
               ),
             ),
