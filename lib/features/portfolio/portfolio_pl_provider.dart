@@ -20,15 +20,23 @@ class PortfolioPLNotifier extends AsyncNotifier<PortfolioPL> {
     return _fetch();
   }
 
-  Future<PortfolioPL> _fetch() async {
+  Future<PortfolioPL> _fetch({int retries = 2}) async {
     final api = ref.read(apiClientProvider);
     final portfolioId = ref.read(selectedPortfolioIdProvider);
     final accountScope = ref.read(accountScopeProvider);
     final params = <String, String>{};
     if (portfolioId != null) params['portfolioId'] = portfolioId.toString();
     if (accountScope != null) params['accountId'] = accountScope.toString();
-    final res = await api.get('/portfolio/pl', queryParameters: params);
-    return PortfolioPL.fromJson(res.data as Map<String, dynamic>);
+    try {
+      final res = await api.get('/portfolio/pl', queryParameters: params);
+      return PortfolioPL.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      if (retries > 0) {
+        await Future.delayed(const Duration(seconds: 2));
+        return _fetch(retries: retries - 1);
+      }
+      rethrow;
+    }
   }
 
   Future<void> recalculate() async {
