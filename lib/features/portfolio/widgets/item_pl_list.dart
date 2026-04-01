@@ -645,15 +645,12 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
       final api = ref.read(apiClientProvider);
       final encoded = Uri.encodeQueryComponent(item.marketHashName);
       await api.delete('/transactions?item=$encoded');
-      if (!context.mounted) return;
-      // Defer invalidation to next frame to avoid black screen
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.invalidate(portfolioPLProvider);
-        ref.invalidate(itemsPLProvider);
-        ref.invalidate(transactionsProvider);
-        ref.invalidate(portfolioProvider);
-        ref.invalidate(txStatsProvider);
-      });
+      // Invalidate all related providers immediately
+      ref.invalidate(itemsPLProvider);
+      ref.invalidate(portfolioPLProvider);
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(portfolioProvider);
+      ref.invalidate(txStatsProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

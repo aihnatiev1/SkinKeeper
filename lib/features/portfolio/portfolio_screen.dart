@@ -1932,14 +1932,24 @@ class _PortfolioOptionsSheet extends ConsumerWidget {
                 ),
               );
               if (confirmed == true) {
-                await ref
-                    .read(portfoliosProvider.notifier)
-                    .deletePortfolio(portfolio.id);
-                if (ref.read(selectedPortfolioIdProvider) == portfolio.id) {
-                  ref.read(selectedPortfolioIdProvider.notifier).state = null;
+                try {
+                  await ref
+                      .read(portfoliosProvider.notifier)
+                      .deletePortfolio(portfolio.id);
+                  if (ref.read(selectedPortfolioIdProvider) == portfolio.id) {
+                    ref.read(selectedPortfolioIdProvider.notifier).state = null;
+                  }
+                  ref.invalidate(portfolioPLProvider);
+                  ref.invalidate(portfolioProvider);
+                  ref.invalidate(portfoliosProvider);
+                  ref.invalidate(itemsPLProvider);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Delete failed: $e'), backgroundColor: AppTheme.loss),
+                    );
+                  }
                 }
-                ref.invalidate(portfolioPLProvider);
-                ref.invalidate(portfolioProvider);
               }
             },
             contentPadding: EdgeInsets.zero,
