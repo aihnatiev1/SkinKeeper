@@ -205,12 +205,18 @@ class _AccountCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   onPressed: () async {
-                    // If not active, switch to this account first
-                    if (!account.isActive) {
+                    // Temporarily switch to this account for session auth, then switch back
+                    final wasActive = account.isActive;
+                    final previousActiveId = ref.read(authStateProvider).valueOrNull?.activeAccountId;
+                    if (!wasActive) {
                       await ref.read(accountsProvider.notifier).setActive(account.id);
                     }
                     if (!context.mounted) return;
                     await requireSession(context, ref);
+                    // Restore previous active account if we switched temporarily
+                    if (!wasActive && previousActiveId != null) {
+                      await ref.read(accountsProvider.notifier).setActive(previousActiveId);
+                    }
                     // Refresh accounts to update session status display
                     ref.invalidate(accountsProvider);
                   },
