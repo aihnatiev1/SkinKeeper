@@ -39,45 +39,26 @@ class InventoryAppBar extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
         child: Column(
           children: [
+            // Row 1: Title + action icons
             Row(
               children: [
                 if (isSelecting)
                   GlassIconBtn(
                     icon: Icons.close_rounded,
                     onTap: () => ref.read(selectionProvider.notifier).clear(),
-                  )
-                else
-                  const SizedBox.shrink(),
+                  ),
                 if (isSelecting) const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isSelecting
-                            ? '${selection.count} selected'
-                            : AppLocalizations.of(context).inventoryTitle,
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                          color: isSelecting ? AppTheme.primary : Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      allItems.whenData((items) {
-                        final totalValue = items.fold<double>(
-                            0, (sum, item) => sum + (item.steamPrice ?? 0));
-                        return Text(
-                          '${items.length} items \u2022 ${currency.format(totalValue)}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.textDisabled,
-                          ),
-                        );
-                      }).maybeWhen(orElse: () => const SizedBox.shrink()),
-                    ],
+                  child: Text(
+                    isSelecting
+                        ? '${selection.count} selected'
+                        : AppLocalizations.of(context).inventoryTitle,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      color: isSelecting ? AppTheme.primary : Colors.white,
+                    ),
                   ),
                 ),
                 GlassIconBtn(
@@ -118,21 +99,25 @@ class InventoryAppBar extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+            const SizedBox(height: 8),
+            // Row 2: Stats left + Account chip right
+            Row(
               children: [
-                SyncIndicator(
-                  onTap: () async {
-                    HapticFeedback.mediumImpact();
-                    await ref.read(inventoryProvider.notifier).refresh();
-                  },
-                ),
-                const SizedBox(width: 8),
+                allItems.whenData((items) {
+                  final totalValue = items.fold<double>(
+                      0, (sum, item) => sum + (item.steamPrice ?? 0));
+                  return Text(
+                    '${items.length} items \u2022 ${currency.format(totalValue)}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textSecondary,
+                    ),
+                  );
+                }).maybeWhen(orElse: () => const SizedBox.shrink()),
+                const Spacer(),
                 const AccountScopeChip(),
               ],
-            ),
             ),
           ],
         ),
