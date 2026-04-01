@@ -101,67 +101,58 @@ class InventoryAppBar extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Row 2: Stats + refresh + bulk sale + account
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  allItems.whenData((items) {
+            const SizedBox(height: 6),
+            // Row 2: Stats left, account chip right
+            Row(
+              children: [
+                Expanded(
+                  child: allItems.whenData((items) {
                     final totalValue = items.fold<double>(
                         0, (sum, item) => sum + (item.steamPrice ?? 0));
-                    return Text(
-                      '${items.length} items \u2022 ${currency.format(totalValue)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textSecondary,
-                      ),
-                    );
-                  }).maybeWhen(orElse: () => const SizedBox.shrink()),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () async {
-                      HapticFeedback.mediumImpact();
-                      await ref.read(inventoryProvider.notifier).refresh();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(AppTheme.r8),
-                        border: Border.all(color: AppTheme.borderLight, width: 0.5),
-                      ),
+                    return GestureDetector(
+                      onTap: () async {
+                        HapticFeedback.mediumImpact();
+                        await ref.read(inventoryProvider.notifier).refresh();
+                      },
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.refresh_rounded, size: 13, color: AppTheme.textMuted),
-                          const SizedBox(width: 4),
-                          Text('Refresh', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.textMuted)),
+                          Text(
+                            '${items.length} items \u2022 ${currency.format(totalValue)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(Icons.refresh_rounded, size: 13, color: AppTheme.textDisabled),
                         ],
                       ),
+                    );
+                  }).maybeWhen(orElse: () => const SizedBox.shrink()),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    context.push('/inventory/bulk-sell');
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(AppTheme.r8),
+                      border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2), width: 0.5),
                     ),
+                    child: Text('Bulk Sale', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.warning)),
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      context.push('/inventory/bulk-sell');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.warning.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(AppTheme.r8),
-                        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2), width: 0.5),
-                      ),
-                      child: Text('Bulk Sale', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.warning)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const AccountScopeChip(),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                const AccountScopeChip(),
+              ],
             ),
           ],
         ),
