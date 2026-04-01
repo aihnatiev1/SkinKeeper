@@ -1165,15 +1165,15 @@ class _SellActions extends ConsumerWidget {
                                   .startQuickSell(items, accountId: item.accountId);
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: stale ? AppTheme.surface : AppTheme.primary,
-                              foregroundColor: stale ? AppTheme.textSecondary : Colors.white,
+                              backgroundColor: stale ? AppTheme.warning : AppTheme.primary,
+                              foregroundColor: stale ? Colors.black : Colors.white,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(AppTheme.r12),
                               ),
                             ),
                             child: Text(
-                              stale ? 'Set Price & Sell' : 'Quick Sell $priceStr',
+                              stale ? 'Check Price & Sell' : 'Quick Sell $priceStr',
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
