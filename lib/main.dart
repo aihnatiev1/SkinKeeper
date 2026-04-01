@@ -37,15 +37,13 @@ void main() async {
   );
   dev.log('Firebase initialized, apps: ${Firebase.apps.length}', name: 'Firebase');
   await Analytics.init();
-  // Clear keychain on fresh install (iOS keeps keychain after app deletion)
+  // Clear secure storage on fresh install (iOS keeps keychain after app deletion)
   final prefs = await SharedPreferences.getInstance();
   if (prefs.getBool('has_launched_v2') != true) {
     try {
-      await const FlutterSecureStorage(
-        iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-      ).deleteAll();
+      await const FlutterSecureStorage().deleteAll();
     } catch (e) {
-      dev.log('Failed to clear keychain: $e', name: 'Init');
+      dev.log('Failed to clear secure storage: $e', name: 'Init');
     }
     await prefs.setBool('has_launched_v2', true);
   }
