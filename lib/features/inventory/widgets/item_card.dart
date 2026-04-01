@@ -428,7 +428,8 @@ class _AccountNameBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = accountName ?? '?';
-    final display = name.length > 12 ? '${name.substring(0, 12)}…' : name;
+    final maxLen = compact ? 6 : 10;
+    final display = name.length > maxLen ? '${name.substring(0, maxLen)}…' : name;
     const color = AppTheme.primary;
     return Container(
       margin: const EdgeInsets.only(right: 4),

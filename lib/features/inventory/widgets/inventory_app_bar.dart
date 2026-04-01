@@ -114,22 +114,6 @@ class InventoryAppBar extends ConsumerWidget {
                     );
                   }).maybeWhen(orElse: () => const SizedBox.shrink()),
                 ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    context.push('/inventory/bulk-sell');
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warning.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppTheme.r8),
-                      border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2), width: 0.5),
-                    ),
-                    child: Text('Bulk Sale', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.warning)),
-                  ),
-                ),
               ],
             ),
           ],

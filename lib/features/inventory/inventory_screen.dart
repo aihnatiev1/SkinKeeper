@@ -83,6 +83,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
+      floatingActionButton: !isSelecting ? FloatingActionButton.small(
+        backgroundColor: AppTheme.warning,
+        onPressed: () {
+          HapticFeedback.mediumImpact();
+          context.push('/inventory/bulk-sell');
+        },
+        child: const Icon(Icons.sell_rounded, color: Colors.black, size: 20),
+      ) : null,
       body: Column(
         children: [
           InventoryAppBar(
