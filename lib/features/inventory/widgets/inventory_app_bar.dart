@@ -36,10 +36,10 @@ class InventoryAppBar extends ConsumerWidget {
     return SafeArea(
       bottom: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 0),
         child: Column(
           children: [
-            // Row 1: Title + action icons
+            // Row 1: Title + search + sort
             Row(
               children: [
                 if (isSelecting)
@@ -64,33 +64,56 @@ class InventoryAppBar extends ConsumerWidget {
                   ),
                 ),
                 GlassIconBtn(
-                  icon: groupingEnabled
-                      ? Icons.layers_rounded
-                      : Icons.layers_clear_rounded,
-                  isActive: groupingEnabled,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    ref.read(groupingEnabledProvider.notifier).state =
-                        !groupingEnabled;
-                  },
-                ),
-                GlassIconBtn(
-                  icon: columns <= 2
-                      ? Icons.grid_view_rounded
-                      : Icons.view_module_rounded,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    final next = columns >= 5 ? 2 : columns + 1;
-                    ref.read(gridColumnsProvider.notifier).state = next;
-                  },
-                ),
-                GlassIconBtn(
                   icon: Icons.search_rounded,
                   isActive: searchOpen,
                   onTap: () {
                     HapticFeedback.selectionClick();
                     onToggleSearch();
                   },
+                ),
+                // More menu — layers, grid, sort
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert_rounded, color: AppTheme.textMuted, size: 22),
+                  color: AppTheme.bgSecondary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    HapticFeedback.selectionClick();
+                    switch (value) {
+                      case 'grouping':
+                        ref.read(groupingEnabledProvider.notifier).state = !groupingEnabled;
+                      case 'grid':
+                        final next = columns >= 5 ? 2 : columns + 1;
+                        ref.read(gridColumnsProvider.notifier).state = next;
+                      case 'bulk':
+                        context.push('/inventory/bulk-sell');
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'grouping',
+                      child: Row(children: [
+                        Icon(groupingEnabled ? Icons.layers_rounded : Icons.layers_clear_rounded, size: 18, color: AppTheme.textSecondary),
+                        const SizedBox(width: 10),
+                        Text(groupingEnabled ? 'Ungroup items' : 'Group items', style: const TextStyle(fontSize: 14, color: AppTheme.textPrimary)),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'grid',
+                      child: Row(children: [
+                        Icon(columns <= 2 ? Icons.grid_view_rounded : Icons.view_module_rounded, size: 18, color: AppTheme.textSecondary),
+                        const SizedBox(width: 10),
+                        Text('Grid: ${columns}col', style: const TextStyle(fontSize: 14, color: AppTheme.textPrimary)),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'bulk',
+                      child: Row(children: [
+                        Icon(Icons.sell_rounded, size: 18, color: AppTheme.warning),
+                        const SizedBox(width: 10),
+                        Text('Quick Bulk Sale', style: TextStyle(fontSize: 14, color: AppTheme.warning)),
+                      ]),
+                    ),
+                  ],
                 ),
                 SortMenuBtn(
                   currentSort: ref.watch(sortOptionProvider),
@@ -101,11 +124,12 @@ class InventoryAppBar extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            // Row 2: Bulk Sale + Account chip — right-aligned
+            const SizedBox(height: 4),
+            // Row 2: Account chip left + stats right
             Row(
               children: [
-                // Stats inline
+                const AccountScopeChip(),
+                const SizedBox(width: 8),
                 Expanded(
                   child: allItems.whenData((items) {
                     final totalValue = items.fold<double>(
@@ -114,27 +138,11 @@ class InventoryAppBar extends ConsumerWidget {
                       '${items.length} items \u2022 ${currency.format(totalValue)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppTheme.textDisabled),
                     );
                   }).maybeWhen(orElse: () => const SizedBox.shrink()),
                 ),
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    context.push('/inventory/bulk-sell');
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warning.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppTheme.r8),
-                      border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2), width: 0.5),
-                    ),
-                    child: Text('Quick Bulk Sale', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.warning)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const AccountScopeChip(),
               ],
             ),
           ],
