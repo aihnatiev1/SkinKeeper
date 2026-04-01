@@ -477,17 +477,15 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
             // ── Marketplace links (with prices) ──
             if (item.marketplaceLinks != null && item.marketplaceLinks!.isNotEmpty) ...[
               const SizedBox(height: AppTheme.s12),
-              _MarketplaceLinks(links: item.marketplaceLinks!, prices: item.prices, currency: currency)
+              _MarketplaceLinks(
+                links: item.marketplaceLinks!,
+                prices: item.prices,
+                currency: currency,
+                originName: item.crates.isNotEmpty ? item.crates.first.name : item.collection?.name,
+                originIcon: item.crates.isNotEmpty ? Icons.inventory_2_rounded : (item.collection != null ? Icons.collections_bookmark_rounded : null),
+              )
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 375.ms),
-            ],
-
-            // ── Drops from (collection / crate) ──
-            if (item.collection != null || item.crates.isNotEmpty) ...[
-              const SizedBox(height: AppTheme.s12),
-              _DropsFromSection(item: item)
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 400.ms),
             ],
 
             const SizedBox(height: AppTheme.s16),
@@ -1135,122 +1133,73 @@ class _SellActions extends ConsumerWidget {
                     ),
                   FeeBreakdown(sellerReceivesCents: priceCents, walletSymbol: result.currencySymbol),
                   const SizedBox(height: AppTheme.s10),
+                  // Sell buttons — clean row
                   Row(
                     children: [
-                      // Quick Sell — disabled when stale, open sell sheet instead
+                      // Quick Sell
                       Expanded(
-                        flex: 3,
-                        child: GestureDetector(
-                          onTap: () async {
-                            if (!await requireSession(context, ref)) return;
-                            if (!context.mounted) return;
-                            if (stale) {
-                              // Open sell sheet so user can enter custom price
-                              HapticFeedback.selectionClick();
-                              showGlassSheet(
-                                  context, SellBottomSheet(items: [item]));
-                              return;
-                            }
-                            HapticFeedback.mediumImpact();
-                            final items = [
-                              {
-                                'assetId': item.assetId,
-                                'marketHashName': item.marketHashName,
-                                'priceCents': 0,
-                                if (item.accountId != null) 'accountId': item.accountId,
-                              },
-                            ];
-                            if (context.mounted) {
-                              showGlassSheetLocked(
-                                  context, const SellProgressSheet());
-                            }
-                            await ref
-                                .read(sellOperationProvider.notifier)
-                                .startQuickSell(items, accountId: item.accountId);
-                          },
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              gradient: stale ? null : AppTheme.primaryGradient,
-                              color: stale ? AppTheme.surface : null,
-                              borderRadius: BorderRadius.circular(AppTheme.r12),
-                              boxShadow: stale ? null : [
-                                BoxShadow(
-                                  color: AppTheme.primary.withValues(alpha: 0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                        child: SizedBox(
+                          height: 44,
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              if (!await requireSession(context, ref)) return;
+                              if (!context.mounted) return;
+                              if (stale) {
+                                HapticFeedback.selectionClick();
+                                showGlassSheet(context, SellBottomSheet(items: [item]));
+                                return;
+                              }
+                              HapticFeedback.mediumImpact();
+                              final items = [
+                                {
+                                  'assetId': item.assetId,
+                                  'marketHashName': item.marketHashName,
+                                  'priceCents': 0,
+                                  if (item.accountId != null) 'accountId': item.accountId,
+                                },
+                              ];
+                              if (context.mounted) {
+                                showGlassSheetLocked(context, const SellProgressSheet());
+                              }
+                              await ref.read(sellOperationProvider.notifier)
+                                  .startQuickSell(items, accountId: item.accountId);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: stale ? AppTheme.surface : AppTheme.primary,
+                              foregroundColor: stale ? AppTheme.textSecondary : Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(AppTheme.r12),
+                              ),
                             ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  stale ? 'Set Price & Sell' : 'Quick Sell',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: stale ? AppTheme.textSecondary : Colors.white,
-                                  ),
-                                ),
-                                if (!stale)
-                                  Text(
-                                    priceStr,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.white.withValues(alpha: 0.7),
-                                    ),
-                                  ),
-                              ],
+                            child: Text(
+                              stale ? 'Set Price & Sell' : 'Quick Sell $priceStr',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                              if (!hasSession)
-                                Positioned(
-                                  top: 4,
-                                  right: 6,
-                                  child: Icon(Icons.lock_outline,
-                                      size: 12,
-                                      color:
-                                          Colors.white.withValues(alpha: 0.7)),
-                                ),
-                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: AppTheme.s10),
-                      // Custom sell
-                      Expanded(
-                        flex: 2,
-                        child: GestureDetector(
-                          onTap: () async {
+                      const SizedBox(width: 8),
+                      // Custom price
+                      SizedBox(
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () async {
                             if (!await requireSession(context, ref)) return;
                             if (!context.mounted) return;
                             HapticFeedback.selectionClick();
-                            showGlassSheet(
-                                context, SellBottomSheet(items: [item]));
+                            showGlassSheet(context, SellBottomSheet(items: [item]));
                           },
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.textSecondary,
+                            side: const BorderSide(color: AppTheme.borderLight),
+                            shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(AppTheme.r12),
-                              border: Border.all(color: AppTheme.borderLight),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                'Custom',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
                             ),
                           ),
+                          child: const Text('Custom', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                         ),
                       ),
                     ],
@@ -1333,11 +1282,15 @@ class _MarketplaceLinks extends StatelessWidget {
   final Map<String, String> links;
   final Map<String, double> prices;
   final CurrencyInfo currency;
+  final String? originName;
+  final IconData? originIcon;
 
   const _MarketplaceLinks({
     required this.links,
     required this.prices,
     required this.currency,
+    this.originName,
+    this.originIcon,
   });
 
   // source key in links → (label, color, icon, price source key)
@@ -1366,24 +1319,51 @@ class _MarketplaceLinks extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('MARKETPLACE', style: AppTheme.label),
+          Row(
+            children: [
+              Text('MARKETPLACE', style: AppTheme.label),
+              const Spacer(),
+              // Origin inline if available
+              if (originName != null)
+                Flexible(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(originIcon ?? Icons.inventory_2_rounded, size: 12, color: AppTheme.textMuted),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          originName!,
+                          style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: AppTheme.s10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: available.map((entry) {
-              final config = _linkConfig[entry.key]!;
-              final (label, color, icon, priceKey) = config;
-              final price = prices[priceKey];
-              return _MarketButton(
-                label: label,
-                color: color,
-                icon: icon,
-                url: entry.value,
-                price: price,
-                currency: currency,
-              );
-            }).toList(),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: available.map((entry) {
+                final config = _linkConfig[entry.key]!;
+                final (label, color, icon, priceKey) = config;
+                final price = prices[priceKey];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _MarketButton(
+                    label: label,
+                    color: color,
+                    icon: icon,
+                    url: entry.value,
+                    price: price,
+                    currency: currency,
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
