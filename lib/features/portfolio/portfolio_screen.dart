@@ -665,38 +665,20 @@ class _PortfolioHeader extends ConsumerWidget {
               final color = AppTheme.plColor(data.change24h);
               return Row(
                 children: [
-                  Flexible(
-                    child: _ChangeBadge(
-                      text: '${isUp ? "↑" : "↓"} ${currency.formatWithSign(data.change24h, decimals: 0)}',
-                      color: color,
-                    ),
+                  _ChangeBadge(
+                    text: '${isUp ? "↑" : "↓"} ${currency.formatWithSign(data.change24h, decimals: 0)}',
+                    color: color,
                   ),
                   const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      '${AppTheme.pctText(data.change24hPct)} today',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textDisabled,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  Text(
+                    '${AppTheme.pctText(data.change24hPct)} today',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textDisabled,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const Spacer(),
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      _sharePortfolio(ref, data, currency);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Icon(Icons.share_outlined,
-                          size: 18, color: AppTheme.textDisabled),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
                   SyncIndicator(
                     onTap: () async {
                       HapticFeedback.mediumImpact();
