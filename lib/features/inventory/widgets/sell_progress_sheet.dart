@@ -78,14 +78,16 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
       child: operationAsync.when(
         data: (operation) {
           if (operation == null) {
+            // Operation not started yet — show loading (quickSell is initializing)
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildHandle(),
-                const SizedBox(height: 24),
-                const Text('No active operation', style: AppTheme.body),
+                const SizedBox(height: 32),
+                const CircularProgressIndicator(color: AppTheme.primary),
                 const SizedBox(height: 16),
-                _buildDoneButton(context),
+                Text('Preparing...', style: AppTheme.body, textAlign: TextAlign.center),
+                const SizedBox(height: 32),
               ],
             );
           }
