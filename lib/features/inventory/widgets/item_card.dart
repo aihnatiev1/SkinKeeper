@@ -158,17 +158,20 @@ class ItemCard extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: _ArbitrageBadge(
-                                      steamPrice: item.steamPrice!,
-                                      buffPrice: item.prices['buff']!,
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
+                            // BUFF arbitrage badge — below price
+                            if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  _ArbitrageBadge(
+                                    steamPrice: item.steamPrice!,
+                                    buffPrice: item.prices['buff']!,
+                                  ),
+                                ],
+                              ),
+                            ],
                             // Secondary: best external (only when Steam price exists)
                             if (!compact && item.steamPrice != null) _BestExternalPrice(item: item, currency: currency),
                           ],
