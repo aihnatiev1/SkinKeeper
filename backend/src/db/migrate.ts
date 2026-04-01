@@ -371,6 +371,8 @@ ALTER TABLE price_alerts ALTER COLUMN condition TYPE VARCHAR(20);
 ALTER TABLE inventory_items ALTER COLUMN asset_id TYPE VARCHAR(30);
 ALTER TABLE sell_operation_items ALTER COLUMN asset_id TYPE VARCHAR(30);
 ALTER TABLE trade_offer_items ALTER COLUMN asset_id TYPE VARCHAR(30);
+-- Drop view that depends on steam_accounts columns before altering types
+DROP VIEW IF EXISTS active_steam_accounts;
 -- trade_token: Steam trade tokens can be 30+ chars
 ALTER TABLE steam_accounts ALTER COLUMN trade_token TYPE VARCHAR(50);
 -- session_method: "clienttoken_exchanged" = 22 chars

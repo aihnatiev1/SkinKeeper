@@ -155,34 +155,35 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       }
     }
 
-    // Check if this Steam ID is linked to another user as a secondary account
-    const { rows: linkedRow } = await pool.query(
-      `SELECT sa.user_id FROM steam_accounts sa
-       JOIN users u ON u.id = sa.user_id
-       WHERE sa.steam_id = $1 AND u.steam_id != $1`,
+    // Find user — steam_accounts is the source of truth, all accounts are equal
+    const { rows: existingAcct } = await pool.query(
+      `SELECT sa.user_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
       [steamId]
     );
 
-    // If linked elsewhere, unlink it first — login always gives you YOUR account only
-    if (linkedRow.length > 0) {
-      await pool.query(
-        `DELETE FROM steam_accounts WHERE steam_id = $1 AND user_id = $2`,
-        [steamId, linkedRow[0].user_id]
+    let user: any;
+    if (existingAcct.length > 0) {
+      // This Steam ID is linked to an existing user — log into that user
+      const { rows } = await pool.query(
+        `SELECT id, steam_id, display_name, avatar_url, is_premium, premium_until
+         FROM users WHERE id = $1`,
+        [existingAcct[0].user_id]
       );
+      user = rows[0];
+    } else {
+      // Not linked anywhere — check users.steam_id fallback, or create new user
+      const { rows } = await pool.query(
+        `INSERT INTO users (steam_id, display_name, avatar_url)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (steam_id)
+         DO UPDATE SET display_name = $2, avatar_url = $3
+         RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
+        [steamId, profile.personaname, profile.avatarfull]
+      );
+      user = rows[0];
     }
 
-    // Upsert user by steam_id
-    const { rows } = await pool.query(
-      `INSERT INTO users (steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (steam_id)
-       DO UPDATE SET display_name = $2, avatar_url = $3
-       RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
-      [steamId, profile.personaname, profile.avatarfull]
-    );
-    const user = rows[0];
-
-    // Create steam_accounts entry for this account
+    // Ensure steam_accounts entry exists for the login account
     await pool.query(
       `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
        VALUES ($1, $2, $3, $4, 'active')
@@ -190,11 +191,15 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
 
-    // Disable all other accounts — fresh login = clean slate with 1 account
-    await pool.query(
-      `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
-      [user.id, steamId]
-    );
+    // fresh=1 → client has no stored token (app reinstall / first launch)
+    // Disable all other accounts so user sees only the one they logged in with
+    const isFresh = params.fresh === "1";
+    if (isFresh) {
+      await pool.query(
+        `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
+        [user.id, steamId]
+      );
+    }
 
     // Set active account to the one used for login
     await pool.query(
@@ -242,15 +247,31 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     const steamId = await verifySteamOpenId(params);
     const profile = await getSteamProfile(steamId);
 
-    const { rows } = await pool.query(
-      `INSERT INTO users (steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (steam_id)
-       DO UPDATE SET display_name = $2, avatar_url = $3
-       RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
-      [steamId, profile.personaname, profile.avatarfull]
+    // Find user — steam_accounts is the source of truth, all accounts are equal
+    const { rows: existingAcct } = await pool.query(
+      `SELECT sa.user_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      [steamId]
     );
-    const user = rows[0];
+
+    let user: any;
+    if (existingAcct.length > 0) {
+      const { rows } = await pool.query(
+        `SELECT id, steam_id, display_name, avatar_url, is_premium, premium_until
+         FROM users WHERE id = $1`,
+        [existingAcct[0].user_id]
+      );
+      user = rows[0];
+    } else {
+      const { rows } = await pool.query(
+        `INSERT INTO users (steam_id, display_name, avatar_url)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (steam_id)
+         DO UPDATE SET display_name = $2, avatar_url = $3
+         RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
+        [steamId, profile.personaname, profile.avatarfull]
+      );
+      user = rows[0];
+    }
 
     await pool.query(
       `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
@@ -259,11 +280,14 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
 
-    // Disable all other accounts — fresh login = clean slate
-    await pool.query(
-      `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
-      [user.id, steamId]
-    );
+    // fresh=1 → app reinstall / first launch, no stored token
+    const isFresh = params.fresh === "1";
+    if (isFresh) {
+      await pool.query(
+        `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
+        [user.id, steamId]
+      );
+    }
 
     // Set active_account_id to the login account
     await pool.query(
