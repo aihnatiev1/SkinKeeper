@@ -53,6 +53,8 @@ class InventoryAppBar extends ConsumerWidget {
                     isSelecting
                         ? '${selection.count} selected'
                         : AppLocalizations.of(context).inventoryTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w800,
@@ -103,19 +105,23 @@ class InventoryAppBar extends ConsumerWidget {
             // Row 2: Stats left + Account chip right
             Row(
               children: [
-                allItems.whenData((items) {
-                  final totalValue = items.fold<double>(
-                      0, (sum, item) => sum + (item.steamPrice ?? 0));
-                  return Text(
-                    '${items.length} items \u2022 ${currency.format(totalValue)}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textSecondary,
-                    ),
-                  );
-                }).maybeWhen(orElse: () => const SizedBox.shrink()),
-                const Spacer(),
+                Expanded(
+                  child: allItems.whenData((items) {
+                    final totalValue = items.fold<double>(
+                        0, (sum, item) => sum + (item.steamPrice ?? 0));
+                    return Text(
+                      '${items.length} items \u2022 ${currency.format(totalValue)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
+                      ),
+                    );
+                  }).maybeWhen(orElse: () => const SizedBox.shrink()),
+                ),
+                const SizedBox(width: 8),
                 const AccountScopeChip(),
               ],
             ),

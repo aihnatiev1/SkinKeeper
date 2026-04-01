@@ -957,16 +957,19 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
                 ),
                 elevation: 0,
               ),
-              child: Text(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
                 _customPriceCents != null && _customPriceCents! > 0
                     ? count == 1
                         ? 'List at $activeSymbol${(_customPriceCents! / 100).toStringAsFixed(2)}'
-                        : 'List $count items at $activeSymbol${(_customPriceCents! / 100).toStringAsFixed(2)} each'
+                        : 'List $count at $activeSymbol${(_customPriceCents! / 100).toStringAsFixed(2)} each'
                     : 'Enter a price',
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
               ),
             ),
           ),

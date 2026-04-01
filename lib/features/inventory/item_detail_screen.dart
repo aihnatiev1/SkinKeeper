@@ -1488,9 +1488,12 @@ class _BestBuySellSummary extends StatelessWidget {
                   decoration: BoxDecoration(color: buyColor, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  sourceDisplayName(cheapest.key),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
+                Flexible(
+                  child: Text(
+                    sourceDisplayName(cheapest.key),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text(
