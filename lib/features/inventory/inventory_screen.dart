@@ -145,7 +145,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           if (!isSelecting)
             Positioned(
               right: 16,
-              bottom: 16,
+              bottom: 80,
               child: GestureDetector(
                 onTap: () {
                   HapticFeedback.mediumImpact();
