@@ -102,39 +102,22 @@ class InventoryAppBar extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 6),
-            // Row 2: Stats left, account chip right
+            // Row 2: Bulk Sale + Account chip — right-aligned
             Row(
               children: [
+                // Stats inline
                 Expanded(
                   child: allItems.whenData((items) {
                     final totalValue = items.fold<double>(
                         0, (sum, item) => sum + (item.steamPrice ?? 0));
-                    return GestureDetector(
-                      onTap: () async {
-                        HapticFeedback.mediumImpact();
-                        await ref.read(inventoryProvider.notifier).refresh();
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${items.length} items \u2022 ${currency.format(totalValue)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(Icons.refresh_rounded, size: 13, color: AppTheme.textDisabled),
-                        ],
-                      ),
+                    return Text(
+                      '${items.length} items \u2022 ${currency.format(totalValue)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppTheme.textDisabled),
                     );
                   }).maybeWhen(orElse: () => const SizedBox.shrink()),
                 ),
-                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () {
                     HapticFeedback.mediumImpact();
@@ -147,7 +130,7 @@ class InventoryAppBar extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(AppTheme.r8),
                       border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2), width: 0.5),
                     ),
-                    child: Text('Bulk Sale', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.warning)),
+                    child: Text('Quick Bulk Sale', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.warning)),
                   ),
                 ),
                 const SizedBox(width: 8),
