@@ -83,15 +83,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      floatingActionButton: !isSelecting ? FloatingActionButton.small(
-        backgroundColor: AppTheme.warning,
-        onPressed: () {
-          HapticFeedback.mediumImpact();
-          context.push('/inventory/bulk-sell');
-        },
-        child: const Icon(Icons.sell_rounded, color: Colors.black, size: 20),
-      ) : null,
-      body: Column(
+      body: Stack(
+        children: [
+          Column(
         children: [
           InventoryAppBar(
             searchOpen: _searchOpen,
@@ -144,6 +138,36 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   _quickSell(selectedItems);
                 }
               },
+            ),
+        ],
+      ),
+          // Floating Bulk Sale button
+          if (!isSelecting)
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  context.push('/inventory/bulk-sell');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warning,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [BoxShadow(color: AppTheme.warning.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.sell_rounded, color: Colors.black, size: 16),
+                      const SizedBox(width: 6),
+                      Text('Bulk Sale', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black)),
+                    ],
+                  ),
+                ),
+              ),
             ),
         ],
       ),
