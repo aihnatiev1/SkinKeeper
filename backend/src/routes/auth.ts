@@ -143,7 +143,11 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     if (state?.startsWith("link:")) {
       const userId = parseInt(state.split(":")[1]);
       if (userId) {
-        // Link additional account — immediately active
+        // If this steam_id is already linked to another user, move it
+        await pool.query(
+          `DELETE FROM steam_accounts WHERE steam_id = $1 AND user_id != $2`,
+          [steamId, userId]
+        );
         await pool.query(
           `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
            VALUES ($1, $2, $3, $4, 'active')

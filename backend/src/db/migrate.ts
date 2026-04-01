@@ -421,6 +421,9 @@ ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS status VARCHAR(10) DEFAULT '
 -- View for all user-facing queries — only returns active accounts
 CREATE OR REPLACE VIEW active_steam_accounts AS
   SELECT * FROM steam_accounts WHERE status = 'active';
+
+-- 031: One steam_id can only belong to one user — prevents ghost user creation
+CREATE UNIQUE INDEX IF NOT EXISTS idx_steam_accounts_steam_id_unique ON steam_accounts(steam_id);
 `;
 
 export async function migrate() {
