@@ -418,9 +418,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_pl_user_account_date
 -- 030: Account status — controls visibility of linked accounts
 ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS status VARCHAR(10) DEFAULT 'active' NOT NULL;
 
--- View for all user-facing queries — only returns active accounts
+-- View for all user-facing queries — all linked accounts are always visible
 CREATE OR REPLACE VIEW active_steam_accounts AS
-  SELECT * FROM steam_accounts WHERE status = 'active';
+  SELECT * FROM steam_accounts;
 
 -- 031: One steam_id can only belong to one user — prevents ghost user creation
 CREATE UNIQUE INDEX IF NOT EXISTS idx_steam_accounts_steam_id_unique ON steam_accounts(steam_id);

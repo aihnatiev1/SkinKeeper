@@ -39,9 +39,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.isLinking) {
-      AccountsNotifier.markLinkPending();
-    }
   }
 
   @override

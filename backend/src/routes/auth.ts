@@ -195,16 +195,6 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
 
-    // fresh=1 → client has no stored token (app reinstall / first launch)
-    // Disable all other accounts so user sees only the one they logged in with
-    const isFresh = params.fresh === "1";
-    if (isFresh) {
-      await pool.query(
-        `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
-        [user.id, steamId]
-      );
-    }
-
     // Set active account to the one used for login
     await pool.query(
       `UPDATE users SET active_account_id = sa.id
@@ -283,15 +273,6 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
        ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
-
-    // fresh=1 → app reinstall / first launch, no stored token
-    const isFresh = params.fresh === "1";
-    if (isFresh) {
-      await pool.query(
-        `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
-        [user.id, steamId]
-      );
-    }
 
     // Set active_account_id to the login account
     await pool.query(
@@ -531,48 +512,28 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
       return;
     }
 
-    const activeAccounts = accounts.filter((a) => a.status === "active");
-    const isLastActive = activeAccounts.length <= 1 && activeAccounts[0]?.id === accountId;
+    const isLast = accounts.length <= 1;
 
-    // Soft-delete: disable instead of deleting
-    await pool.query(
-      `UPDATE steam_accounts SET status = 'disabled' WHERE id = $1 AND user_id = $2`,
-      [accountId, req.userId]
-    );
-
-    if (isLastActive) {
-      await pool.query(
-        `UPDATE users SET active_account_id = NULL WHERE id = $1`,
-        [req.userId]
-      );
-      res.json({ success: true, lastAccountRemoved: true });
-      return;
-    }
-
-    // If this account was the active one, switch to another active account
+    // Clear active_account_id if this was the active account
     const { rows: userRow } = await pool.query(
       `SELECT active_account_id FROM users WHERE id = $1`,
       [req.userId]
     );
     if (userRow[0]?.active_account_id === accountId) {
-      const { rows: remaining } = await pool.query(
-        `SELECT id FROM steam_accounts WHERE user_id = $1 AND id != $2 AND status = 'active' ORDER BY added_at LIMIT 1`,
-        [req.userId, accountId]
+      const next = accounts.find((a) => a.id !== accountId);
+      await pool.query(
+        `UPDATE users SET active_account_id = $1 WHERE id = $2`,
+        [next?.id ?? null, req.userId]
       );
-      if (remaining.length > 0) {
-        await pool.query(
-          `UPDATE users SET active_account_id = $1 WHERE id = $2`,
-          [remaining[0].id, req.userId]
-        );
-      } else {
-        await pool.query(
-          `UPDATE users SET active_account_id = NULL WHERE id = $1`,
-          [req.userId]
-        );
-      }
     }
 
-    res.json({ success: true });
+    // Hard delete — removes account and cascades to inventory_items etc.
+    await pool.query(
+      `DELETE FROM steam_accounts WHERE id = $1 AND user_id = $2`,
+      [accountId, req.userId]
+    );
+
+    res.json({ success: true, lastAccountRemoved: isLast });
   } catch (err) {
     console.error("Unlink account error:", err);
     res.status(500).json({ error: "Failed to unlink account" });
