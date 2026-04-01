@@ -9,6 +9,8 @@ import '../../../core/theme.dart';
 import '../../../models/profit_loss.dart';
 import '../../../widgets/glass_sheet.dart';
 import '../portfolio_pl_provider.dart';
+import '../portfolio_provider.dart';
+import '../../transactions/transactions_provider.dart';
 import 'add_transaction_sheet.dart';
 import 'csv_import_sheet.dart';
 
@@ -648,6 +650,9 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.invalidate(portfolioPLProvider);
         ref.invalidate(itemsPLProvider);
+        ref.invalidate(transactionsProvider);
+        ref.invalidate(portfolioProvider);
+        ref.invalidate(txStatsProvider);
       });
     } catch (e) {
       if (context.mounted) {

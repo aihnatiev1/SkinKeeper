@@ -1354,19 +1354,31 @@ class _PLSummaryCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currency = ref.watch(currencyProvider);
     if (!data.hasData) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.sync_rounded, size: 18, color: AppTheme.textDisabled),
-            const SizedBox(width: 10),
-            Expanded(child: Text('Sync Steam Market history to see P/L', style: AppTheme.caption)),
-          ],
+      return GestureDetector(
+        onTap: () async {
+          HapticFeedback.mediumImpact();
+          final api = ref.read(apiClientProvider);
+          try {
+            await api.post('/transactions/sync');
+            ref.invalidate(portfolioPLProvider);
+            ref.invalidate(transactionsProvider);
+          } catch (_) {}
+        },
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 0.5),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.primary),
+              const SizedBox(width: 10),
+              Expanded(child: Text('Tap to sync transactions & calculate P/L', style: AppTheme.caption.copyWith(color: AppTheme.textSecondary))),
+              const Icon(Icons.chevron_right_rounded, size: 18, color: AppTheme.textDisabled),
+            ],
+          ),
         ),
       );
     }
@@ -1926,6 +1938,8 @@ class _PortfolioOptionsSheet extends ConsumerWidget {
                 if (ref.read(selectedPortfolioIdProvider) == portfolio.id) {
                   ref.read(selectedPortfolioIdProvider.notifier).state = null;
                 }
+                ref.invalidate(portfolioPLProvider);
+                ref.invalidate(portfolioProvider);
               }
             },
             contentPadding: EdgeInsets.zero,
