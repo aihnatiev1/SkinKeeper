@@ -467,7 +467,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         Text(
           widget.isLinking
               ? 'Sign in with another Steam account\nto link it to your profile.'
-              : 'Track your CS2 inventory value\nacross all markets',
+              : 'Your CS2 skins deserve\na proper manager',
           textAlign: TextAlign.center,
           style: AppTheme.subtitle.copyWith(height: 1.5),
         ).animate().fadeIn(duration: 500.ms, delay: 350.ms),
@@ -477,42 +477,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildFeaturePills() {
     const features = [
-      ('Real-time prices', Icons.trending_up_rounded),
-      ('Portfolio tracking', Icons.pie_chart_rounded),
-      ('Price alerts', Icons.notifications_active_rounded),
+      ('Multi-market prices', Icons.trending_up_rounded, Color(0xFF10B981)),
+      ('Portfolio & P/L', Icons.pie_chart_rounded, Color(0xFF6366F1)),
+      ('Trade management', Icons.swap_horiz_rounded, Color(0xFFF59E0B)),
+      ('Price alerts', Icons.notifications_active_rounded, Color(0xFFEF4444)),
+      ('Bulk sell', Icons.sell_rounded, Color(0xFF8B5CF6)),
+      ('Multi-account', Icons.people_rounded, Color(0xFF06B6D4)),
     ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.center,
-      children: features.map((f) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: AppTheme.primary.withValues(alpha: 0.15),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          for (var i = 0; i < features.length; i += 2)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(child: _featureCard(features[i].$1, features[i].$2, features[i].$3, i)),
+                  const SizedBox(width: 8),
+                  if (i + 1 < features.length)
+                    Expanded(child: _featureCard(features[i + 1].$1, features[i + 1].$2, features[i + 1].$3, i + 1))
+                  else
+                    const Expanded(child: SizedBox.shrink()),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _featureCard(String label, IconData icon, Color color, int index) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(f.$2, size: 14, color: AppTheme.primaryLight),
-              const SizedBox(width: 6),
-              Text(
-                f.$1,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    ).animate().fadeIn(duration: 500.ms, delay: 500.ms);
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms, delay: Duration(milliseconds: 400 + index * 80))
+        .slideY(begin: 0.1, end: 0);
   }
 
   Widget _buildSteamButton() {
