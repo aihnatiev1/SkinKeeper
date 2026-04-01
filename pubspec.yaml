@@ -53,19 +53,17 @@ flutter:
   generate: true
   uses-material-design: true
   assets:
-    - assets/app_icon.png
-    - assets/app_icon_ios.png
-    - assets/splash.png
+    - assets/icon.png
     - assets/splash_bg.png
     - assets/onboarding/
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/app_icon.png
+  image_path: assets/icon.png
   min_sdk_android: 21
   adaptive_icon_background: "#0A0E1A"
-  adaptive_icon_foreground: assets/app_icon.png
+  adaptive_icon_foreground: assets/icon.png
 
 flutter_native_splash:
   fullscreen: true
