@@ -317,7 +317,20 @@ router.get("/status", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const accountId = await resolveAccountId(req);
+    let accountId: number;
+    try {
+      accountId = await resolveAccountId(req);
+    } catch {
+      // No linked accounts — return clean "no session" response
+      res.json({
+        status: "none",
+        refreshTokenExpiresAt: null,
+        refreshTokenExpired: false,
+        needsReauth: true,
+        accounts: [],
+      });
+      return;
+    }
     const details = await SteamSessionService.getSessionDetails(accountId);
 
     // Fetch all accounts with their session details
