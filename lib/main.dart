@@ -41,7 +41,10 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   if (prefs.getBool('has_launched_v2') != true) {
     try {
-      await const FlutterSecureStorage().deleteAll();
+      await const FlutterSecureStorage().deleteAll()
+          .timeout(const Duration(seconds: 3), onTimeout: () {
+        dev.log('Secure storage clear timed out — skipping', name: 'Init');
+      });
     } catch (e) {
       dev.log('Failed to clear secure storage: $e', name: 'Init');
     }
