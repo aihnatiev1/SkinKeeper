@@ -86,6 +86,10 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
     final needsSync = ref.read(needsInitialSyncProvider);
     if (needsSync) return; // _runInitialSync will handle it
 
+    // Immediately refresh P&L from existing DB data (shows Total Profit right away)
+    ref.invalidate(portfolioPLProvider);
+    ref.invalidate(portfolioProvider);
+
     final api = ref.read(apiClientProvider);
     final sync = ref.read(syncStateProvider.notifier);
 
