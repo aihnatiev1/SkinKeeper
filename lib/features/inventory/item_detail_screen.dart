@@ -1478,24 +1478,20 @@ class _BestBuySellSummary extends StatelessWidget {
                 Icon(Icons.shopping_cart_outlined,
                     size: 14, color: buyColor.withValues(alpha: 0.7)),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Cheapest Buy', style: TextStyle(
-                    fontSize: 12, color: AppTheme.textSecondary,
-                  )),
-                ),
+                Text('Cheapest Buy', style: TextStyle(
+                  fontSize: 12, color: AppTheme.textSecondary,
+                )),
+                const SizedBox(width: 6),
                 Container(
                   width: 6, height: 6,
                   decoration: BoxDecoration(color: buyColor, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    sourceDisplayName(cheapest.key),
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                Text(
+                  sourceDisplayName(cheapest.key),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: buyColor),
                 ),
-                const SizedBox(width: 8),
+                const Spacer(),
                 Text(
                   currency.format(cheapest.value),
                   style: const TextStyle(
