@@ -200,13 +200,15 @@ class ItemCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      // Info button — smaller in compact
+                      // Info button — 44px touch target
                       GestureDetector(
                         onTap: onInfoTap,
                         behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          width: compact ? 16 : 22,
-                          height: compact ? 16 : 22,
+                        child: Padding(
+                          padding: EdgeInsets.all(compact ? 4 : 8),
+                          child: Container(
+                          width: compact ? 18 : 24,
+                          height: compact ? 18 : 24,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
@@ -224,6 +226,7 @@ class ItemCard extends StatelessWidget {
                               height: 1,
                             ),
                           ),
+                        ),
                         ),
                       ),
                     ],
@@ -323,30 +326,7 @@ class ItemCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      // Account badge — full in normal, 1-letter dot in compact
-                      if (showAccountBadge && item.accountId != null)
-                        compact
-                            ? Positioned(
-                                bottom: 4,
-                                right: 5,
-                                child: GestureDetector(
-                                  onTap: onAccountBadgeTap,
-                                  child: _AccountLetterDot(
-                                    name: item.accountName,
-                                  ),
-                                ),
-                              )
-                            : Positioned(
-                                bottom: 4,
-                                right: 6,
-                                child: GestureDetector(
-                                  onTap: onAccountBadgeTap,
-                                  child: _AccountNameBadge(
-                                    accountName: item.accountName,
-                                    compact: true,
-                                  ),
-                                ),
-                              ),
+                      // Account badge removed from image Stack — now in footer
                       // Stickers + charm row (only for weapons)
                       if (!compact && !item.isNonWeapon &&
                           (item.stickers.isNotEmpty || item.charms.isNotEmpty))
@@ -534,6 +514,11 @@ class _FooterSection extends StatelessWidget {
           ),
           if (hasBan)
             _TradeBanBadge(item: item, compact: compact),
+          if (item.accountName != null && item.accountName!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: _AccountNameBadge(accountName: item.accountName, compact: true),
+            ),
         ],
       ),
     );
