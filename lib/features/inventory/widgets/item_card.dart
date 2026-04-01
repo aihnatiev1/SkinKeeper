@@ -124,6 +124,7 @@ class ItemCard extends StatelessWidget {
                     0,
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Price block: Steam + best external
                       Expanded(
@@ -200,15 +201,15 @@ class ItemCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      // Info button — 44px touch target
+                      // Info button — padded for touch target, aligned top
                       GestureDetector(
                         onTap: onInfoTap,
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
-                          padding: EdgeInsets.all(compact ? 4 : 8),
+                          padding: EdgeInsets.only(left: 4, right: compact ? 0 : 2, top: 0, bottom: 12),
                           child: Container(
-                          width: compact ? 18 : 24,
-                          height: compact ? 18 : 24,
+                          width: compact ? 18 : 26,
+                          height: compact ? 18 : 26,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
@@ -515,10 +516,7 @@ class _FooterSection extends StatelessWidget {
           if (hasBan)
             _TradeBanBadge(item: item, compact: compact),
           if (item.accountName != null && item.accountName!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: _AccountNameBadge(accountName: item.accountName, compact: true),
-            ),
+            _AccountNameBadge(accountName: item.accountName, compact: true),
         ],
       ),
     );
