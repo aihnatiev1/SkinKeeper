@@ -534,7 +534,37 @@ class _PLQuickSummary extends ConsumerWidget {
         ).animate().fadeIn(duration: 400.ms);
       },
       loading: () => const ShimmerBox(height: 64),
-      error: (_, _) => const SizedBox.shrink(),
+      error: (e, _) {
+        // 403 = premium required — show upgrade prompt
+        final is403 = e.toString().contains('403') || e.toString().contains('premium');
+        if (is403) {
+          return GestureDetector(
+            onTap: () => context.push('/premium'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_outline_rounded, size: 18, color: AppTheme.warning),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Upgrade to PRO to see profit & loss',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondary),
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppTheme.textDisabled),
+                ],
+              ),
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      },
     );
   }
 }

@@ -74,6 +74,8 @@ Future<bool> showCurrencyPickerDialog(BuildContext context, WidgetRef ref) async
   final selected = await showModalBottomSheet<int>(
     context: context,
     isScrollControlled: true,
+    isDismissible: false,
+    enableDrag: false,
     backgroundColor: Colors.transparent,
     builder: (ctx) {
       return _CurrencyPickerSheet(currencies: currencies);
