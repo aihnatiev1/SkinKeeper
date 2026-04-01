@@ -703,6 +703,11 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
         return;
       }
       const profile = await getSteamProfile(steamId);
+      // Move account from another user if already linked elsewhere
+      await pool.query(
+        `DELETE FROM steam_accounts WHERE steam_id = $1 AND user_id != $2`,
+        [steamId, pending.linkUserId]
+      );
       const { rows: saRows } = await pool.query(
         `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
          VALUES ($1, $2, $3, $4, 'active')
@@ -727,30 +732,45 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
 
     const profile = await getSteamProfile(steamId);
 
-    const { rows } = await pool.query(
-      `INSERT INTO users (steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (steam_id)
-       DO UPDATE SET display_name = $2, avatar_url = $3
-       RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
-      [steamId, profile.personaname, profile.avatarfull]
+    // Find user — steam_accounts is the source of truth
+    const { rows: existingAcct } = await pool.query(
+      `SELECT sa.user_id, sa.id as account_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      [steamId]
     );
-    const user = rows[0];
 
-    const { rows: saRows } = await pool.query(
-      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
-       VALUES ($1, $2, $3, $4, 'active')
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
-       RETURNING id`,
-      [user.id, steamId, profile.personaname, profile.avatarfull]
-    );
-    const accountId = saRows[0].id;
-
-    // Disable all other accounts — fresh login = clean slate
-    await pool.query(
-      `UPDATE steam_accounts SET status = 'disabled' WHERE user_id = $1 AND steam_id != $2`,
-      [user.id, steamId]
-    );
+    let user: any;
+    let accountId: number;
+    if (existingAcct.length > 0) {
+      const { rows } = await pool.query(
+        `SELECT id, steam_id, display_name, avatar_url, is_premium, premium_until
+         FROM users WHERE id = $1`,
+        [existingAcct[0].user_id]
+      );
+      user = rows[0];
+      accountId = existingAcct[0].account_id;
+      await pool.query(
+        `UPDATE steam_accounts SET display_name = $1, avatar_url = $2, status = 'active' WHERE id = $3`,
+        [profile.personaname, profile.avatarfull, accountId]
+      );
+    } else {
+      const { rows } = await pool.query(
+        `INSERT INTO users (steam_id, display_name, avatar_url)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (steam_id)
+         DO UPDATE SET display_name = $2, avatar_url = $3
+         RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
+        [steamId, profile.personaname, profile.avatarfull]
+      );
+      user = rows[0];
+      const { rows: saRows } = await pool.query(
+        `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+         VALUES ($1, $2, $3, $4, 'active')
+         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
+         RETURNING id`,
+        [user.id, steamId, profile.personaname, profile.avatarfull]
+      );
+      accountId = saRows[0].id;
+    }
 
     // Set active account to the one used for login
     await pool.query(
@@ -822,34 +842,51 @@ router.post("/token", async (req: Request, res: Response) => {
 
     const profile = await getSteamProfile(steamId);
 
-    // Upsert user
-    const { rows } = await pool.query(
-      `INSERT INTO users (steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (steam_id)
-       DO UPDATE SET display_name = $2, avatar_url = $3
-       RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
-      [steamId, profile.personaname, profile.avatarfull]
+    // Find user — steam_accounts is the source of truth
+    const { rows: existingAcct } = await pool.query(
+      `SELECT sa.user_id, sa.id as account_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      [steamId]
     );
-    const user = rows[0];
 
-    // Upsert steam_account
-    const { rows: saRows } = await pool.query(
-      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4
-       RETURNING id`,
-      [user.id, steamId, profile.personaname, profile.avatarfull]
-    );
-    const accountId = saRows[0].id;
+    let user: any;
+    let accountId: number;
+    if (existingAcct.length > 0) {
+      const { rows } = await pool.query(
+        `SELECT id, steam_id, display_name, avatar_url, is_premium, premium_until
+         FROM users WHERE id = $1`,
+        [existingAcct[0].user_id]
+      );
+      user = rows[0];
+      accountId = existingAcct[0].account_id;
+      // Update display info
+      await pool.query(
+        `UPDATE steam_accounts SET display_name = $1, avatar_url = $2 WHERE id = $3`,
+        [profile.personaname, profile.avatarfull, accountId]
+      );
+    } else {
+      const { rows } = await pool.query(
+        `INSERT INTO users (steam_id, display_name, avatar_url)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (steam_id)
+         DO UPDATE SET display_name = $2, avatar_url = $3
+         RETURNING id, steam_id, display_name, avatar_url, is_premium, premium_until`,
+        [steamId, profile.personaname, profile.avatarfull]
+      );
+      user = rows[0];
+      const { rows: saRows } = await pool.query(
+        `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+         VALUES ($1, $2, $3, $4, 'active')
+         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
+         RETURNING id`,
+        [user.id, steamId, profile.personaname, profile.avatarfull]
+      );
+      accountId = saRows[0].id;
+    }
 
-    // Set active account if not set
+    // Set active account to the one used for login
     await pool.query(
-      `UPDATE users SET active_account_id = sa.id
-       FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2
-         AND users.active_account_id IS NULL`,
-      [user.id, steamId]
+      `UPDATE users SET active_account_id = $1 WHERE id = $2`,
+      [accountId, user.id]
     );
 
     // Save session
