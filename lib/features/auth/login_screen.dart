@@ -452,8 +452,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               }
             },
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.asset('assets/app_icon.png', width: 64, height: 64),
+              borderRadius: BorderRadius.circular(24),
+              child: Image.asset('assets/app_icon_ios.png', width: 100, height: 100),
             ),
           ),
         ).animate().fadeIn(duration: 600.ms).scale(
