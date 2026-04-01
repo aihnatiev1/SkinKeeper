@@ -529,7 +529,11 @@ class _FooterSection extends StatelessWidget {
               ],
               const Spacer(),
               if (item.accountName != null && item.accountName!.isNotEmpty)
-                _AccountNameBadge(accountName: item.accountName, compact: true),
+                compact
+                    ? _AccountLetterDot(name: item.accountName)
+                    : Flexible(
+                        child: _AccountNameBadge(accountName: item.accountName, compact: true),
+                      ),
             ],
           ),
           // Float bar below
