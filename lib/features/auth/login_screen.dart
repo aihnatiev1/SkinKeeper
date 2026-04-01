@@ -451,10 +451,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 _showDemoLogin();
               }
             },
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: Image.asset('assets/app_icon_ios.png', width: 100, height: 100),
-            ),
+            child: const Icon(Icons.shield_rounded, size: 40, color: Colors.white),
           ),
         ).animate().fadeIn(duration: 600.ms).scale(
               begin: const Offset(0.8, 0.8),
