@@ -105,12 +105,12 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
                   ),
                   Expanded(
                     child: Text(
-                      _stepTitle,
+                      _stepTitle.toUpperCase(),
                       style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: AppTheme.textDisabled,
                       ),
                     ),
                   ),

@@ -186,14 +186,14 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                         size: 20, color: AppTheme.textSecondary),
                     onPressed: () => context.pop(),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Create Alert',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                      'Create Alert'.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: AppTheme.textDisabled,
                       ),
                     ),
                   ),

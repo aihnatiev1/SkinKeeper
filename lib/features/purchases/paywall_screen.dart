@@ -54,12 +54,12 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                   ),
                   const Expanded(
                     child: Text(
-                      'SkinKeeper PRO',
+                      'SKINKEEPER PRO',
                       style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textDisabled,
+                        letterSpacing: 1.5,
                       ),
                     ),
                   ),

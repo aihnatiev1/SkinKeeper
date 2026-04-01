@@ -43,12 +43,12 @@ class SettingsScreen extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      l10n.settingsTitle,
+                      l10n.settingsTitle.toUpperCase(),
                       style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: AppTheme.textDisabled,
                       ),
                     ),
                   ),

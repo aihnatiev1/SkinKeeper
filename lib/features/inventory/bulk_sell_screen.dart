@@ -427,14 +427,14 @@ class _BulkSellScreenState extends ConsumerState<BulkSellScreen> {
                         size: 20, color: AppTheme.textSecondary),
                     onPressed: () => context.pop(),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Sell Multiple Items',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                      'Sell Multiple Items'.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: AppTheme.textDisabled,
                       ),
                     ),
                   ),

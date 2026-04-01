@@ -77,12 +77,12 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
                   ),
                   Expanded(
                     child: Text(
-                      widget.linkMode ? 'Link New Account' : 'Steam Session',
+                      (widget.linkMode ? 'Link New Account' : 'Steam Session').toUpperCase(),
                       style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: AppTheme.textDisabled,
                       ),
                     ),
                   ),

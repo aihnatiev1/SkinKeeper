@@ -54,14 +54,14 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                             size: 20, color: AppTheme.textSecondary),
                         onPressed: () => context.pop(),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Price Alerts',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
+                          'Price Alerts'.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.5,
+                            color: AppTheme.textDisabled,
                           ),
                         ),
                       ),

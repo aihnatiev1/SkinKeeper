@@ -51,15 +51,15 @@ class InventoryAppBar extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     isSelecting
-                        ? '${selection.count} selected'
-                        : AppLocalizations.of(context).inventoryTitle,
+                        ? '${selection.count} SELECTED'
+                        : AppLocalizations.of(context).inventoryTitle.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                      color: isSelecting ? AppTheme.primary : Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.5,
+                      color: isSelecting ? AppTheme.primary : AppTheme.textDisabled,
                     ),
                   ),
                 ),

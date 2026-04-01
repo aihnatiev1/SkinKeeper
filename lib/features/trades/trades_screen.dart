@@ -71,12 +71,12 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                     children: [
                       Expanded(
                         child: Text(
-                          l10n.tradesTitle,
+                          l10n.tradesTitle.toUpperCase(),
                           style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.5,
+                            color: AppTheme.textDisabled,
                           ),
                         ),
                       ),
