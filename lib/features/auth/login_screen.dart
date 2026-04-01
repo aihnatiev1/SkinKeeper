@@ -451,7 +451,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 _showDemoLogin();
               }
             },
-            child: const Icon(Icons.shield_rounded, size: 40, color: Colors.white),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.asset('assets/app_icon.png', width: 64, height: 64),
+            ),
           ),
         ).animate().fadeIn(duration: 600.ms).scale(
               begin: const Offset(0.8, 0.8),
@@ -477,62 +480,81 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildFeaturePills() {
     const features = [
-      ('Multi-market prices', Icons.trending_up_rounded, Color(0xFF10B981)),
-      ('Portfolio & P/L', Icons.pie_chart_rounded, Color(0xFF6366F1)),
-      ('Trade management', Icons.swap_horiz_rounded, Color(0xFFF59E0B)),
+      ('Live prices', Icons.trending_up_rounded, Color(0xFF10B981)),
+      ('Portfolio P/L', Icons.pie_chart_rounded, Color(0xFF6366F1)),
+      ('Trade & sell', Icons.swap_horiz_rounded, Color(0xFFF59E0B)),
       ('Price alerts', Icons.notifications_active_rounded, Color(0xFFEF4444)),
       ('Bulk sell', Icons.sell_rounded, Color(0xFF8B5CF6)),
       ('Multi-account', Icons.people_rounded, Color(0xFF06B6D4)),
     ];
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          for (var i = 0; i < features.length; i += 2)
+          // Feature grid — 3 columns, compact
+          for (var i = 0; i < features.length; i += 3)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  Expanded(child: _featureCard(features[i].$1, features[i].$2, features[i].$3, i)),
-                  const SizedBox(width: 8),
-                  if (i + 1 < features.length)
-                    Expanded(child: _featureCard(features[i + 1].$1, features[i + 1].$2, features[i + 1].$3, i + 1))
-                  else
-                    const Expanded(child: SizedBox.shrink()),
+                  for (var j = i; j < i + 3 && j < features.length; j++) ...[
+                    if (j > i) const SizedBox(width: 6),
+                    Expanded(child: _featureChip(features[j].$1, features[j].$2, features[j].$3, j)),
+                  ],
                 ],
               ),
             ),
+          const SizedBox(height: 20),
+          // Market logos row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Steam', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+              _dot(),
+              Text('Skinport', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+              _dot(),
+              Text('CSFloat', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+              _dot(),
+              Text('DMarket', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+            ],
+          ).animate().fadeIn(duration: 400.ms, delay: 800.ms),
+          const SizedBox(height: 12),
+          Text(
+            'Free to use \u2022 No ads',
+            style: TextStyle(fontSize: 11, color: AppTheme.textDisabled),
+          ).animate().fadeIn(duration: 400.ms, delay: 900.ms),
         ],
       ),
     );
   }
 
-  Widget _featureCard(String label, IconData icon, Color color, int index) {
+  Widget _dot() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    child: Text('\u2022', style: TextStyle(fontSize: 8, color: AppTheme.textDisabled)),
+  );
+
+  Widget _featureChip(String label, IconData icon, Color color, int index) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 400.ms, delay: Duration(milliseconds: 400 + index * 80))
-        .slideY(begin: 0.1, end: 0);
+    ).animate().fadeIn(duration: 300.ms, delay: Duration(milliseconds: 400 + index * 60))
+        .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1));
   }
 
   Widget _buildSteamButton() {
