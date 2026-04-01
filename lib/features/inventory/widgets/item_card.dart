@@ -507,16 +507,37 @@ class _FooterSection extends StatelessWidget {
         compact ? 5 : 8,
         compact ? 5 : 7,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: compact ? _buildCompactInfo() : _buildFullInfo(),
+          // Wear pills + account badge on same row
+          Row(
+            children: [
+              if (!item.isNonWeapon && item.wearShort != null) ...[
+                if (item.isSouvenir)
+                  Text('SV ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9)))
+                else if (item.isStatTrak)
+                  Text('ST ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9))),
+                _WearPill(wear: item.wearShort!, compact: compact),
+                if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
+                  const Padding(padding: EdgeInsets.only(left: 3), child: Text('🔥', style: TextStyle(fontSize: 9))),
+              ],
+              if (hasBan) ...[
+                const SizedBox(width: 4),
+                _TradeBanBadge(item: item, compact: compact),
+              ],
+              const Spacer(),
+              if (item.accountName != null && item.accountName!.isNotEmpty)
+                _AccountNameBadge(accountName: item.accountName, compact: true),
+            ],
           ),
-          if (hasBan)
-            _TradeBanBadge(item: item, compact: compact),
-          if (item.accountName != null && item.accountName!.isNotEmpty)
-            _AccountNameBadge(accountName: item.accountName, compact: true),
+          // Float bar below
+          if (!item.isNonWeapon && item.wearShort != null)
+            Padding(
+              padding: EdgeInsets.only(top: compact ? 3 : 4, right: 4),
+              child: _MiniFloatBar(floatValue: item.floatValue, wearShort: item.wearShort!),
+            ),
         ],
       ),
     );
