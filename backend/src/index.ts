@@ -23,6 +23,7 @@ import exportRoutes from "./routes/export.js";
 import manualTxRoutes from "./routes/manualTransactions.js";
 import legalRoutes from "./routes/legal.js";
 import adminRoutes from "./routes/admin.js";
+import dataRoutes from "./routes/data.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { log } from "./utils/logger.js";
 import { preloadCSGOData } from "./services/csgoData.js";
@@ -129,6 +130,7 @@ app.use("/api/ext", extensionRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/transactions", manualTxRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/data", dataRoutes);
 
 // Global error handler (must be after all routes)
 app.use(errorHandler);
