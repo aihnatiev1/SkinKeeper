@@ -29,73 +29,46 @@
 /* ─── Banner (top of inventory) ────────────────────────────────────── */
 .sk-banner {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 18px;
-  margin: 10px 0;
-  border-radius: var(--sk-radius);
-  background: var(--sk-bg-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--sk-border);
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  margin: 0 0 6px;
   font-family: var(--sk-font);
   color: var(--sk-text);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.sk-banner-logo {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent));
+.sk-banner-top {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 14px;
-  letter-spacing: -0.5px;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  font-size: 13px;
 }
 
-.sk-banner-stats {
-  display: flex;
-  flex: 1;
-  gap: 20px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.sk-banner-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.sk-banner-stat-label {
-  font-size: 10px;
-  font-weight: 500;
+.sk-banner-left {
   color: var(--sk-text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.sk-banner-stat-value {
-  font-size: 16px;
+.sk-banner-selected {
+  color: var(--sk-text-dim);
+}
+
+.sk-banner-right {
   font-weight: 700;
   color: var(--sk-text);
-  letter-spacing: -0.3px;
+  font-size: 14px;
 }
 
-.sk-banner-stat-value.sk-positive { color: var(--sk-green); }
-.sk-banner-stat-value.sk-negative { color: var(--sk-red); }
+.sk-banner-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
 
-.sk-banner-divider {
-  width: 1px;
-  height: 32px;
-  background: var(--sk-border-subtle);
-  flex-shrink: 0;
+.sk-banner-sort {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
 }
 
 .sk-banner-cta {
@@ -204,20 +177,21 @@
   white-space: nowrap;
 }
 
-/* ─── BOTTOM-RIGHT: Price ─────────────────────────────────────────── */
+/* ─── BOTTOM-LEFT: Price (yellow, prominent) ─────────────────────── */
 .sk-price-tag {
   bottom: 2px;
-  right: 2px;
-  color: #fff;
+  left: 2px;
+  color: #fbbf24;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* ─── BOTTOM-LEFT: Float value ────────────────────────────────────── */
+/* ─── BOTTOM-LEFT: Float value (above price) ─────────────────────── */
 .sk-item-float {
-  bottom: 14px;
+  bottom: 16px;
   left: 2px;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   font-family: 'SF Mono', 'Consolas', monospace;
 }
@@ -428,6 +402,76 @@
   font-weight: 700;
   color: var(--sk-text-dim);
   letter-spacing: 0.3px;
+}
+
+/* ─── Inline elements (injected into Steam DOM) ──────────────────── */
+.sk-copy-links {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sk-copy-btn {
+  font-family: var(--sk-font);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  cursor: pointer;
+  padding: 1px 0;
+}
+
+.sk-copy-btn:hover {
+  color: #fde68a;
+}
+
+.sk-count-badge {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 10;
+  font-family: var(--sk-font);
+  font-size: 32px;
+  font-weight: 900;
+  color: #ef4444;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+  border: 2px solid #ef4444;
+  border-radius: 6px;
+  padding: 2px 10px;
+  line-height: 1.2;
+  background: rgba(0,0,0,0.3);
+}
+
+/* Float bar in detail panel */
+.sk-detail-float {
+  padding: 6px 0 8px;
+  font-family: var(--sk-font);
+}
+
+.sk-detail-float-bar {
+  position: relative;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right,
+    #4ade80 0%, #86efac 7%, #facc15 15%,
+    #f97316 38%, #ef4444 60%, #991b1b 100%
+  );
+}
+
+.sk-detail-float-marker {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 12px;
+  background: #fff;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 4px rgba(0,0,0,0.8);
 }
 
 /* Price rows in detail panel */

@@ -57,9 +57,7 @@ function fmtPrice(val: number): string {
   if (!val) return '';
   const abs = Math.abs(val);
   const sign = val < 0 ? '-' : '';
-  if (abs >= 1000) return `${sign}${currencySign}${Math.round(abs).toLocaleString()}`;
-  if (abs >= 100) return `${sign}${currencySign}${Math.round(abs).toLocaleString()}`;
-  if (abs >= 10) return `${sign}${currencySign}${abs.toFixed(1)}`;
+  if (abs >= 10000) return `${sign}${currencySign}${Math.round(abs).toLocaleString()}`;
   return `${sign}${currencySign}${abs.toFixed(2)}`;
 }
 
@@ -224,48 +222,29 @@ function injectBanner(count: number, unique: number, priced: number, total: numb
   if (!target) return;
 
   const banner = el('div', 'sk-banner');
-  const logo = el('div', 'sk-banner-logo');
-  logo.textContent = 'SK';
-  banner.appendChild(logo);
 
-  const stats = el('div', 'sk-banner-stats');
-  const addStat = (label: string, value: string) => {
-    const stat = el('div', 'sk-banner-stat');
-    const l = el('div', 'sk-banner-stat-label');
-    l.textContent = label;
-    const v = el('div', 'sk-banner-stat-value');
-    v.textContent = value;
-    stat.append(l, v);
-    stats.appendChild(stat);
-  };
+  // ── Top row: stats left, value right ──
+  const topRow = el('div', 'sk-banner-top');
 
-  addStat('Total Value', fmtPrice(total) || `${currencySign}0`);
-  stats.appendChild(el('div', 'sk-banner-divider'));
-  addStat('Items', `${count}`);
-  addStat('Unique', `${unique}`);
-  const pricedPct = unique > 0 ? Math.round((priced / unique) * 100) : 0;
-  addStat('Priced', `${priced}/${unique} (${pricedPct}%)`);
-  if (storageUnits > 0) {
-    stats.appendChild(el('div', 'sk-banner-divider'));
-    addStat('Storage', `${storedItems} in ${storageUnits} units`);
+  const isOwnProfile = !!(window as any).g_bViewingOwnProfile;
+
+  if (isOwnProfile) {
+    const leftInfo = el('span', 'sk-banner-left');
+    const selSpan = el('span', 'sk-banner-selected');
+    selSpan.id = 'sk-selected-value';
+    selSpan.textContent = `Selected Items Value: ${currencySign}0`;
+    leftInfo.appendChild(selSpan);
+    topRow.appendChild(leftInfo);
   }
 
-  // Selected items value counter
-  stats.appendChild(el('div', 'sk-banner-divider'));
-  const selectedStat = el('div', 'sk-banner-stat');
-  const selLabel = el('div', 'sk-banner-stat-label');
-  selLabel.textContent = 'Selected';
-  const selValue = el('div', 'sk-banner-stat-value');
-  selValue.id = 'sk-selected-value';
-  selValue.textContent = `${currencySign}0`;
-  selValue.style.color = 'var(--sk-text-dim)';
-  selectedStat.append(selLabel, selValue);
-  stats.appendChild(selectedStat);
+  const rightInfo = el('span', 'sk-banner-right');
+  rightInfo.textContent = `Total Inventory Value: ${fmtPrice(total) || `${currencySign}0`}`;
+  topRow.appendChild(rightInfo);
 
-  banner.appendChild(stats);
+  banner.appendChild(topRow);
 
-  // ── Actions group (right side) ──
-  banner.appendChild(el('div', 'sk-banner-divider'));
+  // ── Bottom row: actions left, sort right ──
+  const bottomRow = el('div', 'sk-banner-bottom');
   const actions = el('div', 'sk-banner-actions');
 
   // Sort dropdown
@@ -285,19 +264,19 @@ function injectBanner(count: number, unique: number, priced: number, total: numb
     sortSelect.appendChild(opt);
   }
   sortSelect.addEventListener('change', () => sortInventory(sortSelect.value));
-  actions.appendChild(sortSelect);
 
-  // Sell button
-  const sellBtn = el('button', ['sk-banner-cta', 'sk-cta-sell', 'sk-sell-toggle']);
-  sellBtn.textContent = 'Sell';
-  sellBtn.addEventListener('click', toggleSellMode);
-  actions.appendChild(sellBtn);
+  // Sell & Trade-Up — only on own inventory
+  if (isOwnProfile) {
+    const sellBtn = el('button', ['sk-banner-cta', 'sk-cta-sell', 'sk-sell-toggle']);
+    sellBtn.textContent = 'Sell';
+    sellBtn.addEventListener('click', toggleSellMode);
+    actions.appendChild(sellBtn);
 
-  // Trade-Up button
-  const tuBtn = el('button', ['sk-banner-cta', 'sk-cta-amber', 'sk-tu-toggle']);
-  tuBtn.textContent = 'Trade-Up';
-  tuBtn.addEventListener('click', toggleTradeUpMode);
-  actions.appendChild(tuBtn);
+    const tuBtn = el('button', ['sk-banner-cta', 'sk-cta-amber', 'sk-tu-toggle']);
+    tuBtn.textContent = 'Trade-Up';
+    tuBtn.addEventListener('click', toggleTradeUpMode);
+    actions.appendChild(tuBtn);
+  }
 
   // Export dropdown
   const exportWrap = el('div');
@@ -332,8 +311,15 @@ function injectBanner(count: number, unique: number, priced: number, total: numb
   cta.textContent = 'Dashboard';
   actions.appendChild(cta);
 
-  banner.appendChild(actions);
+  // Sort dropdown (right side)
+  const sortWrap = el('div', 'sk-banner-sort');
+  const sortLabel = el('span');
+  sortLabel.textContent = 'Sorting:';
+  sortLabel.style.cssText = 'color:var(--sk-text-dim);font-size:12px;margin-right:6px';
+  sortWrap.append(sortLabel, sortSelect);
+  bottomRow.append(actions, sortWrap);
 
+  banner.appendChild(bottomRow);
   target.insertBefore(banner, target.firstChild);
 }
 
@@ -620,17 +606,26 @@ function tagItem(htmlEl: HTMLElement, item: SteamItem, assetId: string) {
     htmlEl.appendChild(plTag);
   }
 
-  // ── Rarity / Doppler colored background ──
+  // ── Value-based background highlight ──
+  const priceUsd = getItemPrice(item.market_hash_name, 1); // USD price for threshold
+  if (priceUsd >= 500) {
+    htmlEl.style.background = 'linear-gradient(135deg, rgba(220,38,38,0.25) 0%, rgba(220,38,38,0.08) 100%)';
+  } else if (priceUsd >= 100) {
+    htmlEl.style.background = 'linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(251,191,36,0.04) 100%)';
+  }
+
+  // ── Doppler phase colored background (overrides value-based) ──
   if (paintIndex) {
     const phase = getDopplerPhase(paintIndex);
     if (phase) {
-      htmlEl.style.background = `linear-gradient(135deg, ${phase.color}33 0%, ${phase.color}11 100%)`;
-      htmlEl.style.borderBottom = `2px solid ${phase.color}`;
+      if (phase.tier === 1) {
+        // Ruby, Sapphire, Black Pearl, Emerald — strong glow
+        htmlEl.style.background = `linear-gradient(135deg, ${phase.color}55 0%, ${phase.color}20 100%)`;
+        htmlEl.style.boxShadow = `inset 0 0 20px ${phase.color}30, 0 0 8px ${phase.color}40`;
+      } else {
+        htmlEl.style.background = `linear-gradient(135deg, ${phase.color}22 0%, ${phase.color}0a 100%)`;
+      }
     }
-  }
-  if (!htmlEl.style.borderBottom && item.rarityColor) {
-    htmlEl.style.borderBottom = `2px solid #${item.rarityColor}`;
-    htmlEl.style.background = `linear-gradient(180deg, transparent 60%, #${item.rarityColor}15 100%)`;
   }
 }
 
@@ -737,10 +732,10 @@ function updateSelectedValue() {
   const counter = document.getElementById('sk-selected-value');
   if (counter) {
     if (selectedAssetIds.size === 0) {
-      counter.textContent = `${currencySign}0`;
+      counter.textContent = `Selected Items Value: ${currencySign}0`;
       counter.style.color = 'var(--sk-text-dim)';
     } else {
-      counter.textContent = `${fmtPrice(totalValue)} (${selectedAssetIds.size})`;
+      counter.textContent = `Selected Items Value: ${fmtPrice(totalValue)} (${selectedAssetIds.size})`;
       counter.style.color = 'var(--sk-primary-light)';
     }
   }
@@ -760,7 +755,7 @@ function observeDetail() {
 }
 
 function enhanceDetail(panel: HTMLElement) {
-  panel.querySelectorAll('.sk-detail').forEach(e => e.remove());
+  panel.querySelectorAll('.sk-detail, .sk-inline').forEach(e => e.remove());
 
   const nameEl = panel.querySelector('.hover_item_name');
   const name = nameEl?.textContent?.trim();
@@ -772,23 +767,63 @@ function enhanceDetail(panel: HTMLElement) {
   const priceEntry = getItemPriceEntry(marketName);
   const count = dupCount.get(marketName) || 1;
   const enriched = item ? enrichedMap.get(item.assetid) : undefined;
+  const floatVal = item?.floatValue ?? enriched?.float_value ?? null;
+  const paintSeed = item?.paintSeed ?? enriched?.paint_seed ?? null;
 
-  const section = el('div', 'sk-detail');
   const version = ++detailVersion;
+  const isOwn = !!(window as any).g_bViewingOwnProfile;
 
-  // ── Rarity border ──
-  if (item?.rarityColor) {
-    section.style.borderLeft = `3px solid #${item.rarityColor}`;
+  // ── Inline overlay: Copy links + count badge (injected into image area) ──
+  const imageArea = panel.querySelector('.item_desc_icon') || panel.querySelector('.economy_item_hovering');
+  if (imageArea) {
+    (imageArea as HTMLElement).style.position = 'relative';
+
+    // Copy links (top-left of image)
+    const copyBlock = el('div', 'sk-inline sk-copy-links');
+    const addCopy = (label: string, value: string) => {
+      const btn = el('div', 'sk-copy-btn');
+      btn.textContent = label;
+      btn.style.cursor = 'pointer';
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(value);
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = label, 1500);
+      });
+      copyBlock.appendChild(btn);
+    };
+    if (item?.assetid) addCopy('Copy ID', item.assetid);
+    addCopy('Copy Name', marketName);
+    if (item?.inspectLink) addCopy('Copy Link', item.inspectLink);
+    imageArea.appendChild(copyBlock);
+
+    // Count badge (bottom-right of image)
+    if (count > 1) {
+      const countBadge = el('div', 'sk-inline sk-count-badge');
+      countBadge.textContent = `x${count}`;
+      imageArea.appendChild(countBadge);
+    }
   }
 
-  // ── Header ──
-  const header = el('div', 'sk-detail-header');
-  const logo = el('div', 'sk-detail-logo');
-  logo.textContent = 'SK';
-  const title = el('span', 'sk-detail-title');
-  title.textContent = 'SKINKEEPER';
-  header.append(logo, title);
-  section.appendChild(header);
+  // ── Float + float bar (injected between image and name) ──
+  if (floatVal != null && nameEl) {
+    const floatBlock = el('div', 'sk-inline sk-detail-float');
+    const floatText = el('span');
+    floatText.textContent = `Float: ${floatVal.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')}`;
+    floatText.style.cssText = 'color:var(--sk-text);font-size:13px;font-weight:600';
+    floatBlock.appendChild(floatText);
+
+    // Float bar
+    const bar = el('div', 'sk-detail-float-bar');
+    const marker = el('div', 'sk-detail-float-marker');
+    marker.style.left = `${(floatVal * 100).toFixed(1)}%`;
+    bar.appendChild(marker);
+    floatBlock.appendChild(bar);
+
+    nameEl.parentElement?.insertBefore(floatBlock, nameEl);
+  }
+
+  // ── Main section (appended to item_desc_content) ──
+  const section = el('div', 'sk-detail');
 
   // ── Storage Unit special display ──
   if (item?.type === 'Storage Unit') {
@@ -799,20 +834,6 @@ function enhanceDetail(panel: HTMLElement) {
     cVal.textContent = `${item.casketItemCount || 0}`;
     countRow.append(cLabel, cVal);
     section.appendChild(countRow);
-
-    const note = el('div', 'sk-powered');
-    note.textContent = 'Contents can only be viewed via SkinKeeper Desktop App';
-    section.appendChild(note);
-
-    const actions = el('div', 'sk-actions');
-    actions.appendChild(skBadge('Open Desktop App', () => {
-      window.open('https://app.skinkeeper.store/storage-units', '_blank');
-    }));
-    section.appendChild(actions);
-
-    const powered = el('div', 'sk-powered');
-    powered.innerHTML = 'by <a href="https://skinkeeper.store" target="_blank">SkinKeeper</a>';
-    section.appendChild(powered);
 
     const target = panel.querySelector('.item_desc_content') || panel.querySelector('[id$="_content"]');
     if (target) target.appendChild(section);
@@ -1179,8 +1200,9 @@ function enhanceDetail(panel: HTMLElement) {
     });
   }
 
-  // ── Instant Sell / Quick Sell (ported from CSGO Trader) ──
-  if (item?.tradable && item?.marketable) {
+  // ── Instant Sell / Quick Sell — only on own inventory ──
+  const isOwnDetail = !!(window as any).g_bViewingOwnProfile;
+  if (isOwnDetail && item?.tradable && item?.marketable) {
     const sellRow = el('div', 'sk-detail-links');
     const walletCurr = getWalletCurrency();
 
