@@ -1,0 +1,22 @@
+{
+  "name": "skinkeeper-extension",
+  "version": "1.0.0",
+  "description": "SkinKeeper Browser Extension for Steam",
+  "private": true,
+  "scripts": {
+    "dev": "webpack --watch --mode development",
+    "build": "webpack --mode production",
+    "clean": "rm -rf dist",
+    "pack": "npm run build && cd dist && zip -r ../skinkeeper-extension.zip ."
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "copy-webpack-plugin": "^12.0.2",
+    "css-loader": "^7.1.2",
+    "mini-css-extract-plugin": "^2.9.2",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.7.0",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^6.0.1"
+  }
+}

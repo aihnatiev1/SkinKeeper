@@ -1,0 +1,1049 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   SkinKeeper — CS2 Browser Extension Styles
+   Premium dark theme with glassmorphism, injected onto Steam pages
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Variables ────────────────────────────────────────────────────── */
+:root {
+  --sk-primary: #6366f1;
+  --sk-primary-light: #818cf8;
+  --sk-accent: #8b5cf6;
+  --sk-green: #4ade80;
+  --sk-green-dim: rgba(74, 222, 128, 0.15);
+  --sk-red: #f87171;
+  --sk-red-dim: rgba(248, 113, 113, 0.15);
+  --sk-amber: #fbbf24;
+  --sk-amber-dim: rgba(251, 191, 36, 0.12);
+  --sk-text: #e2e8f0;
+  --sk-text-dim: #94a3b8;
+  --sk-bg: rgba(15, 15, 24, 0.92);
+  --sk-bg-glass: rgba(20, 20, 35, 0.75);
+  --sk-border: rgba(99, 102, 241, 0.2);
+  --sk-border-subtle: rgba(255, 255, 255, 0.06);
+  --sk-radius: 10px;
+  --sk-radius-sm: 6px;
+  --sk-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  --sk-transition: 150ms ease;
+}
+
+/* ─── Banner (top of inventory) ────────────────────────────────────── */
+.sk-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  margin: 10px 0;
+  border-radius: var(--sk-radius);
+  background: var(--sk-bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--sk-border);
+  font-family: var(--sk-font);
+  color: var(--sk-text);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.sk-banner-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.sk-banner-stats {
+  display: flex;
+  flex: 1;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sk-banner-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sk-banner-stat-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--sk-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sk-banner-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sk-text);
+  letter-spacing: -0.3px;
+}
+
+.sk-banner-stat-value.sk-positive { color: var(--sk-green); }
+.sk-banner-stat-value.sk-negative { color: var(--sk-red); }
+
+.sk-banner-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--sk-border-subtle);
+  flex-shrink: 0;
+}
+
+.sk-banner-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--sk-radius-sm);
+  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--sk-font);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all var(--sk-transition);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.sk-banner-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  filter: brightness(1.1);
+}
+
+/* ─── Banner: Button Variants ─────────────────────────────────────── */
+.sk-cta-sell {
+  background: var(--sk-green-dim);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  color: var(--sk-green);
+  box-shadow: none;
+}
+
+.sk-cta-sell:hover {
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.2);
+}
+
+.sk-cta-cancel {
+  background: var(--sk-red-dim);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: var(--sk-red);
+  box-shadow: none;
+}
+
+.sk-cta-cancel:hover {
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.2);
+}
+
+.sk-cta-amber {
+  background: var(--sk-amber-dim);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: var(--sk-amber);
+  box-shadow: none;
+}
+
+.sk-cta-amber:hover {
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2);
+}
+
+.sk-cta-secondary {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: var(--sk-primary-light);
+  box-shadow: none;
+}
+
+.sk-cta-secondary:hover {
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+/* ─── Banner: Actions Group ───────────────────────────────────────── */
+.sk-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Item Tile Overlay Grid — proven layout from competitors
+   ┌──────────────────────────────────────┐
+   │ [lock]     [phase/fade]    [ST FT]   │  row 1: top 2px
+   │                          [sticker$]  │  row 2: top 16px
+   │                            [seed]    │  row 3: top 30px
+   │                                      │
+   │                             [dup]    │  bottom 30px
+   │ [float]                    [price]   │  bottom 14px / 2px
+   │ ▓▓▓▓▓▓▓▓▓▓▓▓ float gradient bar ▓▓▓│  bottom 0
+   └──────────────────────────────────────┘
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Shared pill style for all overlays */
+.sk-price-tag, .sk-item-float, .sk-item-ext, .sk-item-seed,
+.sk-item-sticker-val, .sk-lock-badge, .sk-item-phase, .sk-dup-badge {
+  position: absolute;
+  font-family: var(--sk-font);
+  pointer-events: none;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 0px 4px;
+  border-radius: 3px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* ─── BOTTOM-RIGHT: Price ─────────────────────────────────────────── */
+.sk-price-tag {
+  bottom: 2px;
+  right: 2px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ─── BOTTOM-LEFT: Float value ────────────────────────────────────── */
+.sk-item-float {
+  bottom: 14px;
+  left: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+/* ─── TOP-RIGHT: ST/Souvenir + Exterior ───────────────────────────── */
+.sk-item-ext {
+  top: 2px;
+  right: 2px;
+  color: #99ccff;
+  font-size: 10px;
+  font-weight: 800;
+  z-index: 6;
+  letter-spacing: 0.3px;
+}
+
+/* ─── RIGHT row 2: Sticker price (below ext) ──────────────────────── */
+.sk-item-sticker-val {
+  top: 16px;
+  right: 2px;
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--sk-amber);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* ─── RIGHT row 3: Paint Seed (below sticker) ─────────────────────── */
+.sk-item-seed {
+  top: 30px;
+  right: 2px;
+  color: var(--sk-text-dim);
+  font-size: 9px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+/* ─── TOP-CENTER: Phase / Fade % / Marble Fade ────────────────────── */
+.sk-item-phase {
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  z-index: 6;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.3px;
+}
+
+/* ─── TOP-LEFT: Trade lock ────────────────────────────────────────── */
+.sk-lock-badge {
+  top: 2px;
+  left: 2px;
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  z-index: 6;
+}
+
+/* ─── RIGHT bottom area: Duplicate count ──────────────────────────── */
+.sk-dup-badge {
+  bottom: 16px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent));
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  z-index: 6;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Storage Unit Badge ───────────────────────────────────────────── */
+.sk-storage-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--sk-primary-light);
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--sk-font);
+  line-height: 1.4;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ─── P/L Overlay (bottom-left, above float) ──────────────────────── */
+.sk-item-pl {
+  position: absolute;
+  bottom: 28px;
+  left: 2px;
+  padding: 0px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  font-family: var(--sk-font);
+  line-height: 1.5;
+  z-index: 5;
+  pointer-events: none;
+  letter-spacing: -0.2px;
+}
+
+.sk-item-pl.sk-pl-profit {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  color: var(--sk-green);
+}
+
+.sk-item-pl.sk-pl-loss {
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: var(--sk-red);
+}
+
+/* ─── Trade Lock Badge ─────────────────────────────────────────────── */
+.sk-lock-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  font-family: var(--sk-font);
+  line-height: 1.4;
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* ─── Float Bar (bottom of item) ───────────────────────────────────── */
+.sk-float-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(to right,
+    #4ade80 0%, #86efac 7%, #facc15 15%,
+    #f97316 38%, #ef4444 60%, #991b1b 100%
+  );
+  z-index: 4;
+  border-radius: 0 0 2px 2px;
+  opacity: 0.9;
+}
+
+.sk-float-marker {
+  position: absolute;
+  top: -2px;
+  width: 3px;
+  height: 7px;
+  background: #fff;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+
+/* ─── Detail Panel Enhancement ─────────────────────────────────────── */
+.sk-detail {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--sk-radius-sm);
+  background: var(--sk-bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--sk-border);
+  font-family: var(--sk-font);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sk-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--sk-border-subtle);
+}
+
+.sk-detail-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.sk-detail-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sk-text-dim);
+  letter-spacing: 0.3px;
+}
+
+/* Price rows in detail panel */
+.sk-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sk-price-source {
+  color: var(--sk-text-dim);
+  font-weight: 500;
+}
+
+.sk-price-value {
+  font-weight: 700;
+  color: var(--sk-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-price-trend {
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.sk-price-trend.sk-up { color: var(--sk-green); }
+.sk-price-trend.sk-down { color: var(--sk-red); }
+
+/* Rarity pill */
+.sk-rarity {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Sticker chips */
+.sk-stickers {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.sk-sticker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  color: var(--sk-text-dim);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Links/copy row in detail panel */
+.sk-detail-links {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+/* Action buttons in detail panel */
+.sk-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px solid var(--sk-border-subtle);
+}
+
+/* ─── Badges ───────────────────────────────────────────────────────── */
+.sk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--sk-radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--sk-font);
+  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent));
+  color: #fff;
+  cursor: pointer;
+  border: none;
+  transition: all var(--sk-transition);
+  white-space: nowrap;
+}
+
+.sk-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.3);
+  filter: brightness(1.1);
+}
+
+.sk-badge-icon {
+  font-weight: 800;
+  font-size: 9px;
+  letter-spacing: -0.5px;
+}
+
+/* Alert button */
+.sk-alert-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--sk-radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--sk-font);
+  background: var(--sk-amber-dim);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: var(--sk-amber);
+  cursor: pointer;
+  transition: all var(--sk-transition);
+  white-space: nowrap;
+}
+
+.sk-alert-btn:hover {
+  background: rgba(251, 191, 36, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Phase badge */
+.sk-phase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Ratio badge */
+.sk-ratio-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* ─── Trade Offer Summary ──────────────────────────────────────────── */
+.sk-trade-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: 12px 18px;
+  margin: 10px 0;
+  border-radius: var(--sk-radius);
+  background: var(--sk-bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--sk-border);
+  font-family: var(--sk-font);
+  color: var(--sk-text);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.sk-trade-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sk-trade-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--sk-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sk-trade-value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.sk-trade-delta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+}
+
+.sk-trade-delta-value {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.sk-trade-delta-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--sk-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sk-trade-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin: 6px 0;
+  border-radius: var(--sk-radius-sm);
+  background: var(--sk-red-dim);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: var(--sk-red);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--sk-font);
+}
+
+/* ─── Exterior Links (market listing) ──────────────────────────────── */
+.sk-ext-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--sk-text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--sk-font);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--sk-transition);
+}
+
+.sk-ext-link:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--sk-border);
+  color: var(--sk-text);
+}
+
+/* ─── Sort Dropdown (trade offers) ─────────────────────────────────── */
+.sk-sort-select {
+  float: right;
+  margin: 2px 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--sk-text-dim);
+  font-size: 11px;
+  font-family: var(--sk-font);
+  cursor: pointer;
+  outline: none;
+}
+
+.sk-sort-select:hover {
+  border-color: var(--sk-border);
+  color: var(--sk-text);
+}
+
+.sk-sort-select option {
+  background: #1a1a2e;
+  color: var(--sk-text);
+}
+
+/* ─── Market Listing Banner ────────────────────────────────────────── */
+.sk-market-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  margin: 8px 0;
+  border-radius: var(--sk-radius);
+  background: var(--sk-bg-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--sk-border);
+  font-family: var(--sk-font);
+  color: var(--sk-text);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Profile Button ───────────────────────────────────────────────── */
+.sk-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--sk-radius-sm);
+  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--sk-font);
+  text-decoration: none;
+  transition: all var(--sk-transition);
+  border: none;
+  cursor: pointer;
+}
+
+.sk-profile-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.3);
+  filter: brightness(1.1);
+}
+
+/* ─── Powered by ───────────────────────────────────────────────────── */
+.sk-powered {
+  font-size: 10px;
+  color: var(--sk-text-dim);
+  margin-top: 4px;
+}
+
+.sk-powered a {
+  color: var(--sk-primary-light);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.sk-powered a:hover { text-decoration: underline; }
+
+/* ─── Item Selection State (click to select for value calc) ──────── */
+.sk-item-selected {
+  outline: 2px solid var(--sk-primary-light) !important;
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 999px rgba(99, 102, 241, 0.1);
+}
+
+/* ─── Item Selection State (sell mode) ────────────────────────────── */
+.sk-item-sell-selected {
+  outline: 2px solid var(--sk-green) !important;
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 999px rgba(74, 222, 128, 0.08);
+}
+
+.sk-item-tu-selected {
+  outline: 2px solid var(--sk-amber) !important;
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 999px rgba(251, 191, 36, 0.08);
+}
+
+/* ─── Bulk Sell: Checkbox on items ──────────────────────────────────── */
+.sk-sell-cb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  cursor: pointer;
+  transition: all var(--sk-transition);
+}
+
+.sk-sell-cb:hover {
+  border-color: var(--sk-green);
+}
+
+.sk-sell-cb.sk-checked {
+  background: var(--sk-green);
+  border-color: var(--sk-green);
+}
+
+.sk-sell-cb.sk-checked::after {
+  content: '\2713';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #000;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Trade-Up checkbox variant (amber) */
+.sk-tu-cb {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.sk-tu-cb:hover {
+  border-color: var(--sk-amber);
+}
+
+.sk-tu-cb.sk-checked {
+  background: var(--sk-amber);
+  border-color: var(--sk-amber);
+}
+
+/* ─── Bulk Sell: Floating bottom bar ───────────────────────────────── */
+.sk-sell-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--sk-bg);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--sk-border);
+  font-family: var(--sk-font);
+  color: var(--sk-text);
+  z-index: 10000;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.sk-sell-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sk-sell-count {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sk-sell-total {
+  font-size: 13px;
+  color: var(--sk-text-dim);
+  padding-left: 14px;
+  border-left: 1px solid var(--sk-border-subtle);
+}
+
+.sk-sell-bar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--sk-border-subtle);
+  flex-shrink: 0;
+}
+
+.sk-sell-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sk-sell-strategy {
+  padding: 6px 10px;
+  border-radius: var(--sk-radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--sk-text);
+  font-size: 12px;
+  font-family: var(--sk-font);
+  cursor: pointer;
+  outline: none;
+}
+
+.sk-sell-strategy option {
+  background: #1a1a2e;
+  color: var(--sk-text);
+}
+
+.sk-sell-btn {
+  padding: 8px 20px;
+  border-radius: var(--sk-radius-sm);
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--sk-font);
+  border: none;
+  cursor: pointer;
+  transition: all var(--sk-transition);
+}
+
+.sk-sell-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.sk-sell-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Export Menu ──────────────────────────────────────────────────── */
+.sk-export-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 4px;
+  min-width: 150px;
+  border-radius: var(--sk-radius-sm);
+  background: var(--sk-bg);
+  border: 1px solid var(--sk-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.sk-export-option {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: var(--sk-font);
+  color: var(--sk-text);
+  cursor: pointer;
+  transition: background var(--sk-transition);
+}
+
+.sk-export-option:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+/* ─── Trade-Up Calculator Panel ─────────────────────────────────────── */
+.sk-tu-panel {
+  position: fixed;
+  bottom: 0;
+  right: 20px;
+  width: 340px;
+  max-height: 60vh;
+  overflow-y: auto;
+  border-radius: var(--sk-radius) var(--sk-radius) 0 0;
+  background: var(--sk-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--sk-border);
+  border-bottom: none;
+  font-family: var(--sk-font);
+  color: var(--sk-text);
+  z-index: 10000;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.sk-tu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--sk-border-subtle);
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.sk-tu-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sk-amber);
+}
+
+.sk-tu-body {
+  padding: 10px 14px;
+}
+
+.sk-tu-hint {
+  font-size: 11px;
+  color: var(--sk-text-dim);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.sk-tu-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sk-border-subtle);
+}
+
+.sk-tu-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.sk-tu-item-name {
+  color: var(--sk-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.sk-tu-item-price {
+  color: var(--sk-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.sk-tu-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sk-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+/* ─── Loading shimmer ──────────────────────────────────────────────── */
+@keyframes sk-shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+
+.sk-loading {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 100%);
+  background-size: 200px 100%;
+  animation: sk-shimmer 1.5s ease infinite;
+  border-radius: 4px;
+}

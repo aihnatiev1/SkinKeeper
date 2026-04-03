@@ -1,0 +1,111 @@
+{
+  "manifest_version": 3,
+  "name": "SkinKeeper — CS2 Inventory Tracker",
+  "version": "1.0.0",
+  "description": "Track CS2 skin prices, portfolio P/L, and set alerts — directly on Steam. Part of the SkinKeeper ecosystem.",
+  "homepage_url": "https://skinkeeper.store",
+
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+
+  "host_permissions": [
+    "https://steamcommunity.com/*",
+    "https://api.skinkeeper.store/*",
+    "https://prices.csgotrader.app/*",
+    "https://steamrep.com/*",
+    "https://bymykel.github.io/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://steamcommunity.com/id/*/inventory*", "https://steamcommunity.com/profiles/*/inventory*"],
+      "js": ["content/inventory.js"],
+      "css": ["styles/skinkeeper.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://steamcommunity.com/market/listings/730/*"],
+      "js": ["content/marketListing.js"],
+      "css": ["styles/skinkeeper.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://steamcommunity.com/tradeoffer/*"],
+      "js": ["content/tradeOffer.js"],
+      "css": ["styles/skinkeeper.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://steamcommunity.com/id/*/tradeoffers*", "https://steamcommunity.com/profiles/*/tradeoffers*"],
+      "js": ["content/tradeOffers.js"],
+      "css": ["styles/skinkeeper.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://steamcommunity.com/market", "https://steamcommunity.com/market/"],
+      "js": ["content/market.js"],
+      "css": ["styles/skinkeeper.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://steamcommunity.com/id/*", "https://steamcommunity.com/profiles/*"],
+      "exclude_matches": [
+        "https://steamcommunity.com/id/*/inventory*",
+        "https://steamcommunity.com/profiles/*/inventory*"
+      ],
+      "js": ["content/profile.js"],
+      "css": ["styles/skinkeeper.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://steamcommunity.com/*"],
+      "js": ["content/nsfw.js"],
+      "run_at": "document_start"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "externally_connectable": {
+    "matches": ["https://skinkeeper.store/*", "https://app.skinkeeper.store/*"]
+  },
+
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["data/bluegem.json.gz"],
+      "matches": ["https://steamcommunity.com/*"]
+    }
+  ],
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

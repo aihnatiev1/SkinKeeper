@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 320px;
+      min-height: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f14;
+      color: #e2e8f0;
+    }
+    .header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 16px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.1));
+      border-bottom: 1px solid rgba(99,102,241,0.2);
+    }
+    .logo {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 14px;
+    }
+    .header-text h1 { font-size: 16px; font-weight: 700; }
+    .header-text p { font-size: 11px; color: #94a3b8; }
+
+    .content { padding: 16px; }
+
+    /* Login state */
+    #login-section { text-align: center; padding: 24px 16px; }
+    #login-section p { font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+    .login-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 24px; border-radius: 10px;
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      color: #fff; font-weight: 600; font-size: 13px;
+      border: none; cursor: pointer; transition: all 0.2s;
+    }
+    .login-btn:hover { filter: brightness(1.1); }
+
+    /* Dashboard */
+    #dashboard { display: none; }
+    .user-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px; border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      margin-bottom: 12px;
+    }
+    .user-avatar {
+      width: 36px; height: 36px; border-radius: 10px;
+    }
+    .user-name { font-size: 13px; font-weight: 600; }
+    .user-pro {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 10px; color: #fbbf24; font-weight: 700;
+      background: rgba(251,191,36,0.1);
+      padding: 1px 6px; border-radius: 4px;
+    }
+    .user-steamid { font-size: 10px; color: #64748b; font-family: monospace; }
+
+    .stats-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      margin-bottom: 12px;
+    }
+    .stat-card {
+      padding: 10px; border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .stat-label { font-size: 10px; color: #64748b; margin-bottom: 2px; }
+    .stat-value { font-size: 16px; font-weight: 700; }
+    .stat-change { font-size: 10px; font-weight: 600; }
+    .positive { color: #4ade80; }
+    .negative { color: #f87171; }
+
+    .quick-links {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .quick-link {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      color: #e2e8f0; text-decoration: none;
+      font-size: 12px; font-weight: 500;
+      transition: background 0.2s; cursor: pointer; border: none;
+      text-align: left; width: 100%;
+    }
+    .quick-link:hover { background: rgba(99,102,241,0.1); }
+    .quick-link-icon { font-size: 14px; }
+
+    .footer {
+      padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.05);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .footer-version { font-size: 10px; color: #475569; }
+    .footer-link { font-size: 10px; color: #818cf8; text-decoration: none; }
+    .footer-link:hover { text-decoration: underline; }
+
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 0;
+    }
+    .toggle-label { font-size: 12px; color: #94a3b8; }
+    .toggle {
+      width: 36px; height: 20px; border-radius: 10px;
+      background: #334155; position: relative; cursor: pointer;
+      transition: background 0.2s; border: none;
+    }
+    .toggle.active { background: #6366F1; }
+    .toggle::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; transition: left 0.2s;
+    }
+    .toggle.active::after { left: 18px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">SK</div>
+    <div class="header-text">
+      <h1>SkinKeeper</h1>
+      <p>CS2 Inventory Tracker</p>
+    </div>
+  </div>
+
+  <!-- Not logged in -->
+  <div id="login-section" class="content">
+    <p>Connect your SkinKeeper account to see portfolio stats and enable price tracking.</p>
+    <button class="login-btn" id="login-btn">Sign in with SkinKeeper</button>
+  </div>
+
+  <!-- Logged in dashboard -->
+  <div id="dashboard" class="content">
+    <div class="user-row" id="user-row"></div>
+
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <div class="quick-links">
+      <button class="quick-link" data-path="/portfolio">
+        <span class="quick-link-icon">&#128200;</span> Portfolio
+      </button>
+      <button class="quick-link" data-path="/inventory">
+        <span class="quick-link-icon">&#127890;</span> Inventory
+      </button>
+      <button class="quick-link" data-path="/alerts">
+        <span class="quick-link-icon">&#128276;</span> Price Alerts
+      </button>
+      <button class="quick-link" data-path="/trades">
+        <span class="quick-link-icon">&#128260;</span> Trades
+      </button>
+    </div>
+
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05)">
+      <div class="toggle-row">
+        <span class="toggle-label">Show prices on Steam</span>
+        <button class="toggle active" id="toggle-prices"></button>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Contribute price data</span>
+        <button class="toggle active" id="toggle-collect"></button>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">SFW Mode (hide avatars)</span>
+        <button class="toggle" id="toggle-nsfw"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="footer-version" id="version">v1.0.0</span>
+    <a class="footer-link" href="https://skinkeeper.store" target="_blank">skinkeeper.store</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

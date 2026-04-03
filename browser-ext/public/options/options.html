@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SkinKeeper Extension Settings</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f14; color: #e2e8f0;
+      max-width: 640px; margin: 0 auto; padding: 32px 24px;
+    }
+    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+    .logo {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 18px;
+    }
+    .header h1 { font-size: 24px; font-weight: 700; }
+    .header p { font-size: 13px; color: #94a3b8; }
+
+    .section {
+      margin-bottom: 24px; padding: 20px;
+      border-radius: 14px; background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .section-title {
+      font-size: 14px; font-weight: 700; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title .icon { font-size: 16px; }
+
+    .row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .row:last-child { border-bottom: none; }
+    .row-left { flex: 1; }
+    .row-label { font-size: 13px; font-weight: 500; }
+    .row-desc { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    .toggle {
+      width: 40px; height: 22px; border-radius: 11px;
+      background: #334155; position: relative; cursor: pointer;
+      transition: background 0.2s; border: none; flex-shrink: 0;
+    }
+    .toggle.active { background: #6366F1; }
+    .toggle::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; transition: left 0.2s;
+    }
+    .toggle.active::after { left: 20px; }
+
+    select {
+      padding: 6px 12px; border-radius: 8px; font-size: 12px;
+      background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+      cursor: pointer; outline: none;
+    }
+    select:focus { border-color: #6366F1; }
+
+    .save-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 12px 24px; background: rgba(15,15,20,0.95);
+      border-top: 1px solid rgba(99,102,241,0.2);
+      display: none; align-items: center; justify-content: center; gap: 12px;
+      backdrop-filter: blur(10px);
+    }
+    .save-bar.visible { display: flex; }
+    .save-btn {
+      padding: 8px 24px; border-radius: 10px; font-size: 13px; font-weight: 600;
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      color: #fff; border: none; cursor: pointer; transition: all 0.2s;
+    }
+    .save-btn:hover { filter: brightness(1.1); }
+    .save-status { font-size: 12px; color: #4ade80; }
+
+    .account-section {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px; border-radius: 10px; background: rgba(255,255,255,0.02);
+    }
+    .account-avatar { width: 40px; height: 40px; border-radius: 10px; }
+    .account-name { font-size: 14px; font-weight: 600; }
+    .account-link { font-size: 11px; color: #818cf8; text-decoration: none; }
+    .account-link:hover { text-decoration: underline; }
+    .btn-disconnect {
+      margin-left: auto; padding: 6px 14px; border-radius: 8px;
+      font-size: 11px; font-weight: 600; background: rgba(239,68,68,0.1);
+      color: #f87171; border: 1px solid rgba(239,68,68,0.2); cursor: pointer;
+    }
+
+    .conflict-detected {
+      padding: 8px 12px; border-radius: 8px;
+      background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.2);
+      font-size: 11px; color: #fbbf24; margin-top: 8px;
+    }
+
+    .footer {
+      margin-top: 32px; padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: #475569;
+    }
+    .footer a { color: #818cf8; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">SK</div>
+    <div>
+      <h1>SkinKeeper Settings</h1>
+      <p>Customize your Steam enhancement experience</p>
+    </div>
+  </div>
+
+  <!-- Account -->
+  <div class="section" id="account-section">
+    <div class="section-title"><span class="icon">👤</span> Account</div>
+    <div id="account-content"></div>
+  </div>
+
+  <!-- Price Display -->
+  <div class="section">
+    <div class="section-title"><span class="icon">💰</span> Price Display</div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Show prices on items</div>
+        <div class="row-desc">Overlay prices on inventory items and market listings</div>
+      </div>
+      <button class="toggle active" data-setting="showPrices"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Primary price source</div>
+        <div class="row-desc">Which marketplace price to show prominently</div>
+      </div>
+      <select data-setting="priceSource">
+        <option value="buff">Buff163</option>
+        <option value="steam">Steam Market</option>
+        <option value="csfloat">CSFloat</option>
+        <option value="skinport">Skinport</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Show Buff/Steam ratio</div>
+        <div class="row-desc">Display B/S % badge on each item</div>
+      </div>
+      <button class="toggle active" data-setting="showRatio"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Show price velocity</div>
+        <div class="row-desc">7d/30d price trend badges</div>
+      </div>
+      <button class="toggle active" data-setting="showVelocity"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Display currency</div>
+      </div>
+      <select data-setting="currency">
+        <option value="USD">$ USD</option>
+        <option value="EUR">€ EUR</option>
+        <option value="GBP">£ GBP</option>
+        <option value="UAH">₴ UAH</option>
+        <option value="CNY">¥ CNY</option>
+        <option value="BRL">R$ BRL</option>
+        <option value="TRY">₺ TRY</option>
+        <option value="RUB">₽ RUB</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Float & Patterns -->
+  <div class="section">
+    <div class="section-title"><span class="icon">🎯</span> Float & Patterns</div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Show float values</div>
+        <div class="row-desc">Float bar and value on items</div>
+      </div>
+      <button class="toggle active" data-setting="showFloats"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Doppler/Fade phase detection</div>
+        <div class="row-desc">Auto-detect and badge phases, fade %, marble fade patterns</div>
+      </div>
+      <button class="toggle active" data-setting="showPhases"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Sticker SP% calculator</div>
+        <div class="row-desc">Calculate and show sticker premium percentage</div>
+      </div>
+      <button class="toggle active" data-setting="showStickerSP"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Blue gem detection</div>
+        <div class="row-desc">Identify Case Hardened blue gem patterns</div>
+      </div>
+      <button class="toggle active" data-setting="showBlueGems"></button>
+    </div>
+  </div>
+
+  <!-- Portfolio & P/L -->
+  <div class="section">
+    <div class="section-title"><span class="icon">📊</span> Portfolio & P/L</div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Show P/L on inventory items</div>
+        <div class="row-desc">Profit/Loss overlay from your SkinKeeper portfolio</div>
+      </div>
+      <button class="toggle active" data-setting="showPL"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Show arbitrage opportunities</div>
+        <div class="row-desc">Highlight items with cross-market price differences</div>
+      </div>
+      <button class="toggle active" data-setting="showArbitrage"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Trade offer P/L analysis</div>
+        <div class="row-desc">Automatic profit/loss calculation on trade offers</div>
+      </div>
+      <button class="toggle active" data-setting="showTradePL"></button>
+    </div>
+  </div>
+
+  <!-- Inventory Features -->
+  <div class="section">
+    <div class="section-title"><span class="icon">🎒</span> Inventory</div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Stack duplicate items</div>
+        <div class="row-desc">Group identical items with count badge</div>
+      </div>
+      <button class="toggle active" data-setting="stackDuplicates"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Trade lock countdown</div>
+        <div class="row-desc">Show remaining trade lock time on items</div>
+      </div>
+      <button class="toggle active" data-setting="showTradeLock"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Quick sell buttons</div>
+        <div class="row-desc">One-click sell at Buff reference price</div>
+      </div>
+      <button class="toggle active" data-setting="quickSell"></button>
+    </div>
+  </div>
+
+  <!-- Data & Privacy -->
+  <div class="section">
+    <div class="section-title"><span class="icon">🔒</span> Data & Privacy</div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Contribute price data</div>
+        <div class="row-desc">Help the community by sharing anonymous price data from pages you visit</div>
+      </div>
+      <button class="toggle active" data-setting="collectPrices"></button>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-label">Extension conflict detection</div>
+        <div class="row-desc">Auto-detect SIH, CS2 Trader, CSFloat and avoid conflicts</div>
+      </div>
+      <button class="toggle active" data-setting="conflictDetection"></button>
+    </div>
+  </div>
+
+  <!-- Detected Extensions -->
+  <div class="section" id="conflicts-section" style="display:none">
+    <div class="section-title"><span class="icon">⚠️</span> Detected Extensions</div>
+    <div id="conflicts-list"></div>
+  </div>
+
+  <div class="footer">
+    <span>SkinKeeper Extension v<span id="version">1.0.0</span></span>
+    <a href="https://skinkeeper.store" target="_blank">skinkeeper.store</a>
+    <a href="https://github.com/skinkeeper" target="_blank">Open Source</a>
+  </div>
+
+  <div class="save-bar" id="save-bar">
+    <button class="save-btn" id="save-btn">Save Settings</button>
+    <span class="save-status" id="save-status"></span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
