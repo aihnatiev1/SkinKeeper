@@ -23,11 +23,18 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-// GET — check if authenticated
-export async function GET() {
+// GET — check if authenticated (optionally return token for extension connection)
+export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME);
-  return NextResponse.json({ authenticated: !!token?.value });
+
+  // If source=extension, include token so it can be passed to the browser extension
+  const includeToken = req.nextUrl.searchParams.get('include_token') === '1';
+
+  return NextResponse.json({
+    authenticated: !!token?.value,
+    ...(includeToken && token?.value ? { token: token.value } : {}),
+  });
 }
 
 // DELETE — clear session

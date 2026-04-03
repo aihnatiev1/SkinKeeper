@@ -17,6 +17,8 @@ import transactionsRoutes from "./routes/transactions.js";
 import sessionRouter from "./routes/session.js";
 import tradesRoutes from "./routes/trades.js";
 import purchasesRoutes from "./routes/purchases.js";
+import stripeRoutes from "./routes/stripe.js";
+import extensionRoutes from "./routes/extension.js";
 import exportRoutes from "./routes/export.js";
 import manualTxRoutes from "./routes/manualTransactions.js";
 import legalRoutes from "./routes/legal.js";
@@ -33,6 +35,10 @@ const PORT = process.env.PORT || 3000;
 app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors());
+
+// Stripe webhook needs raw body for signature verification — must be before express.json()
+app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
+
 app.use(express.json());
 
 // Apple App Site Association for Universal Links
@@ -118,6 +124,8 @@ app.use("/api/transactions", transactionsRoutes);
 app.use("/api/session", sessionRouter);
 app.use("/api/trades", tradesRoutes);
 app.use("/api/purchases", purchasesRoutes);
+app.use("/api/stripe", stripeRoutes);
+app.use("/api/ext", extensionRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/transactions", manualTxRoutes);
 app.use("/api/admin", adminRoutes);

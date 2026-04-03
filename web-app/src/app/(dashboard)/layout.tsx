@@ -14,16 +14,34 @@ export default function DashboardLayout({
   const { isLoading, error } = useMe();
 
   if (isLoading) return <PageLoader />;
-  if (error) return null; // middleware will redirect
+  if (error) return null;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen gradient-mesh">
       <Sidebar />
       <main
-        className="transition-all duration-200"
-        style={{ marginLeft: sidebarOpen ? 240 : 72 }}
+        className="transition-all duration-300 min-h-screen pt-14 lg:pt-0"
+        style={{ marginLeft: 0 }}
       >
-        {children}
+        <div className="hidden lg:block" />
+        <div
+          className="transition-[margin-left] duration-300"
+          style={{}}
+        >
+          {/* Responsive margin: 0 on mobile, sidebar width on desktop */}
+          <div
+            className="hidden lg:contents"
+          >
+            <style>{`
+              @media (min-width: 1024px) {
+                [data-dashboard-content] { margin-left: ${sidebarOpen ? 240 : 72}px; }
+              }
+            `}</style>
+          </div>
+          <div data-dashboard-content="">
+            {children}
+          </div>
+        </div>
       </main>
     </div>
   );

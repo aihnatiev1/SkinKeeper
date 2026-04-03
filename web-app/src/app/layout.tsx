@@ -14,19 +14,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'SkinKeeper — CS2 Inventory Manager & Portfolio Tracker',
+  title: {
+    default: 'SkinKeeper — CS2 Inventory Manager & Portfolio Tracker',
+    template: '%s | SkinKeeper',
+  },
   description:
-    'Track your CS2 skin portfolio value, analyze profit & loss, sell on Steam Market from your phone, manage trades between accounts, and get price alerts. Free for iOS & Android.',
+    'Track your CS2 skin portfolio value, analyze profit & loss, sell on Steam Market, manage trades between accounts, and get price alerts. Free for iOS, Android & Web.',
   icons: { icon: '/favicon.ico' },
   keywords: [
     'CS2 skins', 'CS2 inventory', 'CS2 portfolio', 'skin tracker',
     'CS2 profit loss', 'Steam Market sell', 'CS2 trade', 'skin prices',
     'CSGO skins', 'Counter-Strike skins', 'CS2 app', 'skin value tracker',
+    'CS2 inventory manager', 'steam skin portfolio', 'CS2 market analytics',
   ],
   openGraph: {
     title: 'SkinKeeper — Track, Trade & Profit from CS2 Skins',
     description:
-      'Real-time portfolio tracking, P&L analytics, instant trades between accounts, price alerts, and market selling — all in one app.',
+      'Real-time portfolio tracking, P&L analytics, instant trades between accounts, price alerts, and market selling — all in one platform.',
     url: 'https://skinkeeper.store',
     siteName: 'SkinKeeper',
     type: 'website',
@@ -36,11 +40,21 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'SkinKeeper — CS2 Inventory Manager',
     description:
-      'Track your CS2 skin portfolio, analyze profit & loss, sell from your phone.',
+      'Track your CS2 skin portfolio, analyze profit & loss, trade between accounts, and sell on Steam Market.',
   },
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  alternates: {
+    canonical: 'https://skinkeeper.store',
   },
   metadataBase: new URL('https://skinkeeper.store'),
 };

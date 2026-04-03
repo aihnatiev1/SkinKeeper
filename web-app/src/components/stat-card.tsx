@@ -13,12 +13,21 @@ interface StatCardProps {
 
 export function StatCard({ label, value, change, positive, icon }: StatCardProps) {
   return (
-    <div className="bg-surface rounded-xl p-5 border border-border">
-      <div className="flex items-center justify-between mb-3">
+    <div className="stat-card glass rounded-xl p-5 border border-border/50">
+      <div className="relative flex items-center justify-between mb-3">
         <span className="text-sm text-muted">{label}</span>
-        {icon && <span className="text-muted">{icon}</span>}
+        {icon && (
+          <span className={cn(
+            'p-1.5 rounded-lg',
+            positive === true && 'bg-profit/10 text-profit',
+            positive === false && 'bg-loss/10 text-loss',
+            positive === undefined && 'bg-surface-light text-muted',
+          )}>
+            {icon}
+          </span>
+        )}
       </div>
-      <p className="text-2xl font-semibold mb-1">{value}</p>
+      <p className="text-2xl font-bold mb-1 tracking-tight">{value}</p>
       {change && (
         <p
           className={cn(

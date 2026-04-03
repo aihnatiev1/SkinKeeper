@@ -9,10 +9,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
-      url: 'https://skinkeeper.store/login',
-      lastModified: new Date(),
+      url: 'https://skinkeeper.store/legal/terms',
+      lastModified: new Date('2026-03-15'),
       changeFrequency: 'monthly',
-      priority: 0.5,
+      priority: 0.3,
+    },
+    {
+      url: 'https://skinkeeper.store/legal/privacy',
+      lastModified: new Date('2026-03-15'),
+      changeFrequency: 'monthly',
+      priority: 0.3,
     },
   ];
 }

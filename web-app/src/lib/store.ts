@@ -22,14 +22,18 @@ export const useAuthStore = create<AuthState>((set) => ({
 
 interface UIState {
   sidebarOpen: boolean;
+  mobileOpen: boolean;
   currency: string;
   toggleSidebar: () => void;
+  setMobileOpen: (open: boolean) => void;
   setCurrency: (currency: string) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
+  mobileOpen: false,
   currency: 'USD',
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  setMobileOpen: (open) => set({ mobileOpen: open }),
   setCurrency: (currency) => set({ currency }),
 }));

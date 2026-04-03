@@ -33,8 +33,14 @@ router.post(
     try {
       const { store, receiptData, purchaseToken, productId } = req.body;
 
-      if (!store || !["apple", "google"].includes(store)) {
-        res.status(400).json({ error: "Invalid store (apple or google)" });
+      if (!store || !["apple", "google", "stripe"].includes(store)) {
+        res.status(400).json({ error: "Invalid store (apple, google, or stripe)" });
+        return;
+      }
+
+      // Stripe subscriptions are managed via /api/stripe/* endpoints
+      if (store === "stripe") {
+        res.status(400).json({ error: "Use /api/stripe/checkout for Stripe subscriptions" });
         return;
       }
 

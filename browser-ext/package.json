@@ -18,5 +18,8 @@
     "typescript": "^5.7.0",
     "webpack": "^5.97.1",
     "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1"
   }
 }

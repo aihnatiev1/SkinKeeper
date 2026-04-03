@@ -137,7 +137,7 @@ export async function verifyGoogleReceipt(
 
 export async function activatePremium(
   userId: number,
-  store: "apple" | "google",
+  store: "apple" | "google" | "stripe",
   result: VerifyResult
 ): Promise<void> {
   const client = await pool.connect();

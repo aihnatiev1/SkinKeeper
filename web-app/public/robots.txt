@@ -4,5 +4,9 @@ Disallow: /api/
 Disallow: /login
 Disallow: /portfolio
 Disallow: /inventory
+Disallow: /trades
+Disallow: /transactions
+Disallow: /alerts
+Disallow: /settings
 
 Sitemap: https://skinkeeper.store/sitemap.xml

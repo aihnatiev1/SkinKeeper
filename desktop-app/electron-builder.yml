@@ -1,0 +1,76 @@
+appId: com.skinkeeper.desktop
+productName: SkinKeeper
+copyright: Copyright © 2024-2026 SkinKeeper
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/main/**/*
+  - node_modules/**/*
+  - "!node_modules/**/README.md"
+  - "!node_modules/**/CHANGELOG.md"
+  - "!node_modules/**/*.ts"
+  - "!node_modules/**/*.map"
+
+extraResources:
+  - from: ../web-app/.next/standalone
+    to: renderer
+    filter:
+      - "**/*"
+  - from: ../web-app/.next/static
+    to: renderer/.next/static
+    filter:
+      - "**/*"
+  - from: ../web-app/public
+    to: renderer/public
+    filter:
+      - "**/*"
+
+# ─── Windows ──────────────────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+  publisherName: SkinKeeper
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: true
+
+# ─── macOS ────────────────────────────────────────────────────────────
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: build/icon.png
+  category: public.app-category.utilities
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  sign: false
+
+# ─── Linux ────────────────────────────────────────────────────────────
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: build/icons
+  category: Utility
+
+# ─── Auto-update ──────────────────────────────────────────────────────
+publish:
+  provider: github
+  owner: skinkeeper
+  repo: skinkeeper-desktop
+  releaseType: release

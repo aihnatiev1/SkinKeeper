@@ -424,6 +424,13 @@ CREATE OR REPLACE VIEW active_steam_accounts AS
 
 -- 031: One steam_id can only belong to one user — prevents ghost user creation
 CREATE UNIQUE INDEX IF NOT EXISTS idx_steam_accounts_steam_id_unique ON steam_accounts(steam_id);
+
+-- 032: Stripe integration for desktop subscriptions
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(100);
+CREATE INDEX IF NOT EXISTS idx_users_stripe_customer ON users(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+
+-- Allow 'stripe' in purchase_receipts.store (widen from 10 to 20 for future stores)
+ALTER TABLE purchase_receipts ALTER COLUMN store TYPE VARCHAR(20);
 `;
 
 export async function migrate() {

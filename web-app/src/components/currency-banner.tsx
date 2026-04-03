@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AlertTriangle, ChevronDown, Check, X } from 'lucide-react';
 import { useWalletInfo, useSteamCurrencies, useSetWalletCurrency } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export function CurrencyBanner() {
   const { data: walletInfo, isLoading } = useWalletInfo();
@@ -13,19 +14,21 @@ export function CurrencyBanner() {
   const [showPicker, setShowPicker] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
-  // Don't show if: loading, manually set, or user dismissed
   if (isLoading || dismissed) return null;
   if (walletInfo?.source === 'manual') return null;
 
   const handleSelect = (currencyId: number) => {
     setWalletCurrency.mutate(currencyId, {
-      onSuccess: () => setShowPicker(false),
+      onSuccess: () => {
+        setShowPicker(false);
+        toast.success('Currency updated');
+      },
     });
   };
 
   return (
-    <div className="mx-6 mt-4">
-      <div className="flex items-center gap-3 px-4 py-3 bg-warning/10 border border-warning/20 rounded-lg text-sm">
+    <div className="mx-4 lg:mx-6 mt-4">
+      <div className="flex items-center gap-3 px-4 py-3 glass border-warning/20 rounded-xl text-sm">
         <AlertTriangle size={16} className="text-warning shrink-0" />
         <div className="flex-1">
           <span className="text-foreground">
@@ -33,7 +36,7 @@ export function CurrencyBanner() {
             {walletInfo?.source === 'auto' && ' (auto-detected)'}
             {walletInfo?.source === 'default' && ' (not detected)'}
           </span>
-          <span className="text-muted ml-1">
+          <span className="text-muted ml-1 hidden sm:inline">
             — set it manually for accurate sell pricing
           </span>
         </div>
@@ -41,7 +44,7 @@ export function CurrencyBanner() {
         {!showPicker ? (
           <button
             onClick={() => setShowPicker(true)}
-            className="flex items-center gap-1 px-3 py-1 bg-warning/20 hover:bg-warning/30 text-warning rounded-md text-xs font-medium transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 bg-warning/10 hover:bg-warning/20 text-warning rounded-lg text-xs font-semibold transition-colors"
           >
             Set Currency <ChevronDown size={12} />
           </button>
@@ -64,7 +67,7 @@ export function CurrencyBanner() {
       </div>
 
       {showPicker && currencies && (
-        <div className="mt-2 p-3 bg-surface border border-border rounded-lg">
+        <div className="mt-2 p-3 glass rounded-xl">
           <div className="flex flex-wrap gap-2">
             {currencies.map((c) => (
               <button
@@ -72,10 +75,10 @@ export function CurrencyBanner() {
                 onClick={() => handleSelect(c.id)}
                 disabled={setWalletCurrency.isPending}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors',
+                  'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all font-medium',
                   walletInfo?.currencyId === c.id
-                    ? 'bg-primary/10 border-primary text-primary'
-                    : 'border-border text-muted hover:text-foreground hover:border-foreground/30'
+                    ? 'bg-primary/10 ring-1 ring-primary/30 text-primary'
+                    : 'glass text-muted hover:text-foreground'
                 )}
               >
                 {c.symbol} {c.code}

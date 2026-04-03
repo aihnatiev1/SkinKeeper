@@ -6,12 +6,22 @@ import { CardSkeleton } from '@/components/loading';
 import { usePortfolioSummary, useProfitLoss, usePLItems } from '@/lib/hooks';
 import { formatPrice, formatPriceChange } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
-import { TrendingUp, TrendingDown, Package, DollarSign, Lock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Package, DollarSign, Lock, Wallet, BarChart3, Sparkles } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 
 function cents(v: number) { return v / 100; }
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.06 } },
+};
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+};
 
 export default function PortfolioPage() {
   const user = useAuthStore((s) => s.user);
@@ -24,130 +34,211 @@ export default function PortfolioPage() {
   return (
     <div>
       <Header title="Portfolio" />
-      <div className="p-6 space-y-6">
+      <div className="p-4 lg:p-6 space-y-6">
         {/* Stats grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <motion.div
+          variants={container}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4"
+        >
           {summaryLoading ? (
             <><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
           ) : summary ? (
             <>
-              <StatCard
-                label="Total Value"
-                value={formatPrice(summary.total_value)}
-                icon={<DollarSign size={18} />}
-              />
-              <StatCard
-                label="24h Change"
-                value={formatPriceChange(summary.change_24h, summary.change_24h_pct)}
-                positive={summary.change_24h >= 0}
-                icon={summary.change_24h >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-              />
-              <StatCard
-                label="7d Change"
-                value={formatPriceChange(summary.change_7d, summary.change_7d_pct)}
-                positive={summary.change_7d >= 0}
-                icon={summary.change_7d >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-              />
-              <StatCard
-                label="Items"
-                value={String(summary.item_count)}
-                icon={<Package size={18} />}
-              />
+              <motion.div variants={fadeUp}>
+                <StatCard
+                  label="Total Value"
+                  value={formatPrice(summary.total_value)}
+                  icon={<DollarSign size={18} />}
+                />
+              </motion.div>
+              <motion.div variants={fadeUp}>
+                <StatCard
+                  label="24h Change"
+                  value={formatPriceChange(summary.change_24h, summary.change_24h_pct)}
+                  positive={summary.change_24h >= 0}
+                  icon={summary.change_24h >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                />
+              </motion.div>
+              <motion.div variants={fadeUp}>
+                <StatCard
+                  label="7d Change"
+                  value={formatPriceChange(summary.change_7d, summary.change_7d_pct)}
+                  positive={summary.change_7d >= 0}
+                  icon={summary.change_7d >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                />
+              </motion.div>
+              <motion.div variants={fadeUp}>
+                <StatCard
+                  label="Items"
+                  value={String(summary.item_count)}
+                  icon={<Package size={18} />}
+                />
+              </motion.div>
             </>
           ) : null}
-        </div>
+        </motion.div>
 
         {/* P&L Summary (premium) */}
         {pl && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatCard
-              label="Total Invested"
-              value={formatPrice(cents(pl.totalInvestedCents))}
-            />
-            <StatCard
-              label="Current Value"
-              value={formatPrice(cents(pl.totalCurrentValueCents))}
-            />
-            <StatCard
-              label="Profit / Loss"
-              value={formatPriceChange(cents(pl.totalProfitCents), pl.totalProfitPct)}
-              positive={pl.totalProfitCents >= 0}
-            />
-          </div>
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4"
+          >
+            <motion.div variants={fadeUp}>
+              <StatCard
+                label="Total Invested"
+                value={formatPrice(cents(pl.totalInvestedCents))}
+                icon={<Wallet size={18} />}
+              />
+            </motion.div>
+            <motion.div variants={fadeUp}>
+              <StatCard
+                label="Current Value"
+                value={formatPrice(cents(pl.totalCurrentValueCents))}
+                icon={<BarChart3 size={18} />}
+              />
+            </motion.div>
+            <motion.div variants={fadeUp}>
+              <StatCard
+                label="Profit / Loss"
+                value={formatPriceChange(cents(pl.totalProfitCents), pl.totalProfitPct)}
+                positive={pl.totalProfitCents >= 0}
+                icon={pl.totalProfitCents >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+              />
+            </motion.div>
+          </motion.div>
         )}
 
         {/* Premium upsell */}
         {!user?.is_premium && (
-          <div className="bg-surface rounded-xl border border-border p-6 text-center">
-            <Lock size={20} className="mx-auto mb-2 text-muted" />
-            <p className="text-sm text-muted">Upgrade to PRO for P&L analytics, item breakdown, and history charts</p>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative overflow-hidden glass rounded-2xl border border-primary/10 p-6 text-center"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5" />
+            <div className="relative">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
+                <Sparkles size={12} />
+                PRO Feature
+              </div>
+              <p className="text-sm text-muted mb-3">Unlock P&L analytics, per-item breakdown, and history charts</p>
+              <Link
+                href="/settings"
+                className="inline-flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25"
+              >
+                <Lock size={14} />
+                Upgrade to PRO
+              </Link>
+            </div>
+          </motion.div>
         )}
 
-        {/* Chart — from summary.history */}
-        <div className="bg-surface rounded-xl border border-border p-6">
-          <h2 className="text-lg font-semibold mb-4">Portfolio History</h2>
-          <div className="h-64">
+        {/* Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="glass rounded-2xl border border-border/50 p-4 lg:p-6"
+        >
+          <h2 className="text-lg font-bold mb-4">Portfolio History</h2>
+          <div className="h-64 lg:h-80">
             {history.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={history}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
+                      <stop offset="50%" stopColor="#8B5CF6" stopOpacity={0.05} />
                       <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(30,41,59,0.5)" vertical={false} />
                   <XAxis
                     dataKey="date"
                     stroke="#64748B"
-                    fontSize={12}
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
                     tickFormatter={(v: string) => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   />
-                  <YAxis stroke="#64748B" fontSize={12} />
+                  <YAxis
+                    stroke="#64748B"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `$${v}`}
+                  />
                   <Tooltip
-                    contentStyle={{ background: '#111827', border: '1px solid #1E293B', borderRadius: '8px', fontSize: '13px' }}
+                    contentStyle={{
+                      background: 'rgba(17,24,39,0.95)',
+                      border: '1px solid rgba(30,41,59,0.5)',
+                      borderRadius: '12px',
+                      fontSize: '13px',
+                      backdropFilter: 'blur(12px)',
+                      boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+                    }}
                     labelFormatter={(v) => new Date(String(v)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Value']}
                   />
-                  <Area type="monotone" dataKey="value" stroke="#8B5CF6" fill="url(#colorValue)" strokeWidth={2} />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#8B5CF6"
+                    fill="url(#colorValue)"
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 5, stroke: '#8B5CF6', strokeWidth: 2, fill: '#111827' }}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-muted text-sm">
-                No history data yet. Check back after a day of tracking.
+              <div className="flex flex-col items-center justify-center h-full text-muted">
+                <BarChart3 size={40} className="mb-3 opacity-30" />
+                <p className="text-sm">No history data yet</p>
+                <p className="text-xs mt-1">Check back after a day of tracking</p>
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Items P&L Table (premium) */}
         {itemsData?.items && itemsData.items.length > 0 && (
-          <div className="bg-surface rounded-xl border border-border overflow-hidden">
-            <div className="px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-semibold">Items P&L</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="glass rounded-2xl border border-border/50 overflow-hidden"
+          >
+            <div className="px-4 lg:px-6 py-4 border-b border-border/30">
+              <h2 className="text-lg font-bold">Items P&L</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-muted text-left border-b border-border">
-                    <th className="px-6 py-3 font-medium">Item</th>
+                  <tr className="text-muted text-left border-b border-border/30">
+                    <th className="px-4 lg:px-6 py-3 font-medium">Item</th>
                     <th className="px-4 py-3 font-medium text-right">Holding</th>
-                    <th className="px-4 py-3 font-medium text-right">Avg Cost</th>
-                    <th className="px-4 py-3 font-medium text-right">Current</th>
+                    <th className="px-4 py-3 font-medium text-right hidden sm:table-cell">Avg Cost</th>
+                    <th className="px-4 py-3 font-medium text-right hidden sm:table-cell">Current</th>
                     <th className="px-4 py-3 font-medium text-right">P&L</th>
                     <th className="px-4 py-3 font-medium text-right">P&L %</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {itemsData.items.map((item) => (
+                  {itemsData.items.map((item, i) => (
                     <motion.tr
                       key={item.marketHashName}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="border-b border-border/50 hover:bg-surface-light transition-colors"
+                      transition={{ delay: i * 0.03 }}
+                      className="border-b border-border/20 hover:bg-surface-light/30 transition-colors"
                     >
-                      <td className="px-6 py-3">
+                      <td className="px-4 lg:px-6 py-3">
                         <div className="flex items-center gap-3">
                           {item.iconUrl && (
                             <img
@@ -156,16 +247,16 @@ export default function PortfolioPage() {
                               className="w-8 h-8 object-contain"
                             />
                           )}
-                          <span className="truncate max-w-[200px]">{item.marketHashName}</span>
+                          <span className="truncate max-w-[180px] lg:max-w-[250px]">{item.marketHashName}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right">{item.currentHolding}</td>
-                      <td className="px-4 py-3 text-right">{formatPrice(cents(item.avgBuyPriceCents))}</td>
-                      <td className="px-4 py-3 text-right">{formatPrice(cents(item.currentPriceCents))}</td>
-                      <td className={`px-4 py-3 text-right font-medium ${item.totalProfitCents >= 0 ? 'text-profit' : 'text-loss'}`}>
+                      <td className="px-4 py-3 text-right font-medium">{item.currentHolding}</td>
+                      <td className="px-4 py-3 text-right text-muted hidden sm:table-cell">{formatPrice(cents(item.avgBuyPriceCents))}</td>
+                      <td className="px-4 py-3 text-right hidden sm:table-cell">{formatPrice(cents(item.currentPriceCents))}</td>
+                      <td className={`px-4 py-3 text-right font-semibold ${item.totalProfitCents >= 0 ? 'text-profit' : 'text-loss'}`}>
                         {item.totalProfitCents >= 0 ? '+' : ''}{formatPrice(cents(item.totalProfitCents))}
                       </td>
-                      <td className={`px-4 py-3 text-right ${item.profitPct >= 0 ? 'text-profit' : 'text-loss'}`}>
+                      <td className={`px-4 py-3 text-right font-medium ${item.profitPct >= 0 ? 'text-profit' : 'text-loss'}`}>
                         {item.profitPct >= 0 ? '+' : ''}{item.profitPct.toFixed(1)}%
                       </td>
                     </motion.tr>
@@ -173,7 +264,7 @@ export default function PortfolioPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

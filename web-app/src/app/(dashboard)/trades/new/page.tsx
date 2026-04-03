@@ -9,6 +9,7 @@ import { formatPrice, getItemIconUrl, cn } from '@/lib/utils';
 import { Search, Send, Users, ArrowLeftRight, ChevronLeft, Wifi, WifiOff } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 type Step = 'pick-partner' | 'select-items';
 
@@ -125,9 +126,12 @@ export default function NewTradePage() {
         itemsToReceive: Array.from(selectedReceive),
         message: message.trim() || undefined,
       });
+      toast.success('Trade offer sent!');
       router.push('/trades');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to send trade');
+      const msg = err instanceof Error ? err.message : 'Failed to send trade';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSending(false);
     }
@@ -148,7 +152,7 @@ export default function NewTradePage() {
               placeholder="Search friends..."
               value={friendSearch}
               onChange={(e) => setFriendSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-lg text-sm focus:outline-none focus:border-primary"
+              className="w-full pl-10 pr-4 py-2.5 glass rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all"
             />
           </div>
 
@@ -169,7 +173,7 @@ export default function NewTradePage() {
                       <button
                         key={acc.id}
                         onClick={() => selectPartner(acc.steam_id, acc.display_name, acc.avatar_url)}
-                        className="flex items-center gap-3 w-full px-4 py-3 bg-surface rounded-xl border border-border hover:border-primary/30 transition-colors"
+                        className="flex items-center gap-3 w-full px-4 py-3 glass rounded-xl hover:border-primary/20 transition-all"
                       >
                         {acc.avatar_url ? (
                           <img src={acc.avatar_url} alt="" className="w-10 h-10 rounded-full" />
@@ -235,7 +239,7 @@ export default function NewTradePage() {
       <Header title="New Trade" />
       <div className="p-6 space-y-4">
         {/* Partner bar */}
-        <div className="flex items-center gap-3 bg-surface rounded-xl border border-border px-4 py-3">
+        <div className="flex items-center gap-3 glass rounded-xl px-4 py-3">
           <button onClick={() => setStep('pick-partner')} className="text-muted hover:text-foreground transition-colors">
             <ChevronLeft size={20} />
           </button>
@@ -271,7 +275,7 @@ export default function NewTradePage() {
         </div>
 
         {/* Summary & send */}
-        <div className="bg-surface rounded-xl border border-border p-5">
+        <div className="glass rounded-2xl p-5">
           <div className="flex items-center gap-4 mb-4">
             <div className="text-center flex-1">
               <p className="text-xs text-muted mb-1">You give</p>
@@ -291,7 +295,7 @@ export default function NewTradePage() {
             placeholder="Message (optional)"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            className="w-full px-4 py-2 mb-4 bg-background border border-border rounded-lg text-sm focus:outline-none focus:border-primary"
+            className="w-full px-4 py-2.5 mb-4 glass rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all"
           />
 
           {error && <p className="text-sm text-loss mb-3">{error}</p>}
@@ -299,7 +303,7 @@ export default function NewTradePage() {
           <button
             onClick={handleSend}
             disabled={sending || (selectedGive.size === 0 && selectedReceive.size === 0)}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold transition-all hover:shadow-lg hover:shadow-primary/25 disabled:opacity-50 active:scale-[0.98]"
           >
             <Send size={16} />
             {sending ? 'Sending...' : 'Send Trade Offer'}
@@ -340,7 +344,7 @@ function ItemGrid({ title, search, onSearchChange, loading, items, selected, onT
   const hover = accent === 'primary' ? 'hover:border-primary/30' : 'hover:border-profit/30';
 
   return (
-    <div className="bg-surface rounded-xl border border-border overflow-hidden">
+    <div className="glass rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-border">
         <h3 className="text-sm font-semibold mb-2">{title}</h3>
         <div className="relative">
