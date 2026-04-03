@@ -1,4 +1,15 @@
 import { clsx, type ClassValue } from 'clsx';
+// Re-export shared utils so existing imports keep working
+export {
+  getWearName, getWearShort as getWearShortFromFloat, getFloatColor, formatFloat, isLowFloat,
+  getDopplerPhase, isDoppler, isFade, calculateFadePercent, analyzeMarbleFade, analyzeBlueGem,
+  analyzePrice, calculateVelocity, calcSellerReceives, calcBuyerPrice,
+  calculateStickerSP, formatSP,
+  validateSellPrice, suggestSellPrice, formatTradeLock,
+  formatPLPercent,
+} from '@skinkeeper/shared';
+export type { MultiPrice, PriceAnalysis, ArbitrageInfo, PhaseInfo, FadeInfo, BlueGemInfo } from '@skinkeeper/shared';
+import { WEAR_SHORT } from '@skinkeeper/shared';
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -52,14 +63,8 @@ export function getItemIconUrl(iconUrl: string | null | undefined): string | und
   return `https://community.akamai.steamstatic.com/economy/image/${iconUrl}/330x192`;
 }
 
+/** Get wear short from full name string — wrapper around shared WEAR_SHORT */
 export function getWearShort(wear: string | null): string | null {
   if (!wear) return null;
-  const map: Record<string, string> = {
-    'Factory New': 'FN',
-    'Minimal Wear': 'MW',
-    'Field-Tested': 'FT',
-    'Well-Worn': 'WW',
-    'Battle-Scarred': 'BS',
-  };
-  return map[wear] || wear;
+  return WEAR_SHORT[wear] || wear;
 }

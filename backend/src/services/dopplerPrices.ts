@@ -8,19 +8,20 @@
  */
 
 // Paint index → CSGOTrader phase name
+// Canonical source: packages/skinkeeper-shared/src/constants/index.ts (DOPPLER_PHASES)
 const PAINT_INDEX_TO_PHASE: Record<number, string> = {
+  415: "Ruby",
+  416: "Sapphire",
+  417: "Black Pearl",
   418: "Phase 1",
   419: "Phase 2",
   420: "Phase 3",
   421: "Phase 4",
-  415: "Ruby",
-  416: "Sapphire",
-  417: "Black Pearl",
-  568: "Phase 1",  // Gamma Doppler
-  569: "Phase 2",
-  570: "Phase 3",
-  571: "Phase 4",
-  618: "Emerald",
+  568: "Emerald",
+  569: "Gamma P1",
+  570: "Gamma P2",
+  571: "Gamma P3",
+  572: "Gamma P4",
 };
 
 /**
