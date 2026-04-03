@@ -8,7 +8,9 @@ import fs from "fs";
 
 const router = Router();
 
-// ─── Doppler Phase lookup table ──────────────────────────────────────
+// ─── Import canonical data from shared package ───────────────────────
+// Note: backend uses Node16 modules, so we use relative path to shared
+// In production, this would be a proper workspace dependency
 const DOPPLER_PHASES: Record<number, { phase: string; color: string; tier: number; multiplier: number }> = {
   415: { phase: 'Ruby', color: '#dc2626', tier: 1, multiplier: 8.0 },
   416: { phase: 'Sapphire', color: '#2563eb', tier: 1, multiplier: 10.0 },
@@ -24,20 +26,18 @@ const DOPPLER_PHASES: Record<number, { phase: string; color: string; tier: numbe
   572: { phase: 'Gamma P4', color: '#22d3ee', tier: 3, multiplier: 1.1 },
 };
 
+const MARKETPLACE_FEES: Record<string, number> = {
+  steam: 0.1304, buff: 0.025, csfloat: 0.02, skinport: 0.06, dmarket: 0.05, bitskins: 0.05,
+};
+
 router.get("/doppler-phases", (_req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "public, max-age=86400");
   res.json(DOPPLER_PHASES);
 });
 
-// ─── Marketplace fees ────────────────────────────────────────────────
 router.get("/marketplace-fees", (_req: Request, res: Response) => {
-  res.json({
-    steam: 0.1304,
-    buff: 0.025,
-    csfloat: 0.02,
-    skinport: 0.06,
-    dmarket: 0.05,
-    bitskins: 0.05,
-  });
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.json(MARKETPLACE_FEES);
 });
 
 // ─── Price analysis ──────────────────────────────────────────────────

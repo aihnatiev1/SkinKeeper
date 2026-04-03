@@ -1,25 +1,19 @@
+// Re-export shared constants — single source of truth
+import { WEAR_SHORT, CURRENCY_MAP, RARITY_ORDER, DOPPLER_PHASES, MARKETPLACE_FEES } from '@skinkeeper/shared';
+export { WEAR_SHORT, CURRENCY_MAP, RARITY_ORDER, DOPPLER_PHASES, MARKETPLACE_FEES };
+
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.skinkeeper.store';
 export const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
 
-export const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  UAH: '₴',
-  RUB: '₽',
-  CNY: '¥',
-  PLN: 'zł',
-  BRL: 'R$',
-  TRY: '₺',
-};
+// Build currency symbols from shared CURRENCY_MAP
+export const CURRENCY_SYMBOLS: Record<string, string> = Object.fromEntries(
+  Object.values(CURRENCY_MAP).map(([code, sign]) => [code, sign])
+);
+// Add extra currencies not in Steam map
+Object.assign(CURRENCY_SYMBOLS, { PLN: 'zł' });
 
-export const WEAR_LABELS: Record<string, string> = {
-  'Factory New': 'FN',
-  'Minimal Wear': 'MW',
-  'Field-Tested': 'FT',
-  'Well-Worn': 'WW',
-  'Battle-Scarred': 'BS',
-};
+// Wear labels — re-export from shared
+export const WEAR_LABELS = WEAR_SHORT;
 
 export const RARITY_COLORS: Record<string, string> = {
   'Consumer Grade': '#B0C3D9',

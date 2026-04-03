@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@skinkeeper/shared": ["../packages/skinkeeper-shared/src/index.ts"],
+      "@skinkeeper/shared/*": ["../packages/skinkeeper-shared/src/*"]
     }
   },
   "include": [
