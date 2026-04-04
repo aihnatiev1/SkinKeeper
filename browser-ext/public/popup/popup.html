@@ -90,6 +90,35 @@
     .quick-link:hover { background: rgba(99,102,241,0.1); }
     .quick-link-icon { font-size: 14px; }
 
+    .ecosystem {
+      padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .ecosystem-title {
+      font-size: 10px; font-weight: 700; color: #64748b;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+    .eco-links { display: flex; flex-direction: column; gap: 6px; }
+    .eco-link {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 8px;
+      background: rgba(99,102,241,0.06);
+      border: 1px solid rgba(99,102,241,0.1);
+      text-decoration: none; color: #e2e8f0;
+      transition: background 0.2s;
+    }
+    .eco-link:hover { background: rgba(99,102,241,0.12); }
+    .eco-icon { font-size: 14px; flex-shrink: 0; }
+    .eco-text { flex: 1; min-width: 0; }
+    .eco-name { font-size: 11px; font-weight: 600; }
+    .eco-desc { font-size: 9px; color: #64748b; }
+    .eco-badges { display: flex; gap: 4px; flex-shrink: 0; }
+    .eco-badge {
+      font-size: 9px; color: #818cf8; background: rgba(99,102,241,0.1);
+      padding: 1px 5px; border-radius: 3px; text-decoration: none;
+      font-weight: 600;
+    }
+    .eco-badge:hover { background: rgba(99,102,241,0.2); }
+
     .footer {
       padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.05);
       display: flex; justify-content: space-between; align-items: center;
@@ -165,6 +194,33 @@
       <div class="toggle-row">
         <span class="toggle-label">SFW Mode (hide avatars)</span>
         <button class="toggle" id="toggle-nsfw"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ecosystem">
+    <div class="ecosystem-title">SkinKeeper Ecosystem</div>
+    <div class="eco-links">
+      <div class="eco-link">
+        <span class="eco-icon">&#128241;</span>
+        <div class="eco-text">
+          <div class="eco-name">Mobile App</div>
+          <div class="eco-desc">Track your inventory on the go</div>
+        </div>
+        <div class="eco-badges">
+          <a class="eco-badge" href="https://apps.apple.com/app/skinkeeper/id6738029498" target="_blank">iOS</a>
+          <a class="eco-badge" href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank">Android</a>
+        </div>
+      </div>
+      <div class="eco-link">
+        <span class="eco-icon">&#128187;</span>
+        <div class="eco-text">
+          <div class="eco-name">Desktop App</div>
+          <div class="eco-desc">Advanced trading & storage management</div>
+        </div>
+        <div class="eco-badges">
+          <a class="eco-badge" href="https://skinkeeper.store/download" target="_blank">Download</a>
+        </div>
       </div>
     </div>
   </div>

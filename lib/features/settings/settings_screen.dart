@@ -213,6 +213,61 @@ class SettingsScreen extends ConsumerWidget {
           ).animate().fadeIn(duration: 300.ms, delay: 200.ms).slideY(begin: 0.05, end: 0),
           const SizedBox(height: 16),
 
+          // SkinKeeper Ecosystem
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: AppTheme.glass(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Text(
+                    'SkinKeeper Ecosystem',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.extension, color: AppTheme.accent),
+                  title: const Text('Browser Extension'),
+                  subtitle: const Text(
+                    'Enhance Steam with price overlays & quick sell',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
+                  onTap: () => launchUrl(Uri.parse('https://chromewebstore.google.com/detail/skinkeeper/placeholder')),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.desktop_windows, color: AppTheme.accent),
+                  title: const Text('Desktop App'),
+                  subtitle: const Text(
+                    'Advanced trading & storage unit management',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
+                  onTap: () => launchUrl(Uri.parse('https://skinkeeper.store/download')),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.language, color: AppTheme.accent),
+                  title: const Text('Web Dashboard'),
+                  subtitle: const Text(
+                    'Full analytics & portfolio tracking',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
+                  onTap: () => launchUrl(Uri.parse('https://app.skinkeeper.store')),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(duration: 300.ms, delay: 220.ms).slideY(begin: 0.05, end: 0),
+          const SizedBox(height: 16),
+
           // Legal
           Container(
             clipBehavior: Clip.antiAlias,
@@ -238,7 +293,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          ).animate().fadeIn(duration: 300.ms, delay: 250.ms).slideY(begin: 0.05, end: 0),
+          ).animate().fadeIn(duration: 300.ms, delay: 270.ms).slideY(begin: 0.05, end: 0),
           const SizedBox(height: 16),
 
           // Sign Out
@@ -252,7 +307,7 @@ class SettingsScreen extends ConsumerWidget {
                 ref.read(authStateProvider.notifier).logout();
               },
             ),
-          ).animate().fadeIn(duration: 300.ms, delay: 300.ms).slideY(begin: 0.05, end: 0),
+          ).animate().fadeIn(duration: 300.ms, delay: 320.ms).slideY(begin: 0.05, end: 0),
 
           // Delete Account
           const SizedBox(height: 24),
@@ -271,7 +326,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
               onTap: () => _showDeleteConfirmation(context, ref),
             ),
-          ).animate().fadeIn(duration: 300.ms, delay: 350.ms).slideY(begin: 0.05, end: 0),
+          ).animate().fadeIn(duration: 300.ms, delay: 370.ms).slideY(begin: 0.05, end: 0),
           ],
         ),
       ),

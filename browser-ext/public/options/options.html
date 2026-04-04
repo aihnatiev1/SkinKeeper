@@ -96,6 +96,32 @@
       font-size: 11px; color: #fbbf24; margin-top: 8px;
     }
 
+    .eco-section {
+      margin-bottom: 24px; padding: 20px;
+      border-radius: 14px; background: rgba(99,102,241,0.04);
+      border: 1px solid rgba(99,102,241,0.1);
+    }
+    .eco-grid { display: flex; gap: 12px; }
+    .eco-card {
+      flex: 1; padding: 14px; border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .eco-card-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .eco-card-icon { font-size: 18px; }
+    .eco-card-name { font-size: 14px; font-weight: 700; }
+    .eco-card-desc { font-size: 12px; color: #94a3b8; margin-bottom: 10px; }
+    .eco-card-links { display: flex; gap: 6px; }
+    .eco-card-link {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      color: #818cf8; background: rgba(99,102,241,0.1);
+      padding: 4px 10px; border-radius: 6px; text-decoration: none;
+      transition: background 0.2s;
+    }
+    .eco-card-link:hover { background: rgba(99,102,241,0.2); }
+
     .footer {
       margin-top: 32px; padding-top: 16px;
       border-top: 1px solid rgba(255,255,255,0.05);
@@ -281,6 +307,34 @@
   <div class="section" id="conflicts-section" style="display:none">
     <div class="section-title"><span class="icon">⚠️</span> Detected Extensions</div>
     <div id="conflicts-list"></div>
+  </div>
+
+  <!-- Ecosystem -->
+  <div class="eco-section">
+    <div class="section-title"><span class="icon">&#127760;</span> SkinKeeper Ecosystem</div>
+    <div class="eco-grid">
+      <div class="eco-card">
+        <div class="eco-card-header">
+          <span class="eco-card-icon">&#128241;</span>
+          <span class="eco-card-name">Mobile App</span>
+        </div>
+        <div class="eco-card-desc">Track your inventory on the go</div>
+        <div class="eco-card-links">
+          <a class="eco-card-link" href="https://apps.apple.com/app/skinkeeper/id6738029498" target="_blank">App Store</a>
+          <a class="eco-card-link" href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank">Google Play</a>
+        </div>
+      </div>
+      <div class="eco-card">
+        <div class="eco-card-header">
+          <span class="eco-card-icon">&#128187;</span>
+          <span class="eco-card-name">Desktop App</span>
+        </div>
+        <div class="eco-card-desc">Advanced trading & storage management</div>
+        <div class="eco-card-links">
+          <a class="eco-card-link" href="https://skinkeeper.store/download" target="_blank">Download</a>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="footer">

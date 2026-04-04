@@ -17,6 +17,8 @@ import {
   Check,
   ArrowRight,
   Sparkles,
+  Monitor,
+  Puzzle,
 } from 'lucide-react';
 
 export default async function LandingPage() {
@@ -33,7 +35,7 @@ export default async function LandingPage() {
         url: 'https://skinkeeper.store',
         description: 'CS2 inventory manager with real-time portfolio tracking, P&L analytics, instant trades, price alerts, and Steam Market selling.',
         applicationCategory: 'GameApplication',
-        operatingSystem: 'iOS, Android, Web',
+        operatingSystem: 'iOS, Android, Web, Chrome Extension, Windows, macOS',
         offers: [
           { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free' },
           { '@type': 'Offer', price: '4.99', priceCurrency: 'USD', name: 'Pro Monthly' },
@@ -72,8 +74,13 @@ export default async function LandingPage() {
           },
           {
             '@type': 'Question',
-            name: 'Is the mobile app free?',
-            acceptedAnswer: { '@type': 'Answer', text: 'Yes, the core app is completely free on iOS and Android. Pro features are available via in-app subscription.' },
+            name: 'Is the app free?',
+            acceptedAnswer: { '@type': 'Answer', text: 'Yes, the core app is completely free on iOS, Android, Web, and Desktop. The Chrome Extension is also free. Pro features are available via subscription.' },
+          },
+          {
+            '@type': 'Question',
+            name: 'What does the Chrome Extension do?',
+            acceptedAnswer: { '@type': 'Answer', text: 'The SkinKeeper Chrome Extension enhances Steam directly in your browser. See real market prices, float values, and quick-trade buttons right on Steam inventory and market pages.' },
           },
           {
             '@type': 'Question',
@@ -144,7 +151,7 @@ export default async function LandingPage() {
           {/* Subtitle */}
           <p className="text-lg lg:text-xl text-muted max-w-2xl mx-auto mb-10 leading-relaxed">
             Real-time portfolio tracking, P&L analytics, instant trades between accounts,
-            price alerts, and Steam Market selling — all in one powerful platform.
+            price alerts, and Steam Market selling — on mobile, desktop, web, and as a browser extension.
           </p>
 
           {/* CTA */}
@@ -295,9 +302,21 @@ export default async function LandingPage() {
             },
             {
               icon: <Smartphone size={24} />,
-              title: 'Mobile + Web',
-              desc: 'Available on iOS, Android, and Web. Your data syncs across all platforms in real-time.',
+              title: 'Every Platform',
+              desc: 'Available on iOS, Android, Web, Desktop, and as a Chrome Extension. Your data syncs everywhere in real-time.',
               gradient: 'from-warning/10 to-transparent',
+            },
+            {
+              icon: <Puzzle size={24} />,
+              title: 'Chrome Extension',
+              desc: 'Enhance Steam directly in your browser. See real prices, float values, and quick-trade buttons right on Steam pages.',
+              gradient: 'from-primary/10 to-transparent',
+            },
+            {
+              icon: <Monitor size={24} />,
+              title: 'Desktop App',
+              desc: 'Native desktop experience for Windows and macOS. Full-featured portfolio management without opening a browser.',
+              gradient: 'from-accent/10 to-transparent',
             },
           ].map((f) => (
             <div
@@ -453,8 +472,12 @@ export default async function LandingPage() {
               a: 'Yes! Link as many Steam accounts as you want and switch between them instantly. See combined portfolio values or filter by account.',
             },
             {
-              q: 'Is the mobile app free?',
-              a: 'Yes, the core app is completely free on iOS and Android. Pro features are available via in-app subscription.',
+              q: 'Is the app free?',
+              a: 'Yes, the core app is completely free on iOS, Android, Web, and Desktop. The Chrome Extension is also free. Pro features are available via subscription.',
+            },
+            {
+              q: 'What does the Chrome Extension do?',
+              a: 'The SkinKeeper Chrome Extension enhances Steam directly in your browser. See real market prices, float values, and quick-trade buttons right on Steam inventory and market pages.',
             },
             {
               q: 'How does selling on Steam Market work?',
@@ -495,7 +518,7 @@ export default async function LandingPage() {
             </Link>
           </div>
           {/* App Store badges */}
-          <div className="flex items-center justify-center gap-4 mt-8">
+          <div className="flex flex-wrap items-center justify-center gap-4 mt-8">
             <a
               href="https://apps.apple.com/app/skinkeeper/id6738029498"
               target="_blank"
@@ -513,6 +536,22 @@ export default async function LandingPage() {
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.18 23.72c-.36-.18-.64-.46-.82-.82l-.02-.04C2.12 22.42 2 21.88 2 21.28V2.72c0-.6.12-1.14.34-1.58l9.92 9.92-9.08 12.66zm.74-22.38c.24-.22.56-.34.92-.34h.04c.24 0 .52.08.82.24L17.6 7.7 14.06 11.24 3.92 1.34zM21.54 10.88c.56.32.88.8.88 1.36 0 .56-.36 1.08-.88 1.36l-2.74 1.56-3.84-3.84 3.84-3.84 2.74 1.4zM17.6 16.3L5.7 22.76c-.3.16-.58.24-.82.24-.36 0-.68-.12-.92-.34L14.06 12.76 17.6 16.3z" /></svg>
               Google Play
+            </a>
+            <a
+              href="https://chromewebstore.google.com/detail/skinkeeper/placeholder"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-sm font-medium hover:bg-surface-light transition-colors"
+            >
+              <Puzzle size={20} />
+              Chrome Extension
+            </a>
+            <a
+              href="https://skinkeeper.store/download"
+              className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-sm font-medium hover:bg-surface-light transition-colors"
+            >
+              <Monitor size={20} />
+              Desktop App
             </a>
           </div>
         </div>
@@ -546,6 +585,8 @@ export default async function LandingPage() {
               <ul className="space-y-2 text-sm text-muted">
                 <li><a href="https://apps.apple.com/app/skinkeeper/id6738029498" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">iOS App</a></li>
                 <li><a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Android App</a></li>
+                <li><a href="https://chromewebstore.google.com/detail/skinkeeper/placeholder" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Chrome Extension</a></li>
+                <li><a href="https://skinkeeper.store/download" className="hover:text-foreground transition-colors">Desktop App</a></li>
               </ul>
             </div>
             <div>
