@@ -12,6 +12,7 @@ import { Search, RefreshCw, Grid3X3, List, SlidersHorizontal, Loader2, Package }
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { EcosystemTip } from '@/components/ecosystem-tip';
 
 type SortOption = 'price-desc' | 'price-asc' | 'name' | 'rarity';
 type ViewMode = 'grid' | 'list';
@@ -74,6 +75,13 @@ export default function InventoryPage() {
       <Header title="Inventory" />
       <CurrencyBanner />
       <div className="p-4 lg:p-6 space-y-4">
+        <EcosystemTip
+          id="inventory-extension"
+          icon="\ud83e\udde9"
+          message="Quick sell & price overlay on Steam — get the browser extension"
+          ctaText="Get Extension"
+          ctaUrl="https://chromewebstore.google.com/detail/skinkeeper/placeholder"
+        />
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[180px] max-w-md">

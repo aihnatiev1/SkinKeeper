@@ -17,6 +17,7 @@ import '../../core/router.dart';
 import '../onboarding/onboarding_screen.dart';
 import '../auth/widgets/session_status_widget.dart';
 import '../auth/session_provider.dart';
+import '../../widgets/ecosystem_banner.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -135,6 +136,10 @@ class SettingsScreen extends ConsumerWidget {
 
           // Notifications group: Price Alerts + Push Preferences
           _PushPrefsSection(),
+          const SizedBox(height: 16),
+
+          // Cross-promotion: Browser Extension
+          const _ExtensionBanner(),
           const SizedBox(height: 16),
 
           // Appearance & Preferences
@@ -559,6 +564,29 @@ class _PushPrefsSection extends ConsumerWidget {
         ],
       ),
     ).animate().fadeIn(duration: 300.ms, delay: 120.ms).slideY(begin: 0.05, end: 0);
+  }
+}
+
+class _ExtensionBanner extends StatefulWidget {
+  const _ExtensionBanner();
+
+  @override
+  State<_ExtensionBanner> createState() => _ExtensionBannerState();
+}
+
+class _ExtensionBannerState extends State<_ExtensionBanner> {
+  bool _dismissed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+    return EcosystemBanner(
+      icon: '\u{1F9E9}',
+      message: 'Overlay prices directly on Steam',
+      cta: 'Get Extension',
+      url: 'https://chromewebstore.google.com/detail/skinkeeper/placeholder',
+      onDismiss: () => setState(() => _dismissed = true),
+    ).animate().fadeIn(duration: 300.ms, delay: 135.ms).slideY(begin: 0.05, end: 0);
   }
 }
 

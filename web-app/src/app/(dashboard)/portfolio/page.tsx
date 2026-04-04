@@ -11,6 +11,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { EcosystemTip } from '@/components/ecosystem-tip';
 
 function cents(v: number) { return v / 100; }
 
@@ -35,6 +36,13 @@ export default function PortfolioPage() {
     <div>
       <Header title="Portfolio" />
       <div className="p-4 lg:p-6 space-y-6">
+        <EcosystemTip
+          id="portfolio-mobile-app"
+          icon="\ud83d\udcf1"
+          message="Track your portfolio on the go — download the SkinKeeper app"
+          ctaText="App Store"
+          ctaUrl="https://apps.apple.com/us/app/skinkeeper/id6760600231"
+        />
         {/* Stats grid */}
         <motion.div
           variants={container}

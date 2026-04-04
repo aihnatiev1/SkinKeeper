@@ -1442,7 +1442,7 @@ function enhanceDetail(panel: HTMLElement) {
   }
   section.appendChild(actions);
 
-  // ── Smart CTAs to web/desktop app ──
+  // ── Smart CTAs — contextual cross-promotion ──
   const ctaDiv = el('div', 'sk-powered');
   ctaDiv.style.cssText = 'display:flex;flex-direction:column;gap:2px;margin-top:4px';
   if (pl && pl.avgBuyCents > 0) {
@@ -1460,6 +1460,19 @@ function enhanceDetail(panel: HTMLElement) {
     const suCta = el('div', 'sk-powered');
     suCta.innerHTML = '📦 <a href="https://app.skinkeeper.store/storage-units" target="_blank" style="color:var(--sk-primary-light)">Browse storage contents in Desktop App →</a>';
     ctaDiv.appendChild(suCta);
+  }
+  // Expensive items ($50+): promote mobile app for price alerts
+  const priceUsd = steamPrice ? steamPrice / exchangeRate : 0;
+  if (priceUsd > 50) {
+    const appCta = el('div', 'sk-powered');
+    appCta.innerHTML = '📈 <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" style="color:var(--sk-text-dim);transition:color 0.2s" onmouseover="this.style.color=\'var(--sk-primary-light)\'" onmouseout="this.style.color=\'var(--sk-text-dim)\'">Track price history & set alerts → SkinKeeper App</a>';
+    ctaDiv.appendChild(appCta);
+  }
+  // All priced items: promote web dashboard
+  if (steamPrice) {
+    const webCta = el('div', 'sk-powered');
+    webCta.innerHTML = '📊 <a href="https://app.skinkeeper.store/portfolio" target="_blank" style="color:var(--sk-text-dim);transition:color 0.2s" onmouseover="this.style.color=\'var(--sk-primary-light)\'" onmouseout="this.style.color=\'var(--sk-text-dim)\'">Full P&L analytics & portfolio → skinkeeper.store</a>';
+    ctaDiv.appendChild(webCta);
   }
   section.appendChild(ctaDiv);
 
