@@ -7,6 +7,8 @@ import {
   LayoutDashboard,
   Backpack,
   ArrowLeftRight,
+  ArrowUpDown,
+  BarChart3,
   History,
   Bell,
   Settings,
@@ -25,7 +27,7 @@ import { useEffect } from 'react';
 import { useIsDesktop } from '@/lib/use-desktop';
 import { useSteamStatus } from '@/lib/use-desktop';
 
-const NAV_ITEMS = [
+const WEB_NAV_ITEMS = [
   { href: '/portfolio', label: 'Portfolio', icon: LayoutDashboard },
   { href: '/inventory', label: 'Inventory', icon: Backpack },
   { href: '/trades', label: 'Trades', icon: ArrowLeftRight },
@@ -35,9 +37,12 @@ const NAV_ITEMS = [
 ];
 
 const DESKTOP_NAV_ITEMS = [
-  { href: '/storage-units', label: 'Storage Units', icon: Package },
-  { href: '/trade-ups', label: 'Trade Ups', icon: Shuffle },
-  { href: '/loadout', label: 'Loadout', icon: Gamepad2 },
+  { href: '/overview', label: 'Overview', icon: BarChart3 },
+  { href: '/inventory', label: 'Items', icon: Backpack },
+  { href: '/transfer', label: 'Transfer', icon: ArrowUpDown },
+  { href: '/trades', label: 'Trades', icon: ArrowLeftRight },
+  { href: '/trade-ups', label: 'Trade Up', icon: Shuffle },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -81,7 +86,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {(desktop ? DESKTOP_NAV_ITEMS : WEB_NAV_ITEMS).map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (
             <Link
@@ -119,63 +124,20 @@ export function Sidebar() {
             </Link>
           );
         })}
-
-        {/* Desktop-only: Steam features */}
-        {desktop && (
-          <>
-            <div className="pt-3 pb-1 px-3">
-              {(sidebarOpen || mobileOpen) && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-muted font-semibold">Steam</span>
-                  <span className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    steamStatus.loggedIn ? 'bg-green-500' : 'bg-red-500'
-                  )} />
-                </div>
-              )}
-            </div>
-            {DESKTOP_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-              const active = pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all relative group',
-                    active
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted hover:text-foreground hover:bg-surface-light',
-                    !steamStatus.loggedIn && 'opacity-50 pointer-events-none'
-                  )}
-                >
-                  {active && (
-                    <motion.div
-                      layoutId="nav-desktop-active"
-                      className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-primary rounded-full"
-                      transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
-                    />
-                  )}
-                  <Icon size={20} className={cn('shrink-0 transition-transform', active && 'scale-110')} />
-                  {(sidebarOpen || mobileOpen) && (
-                    <motion.span
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-sm font-medium whitespace-nowrap"
-                    >
-                      {label}
-                    </motion.span>
-                  )}
-                  {!sidebarOpen && !mobileOpen && (
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-surface border border-border rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
-                      {label}
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-          </>
-        )}
       </nav>
+
+      {/* Steam status — desktop only */}
+      {desktop && (sidebarOpen || mobileOpen) && (
+        <div className="px-4 pb-1">
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <span className={cn(
+              'w-1.5 h-1.5 rounded-full',
+              steamStatus.loggedIn ? 'bg-green-500' : 'bg-red-500'
+            )} />
+            <span>{steamStatus.loggedIn ? `Steam: ${steamStatus.personaName || 'Connected'}` : 'Steam: Disconnected'}</span>
+          </div>
+        </div>
+      )}
 
       {/* User card */}
       {user && (sidebarOpen || mobileOpen) && (

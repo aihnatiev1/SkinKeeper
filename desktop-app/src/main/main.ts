@@ -4,6 +4,7 @@ import * as path from 'path';
 import { SteamClient } from './steam/client';
 import { registerSteamIPC } from './steam/ipc';
 import { registerAuthIPC } from './auth/ipc';
+import { registerAutomationIPC } from './automation/ipc';
 
 const isDev = !app.isPackaged;
 const RENDERER_DEV_URL = 'http://localhost:3001';
@@ -55,6 +56,8 @@ async function startProductionServer() {
 }
 
 function createWindow() {
+  const preloadPath = path.join(__dirname, 'preload.js');
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -65,7 +68,7 @@ function createWindow() {
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#0a0a0a',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -203,6 +206,7 @@ if (!gotTheLock) {
     registerGlobalIPC();
     registerSteamIPC(steamClient);
     registerAuthIPC();
+    registerAutomationIPC(steamClient);
 
     // Start production renderer server if needed
     await startProductionServer();

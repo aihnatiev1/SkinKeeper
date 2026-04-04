@@ -16,6 +16,7 @@ export function registerSteamIPC(steam: SteamClient) {
   steam.on('guard-required', (data) => broadcast('steam:guard-required', { type: data.type }));
   steam.on('qr-code', (url) => broadcast('steam:qr-code', url));
   steam.on('error', (error) => broadcast('steam:error', error));
+  steam.on('transfer-progress', (data) => broadcast('steam:transfer-progress', data));
 
   // Keep reference to pending guard session
   let pendingGuardSession: any = null;
@@ -68,7 +69,7 @@ export function registerSteamIPC(steam: SteamClient) {
   });
 
   ipcMain.handle('steam:inventory-refresh', async () => {
-    return steam.getInventory();
+    return steam.refreshInventory();
   });
 
   // --- Storage unit handlers ---
@@ -87,6 +88,10 @@ export function registerSteamIPC(steam: SteamClient) {
 
   ipcMain.handle('steam:move-from-storage', async (_event, itemIds: string[], casketId: string) => {
     return steam.moveFromStorageUnit(itemIds, casketId);
+  });
+
+  ipcMain.handle('steam:move-between-storage', async (_event, itemIds: string[], sourceCasketId: string, targetCasketId: string) => {
+    return steam.moveBetweenStorageUnits(itemIds, sourceCasketId, targetCasketId);
   });
 
   // --- Item operation handlers ---

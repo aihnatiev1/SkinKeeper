@@ -91,7 +91,11 @@ const authLimiter = rateLimit({
   message: { error: "Too many login attempts, try again later" },
 });
 app.use("/api", globalLimiter);
-app.use("/api/auth/steam", authLimiter);
+app.use("/api/auth/steam", (req, res, next) => {
+  // Poll endpoint is not an auth attempt — skip auth rate limiter
+  if (req.path.startsWith("/poll/")) return next();
+  return authLimiter(req, res, next);
+});
 app.use("/api/auth/token", authLimiter);
 app.use("/api/auth/qr", authLimiter);
 

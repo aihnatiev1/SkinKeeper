@@ -25,7 +25,7 @@ export default function TradeUpsPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !desktop) {
+    if (desktop === false) {
       router.replace('/portfolio');
     }
   }, [desktop, router]);

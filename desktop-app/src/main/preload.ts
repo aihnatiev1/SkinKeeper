@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('skinkeeper', {
       ipcRenderer.invoke('steam:move-to-storage', itemIds, casketId),
     moveFromStorageUnit: (itemIds: string[], casketId: string) =>
       ipcRenderer.invoke('steam:move-from-storage', itemIds, casketId),
+    moveBetweenStorageUnits: (itemIds: string[], sourceCasketId: string, targetCasketId: string) =>
+      ipcRenderer.invoke('steam:move-between-storage', itemIds, sourceCasketId, targetCasketId),
 
     // Item operations
     renameItem: (itemId: string, name: string) =>
@@ -57,6 +59,16 @@ contextBridge.exposeInMainWorld('skinkeeper', {
       ipcRenderer.invoke('steam:cancel-trade', offerId),
   },
 
+  // Automation rules
+  automation: {
+    getRules: () => ipcRenderer.invoke('automation:get-rules'),
+    saveRule: (rule: any) => ipcRenderer.invoke('automation:save-rule', rule),
+    deleteRule: (id: string) => ipcRenderer.invoke('automation:delete-rule', id),
+    previewRule: (rule: any) => ipcRenderer.invoke('automation:preview-rule', rule),
+    runRule: (ruleId: string) => ipcRenderer.invoke('automation:run-rule', ruleId),
+    runAll: () => ipcRenderer.invoke('automation:run-all'),
+  },
+
   // Auto-updater
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),
@@ -73,6 +85,7 @@ contextBridge.exposeInMainWorld('skinkeeper', {
       'steam:guard-required',
       'steam:qr-code',
       'steam:error',
+      'steam:transfer-progress',
       'updater:update-available',
       'updater:update-downloaded',
       'updater:error',

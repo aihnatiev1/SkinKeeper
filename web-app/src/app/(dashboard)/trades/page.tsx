@@ -101,7 +101,7 @@ export default function TradesPage() {
               const recv = recvItems(trade);
               return (
                 <motion.div
-                  key={trade.id}
+                  key={`${trade.id}-${i}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}

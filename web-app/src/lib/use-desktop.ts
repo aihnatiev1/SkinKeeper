@@ -4,8 +4,8 @@ import { isDesktop, getDesktopAPI, type SteamDesktopStatus } from './desktop';
 /**
  * Hook to check if running in desktop mode.
  */
-export function useIsDesktop(): boolean {
-  const [desktop, setDesktop] = useState(false);
+export function useIsDesktop(): boolean | null {
+  const [desktop, setDesktop] = useState<boolean | null>(null);
   useEffect(() => {
     setDesktop(isDesktop());
   }, []);
@@ -124,22 +124,28 @@ export function useSteamLogin() {
 export function useDesktopInventory() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const api = getDesktopAPI();
 
   const refresh = useCallback(async () => {
     if (!api) return;
     setLoading(true);
+    setError(null);
     try {
       const inv = await api.steam.refreshInventory();
-      setItems(inv);
-    } catch (err) {
-      // Silently fail — web-app has its own inventory source
+      setItems(inv || []);
+    } catch (err: any) {
+      console.error('[Desktop Inventory]', err);
+      setError(err?.message || 'Failed to load inventory');
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     if (!api) return;
+
+    // Initial fetch
+    refresh();
 
     const unsub = api.on('steam:inventory-updated', () => {
       refresh();
@@ -148,7 +154,7 @@ export function useDesktopInventory() {
     return unsub;
   }, [refresh]);
 
-  return { items, loading, refresh, isDesktop: !!api };
+  return { items, loading, error, refresh, isDesktop: !!api };
 }
 
 /**
@@ -186,5 +192,10 @@ export function useStorageUnits() {
     return api.steam.moveFromStorageUnit(itemIds, casketId);
   }, []);
 
-  return { units, loading, fetchUnits, getContents, moveToUnit, moveFromUnit, isDesktop: !!api };
+  const moveBetweenUnits = useCallback(async (itemIds: string[], sourceCasketId: string, targetCasketId: string) => {
+    if (!api) return { success: false, moved: 0 };
+    return api.steam.moveBetweenStorageUnits(itemIds, sourceCasketId, targetCasketId);
+  }, []);
+
+  return { units, loading, fetchUnits, getContents, moveToUnit, moveFromUnit, moveBetweenUnits, isDesktop: !!api };
 }

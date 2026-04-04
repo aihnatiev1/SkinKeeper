@@ -5,6 +5,7 @@ import SteamCommunity from 'steamcommunity';
 import TradeOfferManager from 'steam-tradeoffer-manager';
 import GlobalOffensive from 'globaloffensive';
 import { EventEmitter } from 'events';
+import { loadItemData, resolveItemName, resolveItemIcon } from './itemNames';
 
 export interface SteamStatus {
   loggedIn: boolean;
@@ -44,6 +45,9 @@ export class SteamClient extends EventEmitter {
   private _personaName: string | null = null;
   private _wallet: { currency: string; balance: number } | null = null;
   private _inventory: InventoryItem[] = [];
+  private _gcInventory: any[] = []; // Raw GC items with def_index for storage unit ops
+  private _descCache = new Map<string, any>(); // classid → Steam description (name, icon_url, etc.)
+  private _apiKey: string | null = null;
   private _refreshToken: string | null = null;
   private gcReady = false;
   private gcReadyPromise: Promise<void> | null = null;
@@ -106,6 +110,10 @@ export class SteamClient extends EventEmitter {
     this.user.on('webSession', (_sessionId: string, cookies: string[]) => {
       this.community.setCookies(cookies);
       this.tradeManager.setCookies(cookies);
+      // Extract API key
+      if ((this.user as any).webApiKey) {
+        this._apiKey = (this.user as any).webApiKey;
+      }
     });
 
     // Trade offer events
@@ -134,33 +142,91 @@ export class SteamClient extends EventEmitter {
     });
 
     // CS2 Game Coordinator events
-    this.csgo.on('connectedToGC', () => {
+    this.csgo.on('connectedToGC', async () => {
+      // Load item name data FIRST, before mapping inventory
+      await loadItemData();
+
       this.gcReady = true;
+
+      // GC populates csgo.inventory automatically — cache it
+      if (this.csgo.inventory && this.csgo.inventory.length > 0) {
+        this._gcInventory = this.csgo.inventory;
+        this._inventory = this.csgo.inventory.map((item: any) => ({
+          id: String(item.id),
+          classid: String(item.classid || ''),
+          instanceid: String(item.instanceid || ''),
+          name: resolveItemName(item.def_index, item.paint_index, item.custom_name),
+          market_hash_name: item.market_hash_name || resolveItemName(item.def_index, item.paint_index),
+          icon_url: item.icon_url || '',
+          tradable: item.tradable !== false,
+          marketable: item.marketable !== false,
+          type: item.type || '',
+          rarity: item.rarity?.name || '',
+          quality: item.quality?.name || '',
+          def_index: item.def_index,
+          casket_id: item.casket_id || null,
+          paint_wear: item.paint_wear,
+          paint_seed: item.paint_seed,
+          casket_contained_item_count: item.casket_contained_item_count,
+        }));
+        console.log(`[Inventory] GC loaded ${this._inventory.length} items`);
+      }
+
       if (this.gcReadyResolve) {
         this.gcReadyResolve();
         this.gcReadyResolve = null;
       }
       this.emit('gc-ready');
+      this.emit('inventory-updated');
     });
 
     this.csgo.on('disconnectedFromGC', (_reason: number) => {
       this.gcReady = false;
     });
 
-    this.csgo.on('itemAcquired', (item: any) => {
-      this.emit('item-acquired', item);
+    this.csgo.on('itemAcquired', (_item: any) => {
+      this._syncGCInventory();
       this.emit('inventory-updated');
     });
 
-    this.csgo.on('itemRemoved', (item: any) => {
-      this.emit('item-removed', item);
+    this.csgo.on('itemRemoved', (_item: any) => {
+      this._syncGCInventory();
       this.emit('inventory-updated');
     });
 
-    this.csgo.on('itemChanged', (oldItem: any, newItem: any) => {
-      this.emit('item-changed', oldItem, newItem);
+    this.csgo.on('itemChanged', (_oldItem: any, _newItem: any) => {
+      this._syncGCInventory();
       this.emit('inventory-updated');
     });
+  }
+
+  private _syncGCInventory() {
+    if (!this.csgo.inventory) return;
+    this._gcInventory = this.csgo.inventory;
+    // Rebuild _inventory from GC, enriching with existing HTTP data
+    // Exclude items inside caskets AND storage units themselves
+    const httpMap = new Map<string, InventoryItem>();
+    for (const item of this._inventory) {
+      httpMap.set(item.id, item);
+    }
+    this._inventory = this.csgo.inventory
+      .filter((item: any) => !item.casket_id && item.def_index !== 1201)
+      .map((item: any) => {
+        const http = httpMap.get(String(item.id));
+        return http || {
+          id: String(item.id),
+          classid: String(item.classid || ''),
+          instanceid: String(item.instanceid || ''),
+          name: resolveItemName(item.def_index, item.paint_index, item.custom_name),
+          market_hash_name: item.market_hash_name || '',
+          icon_url: '',
+          tradable: item.tradable !== false,
+          marketable: item.marketable !== false,
+          type: '',
+          rarity: '',
+          quality: '',
+        };
+      });
   }
 
   private waitForGC(): Promise<void> {
@@ -284,89 +350,237 @@ export class SteamClient extends EventEmitter {
 
   async getInventory(): Promise<InventoryItem[]> {
     if (!this._isLoggedIn) throw new Error('Not logged in');
+    if (this._inventory.length > 0) return this._inventory;
     await this.waitForGC();
-
-    return new Promise((resolve, reject) => {
-      this.user.getUserOwnedApps(this.user.steamID!, (err: Error | null, apps: any) => {
-        // Use the GC to get full inventory including storage units
-        if (this.csgo.haveGCSession) {
-          // We have GC, inventory items come via events
-          // For now, return cached inventory
-          resolve(this._inventory);
-        } else {
-          // Fallback: use Steam Web API
-          this.getInventoryHTTP()
-            .then(resolve)
-            .catch(reject);
-        }
-      });
-    });
+    return this._inventory;
   }
 
-  private async getInventoryHTTP(): Promise<InventoryItem[]> {
-    return new Promise((resolve, reject) => {
-      (this.user as any).getInventoryContents(730, 2, true, (err: Error | null, inventory: any[]) => {
-        if (err) {
-          reject(err);
-          return;
-        }
+  async refreshInventory(): Promise<InventoryItem[]> {
+    if (!this._isLoggedIn) throw new Error('Not logged in');
 
-        const items: InventoryItem[] = (inventory || []).map((item: any) => ({
-          id: item.assetid || item.id,
-          classid: item.classid,
-          instanceid: item.instanceid,
-          name: item.name,
-          market_hash_name: item.market_hash_name,
-          icon_url: item.icon_url,
-          tradable: item.tradable,
-          marketable: item.marketable,
-          type: item.type,
-          rarity: item.tags?.find((t: any) => t.category === 'Rarity')?.localized_tag_name,
-          quality: item.tags?.find((t: any) => t.category === 'Quality')?.localized_tag_name,
-        }));
+    // GC events keep _inventory in sync via _syncGCInventory
+    // If we have items with icon_url, return as-is. Otherwise try HTTP once.
+    if (this._inventory.length > 0 && this._inventory[0]?.icon_url) {
+      return this._inventory;
+    }
 
-        this._inventory = items;
-        resolve(items);
-      });
-    });
+    try {
+      const items = await this.fetchInventoryHTTP();
+      return items;
+    } catch {
+      return this._inventory;
+    }
   }
+
+  private async fetchInventoryHTTP(): Promise<InventoryItem[]> {
+    const steamId = this.user.steamID?.getSteamID64();
+    if (!steamId) throw new Error('No Steam ID');
+
+    const allItems: InventoryItem[] = [];
+    let startAssetId: string | undefined;
+
+    while (true) {
+      const qs: any = { l: 'english', count: 2000 };
+      if (startAssetId) qs.start_assetid = startAssetId;
+
+      const data: any = await new Promise((resolve, reject) => {
+        this.community.httpRequest({
+          uri: `https://steamcommunity.com/inventory/${steamId}/730/2`,
+          headers: { Referer: `https://steamcommunity.com/profiles/${steamId}/inventory` },
+          qs,
+          json: true,
+        }, (err: Error | null, _res: any, body: any) => {
+          if (err) return reject(err);
+          resolve(body);
+        });
+      });
+
+      if (!data?.assets || !data?.descriptions) break;
+
+      const descMap = new Map<string, any>();
+      for (const desc of data.descriptions) {
+        descMap.set(`${desc.classid}_${desc.instanceid}`, desc);
+        // Cache by classid for casket content enrichment
+        this._descCache.set(String(desc.classid), desc);
+      }
+
+      for (const asset of data.assets) {
+        const desc = descMap.get(`${asset.classid}_${asset.instanceid}`) || {};
+        // Skip storage units
+        if ((desc.type || '').includes('Storage Unit')) continue;
+        allItems.push({
+          id: asset.assetid,
+          classid: asset.classid,
+          instanceid: asset.instanceid,
+          name: desc.name || '',
+          market_hash_name: desc.market_hash_name || '',
+          icon_url: desc.icon_url || '',
+          tradable: !!desc.tradable,
+          marketable: !!desc.marketable,
+          type: desc.type || '',
+          rarity: desc.tags?.find((t: any) => t.category === 'Rarity')?.localized_tag_name,
+          quality: desc.tags?.find((t: any) => t.category === 'Quality')?.localized_tag_name,
+        });
+      }
+
+      if (data.more_items && data.last_assetid) {
+        startAssetId = data.last_assetid;
+      } else {
+        break;
+      }
+    }
+
+    this._inventory = allItems;
+    console.log(`[Inventory] Loaded ${allItems.length} items via HTTP`);
+    return allItems;
+  }
+
 
   // --- Storage Units (Caskets) ---
 
   async getStorageUnits(): Promise<any[]> {
     if (!this._isLoggedIn || !this.gcReady) throw new Error('Not connected to GC');
 
-    // Storage units have def_index 1201
-    return this._inventory.filter((item: any) => item.def_index === 1201);
+    // Storage units have def_index 1201 — use raw GC data
+    const units = this._gcInventory
+      .filter((item: any) => item.def_index === 1201)
+      .map((item: any) => ({
+        id: String(item.id),
+        name: item.custom_name || 'Storage Unit',
+        item_count: item.casket_contained_item_count || 0,
+      }));
+    console.log(`[Storage] GC inventory: ${this._gcInventory.length} items, found ${units.length} storage units`);
+    if (units.length === 0 && this._gcInventory.length > 0) {
+      // Debug: show unique def_index values
+      const defIndexes = [...new Set(this._gcInventory.map((i: any) => i.def_index))];
+      console.log(`[Storage] def_index values in GC: ${defIndexes.slice(0, 20).join(', ')}`);
+    }
+    return units;
   }
 
   async getStorageUnitContents(casketId: string): Promise<any[]> {
     if (!this.gcReady) throw new Error('Not connected to GC');
 
-    return new Promise((resolve) => {
+    // Get GC items from casket
+    const gcItems: any[] = await new Promise((resolve) => {
       this.csgo.getCasketContents(casketId, (err: Error | null, items: any[]) => {
         if (err) {
+          console.error('[Storage] getCasketContents error:', err.message);
           resolve([]);
           return;
         }
         resolve(items || []);
       });
     });
+
+    if (gcItems.length === 0) return [];
+
+    // Find classids not yet in cache
+    const missingClassIds = new Set<string>();
+    for (const item of gcItems) {
+      const cid = String(item.classid);
+      if (cid && !this._descCache.has(cid)) missingClassIds.add(cid);
+    }
+
+    // Fetch missing descriptions via Steam Economy API
+    if (missingClassIds.size > 0) {
+      try {
+        // Build query string: classinfo/730/classid1/classid2/...
+        const classIdList = Array.from(missingClassIds).slice(0, 100); // API limit
+        const qs: any = { appid: 730 };
+        classIdList.forEach((cid, i) => { qs[`classid${i}`] = cid; });
+        qs.class_count = classIdList.length;
+
+        if (this._apiKey) qs.key = this._apiKey;
+
+        const data: any = await new Promise((resolve, reject) => {
+          this.community.httpRequest({
+            uri: `https://api.steampowered.com/ISteamEconomy/GetAssetClassInfo/v1/`,
+            qs,
+            json: true,
+          }, (err: Error | null, _res: any, body: any) => {
+            if (err) return reject(err);
+            resolve(body);
+          });
+        });
+
+        if (data?.result?.success && data.result) {
+          for (const [cid, info] of Object.entries(data.result)) {
+            if (cid === 'success') continue;
+            const desc = info as any;
+            this._descCache.set(cid, {
+              name: desc.name || desc.market_hash_name || '',
+              market_hash_name: desc.market_hash_name || desc.name || '',
+              icon_url: desc.icon_url || '',
+              type: desc.type || '',
+              tags: desc.tags ? Object.values(desc.tags) : [],
+            });
+          }
+        }
+      } catch (err) {
+        console.log('[Storage] GetAssetClassInfo failed:', (err as any)?.message);
+      }
+    }
+
+    // Log first GC item to understand structure
+    if (gcItems.length > 0) {
+      const sample = gcItems[0];
+      const stickerAttr = (sample.attribute || []).find((a: any) => a.def_index === 166);
+      const musicAttr = (sample.attribute || []).find((a: any) => a.def_index === 166);
+      console.log(`[Storage] Sample GC item: def_index=${sample.def_index}, paint_index=${sample.paint_index}, classid=${sample.classid}`);
+      console.log(`[Storage] Sample attributes: ${(sample.attribute || []).map((a: any) => `${a.def_index}=${a.value}`).join(', ')}`);
+      console.log(`[Storage] Sample stickers: ${JSON.stringify(sample.stickers)}`);
+      console.log(`[Storage] Sample origin=${sample.origin}, rarity=${sample.rarity}, quality=${sample.quality}`);
+      console.log(`[Storage] Sample keys: ${Object.keys(sample).join(', ')}`);
+    }
+
+    // Map with enriched cache
+    // Extract paint_index from top-level or attributes for stickers/music kits
+    const mapped = gcItems.map((item: any) => {
+      const attrs = item.attribute || [];
+      const paintIndex = item.paint_index
+        || item.paint_kit
+        || attrs.find((a: any) => a.def_index === 6)?.value  // paint kit attribute
+        || undefined;
+      // For stickers, the sticker_id is in the stickers array
+      const stickerId = (item.stickers && item.stickers[0]?.sticker_id) || undefined;
+
+      // For stickers (def_index 1209), use sticker_id as the kit identifier
+      const effectivePaintIndex = (item.def_index === 1209 || item.def_index === 1348) ? stickerId : paintIndex;
+
+      const desc = this._descCache.get(String(item.classid));
+      const name = desc?.name || resolveItemName(item.def_index, effectivePaintIndex, item.custom_name);
+      return {
+        id: String(item.id),
+        classid: String(item.classid || effectivePaintIndex || item.def_index),
+        name,
+        market_hash_name: desc?.market_hash_name || name,
+        icon_url: desc?.icon_url || resolveItemIcon(item.def_index, effectivePaintIndex, stickerId) || '',
+        icon_url_full: !desc?.icon_url ? resolveItemIcon(item.def_index, effectivePaintIndex, stickerId) : '',
+        tradable: true,
+        type: desc?.type || '',
+        rarity: desc?.tags?.find((t: any) => t.category === 'Rarity')?.localized_tag_name || '',
+      };
+    });
+
+    console.log(`[Storage] Casket ${casketId}: ${mapped.length} items, ${new Set(mapped.map((i: any) => i.classid)).size} unique classids`);
+    return mapped;
   }
 
   async moveToStorageUnit(itemIds: string[], casketId: string): Promise<{ success: boolean; moved: number }> {
     if (!this.gcReady) throw new Error('Not connected to GC');
 
     let moved = 0;
+    const total = itemIds.length;
     for (const itemId of itemIds) {
       try {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           this.csgo.addToCasket(casketId, itemId);
-          // Wait a bit between operations to avoid rate limiting
           setTimeout(resolve, 1000);
         });
         moved++;
         this.emit('item-moved', { itemId, casketId, direction: 'to' });
+        this.emit('transfer-progress', { current: moved, total, direction: 'to' });
       } catch (err) {
         // Continue with next item
       }
@@ -379,6 +593,7 @@ export class SteamClient extends EventEmitter {
     if (!this.gcReady) throw new Error('Not connected to GC');
 
     let moved = 0;
+    const total = itemIds.length;
     for (const itemId of itemIds) {
       try {
         await new Promise<void>((resolve) => {
@@ -387,6 +602,39 @@ export class SteamClient extends EventEmitter {
         });
         moved++;
         this.emit('item-moved', { itemId, casketId, direction: 'from' });
+        this.emit('transfer-progress', { current: moved, total, direction: 'from' });
+      } catch (err) {
+        // Continue with next item
+      }
+    }
+
+    return { success: moved > 0, moved };
+  }
+
+  async moveBetweenStorageUnits(
+    itemIds: string[],
+    sourceCasketId: string,
+    targetCasketId: string
+  ): Promise<{ success: boolean; moved: number }> {
+    if (!this.gcReady) throw new Error('Not connected to GC');
+
+    let moved = 0;
+    const total = itemIds.length;
+    for (const itemId of itemIds) {
+      try {
+        // Remove from source
+        await new Promise<void>((resolve) => {
+          this.csgo.removeFromCasket(sourceCasketId, itemId);
+          setTimeout(resolve, 1000);
+        });
+        // Add to target
+        await new Promise<void>((resolve) => {
+          this.csgo.addToCasket(targetCasketId, itemId);
+          setTimeout(resolve, 1000);
+        });
+        moved++;
+        this.emit('item-moved', { itemId, casketId: targetCasketId, direction: 'between' });
+        this.emit('transfer-progress', { current: moved, total, direction: 'between' });
       } catch (err) {
         // Continue with next item
       }

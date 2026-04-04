@@ -31,13 +31,18 @@ function LoginContent() {
       setNonce(loginNonce);
       setStatus('waiting');
 
-      const apiBase = 'https://api.skinkeeper.store';
-      const returnTo = `${apiBase}/api/auth/steam/callback?nonce=${loginNonce}`;
+      // In dev, route Steam callback through Next.js proxy so it hits local backend
+      const callbackBase = typeof window !== 'undefined' ? window.location.origin : 'https://api.skinkeeper.store';
+      const isDev = callbackBase.includes('localhost');
+      const returnTo = isDev
+        ? `${callbackBase}/api/proxy/auth/steam/callback?nonce=${loginNonce}`
+        : `https://api.skinkeeper.store/api/auth/steam/callback?nonce=${loginNonce}`;
+      const realm = isDev ? callbackBase : 'https://api.skinkeeper.store';
       const params = new URLSearchParams({
         'openid.ns': 'http://specs.openid.net/auth/2.0',
         'openid.mode': 'checkid_setup',
         'openid.return_to': returnTo,
-        'openid.realm': apiBase,
+        'openid.realm': realm,
         'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
         'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
       });
