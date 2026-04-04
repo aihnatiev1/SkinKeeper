@@ -30,6 +30,7 @@ export function getDesktopAPI() {
       moveToStorageUnit: (itemIds: string[], casketId: string) => Promise<{ success: boolean; moved: number }>;
       moveFromStorageUnit: (itemIds: string[], casketId: string) => Promise<{ success: boolean; moved: number }>;
       moveBetweenStorageUnits: (itemIds: string[], sourceCasketId: string, targetCasketId: string) => Promise<{ success: boolean; moved: number }>;
+      renameStorageUnit: (itemId: string, newName: string) => Promise<{ success: boolean }>;
       renameItem: (itemId: string, name: string) => Promise<{ success: boolean }>;
       equipItem: (itemId: string, classId: number, slot: number) => Promise<{ success: boolean }>;
       executeTradeUp: (itemIds: string[]) => Promise<{ success: boolean; result?: any }>;

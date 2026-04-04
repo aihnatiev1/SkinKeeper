@@ -48,6 +48,7 @@ export class SteamClient extends EventEmitter {
   private _gcInventory: any[] = []; // Raw GC items with def_index for storage unit ops
   private _descCache = new Map<string, any>(); // classid → Steam description (name, icon_url, etc.)
   private _apiKey: string | null = null;
+  private _isMoving = false; // Suppress inventory-updated events during bulk move
   private _refreshToken: string | null = null;
   private gcReady = false;
   private gcReadyPromise: Promise<void> | null = null;
@@ -185,18 +186,24 @@ export class SteamClient extends EventEmitter {
     });
 
     this.csgo.on('itemAcquired', (_item: any) => {
-      this._syncGCInventory();
-      this.emit('inventory-updated');
+      if (!this._isMoving) {
+        this._syncGCInventory();
+        this.emit('inventory-updated');
+      }
     });
 
     this.csgo.on('itemRemoved', (_item: any) => {
-      this._syncGCInventory();
-      this.emit('inventory-updated');
+      if (!this._isMoving) {
+        this._syncGCInventory();
+        this.emit('inventory-updated');
+      }
     });
 
     this.csgo.on('itemChanged', (_oldItem: any, _newItem: any) => {
-      this._syncGCInventory();
-      this.emit('inventory-updated');
+      if (!this._isMoving) {
+        this._syncGCInventory();
+        this.emit('inventory-updated');
+      }
     });
   }
 
@@ -446,8 +453,9 @@ export class SteamClient extends EventEmitter {
       .filter((item: any) => item.def_index === 1201)
       .map((item: any) => ({
         id: String(item.id),
-        name: item.custom_name || 'Storage Unit',
+        name: item.custom_name || '',
         item_count: item.casket_contained_item_count || 0,
+        activated: !!item.custom_name,
       }));
     console.log(`[Storage] GC inventory: ${this._gcInventory.length} items, found ${units.length} storage units`);
     if (units.length === 0 && this._gcInventory.length > 0) {
@@ -555,59 +563,71 @@ export class SteamClient extends EventEmitter {
         classid: String(item.classid || effectivePaintIndex || item.def_index),
         name,
         market_hash_name: desc?.market_hash_name || name,
-        icon_url: desc?.icon_url || resolveItemIcon(item.def_index, effectivePaintIndex, stickerId) || '',
-        icon_url_full: !desc?.icon_url ? resolveItemIcon(item.def_index, effectivePaintIndex, stickerId) : '',
+        icon_url: desc?.icon_url || '',
+        icon_url_full: resolveItemIcon(item.def_index, effectivePaintIndex, stickerId) || '',
         tradable: true,
         type: desc?.type || '',
         rarity: desc?.tags?.find((t: any) => t.category === 'Rarity')?.localized_tag_name || '',
       };
     });
 
-    console.log(`[Storage] Casket ${casketId}: ${mapped.length} items, ${new Set(mapped.map((i: any) => i.classid)).size} unique classids`);
+    const withIcons = mapped.filter((i: any) => i.icon_url_full).length;
+    console.log(`[Storage] Casket ${casketId}: ${mapped.length} items, ${new Set(mapped.map((i: any) => i.classid)).size} unique classids, ${withIcons} with icons`);
     return mapped;
   }
 
   async moveToStorageUnit(itemIds: string[], casketId: string): Promise<{ success: boolean; moved: number }> {
     if (!this.gcReady) throw new Error('Not connected to GC');
 
+    this._isMoving = true;
     let moved = 0;
     const total = itemIds.length;
+    console.log(`[Move] Depositing ${total} items to casket ${casketId}`);
+
     for (const itemId of itemIds) {
       try {
-        await new Promise<void>((resolve) => {
-          this.csgo.addToCasket(casketId, itemId);
-          setTimeout(resolve, 1000);
-        });
+        this.csgo.addToCasket(casketId, itemId);
+        await new Promise(r => setTimeout(r, 1000));
         moved++;
-        this.emit('item-moved', { itemId, casketId, direction: 'to' });
         this.emit('transfer-progress', { current: moved, total, direction: 'to' });
       } catch (err) {
-        // Continue with next item
+        console.error(`[Move] ✗ item ${itemId}:`, (err as any)?.message);
       }
     }
 
+    // Settle, sync, notify
+    await new Promise(r => setTimeout(r, 500));
+    this._isMoving = false;
+    this._syncGCInventory();
+    this.emit('inventory-updated');
+    console.log(`[Move] Done: ${moved}/${total}`);
     return { success: moved > 0, moved };
   }
 
   async moveFromStorageUnit(itemIds: string[], casketId: string): Promise<{ success: boolean; moved: number }> {
     if (!this.gcReady) throw new Error('Not connected to GC');
 
+    this._isMoving = true;
     let moved = 0;
     const total = itemIds.length;
+    console.log(`[Move] Withdrawing ${total} items from casket ${casketId}`);
+
     for (const itemId of itemIds) {
       try {
-        await new Promise<void>((resolve) => {
-          this.csgo.removeFromCasket(casketId, itemId);
-          setTimeout(resolve, 1000);
-        });
+        this.csgo.removeFromCasket(casketId, itemId);
+        await new Promise(r => setTimeout(r, 1000));
         moved++;
-        this.emit('item-moved', { itemId, casketId, direction: 'from' });
         this.emit('transfer-progress', { current: moved, total, direction: 'from' });
       } catch (err) {
-        // Continue with next item
+        console.error(`[Move] ✗ item ${itemId}:`, (err as any)?.message);
       }
     }
 
+    await new Promise(r => setTimeout(r, 500));
+    this._isMoving = false;
+    this._syncGCInventory();
+    this.emit('inventory-updated');
+    console.log(`[Move] Done: ${moved}/${total}`);
     return { success: moved > 0, moved };
   }
 
@@ -645,11 +665,27 @@ export class SteamClient extends EventEmitter {
 
   // --- Item Operations ---
 
+  async renameStorageUnit(itemId: string, newName: string): Promise<{ success: boolean }> {
+    if (!this.gcReady) throw new Error('Not connected to GC');
+
+    try {
+      // nameTagId = 0 for storage units (free rename)
+      this.csgo.nameItem(0, itemId, newName);
+      await new Promise(r => setTimeout(r, 1000));
+      console.log(`[Storage] Renamed unit ${itemId} to "${newName}"`);
+      this._syncGCInventory();
+      return { success: true };
+    } catch (err) {
+      console.error('[Storage] Rename failed:', (err as any)?.message);
+      return { success: false };
+    }
+  }
+
   async renameItem(itemId: string, name: string): Promise<{ success: boolean }> {
     if (!this.gcReady) throw new Error('Not connected to GC');
 
     try {
-      this.csgo.nameItem(itemId, name);
+      this.csgo.nameItem(0, itemId, name);
       return { success: true };
     } catch (err) {
       return { success: false };

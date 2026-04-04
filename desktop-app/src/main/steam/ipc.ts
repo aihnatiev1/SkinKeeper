@@ -17,6 +17,7 @@ export function registerSteamIPC(steam: SteamClient) {
   steam.on('qr-code', (url) => broadcast('steam:qr-code', url));
   steam.on('error', (error) => broadcast('steam:error', error));
   steam.on('transfer-progress', (data) => broadcast('steam:transfer-progress', data));
+  steam.on('gc-ready', () => broadcast('steam:gc-ready'));
 
   // Keep reference to pending guard session
   let pendingGuardSession: any = null;
@@ -88,6 +89,10 @@ export function registerSteamIPC(steam: SteamClient) {
 
   ipcMain.handle('steam:move-from-storage', async (_event, itemIds: string[], casketId: string) => {
     return steam.moveFromStorageUnit(itemIds, casketId);
+  });
+
+  ipcMain.handle('steam:rename-storage-unit', async (_event, itemId: string, newName: string) => {
+    return steam.renameStorageUnit(itemId, newName);
   });
 
   ipcMain.handle('steam:move-between-storage', async (_event, itemIds: string[], sourceCasketId: string, targetCasketId: string) => {

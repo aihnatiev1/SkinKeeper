@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Wand2, ArrowLeftRight } from 'lucide-react';
 import { Header } from '@/components/header';
 import { useIsDesktop, useSteamStatus } from '@/lib/use-desktop';
 import { useTransferStore, type TransferTab } from '@/lib/transfer-store';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ToStorageTab } from './components/to-storage-tab';
 import { FromStorageTab } from './components/from-storage-tab';
@@ -24,7 +25,7 @@ export default function TransferPage() {
   const router = useRouter();
   const desktop = useIsDesktop();
   const { status } = useSteamStatus();
-  const { activeTab, setActiveTab } = useTransferStore();
+  const { activeTab, setActiveTab, isTransferring, progress } = useTransferStore();
 
   useEffect(() => {
     if (desktop === false) {
@@ -55,6 +56,30 @@ export default function TransferPage() {
     <div>
       <Header title="Transfer" />
       <div className="p-4 lg:p-6 space-y-4">
+        {/* Transfer progress bar */}
+        {isTransferring && progress && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass rounded-xl border border-primary/20 p-3 space-y-2"
+          >
+            <div className="flex items-center gap-2 text-sm">
+              <Loader2 size={14} className="animate-spin text-primary" />
+              <span className="font-medium">Moving items... {progress.current} / {progress.total}</span>
+              {progress.total > progress.current && (
+                <span className="text-xs text-muted ml-auto">~{progress.total - progress.current}s left</span>
+              )}
+            </div>
+            <div className="h-1.5 bg-surface-light rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
+                animate={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+          </motion.div>
+        )}
+
         {/* Tab bar */}
         <div className="flex items-center gap-1 p-1 glass rounded-xl border border-border/50 w-fit">
           {TABS.map(({ id, label, icon: Icon, soon }) => (

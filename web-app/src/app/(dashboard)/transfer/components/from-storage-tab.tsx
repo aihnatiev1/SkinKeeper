@@ -254,6 +254,10 @@ export function FromStorageTab() {
                           onClick={() => setQty(key, Math.min(count, qty + 1))}
                           className="w-5 h-5 rounded text-xs text-muted hover:text-foreground hover:bg-surface-light transition-colors"
                         >+</button>
+                        <button
+                          onClick={() => setQty(key, count)}
+                          className="ml-1 px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                        >all</button>
                       </div>
                     </td>
                     <td className="py-1.5 px-2 text-center">

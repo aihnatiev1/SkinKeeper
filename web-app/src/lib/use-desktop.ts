@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { isDesktop, getDesktopAPI, type SteamDesktopStatus } from './desktop';
+import { useTransferStore } from './transfer-store';
 
 /**
  * Hook to check if running in desktop mode.
@@ -147,8 +148,12 @@ export function useDesktopInventory() {
     // Initial fetch
     refresh();
 
+    // Don't auto-refresh during transfer — it clears the table
+    const isTransferring = useTransferStore.getState().isTransferring;
     const unsub = api.on('steam:inventory-updated', () => {
-      refresh();
+      if (!useTransferStore.getState().isTransferring) {
+        refresh();
+      }
     });
 
     return unsub;
@@ -172,10 +177,19 @@ export function useStorageUnits() {
       const u = await api.steam.getStorageUnits();
       setUnits(u);
     } catch (err) {
-      // Ignore
+      // GC not ready yet — will retry on gc-ready event
     }
     setLoading(false);
   }, []);
+
+  // Auto-fetch when GC connects
+  useEffect(() => {
+    if (!api) return;
+    const unsub = api.on('steam:gc-ready', () => {
+      fetchUnits();
+    });
+    return unsub;
+  }, [fetchUnits]);
 
   const getContents = useCallback(async (casketId: string) => {
     if (!api) return [];
@@ -192,10 +206,27 @@ export function useStorageUnits() {
     return api.steam.moveFromStorageUnit(itemIds, casketId);
   }, []);
 
+  const renameUnit = useCallback(async (unitId: string, newName: string) => {
+    if (!api) return { success: false };
+    const result = await api.steam.renameStorageUnit(unitId, newName);
+    if (result.success) fetchUnits(); // Refresh to show new name
+    return result;
+  }, [fetchUnits]);
+
   const moveBetweenUnits = useCallback(async (itemIds: string[], sourceCasketId: string, targetCasketId: string) => {
     if (!api) return { success: false, moved: 0 };
     return api.steam.moveBetweenStorageUnits(itemIds, sourceCasketId, targetCasketId);
   }, []);
 
-  return { units, loading, fetchUnits, getContents, moveToUnit, moveFromUnit, moveBetweenUnits, isDesktop: !!api };
+  // Listen for transfer progress events from main process
+  const updateProgress = useTransferStore((s) => s.updateProgress);
+  useEffect(() => {
+    if (!api) return;
+    const unsub = api.on('steam:transfer-progress', (data: any) => {
+      updateProgress({ current: data.current, total: data.total });
+    });
+    return unsub;
+  }, [updateProgress]);
+
+  return { units, loading, fetchUnits, getContents, moveToUnit, moveFromUnit, moveBetweenUnits, renameUnit, isDesktop: !!api };
 }

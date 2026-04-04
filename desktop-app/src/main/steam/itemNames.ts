@@ -28,18 +28,22 @@ function fetchText(url: string): Promise<string> {
   });
 }
 
-// Simple approach: extract all "item_name" values near their def_index
+// Extract item defs only from the "items" section (before sticker_kits/paint_kits)
 function extractItemDefs(text: string): Map<number, string> {
   const result = new Map<number, string>();
-  // Match blocks like: "1209" { ... "item_name" "#CSGO_Tool_Sticker" ... }
-  // Use regex to find numeric keys followed by item_name within ~500 chars
+  // Limit to "items" section only — stop before sticker_kits
+  const itemsStart = text.indexOf('"items"');
+  const stickerStart = text.indexOf('"sticker_kits"');
+  if (itemsStart === -1) return result;
+  const searchText = text.substring(itemsStart, stickerStart > itemsStart ? stickerStart : undefined);
+
   const blockRegex = /"\s*(\d+)\s*"\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g;
   let match;
-  while ((match = blockRegex.exec(text))) {
+  while ((match = blockRegex.exec(searchText))) {
     const id = parseInt(match[1]);
     const body = match[2];
     const nameMatch = body.match(/"item_name"\s*"([^"]+)"/);
-    if (nameMatch) {
+    if (nameMatch && !result.has(id)) {
       result.set(id, nameMatch[1].replace('#', '').toLowerCase());
     }
   }
@@ -124,17 +128,34 @@ export async function loadItemData(): Promise<void> {
     // Parse sticker kits
     stickerKits = extractStickerKits(itemsGameRaw);
 
-    // Load sticker images from CSGO-API
+    // Load item images + names from CSGO-API (covers stickers, crates, and more)
     try {
-      const stickersJson = await fetchText('https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/stickers.json');
+      const [stickersJson, cratesJson] = await Promise.all([
+        fetchText('https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/stickers.json'),
+        fetchText('https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/crates.json'),
+      ]);
+
+      // Sticker images: sticker-5820 → image
       const stickers = JSON.parse(stickersJson);
       for (const s of stickers) {
-        // id format: "sticker-5820"
         const kitId = parseInt(s.id?.replace('sticker-', ''));
         if (kitId && s.image) stickerImages.set(kitId, s.image);
       }
+
+      // Crate/case names + images: crate-7007 → name + image
+      const crates = JSON.parse(cratesJson);
+      for (const c of crates) {
+        const defIdx = parseInt(c.id?.replace('crate-', ''));
+        if (defIdx && c.name) {
+          // Override itemDefs with accurate name from API
+          const token = `csgoapi_${defIdx}`;
+          itemDefs.set(defIdx, token);
+          translations.set(token, c.name);
+          if (c.image) stickerImages.set(defIdx + 1000000, c.image); // Use offset to not collide with sticker IDs
+        }
+      }
     } catch (err) {
-      console.log('[ItemNames] Sticker images load failed:', (err as any)?.message);
+      console.log('[ItemNames] CSGO-API load failed:', (err as any)?.message);
     }
 
     loaded = true;
@@ -185,6 +206,10 @@ export function resolveItemIcon(defIndex: number, paintIndex?: number, stickerId
   if ((defIndex === 1209 || defIndex === 1348) && stickerId) {
     return stickerImages.get(stickerId) || '';
   }
+
+  // Crates/cases: use offset key
+  const crateImage = stickerImages.get(defIndex + 1000000);
+  if (crateImage) return crateImage;
 
   return '';
 }

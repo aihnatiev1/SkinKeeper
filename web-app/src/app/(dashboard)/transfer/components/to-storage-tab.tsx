@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Search, RefreshCw, Eye, EyeOff, Package, Loader2, ChevronDown, ArrowRightToLine, Sparkles } from 'lucide-react';
+import { Search, RefreshCw, Eye, EyeOff, Package, Loader2, ChevronDown, ArrowRightToLine, Sparkles, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDesktopInventory, useStorageUnits } from '@/lib/use-desktop';
 import { useTransferStore } from '@/lib/transfer-store';
@@ -41,7 +41,9 @@ function getCategories(items: any[]): { name: string; count: number }[] {
 
 export function ToStorageTab() {
   const { items, loading: invLoading, error: invError, refresh } = useDesktopInventory();
-  const { units, loading: unitsLoading, fetchUnits, moveToUnit } = useStorageUnits();
+  const { units, loading: unitsLoading, fetchUnits, moveToUnit, renameUnit } = useStorageUnits();
+  const [editingUnit, setEditingUnit] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [hideFull, setHideFull] = useState(false);
@@ -50,7 +52,7 @@ export function ToStorageTab() {
   const [quantities, setQuantities] = useState<Map<string, number>>(new Map());
   const {
     fastmove, toggleFastmove,
-    isTransferring, setTransferring,
+    isTransferring, progress, setTransferring,
     movedItems, clearMovedItems, addToQueue, queue, processingItem, clearQueue,
   } = useTransferStore();
 
@@ -103,6 +105,11 @@ export function ToStorageTab() {
       toast.error('Select a destination storage unit');
       return;
     }
+    const selectedUnit = (units || []).find((u: any) => u.id === selectedUnitId);
+    if (selectedUnit && !selectedUnit.activated) {
+      toast.error('Activate this storage unit first (give it a name)');
+      return;
+    }
     const key = group.item.market_hash_name || group.item.id;
     const qty = quantities.get(key) ?? 0;
     if (qty === 0) {
@@ -118,12 +125,13 @@ export function ToStorageTab() {
 
     setTransferring(true, { current: 0, total: idsToMove.length });
     const result = await moveToUnit(idsToMove, selectedUnitId);
-    setTransferring(false);
+    setTransferring(false, null);
 
     if (result?.success) {
-      toast.success(`Moved ${result.moved} items`);
-      refresh();
-      fetchUnits();
+      toast.success(`Moved ${result.moved} items to storage`);
+      setQty(key, 0); // Reset qty
+      refresh(); // Refresh inventory
+      fetchUnits(); // Refresh storage unit counts
     } else {
       toast.error('Failed to move items');
     }
@@ -180,22 +188,74 @@ export function ToStorageTab() {
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           {filteredUnits.map((unit: any) => (
-            <button
+            <div
               key={unit.id}
-              onClick={() => setSelectedUnitId(unit.id)}
+              onClick={() => {
+                if (!unit.activated) {
+                  // Force activate: open rename input
+                  setSelectedUnitId(unit.id);
+                  setEditingUnit(unit.id);
+                  setEditName('');
+                } else {
+                  setSelectedUnitId(unit.id);
+                }
+              }}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-xl border shrink-0 transition-all min-w-[180px]',
+                'flex items-center gap-3 px-4 py-3 rounded-xl border shrink-0 transition-all min-w-[180px] group cursor-pointer',
+                !unit.activated && 'border-warning/30 border-dashed',
                 selectedUnitId === unit.id
                   ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/30'
-                  : 'border-border/50 glass hover:border-border'
+                  : unit.activated ? 'border-border/50 glass hover:border-border' : ''
               )}
             >
-              <Package size={18} className={cn(selectedUnitId === unit.id ? 'text-primary' : 'text-muted')} />
-              <div className="text-left min-w-0">
-                <p className="text-sm font-medium truncate">{unit.name}</p>
-                <p className="text-xs text-muted">{unit.item_count} items</p>
+              <Package size={18} className={cn(
+                !unit.activated ? 'text-warning' : selectedUnitId === unit.id ? 'text-primary' : 'text-muted'
+              )} />
+              <div className="text-left min-w-0 flex-1">
+                {editingUnit === unit.id ? (
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onBlur={async () => {
+                      if (editName.trim() && editName !== unit.name) {
+                        await renameUnit(unit.id, editName.trim());
+                      }
+                      setEditingUnit(null);
+                    }}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter') {
+                        if (editName.trim() && editName !== unit.name) {
+                          await renameUnit(unit.id, editName.trim());
+                        }
+                        setEditingUnit(null);
+                      }
+                      if (e.key === 'Escape') setEditingUnit(null);
+                    }}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full text-sm font-medium bg-transparent border-b border-primary/50 focus:outline-none py-0"
+                  />
+                ) : (
+                  <p className={cn('text-sm font-medium truncate', !unit.activated && 'text-warning')}>
+                    {unit.name || 'Tap to activate'}
+                  </p>
+                )}
+                <p className="text-xs text-muted">
+                  {unit.id === selectedUnitId && isTransferring && progress
+                    ? `${unit.item_count + progress.current} items (+${progress.current})`
+                    : `${unit.item_count} items`}
+                </p>
               </div>
-            </button>
+              {selectedUnitId === unit.id && editingUnit !== unit.id && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEditingUnit(unit.id); setEditName(unit.name); }}
+                  className="p-1 rounded text-muted hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Pencil size={12} />
+                </button>
+              )}
+            </div>
           ))}
           {filteredUnits.length === 0 && !unitsLoading && (
             <div className="text-sm text-muted py-3">No storage units found</div>
@@ -388,6 +448,10 @@ export function ToStorageTab() {
                           onClick={() => setQty(key, Math.min(count, qty + 1))}
                           className="w-5 h-5 rounded text-xs text-muted hover:text-foreground hover:bg-surface-light transition-colors"
                         >+</button>
+                        <button
+                          onClick={() => setQty(key, count)}
+                          className="ml-1 px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                        >all</button>
                       </div>
                     </td>
 

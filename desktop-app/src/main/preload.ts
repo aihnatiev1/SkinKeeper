@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld('skinkeeper', {
       ipcRenderer.invoke('steam:move-from-storage', itemIds, casketId),
     moveBetweenStorageUnits: (itemIds: string[], sourceCasketId: string, targetCasketId: string) =>
       ipcRenderer.invoke('steam:move-between-storage', itemIds, sourceCasketId, targetCasketId),
+    renameStorageUnit: (itemId: string, newName: string) =>
+      ipcRenderer.invoke('steam:rename-storage-unit', itemId, newName),
 
     // Item operations
     renameItem: (itemId: string, name: string) =>
@@ -86,6 +88,7 @@ contextBridge.exposeInMainWorld('skinkeeper', {
       'steam:qr-code',
       'steam:error',
       'steam:transfer-progress',
+      'steam:gc-ready',
       'updater:update-available',
       'updater:update-downloaded',
       'updater:error',
