@@ -128,19 +128,19 @@ export function FromStorageTab() {
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex flex-wrap gap-2">
           {filteredUnits.map((unit: any) => (
             <button key={unit.id} onClick={() => setSelectedUnitId(unit.id)}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-xl border shrink-0 transition-all min-w-[180px]',
+                'flex items-center gap-2 px-3 py-2 rounded-lg border shrink-0 transition-all min-w-[140px] max-w-[180px]',
                 selectedUnitId === unit.id
                   ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/30'
                   : 'border-border/50 glass hover:border-border'
               )}>
-              <Package size={18} className={cn(selectedUnitId === unit.id ? 'text-primary' : 'text-muted')} />
+              <Package size={14} className={cn('shrink-0', selectedUnitId === unit.id ? 'text-primary' : 'text-muted')} />
               <div className="text-left min-w-0">
-                <p className="text-sm font-medium truncate">{unit.name}</p>
-                <p className="text-xs text-muted">{unit.item_count} items</p>
+                <p className="text-xs font-medium truncate">{unit.name || 'Activate'}</p>
+                <p className="text-[10px] text-muted tabular-nums">{unit.item_count} / 1000</p>
               </div>
             </button>
           ))}
@@ -219,8 +219,8 @@ export function FromStorageTab() {
                       isProcessingThis && 'bg-warning/5')}>
                     <td className="py-1.5 px-2">
                       <div className="w-10 h-10 rounded-lg bg-surface-light/50 overflow-hidden flex items-center justify-center">
-                        {item.icon_url ? (
-                          <img src={item.icon_url_full || (item.icon_url ? `${STEAM_CDN}${item.icon_url}/64x64` : '')} alt="" className="w-full h-full object-contain" loading="lazy" />
+                        {(item.icon_url || item.icon_url_full) ? (
+                          <img src={item.icon_url_full || `${STEAM_CDN}${item.icon_url}/64x64`} alt="" className="w-full h-full object-contain" loading="lazy" />
                         ) : (
                           <Package size={16} className="text-muted" />
                         )}

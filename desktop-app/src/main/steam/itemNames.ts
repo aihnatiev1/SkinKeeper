@@ -130,30 +130,42 @@ export async function loadItemData(): Promise<void> {
 
     // Load item images + names from CSGO-API (covers stickers, crates, and more)
     try {
-      const [stickersJson, cratesJson] = await Promise.all([
-        fetchText('https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/stickers.json'),
-        fetchText('https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/crates.json'),
+      const API = 'https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en';
+      const [stickersJson, cratesJson, patchesJson, collectiblesJson, keysJson, graffitiJson] = await Promise.all([
+        fetchText(`${API}/stickers.json`),
+        fetchText(`${API}/crates.json`),
+        fetchText(`${API}/patches.json`).catch(() => '[]'),
+        fetchText(`${API}/collectibles.json`).catch(() => '[]'),
+        fetchText(`${API}/keys.json`).catch(() => '[]'),
+        fetchText(`${API}/graffiti.json`).catch(() => '[]'),
       ]);
 
-      // Sticker images: sticker-5820 → image
-      const stickers = JSON.parse(stickersJson);
-      for (const s of stickers) {
+      // Sticker images
+      for (const s of JSON.parse(stickersJson)) {
         const kitId = parseInt(s.id?.replace('sticker-', ''));
         if (kitId && s.image) stickerImages.set(kitId, s.image);
       }
 
-      // Crate/case names + images: crate-7007 → name + image
-      const crates = JSON.parse(cratesJson);
-      for (const c of crates) {
-        const defIdx = parseInt(c.id?.replace('crate-', ''));
-        if (defIdx && c.name) {
-          // Override itemDefs with accurate name from API
-          const token = `csgoapi_${defIdx}`;
-          itemDefs.set(defIdx, token);
-          translations.set(token, c.name);
-          if (c.image) stickerImages.set(defIdx + 1000000, c.image); // Use offset to not collide with sticker IDs
+      // Register items by def_index from CSGO-API (name + image)
+      const registerItems = (json: string, prefix: string) => {
+        for (const item of JSON.parse(json)) {
+          const id = String(item.id || '');
+          const defIdx = parseInt(id.replace(/^[a-z_]+-/, ''));
+          if (!defIdx || isNaN(defIdx)) continue;
+          if (item.name) {
+            const token = `api_${defIdx}`;
+            itemDefs.set(defIdx, token);
+            translations.set(token, item.name);
+          }
+          if (item.image) stickerImages.set(defIdx + 1000000, item.image);
         }
-      }
+      };
+
+      registerItems(cratesJson, 'crate');
+      registerItems(patchesJson, 'patch');
+      registerItems(collectiblesJson, 'collectible');
+      registerItems(keysJson, 'key');
+      registerItems(graffitiJson, 'graffiti');
     } catch (err) {
       console.log('[ItemNames] CSGO-API load failed:', (err as any)?.message);
     }

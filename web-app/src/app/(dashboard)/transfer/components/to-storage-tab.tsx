@@ -139,15 +139,34 @@ export function ToStorageTab() {
 
   const handleMoveAll = async () => {
     if (!selectedUnitId) return;
-    const allIds = filteredItems.map((i: any) => i.id);
-    if (allIds.length === 0) return;
+    const selectedUnit = (units || []).find((u: any) => u.id === selectedUnitId);
+    if (selectedUnit && !selectedUnit.activated) {
+      toast.error('Activate this storage unit first');
+      return;
+    }
 
-    setTransferring(true, { current: 0, total: allIds.length });
-    const result = await moveToUnit(allIds, selectedUnitId);
-    setTransferring(false);
+    // Collect IDs only from groups with qty > 0
+    const idsToMove: string[] = [];
+    for (const group of grouped) {
+      const key = group.item.market_hash_name || group.item.id;
+      const qty = quantities.get(key) ?? 0;
+      if (qty > 0) {
+        idsToMove.push(...group.ids.slice(0, qty));
+      }
+    }
+
+    if (idsToMove.length === 0) {
+      toast.error('Set quantity for items you want to move');
+      return;
+    }
+
+    setTransferring(true, { current: 0, total: idsToMove.length });
+    const result = await moveToUnit(idsToMove, selectedUnitId);
+    setTransferring(false, null);
 
     if (result?.success) {
       toast.success(`Moved ${result.moved} items`);
+      setQuantities(new Map());
       refresh();
       fetchUnits();
     }
@@ -186,7 +205,7 @@ export function ToStorageTab() {
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex flex-wrap gap-2">
           {filteredUnits.map((unit: any) => (
             <div
               key={unit.id}
@@ -201,14 +220,15 @@ export function ToStorageTab() {
                 }
               }}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-xl border shrink-0 transition-all min-w-[180px] group cursor-pointer',
+                'flex items-center gap-2 px-3 py-2 rounded-lg border shrink-0 transition-all min-w-[140px] max-w-[180px] group cursor-pointer',
                 !unit.activated && 'border-warning/30 border-dashed',
                 selectedUnitId === unit.id
                   ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/30'
                   : unit.activated ? 'border-border/50 glass hover:border-border' : ''
               )}
             >
-              <Package size={18} className={cn(
+              <Package size={14} className={cn(
+                'shrink-0',
                 !unit.activated ? 'text-warning' : selectedUnitId === unit.id ? 'text-primary' : 'text-muted'
               )} />
               <div className="text-left min-w-0 flex-1">
@@ -237,14 +257,14 @@ export function ToStorageTab() {
                     className="w-full text-sm font-medium bg-transparent border-b border-primary/50 focus:outline-none py-0"
                   />
                 ) : (
-                  <p className={cn('text-sm font-medium truncate', !unit.activated && 'text-warning')}>
-                    {unit.name || 'Tap to activate'}
+                  <p className={cn('text-xs font-medium truncate', !unit.activated && 'text-warning')}>
+                    {unit.name || 'Activate'}
                   </p>
                 )}
-                <p className="text-xs text-muted">
+                <p className="text-[10px] text-muted tabular-nums">
                   {unit.id === selectedUnitId && isTransferring && progress
-                    ? `${unit.item_count + progress.current} items (+${progress.current})`
-                    : `${unit.item_count} items`}
+                    ? `${unit.item_count + progress.current} (+${progress.current})`
+                    : `${unit.item_count} / 1000`}
                 </p>
               </div>
               {selectedUnitId === unit.id && editingUnit !== unit.id && (
@@ -400,9 +420,9 @@ export function ToStorageTab() {
                     {/* Image */}
                     <td className="py-1.5 px-2">
                       <div className="w-10 h-10 rounded-lg bg-surface-light/50 overflow-hidden flex items-center justify-center">
-                        {item.icon_url ? (
+                        {(item.icon_url || item.icon_url_full) ? (
                           <img
-                            src={item.icon_url_full || (item.icon_url ? `${STEAM_CDN}${item.icon_url}/64x64` : '')}
+                            src={item.icon_url_full || `${STEAM_CDN}${item.icon_url}/64x64`}
                             alt=""
                             className="w-full h-full object-contain"
                             loading="lazy"
@@ -449,7 +469,11 @@ export function ToStorageTab() {
                           className="w-5 h-5 rounded text-xs text-muted hover:text-foreground hover:bg-surface-light transition-colors"
                         >+</button>
                         <button
-                          onClick={() => setQty(key, count)}
+                          onClick={() => {
+                            const unit = (units || []).find((u: any) => u.id === selectedUnitId);
+                            const remaining = unit ? Math.max(0, 1000 - unit.item_count) : count;
+                            setQty(key, Math.min(count, remaining));
+                          }}
                           className="ml-1 px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-primary hover:bg-primary/10 transition-colors"
                         >all</button>
                       </div>
