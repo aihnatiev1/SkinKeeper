@@ -520,7 +520,7 @@ export default async function LandingPage() {
           {/* App Store badges */}
           <div className="flex flex-wrap items-center justify-center gap-4 mt-8">
             <a
-              href="https://apps.apple.com/app/skinkeeper/id6738029498"
+              href="https://apps.apple.com/us/app/skinkeeper/id6760600231"
               target="_blank"
               rel="noopener"
               className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-sm font-medium hover:bg-surface-light transition-colors"
@@ -583,7 +583,7 @@ export default async function LandingPage() {
             <div>
               <h4 className="font-semibold mb-3 text-sm">Download</h4>
               <ul className="space-y-2 text-sm text-muted">
-                <li><a href="https://apps.apple.com/app/skinkeeper/id6738029498" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">iOS App</a></li>
+                <li><a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">iOS App</a></li>
                 <li><a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Android App</a></li>
                 <li><a href="https://chromewebstore.google.com/detail/skinkeeper/placeholder" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Chrome Extension</a></li>
                 <li><a href="https://skinkeeper.store/download" className="hover:text-foreground transition-colors">Desktop App</a></li>
