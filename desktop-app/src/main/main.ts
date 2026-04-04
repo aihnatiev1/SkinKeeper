@@ -5,6 +5,7 @@ import { SteamClient } from './steam/client';
 import { registerSteamIPC } from './steam/ipc';
 import { registerAuthIPC } from './auth/ipc';
 import { registerAutomationIPC } from './automation/ipc';
+import { initAnalytics, trackEvent, shutdownAnalytics } from './analytics';
 
 const isDev = !app.isPackaged;
 const RENDERER_DEV_URL = 'http://localhost:3001';
@@ -199,6 +200,10 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(async () => {
+    // Initialize analytics
+    initAnalytics();
+    trackEvent('app_opened');
+
     // Initialize Steam client
     steamClient = new SteamClient();
 
@@ -231,7 +236,9 @@ if (!gotTheLock) {
     }
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', async () => {
     steamClient?.logout();
+    trackEvent('app_closed');
+    await shutdownAnalytics();
   });
 }

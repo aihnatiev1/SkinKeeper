@@ -1,6 +1,7 @@
 import '../styles/skinkeeper.css';
 import { waitForElement, el, skBadge, sendMessage } from '../shared/dom';
 import { readMarketListings, loadBulkPrices, loadExchangeRates, getItemPrice, getItemPriceEntry, getWalletCurrency, parseSteamPriceString } from '../shared/steam';
+import { trackEvent } from '../shared/analytics';
 
 let exchangeRate = 1;
 let currencySign = '$';
@@ -40,6 +41,7 @@ async function init() {
 
   injectPanel(itemName, listings.length, price, priceEntry, marketInfo);
 
+  trackEvent('market_listing_viewed', { item_name: itemName, listing_count: listings.length });
   console.log(`[SkinKeeper] Market: ${itemName}, ${listings.length} listings`);
 }
 

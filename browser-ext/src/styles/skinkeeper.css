@@ -163,55 +163,55 @@
    └──────────────────────────────────────┘
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* Shared pill style for all overlays */
+/* Shared base for all overlays */
 .sk-price-tag, .sk-item-float, .sk-item-ext, .sk-item-seed,
 .sk-item-sticker-val, .sk-lock-badge, .sk-item-phase, .sk-dup-badge {
   position: absolute;
   font-family: var(--sk-font);
   pointer-events: none;
   z-index: 5;
-  background: rgba(0, 0, 0, 0.8);
-  padding: 0px 4px;
-  border-radius: 3px;
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7);
 }
 
-/* ─── BOTTOM-LEFT: Price (yellow, prominent) ─────────────────────── */
+/* ─── BOTTOM-LEFT: Price (bright yellow, no bg) ──────────────────── */
 .sk-price-tag {
-  bottom: 2px;
-  left: 2px;
-  color: #fbbf24;
-  font-size: 11px;
+  bottom: 3px;
+  left: 4px;
+  color: #fde047;
+  font-size: 12px;
   font-weight: 800;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* ─── BOTTOM-LEFT: Float value (above price) ─────────────────────── */
+/* ─── BOTTOM-LEFT: Float value (above price, subtle) ─────────────── */
 .sk-item-float {
-  bottom: 16px;
-  left: 2px;
+  bottom: 19px;
+  left: 4px;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 500;
   font-family: 'SF Mono', 'Consolas', monospace;
+  opacity: 0.7;
 }
 
-/* ─── TOP-RIGHT: ST/Souvenir + Exterior ───────────────────────────── */
+/* ─── TOP-RIGHT: Exterior badge (dark pill, colored text) ─────────── */
 .sk-item-ext {
-  top: 2px;
-  right: 2px;
-  color: #99ccff;
+  top: 3px;
+  right: 3px;
   font-size: 10px;
   font-weight: 800;
   z-index: 6;
   letter-spacing: 0.3px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 5px;
+  border-radius: 3px;
+  text-shadow: none;
 }
 
 /* ─── RIGHT row 2: Sticker price (below ext) ──────────────────────── */
 .sk-item-sticker-val {
-  top: 16px;
-  right: 2px;
-  background: rgba(251, 191, 36, 0.2);
+  top: 18px;
+  right: 3px;
   color: var(--sk-amber);
   font-size: 9px;
   font-weight: 700;
@@ -219,37 +219,42 @@
 
 /* ─── RIGHT row 3: Paint Seed (below sticker) ─────────────────────── */
 .sk-item-seed {
-  top: 30px;
-  right: 2px;
+  top: 32px;
+  right: 3px;
   color: var(--sk-text-dim);
   font-size: 9px;
   font-weight: 600;
   font-family: 'SF Mono', 'Consolas', monospace;
-  background: rgba(0, 0, 0, 0.65);
 }
 
 /* ─── TOP-CENTER: Phase / Fade % / Marble Fade ────────────────────── */
 .sk-item-phase {
-  top: 2px;
+  top: 3px;
   left: 50%;
   transform: translateX(-50%);
   color: #fff;
   font-size: 9px;
   font-weight: 800;
   z-index: 6;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   letter-spacing: 0.3px;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-shadow: none;
 }
 
 /* ─── TOP-LEFT: Trade lock ────────────────────────────────────────── */
 .sk-lock-badge {
-  top: 2px;
-  left: 2px;
+  top: 3px;
+  left: 3px;
   background: rgba(239, 68, 68, 0.85);
   color: #fff;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   z-index: 6;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-shadow: none;
 }
 
 /* ─── RIGHT bottom area: Duplicate count ──────────────────────────── */

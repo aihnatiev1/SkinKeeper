@@ -1,5 +1,6 @@
 import { apiRequest, isLoggedIn } from '../shared/api';
 import { CollectedPrice, PriceBatch, DEFAULT_SETTINGS, type ExtSettings, type MessageType } from '../shared/types';
+import { postToPostHog } from '../shared/analytics';
 
 // ─── Price Data Pipeline ──────────────────────────────────────────────
 // Batch collected prices and send to SkinKeeper API every 30 seconds
@@ -256,6 +257,10 @@ async function handleMessage(msg: any): Promise<any> {
       return { rules: fr || DEFAULT_FRIEND_RULES, enabled: mf ?? false };
     }
 
+    case 'TRACK_EVENT':
+      postToPostHog(msg.event, msg.properties || {});
+      return { ok: true };
+
     default:
       return null;
   }
@@ -422,6 +427,7 @@ chrome.notifications.onClicked.addListener(() => {
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     chrome.tabs.create({ url: 'https://app.skinkeeper.store/settings?source=extension' });
+    postToPostHog('extension_installed', {});
   }
 
   // Clear stale price cache on update to avoid format mismatches

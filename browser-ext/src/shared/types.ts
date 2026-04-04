@@ -49,7 +49,8 @@ export type MessageType =
   | { type: 'GET_STICKER_PRICES'; names: string[] }
   | { type: 'CREATE_ALERT'; market_hash_name: string; condition: string; threshold: number }
   | { type: 'OPEN_APP'; path: string }
-  | { type: 'GET_SETTINGS' };
+  | { type: 'GET_SETTINGS' }
+  | { type: 'TRACK_EVENT'; event: string; properties?: Record<string, any> };
 
 export interface ItemPL {
   market_hash_name: string;

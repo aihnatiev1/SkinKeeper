@@ -22,12 +22,13 @@
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
-    "steam-user": "^5.2.0",
+    "globaloffensive": "^3.1.1",
+    "posthog-node": "^5.28.11",
     "steam-session": "^1.8.0",
     "steam-totp": "^2.1.2",
     "steam-tradeoffer-manager": "^2.12.5",
-    "steamcommunity": "^3.48.5",
-    "globaloffensive": "^3.1.1"
+    "steam-user": "^5.2.0",
+    "steamcommunity": "^3.48.5"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
