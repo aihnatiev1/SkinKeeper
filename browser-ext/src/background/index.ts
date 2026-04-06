@@ -171,6 +171,16 @@ async function handleMessage(msg: any): Promise<any> {
     case 'GET_INVENTORY':
       return apiRequest(`/inventory?limit=5000&offset=0&sort=price-desc`);
 
+    case 'SYNC_ITEMS':
+      // Push float/seed/paint data from Steam to backend
+      if (Array.isArray(msg.items) && msg.items.length > 0) {
+        return apiRequest('/ext/items/enrich', {
+          method: 'POST',
+          body: { items: msg.items },
+        });
+      }
+      return { ok: false };
+
     case 'GET_PL_ITEMS':
       return apiRequest(`/portfolio/pl/items?limit=500&offset=0`);
 

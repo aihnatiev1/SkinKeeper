@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from 'clsx';
 // Re-export shared utils so existing imports keep working
 export {
   getWearName, getWearShort as getWearShortFromFloat, getFloatColor, formatFloat, isLowFloat,
-  getDopplerPhase, isDoppler, isFade, calculateFadePercent, analyzeMarbleFade, analyzeBlueGem,
+  getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade, analyzeBlueGem,
   analyzePrice, calculateVelocity, calcSellerReceives, calcBuyerPrice,
   calculateStickerSP, formatSP,
   validateSellPrice, suggestSellPrice, formatTradeLock,

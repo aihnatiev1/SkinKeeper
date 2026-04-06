@@ -11,8 +11,9 @@ const priceLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: AuthRequest) => `ext:${req.userId || req.ip}`,
+  keyGenerator: (req: AuthRequest) => `ext:${req.userId || 'anon'}`,
   message: { error: "Too many price submissions" },
+  validate: false,
 });
 
 // ─── POST /api/ext/prices — receive crowdsourced price data ───────────
@@ -127,6 +128,101 @@ router.post(
     } catch (err) {
       console.error("[Extension] Bulk price fetch error:", err);
       res.status(500).json({ error: "Failed to fetch prices" });
+    }
+  }
+);
+
+// ─── POST /api/ext/items/enrich — receive float/seed/paint data from extension ─
+router.post(
+  "/items/enrich",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { items } = req.body;
+
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ error: "No items provided" });
+        return;
+      }
+
+      // Cap at 500 items per request
+      const batch = items.slice(0, 500);
+
+      // Get user's steam account IDs for ownership check
+      const { rows: accounts } = await pool.query(
+        `SELECT id FROM steam_accounts WHERE user_id = $1`,
+        [req.userId]
+      );
+      const accountIds = accounts.map((a) => a.id);
+
+      if (accountIds.length === 0) {
+        res.status(400).json({ error: "No steam accounts" });
+        return;
+      }
+
+      let updated = 0;
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        for (const item of batch) {
+          if (!item.asset_id) continue;
+
+          const sets: string[] = [];
+          const vals: any[] = [];
+          let idx = 1;
+
+          if (item.float_value != null && typeof item.float_value === "number") {
+            sets.push(`float_value = $${idx++}`);
+            vals.push(item.float_value);
+          }
+          if (item.paint_seed != null && typeof item.paint_seed === "number") {
+            sets.push(`paint_seed = $${idx++}`);
+            vals.push(item.paint_seed);
+          }
+          if (item.paint_index != null && typeof item.paint_index === "number") {
+            sets.push(`paint_index = $${idx++}`);
+            vals.push(item.paint_index);
+          }
+          if (item.stickers != null && Array.isArray(item.stickers)) {
+            sets.push(`stickers = $${idx++}`);
+            vals.push(JSON.stringify(item.stickers));
+          }
+          if (item.charms != null && Array.isArray(item.charms)) {
+            sets.push(`charms = $${idx++}`);
+            vals.push(JSON.stringify(item.charms));
+          }
+
+          if (sets.length === 0) continue;
+
+          sets.push(`inspected_at = NOW()`);
+
+          // Only update items owned by this user
+          vals.push(item.asset_id);
+          vals.push(accountIds);
+
+          await client.query(
+            `UPDATE inventory_items
+             SET ${sets.join(", ")}
+             WHERE asset_id = $${idx++} AND steam_account_id = ANY($${idx})`,
+            vals
+          );
+          updated++;
+        }
+
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      console.log(`[Extension] Enriched ${updated} items for user ${req.userId}`);
+      res.json({ ok: true, updated });
+    } catch (err) {
+      console.error("[Extension] Item enrich error:", err);
+      res.status(500).json({ error: "Failed to enrich items" });
     }
   }
 );

@@ -6,7 +6,7 @@ import { CurrencyBanner } from '@/components/currency-banner';
 import { ItemDetailModal } from '@/components/item-detail-modal';
 import { BulkSellBar } from '@/components/bulk-sell-bar';
 import { useInventory, useRefreshInventory } from '@/lib/hooks';
-import { formatPrice, getItemIconUrl, getWearShort, cn, getDopplerPhase, isDoppler, isFade, calculateFadePercent } from '@/lib/utils';
+import { formatPrice, getItemIconUrl, getWearShort, cn, getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade, getFloatColor } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
 import type { InventoryItem } from '@/lib/types';
 import { Search, RefreshCw, Grid3X3, List, SlidersHorizontal, Loader2, Package, Lock, CheckSquare } from 'lucide-react';
@@ -323,11 +323,13 @@ export default function InventoryPage() {
             {search && <p className="text-xs mt-1">Try a different search term</p>}
           </div>
         ) : view === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
             {items.map((item, idx) => {
               const price = item.prices?.steam || item.prices?.buff || item.prices?.skinport || 0;
               const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
               const isLast = idx === items.length - 1;
+              const isStatTrak = item.market_hash_name.includes('StatTrak');
+              const isSouvenir = item.market_hash_name.includes('Souvenir');
 
               // Doppler phase
               const dopplerPhase = item.paint_index && isDoppler(item.market_hash_name)
@@ -335,13 +337,43 @@ export default function InventoryPage() {
                 : null;
 
               // Fade %
-              const fadeInfo = item.paint_seed && isFade(item.market_hash_name)
+              const fadeInfo = item.paint_seed != null && isFade(item.market_hash_name)
                 ? calculateFadePercent(item.paint_seed)
                 : null;
 
-              // Sticker count
+              // Marble Fade
+              const marbleFade = item.paint_seed != null && isMarbleFade(item.market_hash_name)
+                ? analyzeMarbleFade(item.paint_seed)
+                : null;
+
+              const hasSpecialBadge = dopplerPhase || fadeInfo || marbleFade;
+
+              // Stickers
               const stickers = Array.isArray(item.stickers) ? item.stickers : [];
               const stickerCount = stickers.length;
+
+              // Duplicate count
+              const dupCount = allItems.filter(i => i.market_hash_name === item.market_hash_name).length;
+
+              // Wear colors matching extension exactly
+              const WEAR_COLORS: Record<string, string> = { FN: '#4ade80', MW: '#22d3ee', FT: '#a78bfa', WW: '#f97316', BS: '#ef4444' };
+              const wearShort = getWearShort(item.wear);
+              const wearColor = isStatTrak ? '#cf6a32' : isSouvenir ? '#ffd700' : (wearShort && WEAR_COLORS[wearShort]) || '#818cf8';
+
+              // Extension-style text shadow for all overlays
+              const txtSh = '0 1px 2px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.7)';
+
+              // Card background: doppler glow > value highlight > rarity tint
+              let cardBg = `linear-gradient(135deg, ${rarityColor}10, ${rarityColor}20)`;
+              let cardShadow: string | undefined;
+              if (dopplerPhase && dopplerPhase.tier === 1) {
+                cardBg = `linear-gradient(135deg, ${dopplerPhase.color}55, ${dopplerPhase.color}20)`;
+                cardShadow = `inset 0 0 20px ${dopplerPhase.color}30, 0 0 8px ${dopplerPhase.color}40`;
+              } else if (price >= 2000) {
+                cardBg = 'linear-gradient(135deg, rgba(220,38,38,0.30), rgba(220,38,38,0.10))';
+              } else if (price >= 1000) {
+                cardBg = 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(220,38,38,0.05))';
+              }
 
               return (
                 <motion.div
@@ -352,94 +384,156 @@ export default function InventoryPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   onClick={() => selectMode ? toggleSelect(item.asset_id) : setSelectedItem(item)}
                   className={cn(
-                    'item-card glass rounded-xl border overflow-hidden cursor-pointer group',
-                    selectedIds.has(item.asset_id)
-                      ? 'border-primary ring-1 ring-primary/30'
-                      : 'border-border/30'
+                    'relative overflow-hidden cursor-pointer group rounded-md',
+                    selectedIds.has(item.asset_id) && 'ring-2 ring-primary'
                   )}
+                  style={{
+                    background: cardBg,
+                    boxShadow: cardShadow,
+                    borderLeft: `3px solid ${rarityColor}`,
+                  }}
                 >
-                  <div
-                    className="relative flex items-center justify-center"
-                    style={{
-                      background: `linear-gradient(135deg, ${rarityColor}08, ${rarityColor}18)`,
-                      aspectRatio: '1',
-                    }}
-                  >
+                  {/* Image area */}
+                  <div className="relative" style={{ aspectRatio: '4/3' }}>
                     <img
                       src={getItemIconUrl(item.icon_url)}
                       alt={item.market_hash_name}
-                      className="max-h-[70%] max-w-[85%] object-contain group-hover:scale-110 transition-transform duration-300"
+                      className="absolute inset-0 w-full h-full object-contain p-3 group-hover:scale-110 transition-transform duration-300"
                     />
 
-                    {/* Top-left: float value */}
-                    {item.float_value != null && (
-                      <span className="absolute top-1.5 left-1.5 text-[9px] font-mono text-white/70 leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                        {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
-                      </span>
-                    )}
-
-                    {/* Top-right: wear badge */}
-                    {item.wear && (
-                      <span className={cn(
-                        'absolute top-1.5 right-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold leading-none',
-                        item.market_hash_name.includes('StatTrak')
-                          ? 'bg-orange-500/90 text-white'
-                          : 'bg-primary/80 text-white'
-                      )}>
-                        {item.market_hash_name.includes('StatTrak') ? 'ST ' : ''}
-                        {getWearShort(item.wear)}
-                      </span>
-                    )}
-
-                    {/* Trade lock icon top-left (below float) */}
-                    {!item.tradable && (
-                      <span className="absolute top-1.5 left-1.5 flex items-center justify-center w-4 h-4 bg-loss/80 rounded text-white" style={item.float_value != null ? { top: '18px' } : undefined}>
-                        <Lock size={9} />
-                      </span>
-                    )}
-
-                    {/* Doppler phase badge */}
+                    {/* === TOP-LEFT: Phase / Fade / Marble Fade badge === */}
                     {dopplerPhase && (
-                      <span
-                        className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded font-bold leading-none text-white"
-                        style={{ backgroundColor: dopplerPhase.color }}
+                      <div
+                        className="absolute top-[3px] left-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold text-white whitespace-nowrap z-10"
+                        style={{
+                          ...(dopplerPhase.tier === 1
+                            ? { background: `linear-gradient(135deg, ${dopplerPhase.color}ee, ${dopplerPhase.color}99)`, textShadow: `0 0 8px ${dopplerPhase.color}` }
+                            : { background: dopplerPhase.color + 'cc' }),
+                          lineHeight: '1.4',
+                        }}
                       >
-                        {dopplerPhase.phase}
-                      </span>
+                        {dopplerPhase.tier === 1 ? dopplerPhase.phase : dopplerPhase.phase.replace('Phase ', 'P').replace('Gamma ', 'G')}
+                      </div>
                     )}
-
-                    {/* Fade badge */}
                     {fadeInfo && !dopplerPhase && (
-                      <span
-                        className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded font-bold leading-none text-white"
-                        style={{ backgroundColor: fadeInfo.color }}
+                      <div
+                        className="absolute top-[3px] left-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold text-black whitespace-nowrap z-10"
+                        style={{ background: 'linear-gradient(135deg, #ff6b35, #f7c948, #6dd5ed)', textShadow: '0 0 3px rgba(255,255,255,0.4)', lineHeight: '1.4' }}
                       >
                         {fadeInfo.percentage}%
-                      </span>
+                      </div>
+                    )}
+                    {marbleFade && !dopplerPhase && !fadeInfo && (
+                      <div
+                        className="absolute top-[3px] left-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold text-white whitespace-nowrap z-10"
+                        style={{ background: marbleFade.color + 'cc', lineHeight: '1.4' }}
+                      >
+                        {marbleFade.pattern === 'Fire & Ice' ? '\ud83d\udd25\u2744\ufe0f' : marbleFade.pattern.substring(0, 3)}
+                      </div>
                     )}
 
-                    {/* Sticker count badge — bottom right */}
-                    {stickerCount > 0 && (
-                      <span className="absolute bottom-1.5 right-1.5 text-[9px] px-1 py-0.5 bg-accent/80 text-white rounded font-bold leading-none">
-                        x{stickerCount}
-                      </span>
+                    {/* === TOP-RIGHT: Wear badge (ST/SV + FN/MW/FT/WW/BS) === */}
+                    {(item.wear || isStatTrak || isSouvenir) && (
+                      <div
+                        className="absolute top-[3px] right-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold z-10"
+                        style={{ background: 'rgba(0,0,0,0.6)', color: wearColor, letterSpacing: '0.3px', lineHeight: '1.4' }}
+                      >
+                        {isStatTrak ? 'ST ' : ''}{isSouvenir ? 'SV ' : ''}{wearShort || ''}
+                      </div>
                     )}
 
-                    {/* Bottom-left overlay: price + sticker value */}
-                    <div className="absolute bottom-1.5 left-1.5">
-                      <p className="text-sm font-bold text-profit leading-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                        {price > 0 ? formatPrice(price) : '—'}
-                      </p>
-                      {item.sticker_value != null && item.sticker_value > 1 && (
-                        <p className="text-[9px] text-accent leading-none mt-0.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                          SP: {formatPrice(item.sticker_value)}
-                        </p>
-                      )}
-                    </div>
+                    {/* === Trade lock (below phase or top-left row 2) === */}
+                    {!item.tradable && (
+                      <div
+                        className="absolute left-[3px] px-[4px] py-[1px] rounded-[3px] text-white text-[8px] font-bold z-10"
+                        style={{ top: hasSpecialBadge ? '20px' : '3px', background: 'rgba(239,68,68,0.85)' }}
+                      >
+                        {item.trade_ban_until ? (() => {
+                          const days = Math.ceil((new Date(item.trade_ban_until).getTime() - Date.now()) / 86400000);
+                          return days > 0 ? `${days}d` : '\ud83d\udd12';
+                        })() : '\ud83d\udd12'}
+                      </div>
+                    )}
+
+                    {/* === RIGHT SIDE: Sticker value (row 1, below wear) === */}
+                    {item.sticker_value != null && item.sticker_value > 1 && (
+                      <div
+                        className="absolute right-[3px] z-10"
+                        style={{ top: '18px', color: '#fbbf24', fontSize: '9px', fontWeight: 700, textShadow: txtSh }}
+                      >
+                        {formatPrice(item.sticker_value)}
+                      </div>
+                    )}
+
+                    {/* === RIGHT SIDE: Paint seed (row 2) === */}
+                    {item.paint_seed != null && (dopplerPhase || fadeInfo || marbleFade) && (
+                      <div
+                        className="absolute right-[3px] font-mono z-10"
+                        style={{ top: '32px', color: '#94a3b8', fontSize: '9px', fontWeight: 600, textShadow: txtSh }}
+                      >
+                        {item.paint_seed}
+                      </div>
+                    )}
+
+                    {/* === BOTTOM-LEFT: Float value === */}
+                    {item.float_value != null && (
+                      <div
+                        className="absolute left-[4px] font-mono z-10"
+                        style={{ bottom: '19px', fontSize: '9px', fontWeight: 500, color: 'rgba(255,255,255,0.85)', textShadow: txtSh }}
+                      >
+                        {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
+                      </div>
+                    )}
+
+                    {/* === BOTTOM-LEFT: Price (bright yellow) === */}
+                    {price > 0 && (
+                      <div
+                        className="absolute left-[4px] z-10"
+                        style={{ bottom: '3px', color: '#fde047', fontSize: '12px', fontWeight: 800, textShadow: txtSh }}
+                      >
+                        {formatPrice(price)}
+                      </div>
+                    )}
+
+                    {/* === BOTTOM-RIGHT: Duplicate count === */}
+                    {dupCount > 1 && (
+                      <div
+                        className="absolute z-10 text-center text-white"
+                        style={{
+                          bottom: '16px', right: '2px',
+                          minWidth: '14px', height: '14px', padding: '0 3px',
+                          borderRadius: '7px', lineHeight: '14px',
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          fontSize: '8px', fontWeight: 800,
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                        }}
+                      >
+                        x{dupCount}
+                      </div>
+                    )}
+
+                    {/* === BOTTOM: Float bar (full width gradient) === */}
+                    {item.float_value != null && (
+                      <div
+                        className="absolute bottom-0 left-0 right-0 z-10"
+                        style={{
+                          height: '3px',
+                          background: 'linear-gradient(to right, #4ade80 0%, #86efac 7%, #facc15 15%, #f97316 38%, #ef4444 60%, #991b1b 100%)',
+                          opacity: 0.9,
+                          borderRadius: '0 0 4px 4px',
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute', top: '-2px',
+                          width: '3px', height: '7px',
+                          background: '#fff', borderRadius: '1px',
+                          left: `${item.float_value * 100}%`,
+                          transform: 'translateX(-50%)',
+                          boxShadow: '0 0 3px rgba(0,0,0,0.8)',
+                        }} />
+                      </div>
+                    )}
                   </div>
-
-                  {/* Rarity bar */}
-                  <div className="h-[2px]" style={{ backgroundColor: rarityColor }} />
                 </motion.div>
               );
             })}
@@ -461,13 +555,22 @@ export default function InventoryPage() {
                 {items.map((item, idx) => {
                   const price = item.prices?.steam || item.prices?.buff || item.prices?.skinport || 0;
                   const isLast = idx === items.length - 1;
+                  const isStatTrak = item.market_hash_name.includes('StatTrak');
+                  const isSouvenir = item.market_hash_name.includes('Souvenir');
                   const dopplerPhase = item.paint_index && isDoppler(item.market_hash_name)
                     ? getDopplerPhase(item.paint_index)
                     : null;
-                  const fadeInfo = item.paint_seed && isFade(item.market_hash_name)
+                  const fadeInfo = item.paint_seed != null && isFade(item.market_hash_name)
                     ? calculateFadePercent(item.paint_seed)
                     : null;
+                  const marbleFade = item.paint_seed != null && isMarbleFade(item.market_hash_name)
+                    ? analyzeMarbleFade(item.paint_seed)
+                    : null;
                   const stickerCount = Array.isArray(item.stickers) ? item.stickers.length : 0;
+                  const wearShort = getWearShort(item.wear);
+                  const wearColors: Record<string, string> = { FN: '#4ade80', MW: '#22d3ee', FT: '#a78bfa', WW: '#f97316', BS: '#ef4444' };
+                  const wearColor = isStatTrak ? '#cf6a32' : isSouvenir ? '#ffd700' : (wearShort && wearColors[wearShort]) || '#818cf8';
+                  const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
 
                   return (
                     <tr
@@ -475,6 +578,7 @@ export default function InventoryPage() {
                       ref={isLast ? lastItemRef : undefined}
                       onClick={() => setSelectedItem(item)}
                       className="border-b border-border/20 hover:bg-surface-light/30 transition-colors cursor-pointer"
+                      style={{ borderLeft: `3px solid ${rarityColor}` }}
                     >
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
@@ -496,26 +600,40 @@ export default function InventoryPage() {
                         ) : '—'}
                       </td>
                       <td className="px-4 py-2.5 hidden sm:table-cell">
-                        {item.wear ? (
-                          <span className={cn(
-                            'text-[10px] px-1.5 py-0.5 rounded font-bold',
-                            item.market_hash_name.includes('StatTrak') ? 'bg-orange-500/20 text-orange-400' : 'bg-primary/10 text-primary'
-                          )}>
-                            {item.market_hash_name.includes('StatTrak') ? 'ST ' : ''}{getWearShort(item.wear)}
+                        {(item.wear || isStatTrak || isSouvenir) ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-black/30" style={{ color: wearColor }}>
+                            {isStatTrak ? 'ST ' : ''}{isSouvenir ? 'SV ' : ''}{wearShort || ''}
                           </span>
                         ) : '—'}
                       </td>
                       <td className="px-4 py-2.5 hidden lg:table-cell">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {dopplerPhase && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold text-white" style={{ backgroundColor: dopplerPhase.color }}>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold text-white"
+                              style={dopplerPhase.tier === 1
+                                ? { background: `linear-gradient(135deg, ${dopplerPhase.color}ee, ${dopplerPhase.color}99)`, textShadow: `0 0 8px ${dopplerPhase.color}` }
+                                : { backgroundColor: dopplerPhase.color + 'cc' }
+                              }
+                            >
                               {dopplerPhase.phase}
                             </span>
                           )}
                           {fadeInfo && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold text-white" style={{ backgroundColor: fadeInfo.color }}>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold text-black"
+                              style={{ background: 'linear-gradient(135deg, #ff6b35, #f7c948, #6dd5ed)' }}
+                            >
                               {fadeInfo.percentage}%
                             </span>
+                          )}
+                          {marbleFade && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold text-white"
+                              style={{ backgroundColor: marbleFade.color + 'cc' }}
+                            >
+                              {marbleFade.pattern === 'Fire & Ice' ? '\ud83d\udd25\u2744\ufe0f' : marbleFade.pattern}
+                            </span>
+                          )}
+                          {item.paint_seed != null && (dopplerPhase || fadeInfo || marbleFade) && (
+                            <span className="text-[10px] font-mono text-slate-400">#{item.paint_seed}</span>
                           )}
                           {stickerCount > 0 && (
                             <span className="text-[10px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-medium">
@@ -523,13 +641,13 @@ export default function InventoryPage() {
                             </span>
                           )}
                           {item.sticker_value != null && item.sticker_value > 1 && (
-                            <span className="text-[10px] text-accent">
-                              SP: {formatPrice(item.sticker_value)}
+                            <span className="text-[10px] text-amber-400 font-bold">
+                              {formatPrice(item.sticker_value)}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-profit">
+                      <td className="px-4 py-2.5 text-right font-semibold" style={{ color: '#fde047' }}>
                         {price > 0 ? formatPrice(price) : '—'}
                       </td>
                       <td className="px-4 py-2.5 text-center hidden sm:table-cell">

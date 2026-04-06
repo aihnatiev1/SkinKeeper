@@ -195,9 +195,29 @@ async function init() {
   });
 }
 
+// ─── Sync item data (float/seed/paint) to SkinKeeper backend ──────────
+
 // ─── Fetch Enriched Data from SkinKeeper API ──────────────────────────
 
 async function fetchEnrichedInventory() {
+  // Sync float/seed/paint data to backend first
+  if (isOwnInventory) {
+    const toSync = items
+      .filter(i => i.floatValue != null || i.paintSeed != null || i.paintIndex != null)
+      .map(i => ({
+        asset_id: i.assetid,
+        float_value: i.floatValue ?? null,
+        paint_seed: i.paintSeed ?? null,
+        paint_index: i.paintIndex ?? null,
+      }));
+    console.log(`[SkinKeeper] Items to sync: ${toSync.length} (of ${items.length} total)`);
+    if (toSync.length > 0) {
+      sendMessage({ type: 'SYNC_ITEMS', items: toSync })
+        .then(r => console.log('[SkinKeeper] Sync result:', r))
+        .catch(e => console.error('[SkinKeeper] Sync error:', e));
+    }
+  }
+
   try {
     const data = await sendMessage({ type: 'GET_INVENTORY' });
     if (!data?.items || !Array.isArray(data.items)) {

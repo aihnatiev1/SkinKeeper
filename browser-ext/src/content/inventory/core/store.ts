@@ -43,19 +43,38 @@ export class DataStore {
   }
 
   updateFromSteam(items: any[]) {
+    // Collect items with inspect data to sync to backend
+    const toSync: any[] = [];
+
     items.forEach(item => {
       const price = getItemPrice(item.name, this.exchangeRate);
       const existing = this.items.get(item.assetid) || { assetId: item.assetid, name: item.name };
-      
+
       const updated: ItemData = {
         ...existing,
         price: price > 0 ? price : (existing as ItemData).price,
         rarityColor: item.rarity_color || (existing as ItemData).rarityColor,
         isRare: item.type?.toLowerCase().includes('knife') || item.type?.toLowerCase().includes('gloves')
       };
-      
+
       this.items.set(item.assetid, updated);
+
+      // Queue items that have float/seed/paint data for backend sync
+      if (item.float != null || item.paintSeed != null || item.paintIndex != null) {
+        toSync.push({
+          asset_id: item.assetid,
+          float_value: item.float,
+          paint_seed: item.paintSeed,
+          paint_index: item.paintIndex,
+        });
+      }
     });
+
+    // Push to backend via background script (fire & forget)
+    if (toSync.length > 0) {
+      sendMessage({ type: 'SYNC_ITEMS', items: toSync }).catch(() => {});
+      console.log(`[SkinKeeper] Syncing ${toSync.length} items to backend`);
+    }
   }
 
   async fetchEnrichedData() {

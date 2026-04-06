@@ -220,11 +220,15 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       const webAppUrl = process.env.WEB_APP_URL || "https://skinkeeper.store";
       const isPopup = params.popup === "1";
       if (isPopup) {
-        // Redirect popup back to same-origin page so window.close() works
-        res.redirect(`${webAppUrl}/login/success`);
+        // Popup: notify opener via postMessage, then close; fallback to JS redirect
+        res.send(`<html><head><script>
+try { window.opener && window.opener.postMessage({type:"sk_login_done"},"${webAppUrl}"); } catch(e){}
+try { window.close(); } catch(e){}
+setTimeout(function(){ window.location.replace("${webAppUrl}/login"); },1000);
+</script></head><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>Login successful!</h2><p style="color:#999">Closing...</p></div></body></html>`);
       } else {
-        // Mobile same-window redirect — go back to login page, sessionStorage nonce resumes polling
-        res.redirect(`${webAppUrl}/login`);
+        // Mobile same-window redirect
+        res.send(`<html><head><script>window.location.replace("${webAppUrl}/login")</script></head><body style="background:#0a0e1a"></body></html>`);
       }
       return;
     }
