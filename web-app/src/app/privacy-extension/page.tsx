@@ -63,10 +63,10 @@ export default function ExtensionPrivacyPage() {
           <p>We do not sell, rent, or share your data with third parties. Anonymous analytics data is processed by PostHog under their privacy policy.</p>
 
           <h2 className="text-lg font-bold text-foreground mt-8">7. Your Rights</h2>
-          <p>You can uninstall the Extension at any time to stop all data processing. To clear stored data, go to chrome://extensions, find SkinKeeper, and click &quot;Clear data&quot;. If you have a SkinKeeper account, you can request data deletion at support@skinkeeper.store.</p>
+          <p>You can uninstall the Extension at any time to stop all data processing. To clear stored data, go to chrome://extensions, find SkinKeeper, and click &quot;Clear data&quot;. If you have a SkinKeeper account, you can request data deletion at skillar.app@gmail.com.</p>
 
           <h2 className="text-lg font-bold text-foreground mt-8">8. Contact</h2>
-          <p>For questions about this policy, email <a href="mailto:support@skinkeeper.store" className="text-primary hover:underline">support@skinkeeper.store</a>.</p>
+          <p>For questions about this policy, email <a href="mailto:skillar.app@gmail.com" className="text-primary hover:underline">skillar.app@gmail.com</a>.</p>
         </div>
       </main>
     </div>

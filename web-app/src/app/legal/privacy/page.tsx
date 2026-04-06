@@ -40,7 +40,7 @@ export default function PrivacyPage() {
           <p>We do not sell your personal data. We share data only with: (a) service providers necessary to operate the platform; (b) law enforcement when required by law.</p>
 
           <h2 className="text-lg font-bold text-foreground mt-8">6. Your Rights</h2>
-          <p>You can: (a) access your data through the app; (b) request data export; (c) request account deletion by contacting support@skinkeeper.store; (d) opt out of push notifications in app settings.</p>
+          <p>You can: (a) access your data through the app; (b) request data export; (c) request account deletion by contacting skillar.app@gmail.com; (d) opt out of push notifications in app settings.</p>
 
           <h2 className="text-lg font-bold text-foreground mt-8">7. Cookies</h2>
           <p>We use essential cookies for authentication (session tokens). No tracking cookies are used on the marketing website.</p>
@@ -55,7 +55,7 @@ export default function PrivacyPage() {
           <p>We may update this Privacy Policy at any time. Changes will be posted on this page with an updated date.</p>
 
           <h2 className="text-lg font-bold text-foreground mt-8">11. Contact</h2>
-          <p>For privacy-related questions, contact us at support@skinkeeper.store.</p>
+          <p>For privacy-related questions, contact us at skillar.app@gmail.com.</p>
         </div>
       </main>
     </div>

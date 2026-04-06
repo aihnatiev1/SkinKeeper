@@ -49,7 +49,7 @@ export default function TermsPage() {
           <p>We may update these Terms at any time. Continued use of the Service after changes constitutes acceptance of the updated Terms.</p>
 
           <h2 className="text-lg font-bold text-foreground mt-8">10. Contact</h2>
-          <p>For questions about these Terms, contact us at support@skinkeeper.store.</p>
+          <p>For questions about these Terms, contact us at skillar.app@gmail.com.</p>
         </div>
       </main>
     </div>
