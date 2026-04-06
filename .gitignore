@@ -53,3 +53,8 @@ backend/.env
 backend/src/coverage/
 node_modules/
 ecosystem.config.js
+
+# Browser extension build artifacts
+browser-ext/dist/
+browser-ext/*.zip
+iScreen*.png
