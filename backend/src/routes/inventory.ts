@@ -48,10 +48,15 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     const whereClause = conditions.join(" AND ");
 
     // CTE: best price per item name (computed once, used for sort + total)
-    // Ignore stale prices (> 48h old) — same threshold as getLatestPrices
+    // Use Steam price first, then fall back to best external price.
+    // This matches Portfolio total_value calculation for consistency.
     const bestPriceCTE = `
       best AS (
-        SELECT market_hash_name, MAX(price_usd) as best_price
+        SELECT market_hash_name,
+               COALESCE(
+                 MAX(CASE WHEN source = 'steam' THEN price_usd END),
+                 MAX(price_usd)
+               ) as best_price
         FROM current_prices
         WHERE price_usd > 0
           AND updated_at > NOW() - INTERVAL '48 hours'
