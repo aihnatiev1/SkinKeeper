@@ -24,16 +24,26 @@ interface UIState {
   sidebarOpen: boolean;
   mobileOpen: boolean;
   currency: string;
+  /** null = all accounts, number = specific steam_account id */
+  accountScope: number | null;
+  /** null = all portfolios, number = specific portfolio id */
+  portfolioScope: number | null;
   toggleSidebar: () => void;
   setMobileOpen: (open: boolean) => void;
   setCurrency: (currency: string) => void;
+  setAccountScope: (scope: number | null) => void;
+  setPortfolioScope: (scope: number | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
   mobileOpen: false,
   currency: 'USD',
+  accountScope: null,
+  portfolioScope: null,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setMobileOpen: (open) => set({ mobileOpen: open }),
   setCurrency: (currency) => set({ currency }),
+  setAccountScope: (scope) => set({ accountScope: scope }),
+  setPortfolioScope: (scope) => set({ portfolioScope: scope }),
 }));

@@ -535,6 +535,7 @@ QuickPriceResult? _localFallback(QuickPriceRequest request) {
   final sellerReceives = cents - valveFee - cs2Fee;
   final marketUrl = 'https://steamcommunity.com/market/listings/730/${Uri.encodeComponent(request.marketHashName)}';
   return QuickPriceResult(
+    // Undercut by 1 unit — this is a USD fallback so step = 1 cent
     sellerReceivesCents: (sellerReceives - 1).clamp(1, sellerReceives),
     stale: true,
     source: 'local',

@@ -20,44 +20,67 @@ interface CurrencyInfo {
   symbol: string;
   /** Decimal places used (2 for most, 0 for JPY/VND/KRW) */
   decimals: number;
+  /**
+   * Minimum undercut step in the currency's smallest unit (cents/kopecks).
+   * Steam's market enforces minimum price steps per currency:
+   *   - USD/EUR/GBP: 1 cent  (minUnit: 1)
+   *   - UAH: 1 hryvnia       (minUnit: 100 = 100 kopecks)
+   *   - RUB: 1 ruble         (minUnit: 100 = 100 kopecks)
+   *   - KZT: 1 tenge         (minUnit: 100)
+   *   - IDR: 1 rupiah * 100  (minUnit: 100 — Steam rounds to hundreds)
+   *   - VND: 1 dong * 100    (minUnit: 100)
+   *   - COP: 1 peso * 100    (minUnit: 100)
+   *   - ARS: 1 peso          (minUnit: 100)
+   *   - JPY/KRW: 1 unit      (minUnit: 1 — no decimal places)
+   * Defaults to 1 if not specified.
+   */
+  minUnit: number;
 }
 
 const STEAM_CURRENCIES: Record<number, CurrencyInfo> = {
-  1: { code: "USD", symbol: "$", decimals: 2 },
-  2: { code: "GBP", symbol: "£", decimals: 2 },
-  3: { code: "EUR", symbol: "€", decimals: 2 },
-  5: { code: "RUB", symbol: "₽", decimals: 2 },
-  6: { code: "PLN", symbol: "zł", decimals: 2 },
-  7: { code: "BRL", symbol: "R$", decimals: 2 },
-  8: { code: "JPY", symbol: "¥", decimals: 0 },
-  9: { code: "NOK", symbol: "kr", decimals: 2 },
-  10: { code: "IDR", symbol: "Rp", decimals: 2 },
-  11: { code: "MYR", symbol: "RM", decimals: 2 },
-  12: { code: "PHP", symbol: "₱", decimals: 2 },
-  13: { code: "SGD", symbol: "S$", decimals: 2 },
-  14: { code: "THB", symbol: "฿", decimals: 2 },
-  15: { code: "VND", symbol: "₫", decimals: 0 },
-  16: { code: "KRW", symbol: "₩", decimals: 0 },
-  17: { code: "TRY", symbol: "₺", decimals: 2 },
-  18: { code: "UAH", symbol: "₴", decimals: 2 },
-  19: { code: "MXN", symbol: "Mex$", decimals: 2 },
-  20: { code: "CAD", symbol: "C$", decimals: 2 },
-  21: { code: "AUD", symbol: "A$", decimals: 2 },
-  22: { code: "NZD", symbol: "NZ$", decimals: 2 },
-  23: { code: "CNY", symbol: "¥", decimals: 2 },
-  24: { code: "INR", symbol: "₹", decimals: 2 },
-  25: { code: "CLP", symbol: "CLP$", decimals: 0 },
-  26: { code: "PEN", symbol: "S/.", decimals: 2 },
-  27: { code: "COP", symbol: "COL$", decimals: 2 },
-  28: { code: "ZAR", symbol: "R", decimals: 2 },
-  29: { code: "HKD", symbol: "HK$", decimals: 2 },
-  30: { code: "TWD", symbol: "NT$", decimals: 0 },
-  31: { code: "SAR", symbol: "SR", decimals: 2 },
-  32: { code: "AED", symbol: "AED", decimals: 2 },
-  34: { code: "ARS", symbol: "ARS$", decimals: 2 },
-  35: { code: "ILS", symbol: "₪", decimals: 2 },
-  37: { code: "KZT", symbol: "₸", decimals: 2 },
+  1:  { code: "USD", symbol: "$",     decimals: 2, minUnit: 1 },
+  2:  { code: "GBP", symbol: "£",     decimals: 2, minUnit: 1 },
+  3:  { code: "EUR", symbol: "€",     decimals: 2, minUnit: 1 },
+  5:  { code: "RUB", symbol: "₽",     decimals: 2, minUnit: 100 },
+  6:  { code: "PLN", symbol: "zł",    decimals: 2, minUnit: 1 },
+  7:  { code: "BRL", symbol: "R$",    decimals: 2, minUnit: 1 },
+  8:  { code: "JPY", symbol: "¥",     decimals: 0, minUnit: 1 },
+  9:  { code: "NOK", symbol: "kr",    decimals: 2, minUnit: 1 },
+  10: { code: "IDR", symbol: "Rp",    decimals: 2, minUnit: 100 },
+  11: { code: "MYR", symbol: "RM",    decimals: 2, minUnit: 1 },
+  12: { code: "PHP", symbol: "₱",     decimals: 2, minUnit: 1 },
+  13: { code: "SGD", symbol: "S$",    decimals: 2, minUnit: 1 },
+  14: { code: "THB", symbol: "฿",     decimals: 2, minUnit: 1 },
+  15: { code: "VND", symbol: "₫",     decimals: 0, minUnit: 100 },
+  16: { code: "KRW", symbol: "₩",     decimals: 0, minUnit: 1 },
+  17: { code: "TRY", symbol: "₺",     decimals: 2, minUnit: 1 },
+  18: { code: "UAH", symbol: "₴",     decimals: 2, minUnit: 100 },
+  19: { code: "MXN", symbol: "Mex$",  decimals: 2, minUnit: 1 },
+  20: { code: "CAD", symbol: "C$",    decimals: 2, minUnit: 1 },
+  21: { code: "AUD", symbol: "A$",    decimals: 2, minUnit: 1 },
+  22: { code: "NZD", symbol: "NZ$",   decimals: 2, minUnit: 1 },
+  23: { code: "CNY", symbol: "¥",     decimals: 2, minUnit: 1 },
+  24: { code: "INR", symbol: "₹",     decimals: 2, minUnit: 1 },
+  25: { code: "CLP", symbol: "CLP$",  decimals: 0, minUnit: 1 },
+  26: { code: "PEN", symbol: "S/.",   decimals: 2, minUnit: 1 },
+  27: { code: "COP", symbol: "COL$",  decimals: 2, minUnit: 100 },
+  28: { code: "ZAR", symbol: "R",     decimals: 2, minUnit: 1 },
+  29: { code: "HKD", symbol: "HK$",   decimals: 2, minUnit: 1 },
+  30: { code: "TWD", symbol: "NT$",   decimals: 0, minUnit: 1 },
+  31: { code: "SAR", symbol: "SR",    decimals: 2, minUnit: 1 },
+  32: { code: "AED", symbol: "AED",   decimals: 2, minUnit: 1 },
+  34: { code: "ARS", symbol: "ARS$",  decimals: 2, minUnit: 100 },
+  35: { code: "ILS", symbol: "₪",     decimals: 2, minUnit: 1 },
+  37: { code: "KZT", symbol: "₸",     decimals: 2, minUnit: 100 },
 };
+
+/**
+ * Get the minimum undercut step for a currency (in its smallest unit).
+ * E.g., USD → 1 (1 cent), UAH → 100 (1 hryvnia).
+ */
+export function getMinUndercutUnit(steamCurrencyId: number): number {
+  return STEAM_CURRENCIES[steamCurrencyId]?.minUnit ?? 1;
+}
 
 export function getCurrencyInfo(steamCurrencyId: number): CurrencyInfo | null {
   return STEAM_CURRENCIES[steamCurrencyId] ?? null;

@@ -4,11 +4,9 @@ import { pool } from "../db/pool.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { demoStubs } from "../middleware/demoStubs.js";
 import { validateBody } from "../middleware/validate.js";
-import { sellOperationSchema, sellItemSchema, sessionCookiesSchema, clientTokenSchema, refreshPricesSchema } from "../middleware/schemas.js";
+import { sellOperationSchema, refreshPricesSchema } from "../middleware/schemas.js";
 import {
-  sellItem,
   quickSellPrice,
-  bulkSell,
   getMarketPrice,
 } from "../services/market.js";
 import { SteamSessionService } from "../services/steamSession.js";
@@ -24,11 +22,11 @@ import {
   detectWalletCurrency,
   getExchangeRate,
   getCurrencyInfo,
+  getMinUndercutUnit,
   convertUsdToWallet,
   setWalletCurrency,
   getSteamCurrencies,
 } from "../services/currency.js";
-import { SessionExpiredError } from "../utils/errors.js";
 import { getExchangeRates, getExchangeRatesUpdatedAt } from "../services/csgoTrader.js";
 import { getMarketplaceLinks } from "../services/buffIds.js";
 import { refreshPricesOnDemand } from "../services/steamHistogram.js";
@@ -570,9 +568,10 @@ router.post(
         fresh: boolean;
       }> = {};
 
+      const step = getMinUndercutUnit(walletCurrencyId);
       for (const [name, p] of priceMap) {
-        // Undercut: lowest listing - 1, minus fees
-        const listing = Math.max(1, p.lowestSellOrder - 1);
+        // Undercut: lowest listing - 1 unit, minus fees
+        const listing = Math.max(step, p.lowestSellOrder - step);
         const valveFee = Math.max(1, Math.floor(listing * 0.05));
         const cs2Fee = Math.max(1, Math.floor(listing * 0.10));
         const sellerReceives = Math.max(1, listing - valveFee - cs2Fee);
@@ -600,84 +599,13 @@ router.post(
   }
 );
 
-// @deprecated — Use POST /api/market/sell-operation instead
-router.post(
-  "/sell",
-  authMiddleware,
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { assetId, priceInCents, accountId } = req.body;
-      if (!assetId || !priceInCents) {
-        res.status(400).json({ error: "assetId and priceInCents required" });
-        return;
-      }
-
-      const resolvedAccountId = accountId
-        ? parseInt(accountId)
-        : await SteamSessionService.getActiveAccountId(req.userId!);
-
-      const session = await SteamSessionService.getSession(resolvedAccountId);
-      if (!session) {
-        res.status(400).json({ error: "Steam session not configured." });
-        return;
-      }
-      const isValid = await SteamSessionService.validateSession(session);
-      if (!isValid) {
-        next(new SessionExpiredError("Steam session expired. Please re-authenticate."));
-        return;
-      }
-
-      const result = await sellItem(session, assetId, priceInCents, resolvedAccountId);
-      res.json(result);
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// @deprecated — Use POST /api/market/sell-operation instead
-router.post(
-  "/bulk-sell",
-  authMiddleware,
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { items, accountId } = req.body as {
-        items: Array<{ assetId: string; priceInCents: number }>;
-        accountId?: number;
-      };
-
-      if (!items || items.length === 0) {
-        res.status(400).json({ error: "Items array required" });
-        return;
-      }
-
-      if (items.length > 50) {
-        res.status(400).json({ error: "Max 50 items per batch" });
-        return;
-      }
-
-      const resolvedAccountId = accountId
-        ?? await SteamSessionService.getActiveAccountId(req.userId!);
-
-      const session = await SteamSessionService.getSession(resolvedAccountId);
-      if (!session) {
-        res.status(400).json({ error: "Steam session not configured." });
-        return;
-      }
-      const isValid = await SteamSessionService.validateSession(session);
-      if (!isValid) {
-        next(new SessionExpiredError("Steam session expired. Please re-authenticate."));
-        return;
-      }
-
-      const results = await bulkSell(session, items, resolvedAccountId);
-      const succeeded = results.filter((r) => r.result.success).length;
-      res.json({ results, succeeded, total: items.length });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
+// @deprecated — removed, use POST /api/market/sell-operation instead
+router.post("/sell", authMiddleware, (_req, res) => {
+  res.status(410).json({ error: "Deprecated. Use POST /api/market/sell-operation instead." });
+});
+router.post("/bulk-sell", authMiddleware, (_req, res) => {
+  res.status(410).json({ error: "Deprecated. Use POST /api/market/sell-operation instead." });
+});
 
 
 // ─── Arbitrage / Best Deals ──────────────────────────────────────────────────

@@ -120,9 +120,28 @@ export default function TradesPage() {
                         </div>
                       </div>
                     </div>
-                    <span className="text-xs text-muted">
-                      {formatRelativeTime(trade.createdAt)}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {/* Trade P&L badge */}
+                      {trade.valueGiveCents > 0 && trade.valueRecvCents > 0 && (
+                        (() => {
+                          const diff = trade.valueRecvCents - trade.valueGiveCents;
+                          const pct = trade.valueGiveCents > 0 ? (diff / trade.valueGiveCents) * 100 : 0;
+                          return (
+                            <span className={cn(
+                              'text-xs px-2 py-0.5 rounded-full font-semibold',
+                              diff > 0 ? 'bg-profit/10 text-profit'
+                              : diff < 0 ? 'bg-loss/10 text-loss'
+                              : 'bg-muted/10 text-muted'
+                            )}>
+                              {diff > 0 ? '+' : ''}{formatPrice(cents(diff))} ({diff > 0 ? '+' : ''}{pct.toFixed(1)}%)
+                            </span>
+                          );
+                        })()
+                      )}
+                      <span className="text-xs text-muted">
+                        {formatRelativeTime(trade.createdAt)}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Items */}

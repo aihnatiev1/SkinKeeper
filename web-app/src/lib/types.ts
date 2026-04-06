@@ -88,13 +88,18 @@ export interface InventoryItem {
   inspect_link: string | null;
   paint_seed: number | null;
   paint_index: number | null;
-  stickers: unknown | null;
+  stickers: Array<{ name?: string; icon_url?: string; wear?: number }> | null;
   charms: unknown | null;
   account_steam_id: string;
   account_id: number;
   account_name: string;
   account_avatar_url: string;
   prices: Record<string, number>;
+  sticker_value: number | null;
+  fade_percentage: number | null;
+  collection: string | null;
+  min_float: number | null;
+  max_float: number | null;
 }
 
 // ─── Trades ────────────────────────────────────────────────────────────
@@ -210,4 +215,100 @@ export interface Alert {
   cooldown_minutes: number;
   last_triggered_at: string | null;
   created_at: string;
+}
+
+// ─── Portfolios ───────────────────────────────────────────────────────
+export interface Portfolio {
+  id: number;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+// ─── Market Listings ──────────────────────────────────────────────────
+// GET /api/market/listings
+export interface MarketListing {
+  listingId: string;
+  assetId: string;
+  accountId: number;
+  accountName: string | null;
+  state: 'active' | 'to_confirm' | 'on_hold';
+  marketHashName: string | null;
+  name: string | null;
+  iconUrl: string | null;
+  sellerPrice: number;
+  buyerPrice: number;
+  currencyId: number;
+  timeCreated: number;
+}
+
+// GET /api/market/volume
+export interface SellVolume {
+  today: number;
+  limit: number;
+  warningAt: number;
+  remaining: number;
+}
+
+// POST /api/market/sell-operation
+export interface SellOperation {
+  operationId: string;
+  status: string;
+  totalItems: number;
+  completedItems?: number;
+  failedItems?: number;
+  items?: SellOperationItem[];
+}
+
+export interface SellOperationItem {
+  assetId: string;
+  marketHashName: string;
+  priceCents: number;
+  status: string;
+  error?: string;
+}
+
+// ─── Deals / Arbitrage ────────────────────────────────────────────────
+// GET /api/market/deals
+export interface Deal {
+  marketHashName: string;
+  buySource: string;
+  buyPrice: number;
+  sellPrice: number;
+  profitUsd: number;
+  profitPct: number;
+  iconUrl: string | null;
+  buyUrl: string | null;
+  buffBidPrice: number | null;
+}
+
+// ─── Watchlist ────────────────────────────────────────────────────────
+// GET /api/alerts/watchlist
+export interface WatchlistItem {
+  id: number;
+  market_hash_name: string;
+  condition: string;
+  threshold: number;
+  source: string;
+  is_active: boolean;
+  cooldown_minutes: number;
+  last_triggered_at: string | null;
+  created_at: string;
+  icon_url: string | null;
+  is_watchlist: boolean;
+  current_price: number | null;
+}
+
+// ─── Price History ────────────────────────────────────────────────────
+export interface PriceHistoryPoint {
+  date: string;
+  price: number;
+}
+
+// ─── Fee Calculator ───────────────────────────────────────────────────
+export interface FeeCalcResult {
+  buyerPays: number;
+  sellerReceives: number;
+  steamFee: number;
+  gameFee: number;
 }

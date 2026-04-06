@@ -577,7 +577,11 @@ export default async function LandingPage() {
               <ul className="space-y-2 text-sm text-muted">
                 <li><a href="#features" className="hover:text-foreground transition-colors">Features</a></li>
                 <li><a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a></li>
-                <li><Link href="/login" className="hover:text-foreground transition-colors">Dashboard</Link></li>
+                <li><Link href="/portfolio" className="hover:text-foreground transition-colors">Portfolio</Link></li>
+                <li><Link href="/inventory" className="hover:text-foreground transition-colors">Inventory</Link></li>
+                <li><Link href="/market" className="hover:text-foreground transition-colors">Market</Link></li>
+                <li><Link href="/deals" className="hover:text-foreground transition-colors">Deals</Link></li>
+                <li><Link href="/watchlist" className="hover:text-foreground transition-colors">Watchlist</Link></li>
               </ul>
             </div>
             <div>

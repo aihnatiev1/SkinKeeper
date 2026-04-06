@@ -509,162 +509,104 @@ class _FooterSection extends StatelessWidget {
         compact ? 5 : 8,
         compact ? 5 : 7,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Wear pills + account badge on same row
-          Row(
-            children: [
-              Flexible(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!item.isNonWeapon && item.wearShort != null) ...[
-                      if (item.isSouvenir)
-                        Text('SV ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9)))
-                      else if (item.isStatTrak)
-                        Text('ST ', style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.w800, color: AppTheme.warning.withValues(alpha: 0.9))),
-                      _WearPill(wear: item.wearShort!, compact: compact),
-                      if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
-                        const Padding(padding: EdgeInsets.only(left: 3), child: Text('🔥', style: TextStyle(fontSize: 9))),
-                    ],
-                    if (hasBan) ...[
-                      const SizedBox(width: 4),
-                      _TradeBanBadge(item: item, compact: compact),
-                    ],
-                  ],
-                ),
-              ),
-              if (hasAccount) ...[
-                const SizedBox(width: 2),
-                compact
-                    ? _AccountLetterDot(name: item.accountName)
-                    : _AccountNameBadge(accountName: item.accountName, compact: true),
-              ],
-            ],
-          ),
-          // Float bar below
-          if (!item.isNonWeapon && item.wearShort != null)
-            Padding(
-              padding: EdgeInsets.only(top: compact ? 3 : 4, right: 4),
-              child: _MiniFloatBar(floatValue: item.floatValue, wearShort: item.wearShort!),
-            ),
-        ],
-      ),
+      child: compact ? _buildCompactFooter(hasBan, hasAccount) : _buildFullFooter(hasBan, hasAccount),
     );
   }
 
-  Widget _buildCompactInfo() {
-    // Non-weapon items or items without wear (cases, capsules, etc.) don't show wear/float
-    if (item.isNonWeapon || item.wearShort == null) return const SizedBox.shrink();
-
+  Widget _buildCompactFooter(bool hasBan, bool hasAccount) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           children: [
-            if (item.isSouvenir)
-              Text(
-                'SV ',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.warning.withValues(alpha: 0.9),
-                ),
-              )
-            else if (item.isStatTrak)
-              Text(
-                'ST ',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.warning.withValues(alpha: 0.9),
-                ),
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!item.isNonWeapon && item.wearShort != null) ...[
+                    if (item.isSouvenir)
+                      const Text('SV ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning))
+                    else if (item.isStatTrak)
+                      const Text('ST ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning)),
+                    _WearPill(wear: item.wearShort!, compact: true),
+                    if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
+                      const Padding(padding: EdgeInsets.only(left: 3), child: Text('🔥', style: TextStyle(fontSize: 9))),
+                  ],
+                  if (hasBan) ...[
+                    const SizedBox(width: 4),
+                    _TradeBanBadge(item: item, compact: true),
+                  ],
+                ],
               ),
-            if (item.wearShort != null)
-              _WearPill(wear: item.wearShort!, compact: true),
-            if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
-              const Padding(
-                padding: EdgeInsets.only(left: 3),
-                child: Text('🔥', style: TextStyle(fontSize: 9)),
-              ),
+            ),
+            if (hasAccount) ...[
+              const SizedBox(width: 2),
+              _AccountLetterDot(name: item.accountName),
+            ],
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4, right: 4),
-          child: _MiniFloatBar(
-            floatValue: item.floatValue,
-            wearShort: item.wearShort!,
+        if (!item.isNonWeapon && item.wearShort != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 3, right: 4),
+            child: _MiniFloatBar(floatValue: item.floatValue, wearShort: item.wearShort!),
           ),
-        ),
       ],
     );
   }
 
-  Widget _buildFullInfo() {
-    // Non-weapon items or items without wear (cases, capsules, etc.) don't show wear/float/rarity
-    if (item.isNonWeapon || item.wearShort == null) return const SizedBox.shrink();
-
+  Widget _buildFullFooter(bool hasBan, bool hasAccount) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Wear row
-        Wrap(
-          spacing: 4,
-          runSpacing: 3,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        // Row 1: special badges + wear + trade ban + account
+        Row(
           children: [
-            if (item.isRareDoppler)
-              DopplerPhaseGem(
-                phase: item.dopplerPhase!,
-                color: item.dopplerColor!,
-                size: 12,
-              )
-            else if (item.isDoppler && item.dopplerPhase != null)
-              _DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor)
-            else if (item.isRareItem)
-              _RareBadge(reason: item.rareReason!),
-            if (item.isSouvenir)
-              const Text(
-                'SV',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.warning,
-                ),
-              )
-            else if (item.isStatTrak)
-              const Text(
-                'ST',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.warning,
-                ),
+            Flexible(
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 3,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  // Doppler / Rare badge
+                  if (item.isRareDoppler)
+                    DopplerPhaseGem(
+                      phase: item.dopplerPhase!,
+                      color: item.dopplerColor!,
+                      size: 12,
+                    )
+                  else if (item.isDoppler && item.dopplerPhase != null)
+                    _DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor)
+                  else if (item.isRareItem)
+                    _RareBadge(reason: item.rareReason!),
+                  // StatTrak / Souvenir
+                  if (!item.isNonWeapon && item.wearShort != null) ...[
+                    if (item.isSouvenir)
+                      const Text('SV', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.warning))
+                    else if (item.isStatTrak)
+                      const Text('ST', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.warning)),
+                    _WearPill(wear: item.wearShort!),
+                  ],
+                  if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
+                    const Text('🔥', style: TextStyle(fontSize: 10)),
+                  if (hasBan) _TradeBanBadge(item: item, compact: false),
+                ],
               ),
-            if (item.wearShort != null)
-              _WearPill(wear: item.wearShort!),
+            ),
+            if (hasAccount) ...[
+              const SizedBox(width: 2),
+              _AccountNameBadge(accountName: item.accountName, compact: true),
+            ],
           ],
         ),
-        // Float value text (only when exact float known)
-        if (item.floatValue != null)
+        // Row 2: float text
+        if (!item.isNonWeapon && item.floatValue != null)
           Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Low float fire icon
-                if (item.floatValue! < 0.01 && item.wear == 'Factory New')
-                  Tooltip(
-                    message: 'Low Float',
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 3),
-                      child: Text('🔥', style: TextStyle(fontSize: 10)),
-                    ),
-                  ),
                 Text(
                   item.floatValue!.toStringAsFixed(7),
                   style: TextStyle(
@@ -681,13 +623,13 @@ class _FooterSection extends StatelessWidget {
               ],
             ),
           ),
-        // Float bar — always shown for items with wear
-        const SizedBox(height: 6),
-        _MiniFloatBar(
-          floatValue: item.floatValue,
-          wearShort: item.wearShort!,
-        ),
-        // Fade % bar — only for Fade knives with known percentage
+        // Row 3: float bar
+        if (!item.isNonWeapon && item.wearShort != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, right: 4),
+            child: _MiniFloatBar(floatValue: item.floatValue, wearShort: item.wearShort!),
+          ),
+        // Row 4: fade bar
         if (item.fadePercentage != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -696,6 +638,7 @@ class _FooterSection extends StatelessWidget {
       ],
     );
   }
+
 }
 
 // ─── Wear Pill ───────────────────────────────────────────────────────

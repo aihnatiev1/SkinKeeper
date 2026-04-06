@@ -2,8 +2,9 @@
 
 import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Loader2, Shield } from 'lucide-react';
+import { Loader2, Shield, ArrowLeft } from 'lucide-react';
 import { authApi } from '@/lib/api';
 
 export default function LoginPage() {
@@ -76,7 +77,26 @@ function LoginContent() {
   }, [nonce, status, redirect, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative">
+    <div className="min-h-screen flex flex-col relative">
+      {/* Nav bar */}
+      <nav className="fixed top-0 left-0 right-0 z-50 glass-strong">
+        <div className="flex items-center justify-between px-6 lg:px-16 h-16 max-w-7xl mx-auto">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-shadow">
+              SK
+            </div>
+            <span className="text-lg font-bold">SkinKeeper</span>
+          </Link>
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={14} />
+            Back to home
+          </Link>
+        </div>
+      </nav>
+
       {/* Background */}
       <div className="absolute inset-0 gradient-hero" />
       <div className="absolute inset-0 dot-pattern opacity-20" />
@@ -84,6 +104,8 @@ function LoginContent() {
       {/* Floating skin images */}
       <div className="absolute top-[15%] left-[8%] w-32 h-32 rounded-full bg-primary/10 blur-2xl animate-float pointer-events-none hidden md:block" />
       <div className="absolute bottom-[20%] right-[10%] w-28 h-28 rounded-full bg-accent/8 blur-3xl animate-float-delayed pointer-events-none hidden md:block" />
+
+      <div className="flex-1 flex items-center justify-center px-4">
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -157,6 +179,7 @@ function LoginContent() {
           </p>
         </div>
       </motion.div>
+      </div>
     </div>
   );
 }

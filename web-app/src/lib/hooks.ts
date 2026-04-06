@@ -14,8 +14,21 @@ import type {
   Alert,
   WalletInfo,
   SteamCurrency,
+  MarketListing,
+  SellVolume,
+  SellOperation,
+  Deal,
+  WatchlistItem,
+  PriceHistoryPoint,
+  FeeCalcResult,
+  Portfolio,
 } from './types';
-import { useAuthStore } from './store';
+import { useAuthStore, useUIStore } from './store';
+
+/** Build `?accountId=X` param string if account scope is set, empty string otherwise */
+function scopeParam(scope: number | null, prefix: '?' | '&' = '?'): string {
+  return scope != null ? `${prefix}accountId=${scope}` : '';
+}
 
 // ─── Auth ──────────────────────────────────────────────────────────────
 
@@ -55,42 +68,105 @@ export function useSwitchAccount() {
   });
 }
 
-// ─── Portfolio ─────────────────────────────────────────────────────────
+// ─── Portfolios (named) ───────────────────────────────────────────────
+
+export function usePortfolios() {
+  return useQuery({
+    queryKey: ['portfolios'],
+    queryFn: () => api.get<{ portfolios: Portfolio[] }>('/portfolios'),
+    select: (data) => data.portfolios,
+  });
+}
+
+export function useCreatePortfolio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; color?: string }) =>
+      api.post<Portfolio>('/portfolios', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolios'] }),
+  });
+}
+
+export function useUpdatePortfolio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; name: string; color?: string }) =>
+      api.put<Portfolio>(`/portfolios/${id}`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolios'] }),
+  });
+}
+
+export function useDeletePortfolio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/portfolios/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portfolios'] });
+      qc.invalidateQueries({ queryKey: ['portfolio'] });
+    },
+  });
+}
+
+// ─── Portfolio Summary & P/L ──────────────────────────────────────────
 
 export function usePortfolioSummary() {
+  const scope = useUIStore((s) => s.accountScope);
   return useQuery({
-    queryKey: ['portfolio', 'summary'],
-    queryFn: () => api.get<PortfolioSummary>('/portfolio/summary'),
+    queryKey: ['portfolio', 'summary', scope],
+    queryFn: () => api.get<PortfolioSummary>(`/portfolio/summary${scopeParam(scope)}`),
   });
 }
 
 export function useProfitLoss() {
   const user = useAuthStore((s) => s.user);
+  const scope = useUIStore((s) => s.accountScope);
+  const pScope = useUIStore((s) => s.portfolioScope);
   return useQuery({
-    queryKey: ['portfolio', 'pl'],
-    queryFn: () => api.get<ProfitLoss>('/portfolio/pl'),
+    queryKey: ['portfolio', 'pl', scope, pScope],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (scope != null) params.set('accountId', String(scope));
+      if (pScope != null) params.set('portfolioId', String(pScope));
+      const qs = params.toString();
+      return api.get<ProfitLoss>(`/portfolio/pl${qs ? `?${qs}` : ''}`);
+    },
     enabled: !!user?.is_premium,
   });
 }
 
 export function usePLItems(page = 1, limit = 50) {
   const user = useAuthStore((s) => s.user);
+  const scope = useUIStore((s) => s.accountScope);
+  const pScope = useUIStore((s) => s.portfolioScope);
   return useQuery({
-    queryKey: ['portfolio', 'pl', 'items', page],
-    queryFn: () =>
-      api.get<{ items: PLItem[]; total: number; offset: number; limit: number }>(
-        `/portfolio/pl/items?offset=${(page - 1) * limit}&limit=${limit}`
-      ),
+    queryKey: ['portfolio', 'pl', 'items', page, scope, pScope],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set('offset', String((page - 1) * limit));
+      params.set('limit', String(limit));
+      if (scope != null) params.set('accountId', String(scope));
+      if (pScope != null) params.set('portfolioId', String(pScope));
+      return api.get<{ items: PLItem[]; total: number; offset: number; limit: number }>(
+        `/portfolio/pl/items?${params}`
+      );
+    },
     enabled: !!user?.is_premium,
   });
 }
 
 export function usePLHistory(days = 30) {
   const user = useAuthStore((s) => s.user);
+  const scope = useUIStore((s) => s.accountScope);
+  const pScope = useUIStore((s) => s.portfolioScope);
   return useQuery({
-    queryKey: ['portfolio', 'pl', 'history', days],
-    queryFn: () =>
-      api.get<{ history: PLHistory[] }>(`/portfolio/pl/history?days=${days}`),
+    queryKey: ['portfolio', 'pl', 'history', days, scope, pScope],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set('days', String(days));
+      if (scope != null) params.set('accountId', String(scope));
+      if (pScope != null) params.set('portfolioId', String(pScope));
+      return api.get<{ history: PLHistory[] }>(`/portfolio/pl/history?${params}`);
+    },
     enabled: !!user?.is_premium,
   });
 }
@@ -118,10 +194,12 @@ interface InventoryFilters {
 const INVENTORY_PAGE_SIZE = 20;
 
 export function useInventory(filters: InventoryFilters = {}) {
+  const scope = useUIStore((s) => s.accountScope);
   const { sort = 'price-desc', search = '', tradableOnly = false, accountId } = filters;
+  const effectiveAccountId = accountId ?? scope;
 
   return useInfiniteQuery<InventoryPage>({
-    queryKey: ['inventory', sort, search, tradableOnly, accountId],
+    queryKey: ['inventory', sort, search, tradableOnly, effectiveAccountId],
     queryFn: ({ pageParam = 0 }) => {
       const params = new URLSearchParams();
       params.set('limit', String(INVENTORY_PAGE_SIZE));
@@ -129,7 +207,7 @@ export function useInventory(filters: InventoryFilters = {}) {
       params.set('sort', sort);
       if (search) params.set('search', search);
       if (tradableOnly) params.set('tradableOnly', 'true');
-      if (accountId) params.set('accountId', String(accountId));
+      if (effectiveAccountId) params.set('accountId', String(effectiveAccountId));
       return api.get<InventoryPage>(`/inventory?${params}`);
     },
     getNextPageParam: (lastPage) =>
@@ -152,13 +230,15 @@ export function useRefreshInventory() {
 // ─── Trades ────────────────────────────────────────────────────────────
 
 export function useTrades(status?: string, limit = 20, offset = 0) {
+  const scope = useUIStore((s) => s.accountScope);
   return useQuery({
-    queryKey: ['trades', status, limit, offset],
+    queryKey: ['trades', status, limit, offset, scope],
     queryFn: () => {
       const params = new URLSearchParams();
       if (status) params.set('status', status);
       params.set('limit', String(limit));
       params.set('offset', String(offset));
+      if (scope != null) params.set('accountId', String(scope));
       return api.get<{ offers: TradeOffer[]; total: number; hasMore: boolean }>(
         `/trades?${params}`
       );
@@ -182,14 +262,16 @@ export function useTransactions(filters?: {
   from?: string;
   to?: string;
 }) {
+  const scope = useUIStore((s) => s.accountScope);
   return useQuery({
-    queryKey: ['transactions', filters],
+    queryKey: ['transactions', filters, scope],
     queryFn: () => {
       const params = new URLSearchParams();
       if (filters?.type) params.set('type', filters.type);
       if (filters?.item) params.set('item', filters.item);
       if (filters?.from) params.set('from', filters.from);
       if (filters?.to) params.set('to', filters.to);
+      if (scope != null) params.set('accountId', String(scope));
       return api.get<{ transactions: Transaction[]; total: number }>(
         `/transactions?${params}`
       );
@@ -202,6 +284,29 @@ export function useTransactionStats() {
   return useQuery({
     queryKey: ['transactions', 'stats'],
     queryFn: () => api.get<TransactionStats>('/transactions/stats'),
+  });
+}
+
+export function useImportTransactions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (rows: Array<{ name: string; type: string; qty?: number; price_usd: number; date?: string; portfolio_id?: number }>) =>
+      api.post<{ imported: number }>('/transactions/import', { rows }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['portfolio'] });
+    },
+  });
+}
+
+export function useDeleteTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/transactions/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['portfolio'] });
+    },
   });
 }
 
@@ -262,10 +367,134 @@ export function useCreateAlert() {
   });
 }
 
+export function useToggleAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
+      api.patch(`/alerts/${id}`, { is_active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
+  });
+}
+
 export function useDeleteAlert() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.delete(`/alerts/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
+  });
+}
+
+// ─── Market Listings ──────────────────────────────────────────────────
+
+export function useMarketListings() {
+  const scope = useUIStore((s) => s.accountScope);
+  return useQuery({
+    queryKey: ['market', 'listings', scope],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (scope != null) params.set('accountId', String(scope));
+      return api.get<{ listings: MarketListing[]; totalCount: number }>(`/market/listings?${params}`);
+    },
+  });
+}
+
+export function useSellVolume() {
+  return useQuery({
+    queryKey: ['market', 'volume'],
+    queryFn: () => api.get<SellVolume>('/market/volume'),
+  });
+}
+
+export function useCreateSellOperation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: Array<{ assetId: string; marketHashName: string; priceCents: number }>) =>
+      api.post<SellOperation>('/market/sell-operation', { items }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['market'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useSellOperationStatus(operationId: string | null) {
+  return useQuery({
+    queryKey: ['market', 'sell-operation', operationId],
+    queryFn: () => api.get<SellOperation>(`/market/sell-operation/${operationId}`),
+    enabled: !!operationId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'pending' || status === 'in_progress' ? 2000 : false;
+    },
+  });
+}
+
+// ─── Deals / Arbitrage ────────────────────────────────────────────────
+
+export function useDeals(minProfit = 5, limit = 50) {
+  return useQuery({
+    queryKey: ['market', 'deals', minProfit, limit],
+    queryFn: () =>
+      api.get<{ deals: Deal[]; count: number }>(`/market/deals?minProfit=${minProfit}&limit=${limit}`),
+  });
+}
+
+// ─── Watchlist ────────────────────────────────────────────────────────
+
+export function useWatchlist() {
+  return useQuery({
+    queryKey: ['watchlist'],
+    queryFn: () => api.get<{ items: WatchlistItem[] }>('/alerts/watchlist'),
+    select: (data) => data.items,
+  });
+}
+
+export function useAddToWatchlist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (item: { marketHashName: string; targetPrice: number; source?: string; iconUrl?: string }) =>
+      api.post('/alerts/watchlist', item),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['watchlist'] }),
+  });
+}
+
+export function useRemoveFromWatchlist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/alerts/watchlist/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['watchlist'] }),
+  });
+}
+
+// ─── Price History ────────────────────────────────────────────────────
+
+export function usePriceHistory(marketHashName: string | null, days = 30) {
+  return useQuery({
+    queryKey: ['prices', 'history', marketHashName, days],
+    queryFn: () =>
+      api.get<{ market_hash_name: string; history: PriceHistoryPoint[]; partial?: boolean }>(
+        `/prices/${encodeURIComponent(marketHashName!)}/history?days=${days}`
+      ),
+    enabled: !!marketHashName,
+  });
+}
+
+export function useItemPrices(marketHashName: string | null) {
+  return useQuery({
+    queryKey: ['prices', 'current', marketHashName],
+    queryFn: () =>
+      api.get<{ market_hash_name: string; current_prices: Record<string, number> }>(
+        `/prices/${encodeURIComponent(marketHashName!)}`
+      ),
+    enabled: !!marketHashName,
+  });
+}
+
+// ─── Fee Calculator ───────────────────────────────────────────────────
+
+export function useCalcFees() {
+  return useMutation({
+    mutationFn: (input: { buyerPrice?: number; sellerReceives?: number }) =>
+      api.post<FeeCalcResult>('/data/calc-fees', input),
   });
 }

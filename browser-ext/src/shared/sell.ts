@@ -19,13 +19,15 @@ export interface SellValidation {
 }
 
 /**
- * Validate sell price against reference prices
+ * Validate sell price against reference prices.
+ * @param minUnit - Minimum currency step (1 for USD, 100 for UAH/RUB). Defaults to 1.
  */
 export function validateSellPrice(
   priceCents: number,
   buffPrice: number,
   steamPrice: number,
-  itemName: string
+  itemName: string,
+  minUnit = 1
 ): SellValidation {
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -34,23 +36,23 @@ export function validateSellPrice(
     errors.push('Price must be greater than 0');
   }
 
-  if (priceCents < 3) {
-    errors.push('Minimum Steam listing price is $0.03');
+  if (priceCents < minUnit * 3) {
+    errors.push('Price is below the minimum listing price');
   }
 
   // Warn if significantly below Buff price (possible mistake)
   if (buffPrice > 0 && priceCents < buffPrice * 0.5) {
-    errors.push(`Price ($${(priceCents / 100).toFixed(2)}) is less than 50% of Buff price ($${(buffPrice / 100).toFixed(2)}). This may be a mistake.`);
+    errors.push(`Price is less than 50% of Buff price. This may be a mistake.`);
   }
 
   // Warn if below Steam lowest listing
   if (steamPrice > 0 && priceCents < steamPrice * 0.8) {
-    warnings.push(`Price is 20%+ below current Steam listing ($${(steamPrice / 100).toFixed(2)})`);
+    warnings.push(`Price is 20%+ below current Steam listing`);
   }
 
   // Warn if price seems like wrong currency (e.g. cents instead of dollars)
-  if (buffPrice > 100 && priceCents < 10) {
-    errors.push(`Price ($${(priceCents / 100).toFixed(2)}) looks suspiciously low for "${itemName}". Did you enter cents instead of dollars?`);
+  if (buffPrice > minUnit * 100 && priceCents < minUnit * 10) {
+    errors.push(`Price looks suspiciously low for "${itemName}". Did you enter cents instead of the full amount?`);
   }
 
   return {
@@ -61,12 +63,14 @@ export function validateSellPrice(
 }
 
 /**
- * Calculate suggested sell price based on reference
+ * Calculate suggested sell price based on reference.
+ * @param minUnit - Minimum undercut step (1 for USD/EUR, 100 for UAH/RUB/KZT). Defaults to 1.
  */
 export function suggestSellPrice(
   buffPrice: number,
   steamPrice: number,
-  strategy: 'match_buff' | 'undercut_steam' | 'buff_plus_5' | 'steam_minus_1'
+  strategy: 'match_buff' | 'undercut_steam' | 'buff_plus_5' | 'steam_minus_1',
+  minUnit = 1
 ): number {
   switch (strategy) {
     case 'match_buff':
@@ -74,9 +78,11 @@ export function suggestSellPrice(
     case 'buff_plus_5':
       return Math.round(buffPrice * 1.05);
     case 'undercut_steam':
-      return steamPrice > 3 ? steamPrice - 1 : steamPrice;
-    case 'steam_minus_1':
-      return steamPrice > 100 ? steamPrice - 100 : Math.max(3, steamPrice - 1);
+      return steamPrice > minUnit * 3 ? steamPrice - minUnit : steamPrice;
+    case 'steam_minus_1': {
+      const fullUnit = minUnit * 100;
+      return steamPrice > fullUnit ? steamPrice - fullUnit : Math.max(minUnit * 3, steamPrice - minUnit);
+    }
     default:
       return buffPrice || steamPrice;
   }

@@ -3,22 +3,35 @@
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { CreateAlertModal } from '@/components/create-alert-modal';
-import { useAlerts, useDeleteAlert } from '@/lib/hooks';
-import { formatPrice } from '@/lib/utils';
+import { useAlerts, useDeleteAlert, useToggleAlert } from '@/lib/hooks';
+import { useAuthStore } from '@/lib/store';
+import { formatPrice, cn } from '@/lib/utils';
 import { Bell, Trash2, TrendingUp, TrendingDown, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 export default function AlertsPage() {
+  const user = useAuthStore((s) => s.user);
   const { data: alerts, isLoading } = useAlerts();
   const deleteAlert = useDeleteAlert();
+  const toggleAlert = useToggleAlert();
   const [showCreate, setShowCreate] = useState(false);
+
+  const limit = user?.is_premium ? 20 : 5;
+  const count = alerts?.length ?? 0;
 
   const handleDelete = (id: number) => {
     deleteAlert.mutate(id, {
       onSuccess: () => toast.success('Alert deleted'),
       onError: () => toast.error('Failed to delete alert'),
+    });
+  };
+
+  const handleToggle = (id: number, currentlyActive: boolean) => {
+    toggleAlert.mutate({ id, is_active: !currentlyActive }, {
+      onSuccess: () => toast.success(currentlyActive ? 'Alert paused' : 'Alert resumed'),
+      onError: () => toast.error('Failed to toggle alert'),
     });
   };
 
@@ -28,11 +41,24 @@ export default function AlertsPage() {
       <div className="p-4 lg:p-6 space-y-4">
         {/* Toolbar */}
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted">
-            {alerts?.length || 0} alert{(alerts?.length || 0) !== 1 ? 's' : ''} active
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted">
+              {count} / {limit} alerts
+            </p>
+            {count >= limit && !user?.is_premium && (
+              <a href="/settings#premium" className="text-xs text-warning font-medium hover:underline">
+                Upgrade for more
+              </a>
+            )}
+          </div>
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={() => {
+              if (count >= limit) {
+                toast.error(user?.is_premium ? 'Alert limit reached (20)' : 'Free limit reached (5). Upgrade to PRO for 20 alerts.');
+                return;
+              }
+              setShowCreate(true);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
           >
             <Plus size={14} />
@@ -87,15 +113,18 @@ export default function AlertsPage() {
                     <span className="capitalize">{alert.source}</span>
                   </div>
                 </div>
-                <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${
-                    alert.is_active
-                      ? 'bg-profit/10 text-profit'
-                      : 'bg-muted/10 text-muted'
-                  }`}
+                <button
+                  onClick={() => handleToggle(alert.id, alert.is_active)}
+                  className={cn(
+                    'relative w-10 h-5 rounded-full transition-colors shrink-0',
+                    alert.is_active ? 'bg-profit' : 'bg-muted/30'
+                  )}
                 >
-                  {alert.is_active ? 'Active' : 'Triggered'}
-                </span>
+                  <span className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform',
+                    alert.is_active ? 'left-[22px]' : 'left-0.5'
+                  )} />
+                </button>
                 <button
                   onClick={() => handleDelete(alert.id)}
                   className="text-muted hover:text-loss transition-colors p-2 rounded-lg hover:bg-loss/10 shrink-0"

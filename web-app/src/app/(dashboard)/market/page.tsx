@@ -1,0 +1,197 @@
+'use client';
+
+import { Header } from '@/components/header';
+import { PageLoader } from '@/components/loading';
+import { useMarketListings, useSellVolume } from '@/lib/hooks';
+import { formatPrice, getItemIconUrl, cn } from '@/lib/utils';
+import type { MarketListing } from '@/lib/types';
+import { Store, Package, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { EcosystemTip } from '@/components/ecosystem-tip';
+import { FeeCalculator } from '@/components/fee-calculator';
+
+const STATE_LABELS: Record<string, { label: string; color: string }> = {
+  active: { label: 'Active', color: 'text-profit' },
+  to_confirm: { label: 'Confirm', color: 'text-warning' },
+  on_hold: { label: 'On Hold', color: 'text-muted' },
+};
+
+export default function MarketPage() {
+  const { data, isLoading, refetch, isFetching } = useMarketListings();
+  const { data: volume } = useSellVolume();
+  const [stateFilter, setStateFilter] = useState<string | null>(null);
+
+  const listings = data?.listings ?? [];
+  const filtered = stateFilter ? listings.filter((l) => l.state === stateFilter) : listings;
+  const totalValue = listings.reduce((sum, l) => sum + l.sellerPrice, 0) / 100;
+
+  const stateCounts = listings.reduce(
+    (acc, l) => {
+      acc[l.state] = (acc[l.state] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  return (
+    <div>
+      <Header title="Market" />
+      <div className="p-4 lg:p-6 space-y-4">
+        <EcosystemTip
+          id="market-desktop"
+          icon="\ud83d\udda5\ufe0f"
+          message="List items faster with Quick Sell in the desktop app. Automatic re-pricing and bulk operations."
+          ctaText="Get Desktop App"
+          ctaUrl="https://skinkeeper.store"
+        />
+        {/* Stats row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="glass rounded-xl p-4">
+            <p className="text-xs text-muted mb-1">Active Listings</p>
+            <p className="text-2xl font-bold">{listings.length}</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <p className="text-xs text-muted mb-1">Total Value</p>
+            <p className="text-2xl font-bold">{formatPrice(totalValue)}</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <p className="text-xs text-muted mb-1">Sold Today</p>
+            <p className="text-2xl font-bold">{volume?.today ?? 0}</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <p className="text-xs text-muted mb-1">Daily Limit</p>
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl font-bold">{volume?.remaining ?? '—'}</p>
+              <span className="text-xs text-muted">/ {volume?.limit ?? '—'}</span>
+            </div>
+            {volume && volume.today >= volume.warningAt && (
+              <p className="text-xs text-warning flex items-center gap-1 mt-1">
+                <AlertTriangle size={10} /> Approaching limit
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Fee Calculator */}
+        <div className="max-w-sm">
+          <FeeCalculator />
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-3">
+          <div className="flex glass rounded-xl overflow-hidden">
+            <button
+              onClick={() => setStateFilter(null)}
+              className={cn('px-3 py-2 text-sm transition-colors', !stateFilter ? 'bg-primary/10 text-primary' : 'text-muted hover:text-foreground')}
+            >
+              All ({listings.length})
+            </button>
+            {Object.entries(STATE_LABELS).map(([state, { label }]) => (
+              <button
+                key={state}
+                onClick={() => setStateFilter(stateFilter === state ? null : state)}
+                className={cn(
+                  'px-3 py-2 text-sm transition-colors',
+                  stateFilter === state ? 'bg-primary/10 text-primary' : 'text-muted hover:text-foreground'
+                )}
+              >
+                {label} ({stateCounts[state] || 0})
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
+
+        {/* Content */}
+        {isLoading ? (
+          <PageLoader />
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted">
+            <Store size={48} className="mb-3 opacity-30" />
+            <p className="text-sm">No market listings</p>
+            <p className="text-xs mt-1">Items you list on Steam Market will appear here</p>
+          </div>
+        ) : (
+          <div className="glass rounded-2xl border border-border/50 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-muted text-left border-b border-border/30">
+                  <th className="px-4 py-3 font-medium">Item</th>
+                  <th className="px-4 py-3 font-medium hidden sm:table-cell">Account</th>
+                  <th className="px-4 py-3 font-medium text-center">Status</th>
+                  <th className="px-4 py-3 font-medium text-right">Seller Gets</th>
+                  <th className="px-4 py-3 font-medium text-right">Buyer Pays</th>
+                  <th className="px-4 py-3 font-medium text-right hidden sm:table-cell">Listed</th>
+                  <th className="px-4 py-3 font-medium w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((listing) => {
+                  const stateInfo = STATE_LABELS[listing.state] || { label: listing.state, color: 'text-muted' };
+                  return (
+                    <tr
+                      key={listing.listingId}
+                      className="border-b border-border/20 hover:bg-surface-light/30 transition-colors"
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-3">
+                          {listing.iconUrl && (
+                            <img
+                              src={getItemIconUrl(listing.iconUrl)}
+                              alt=""
+                              className="w-10 h-7 object-contain"
+                            />
+                          )}
+                          <span className="truncate max-w-[200px] lg:max-w-[300px]">
+                            {listing.marketHashName || listing.name || '—'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted text-xs hidden sm:table-cell">
+                        {listing.accountName || '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className={cn('text-xs font-medium', stateInfo.color)}>
+                          {stateInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold">
+                        {formatPrice(listing.sellerPrice / 100)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-muted">
+                        {formatPrice(listing.buyerPrice / 100)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-muted text-xs hidden sm:table-cell">
+                        {listing.timeCreated > 0
+                          ? new Date(listing.timeCreated * 1000).toLocaleDateString()
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <a
+                          href={`https://steamcommunity.com/market/listings/730/${encodeURIComponent(listing.marketHashName || '')}`}
+                          target="_blank"
+                          rel="noopener"
+                          className="text-muted hover:text-foreground transition-colors"
+                        >
+                          <ExternalLink size={14} />
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

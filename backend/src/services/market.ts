@@ -1,7 +1,7 @@
 import axios from "axios";
 import type { SteamSession } from "./steamSession.js";
 import { SteamSessionService } from "./steamSession.js";
-import { convertUsdToWallet, getWalletCurrency, getCurrencyInfo, getExchangeRate, parseSteamPrice } from "./currency.js";
+import { convertUsdToWallet, getWalletCurrency, getCurrencyInfo, getExchangeRate, parseSteamPrice, getMinUndercutUnit } from "./currency.js";
 import { log } from "../utils/logger.js";
 import { getLatestPrices, getFreshSteamPrice } from "./prices.js";
 import { getSteamDepth } from "./steamMarketDepth.js";
@@ -302,8 +302,9 @@ export async function quickSellPrice(
   marketHashName: string,
   walletCurrencyId: number = 1
 ): Promise<QuickSellResult | null> {
+  const step = getMinUndercutUnit(walletCurrencyId);
   const undercut = (buyerPaysCents: number): number => {
-    const listing = Math.max(1, buyerPaysCents - 1);
+    const listing = Math.max(step, buyerPaysCents - step);
     const valveFee = Math.max(1, Math.floor(listing * 0.05));
     const cs2Fee = Math.max(1, Math.floor(listing * 0.10));
     return Math.max(1, listing - valveFee - cs2Fee);

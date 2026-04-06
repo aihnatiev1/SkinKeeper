@@ -3,14 +3,15 @@
 import { Header } from '@/components/header';
 import { StatCard } from '@/components/stat-card';
 import { CardSkeleton } from '@/components/loading';
+import { PremiumGate, ProBadge } from '@/components/premium-gate';
+import { PortfolioSelector } from '@/components/portfolio-selector';
 import { usePortfolioSummary, useProfitLoss, usePLItems } from '@/lib/hooks';
 import { formatPrice, formatPriceChange } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
-import { TrendingUp, TrendingDown, Package, DollarSign, Lock, Wallet, BarChart3, Sparkles } from 'lucide-react';
+import { TrendingUp, TrendingDown, Package, DollarSign, Wallet, BarChart3, Download } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import { EcosystemTip } from '@/components/ecosystem-tip';
 
 function cents(v: number) { return v / 100; }
@@ -43,6 +44,9 @@ export default function PortfolioPage() {
           ctaText="Get the App"
           ctaUrl="https://apps.apple.com/us/app/skinkeeper/id6760600231"
         />
+        {/* Portfolio selector */}
+        <PortfolioSelector />
+
         {/* Stats grid */}
         <motion.div
           variants={container}
@@ -89,62 +93,39 @@ export default function PortfolioPage() {
         </motion.div>
 
         {/* P&L Summary (premium) */}
-        {pl && (
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4"
-          >
-            <motion.div variants={fadeUp}>
-              <StatCard
-                label="Total Invested"
-                value={formatPrice(cents(pl.totalInvestedCents))}
-                icon={<Wallet size={18} />}
-              />
+        <PremiumGate feature="Profit & Loss Analytics">
+          {pl && (
+            <motion.div
+              variants={container}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4"
+            >
+              <motion.div variants={fadeUp}>
+                <StatCard
+                  label="Total Invested"
+                  value={formatPrice(cents(pl.totalInvestedCents))}
+                  icon={<Wallet size={18} />}
+                />
+              </motion.div>
+              <motion.div variants={fadeUp}>
+                <StatCard
+                  label="Current Value"
+                  value={formatPrice(cents(pl.totalCurrentValueCents))}
+                  icon={<BarChart3 size={18} />}
+                />
+              </motion.div>
+              <motion.div variants={fadeUp}>
+                <StatCard
+                  label="Profit / Loss"
+                  value={formatPriceChange(cents(pl.totalProfitCents), pl.totalProfitPct)}
+                  positive={pl.totalProfitCents >= 0}
+                  icon={pl.totalProfitCents >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                />
+              </motion.div>
             </motion.div>
-            <motion.div variants={fadeUp}>
-              <StatCard
-                label="Current Value"
-                value={formatPrice(cents(pl.totalCurrentValueCents))}
-                icon={<BarChart3 size={18} />}
-              />
-            </motion.div>
-            <motion.div variants={fadeUp}>
-              <StatCard
-                label="Profit / Loss"
-                value={formatPriceChange(cents(pl.totalProfitCents), pl.totalProfitPct)}
-                positive={pl.totalProfitCents >= 0}
-                icon={pl.totalProfitCents >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-
-        {/* Premium upsell */}
-        {!user?.is_premium && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative overflow-hidden glass rounded-2xl border border-primary/10 p-6 text-center"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5" />
-            <div className="relative">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
-                <Sparkles size={12} />
-                PRO Feature
-              </div>
-              <p className="text-sm text-muted mb-3">Unlock P&L analytics, per-item breakdown, and history charts</p>
-              <Link
-                href="/settings"
-                className="inline-flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25"
-              >
-                <Lock size={14} />
-                Upgrade to PRO
-              </Link>
-            </div>
-          </motion.div>
-        )}
+          )}
+        </PremiumGate>
 
         {/* Chart */}
         <motion.div
@@ -222,8 +203,27 @@ export default function PortfolioPage() {
             transition={{ delay: 0.3 }}
             className="glass rounded-2xl border border-border/50 overflow-hidden"
           >
-            <div className="px-4 lg:px-6 py-4 border-b border-border/30">
+            <div className="px-4 lg:px-6 py-4 border-b border-border/30 flex items-center justify-between">
               <h2 className="text-lg font-bold">Items P&L</h2>
+              <button
+                onClick={() => {
+                  if (!itemsData?.items) return;
+                  const header = 'Item,Holding,Avg Cost,Current Price,P&L ($),P&L (%)\n';
+                  const rows = itemsData.items.map((i) =>
+                    `"${i.marketHashName}",${i.currentHolding},${(i.avgBuyPriceCents/100).toFixed(2)},${(i.currentPriceCents/100).toFixed(2)},${(i.totalProfitCents/100).toFixed(2)},${i.profitPct.toFixed(1)}`
+                  ).join('\n');
+                  const blob = new Blob([header + rows], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `skinkeeper-pl-${new Date().toISOString().slice(0,10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors"
+              >
+                <Download size={12} /> Export CSV
+              </button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

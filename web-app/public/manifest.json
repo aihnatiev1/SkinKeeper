@@ -1,0 +1,41 @@
+{
+  "name": "SkinKeeper — CS2 Inventory Manager",
+  "short_name": "SkinKeeper",
+  "description": "Track your CS2 skin portfolio, analyze profit & loss, trade between accounts, and sell on Steam Market.",
+  "start_url": "/portfolio",
+  "display": "standalone",
+  "background_color": "#0B0F19",
+  "theme_color": "#6366F1",
+  "orientation": "any",
+  "categories": ["games", "utilities", "finance"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=app.skinkeeper.store",
+      "id": "app.skinkeeper.store"
+    },
+    {
+      "platform": "itunes",
+      "url": "https://apps.apple.com/us/app/skinkeeper/id6760600231"
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useAccounts, useSwitchAccount } from '@/lib/hooks';
 import { api, authApi } from '@/lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Crown, LogOut, Globe, CreditCard, Link2, Check, Sparkles, Shield, Zap, ExternalLink, Loader2 } from 'lucide-react';
+import { Crown, LogOut, Globe, CreditCard, Link2, Check, Sparkles, Shield, Zap, ExternalLink, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { CURRENCY_SYMBOLS } from '@/lib/constants';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -36,6 +36,8 @@ function SettingsContent() {
   const isDesktopApp = useIsDesktop();
   const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [refreshingSession, setRefreshingSession] = useState<number | null>(null);
+  const [unlinkingAccount, setUnlinkingAccount] = useState<number | null>(null);
 
   // Handle Stripe redirect results
   useEffect(() => {
@@ -116,6 +118,34 @@ function SettingsContent() {
     switchAccount.mutate(id, {
       onSuccess: () => toast.success('Account switched'),
     });
+  };
+
+  const handleRefreshSession = async (accountId: number) => {
+    setRefreshingSession(accountId);
+    try {
+      await api.post(`/session/refresh?accountId=${accountId}`);
+      toast.success('Session refreshed');
+      // Refetch accounts to update status
+      window.location.reload();
+    } catch {
+      toast.error('Failed to refresh session');
+    } finally {
+      setRefreshingSession(null);
+    }
+  };
+
+  const handleUnlinkAccount = async (accountId: number, name: string) => {
+    if (!confirm(`Remove "${name}"? This will delete its inventory, trades, and transaction data.`)) return;
+    setUnlinkingAccount(accountId);
+    try {
+      await api.delete(`/auth/accounts/${accountId}`);
+      toast.success('Account removed');
+      window.location.reload();
+    } catch {
+      toast.error('Failed to remove account');
+    } finally {
+      setUnlinkingAccount(null);
+    }
   };
 
   const handleStripeCheckout = async (plan: 'monthly' | 'yearly') => {
@@ -209,18 +239,40 @@ function SettingsContent() {
                 >
                   {acc.sessionStatus}
                 </span>
-                {acc.isActive ? (
-                  <span className="text-xs text-profit flex items-center gap-1 font-semibold">
-                    <Check size={12} /> Active
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => handleSwitch(acc.id)}
-                    className="text-xs text-primary hover:text-primary-hover font-semibold transition-colors"
-                  >
-                    Switch
-                  </button>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {acc.sessionStatus === 'expired' && (
+                    <button
+                      onClick={() => handleRefreshSession(acc.id)}
+                      disabled={refreshingSession === acc.id}
+                      className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                      title="Refresh session"
+                    >
+                      <RefreshCw size={12} className={refreshingSession === acc.id ? 'animate-spin' : ''} />
+                    </button>
+                  )}
+                  {acc.isActive ? (
+                    <span className="text-xs text-profit flex items-center gap-1 font-semibold">
+                      <Check size={12} /> Active
+                    </span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleSwitch(acc.id)}
+                        className="text-xs text-primary hover:text-primary-hover font-semibold transition-colors"
+                      >
+                        Switch
+                      </button>
+                      <button
+                        onClick={() => handleUnlinkAccount(acc.id, acc.displayName)}
+                        disabled={unlinkingAccount === acc.id}
+                        className="p-1.5 rounded-lg text-muted hover:text-loss hover:bg-loss/10 transition-colors"
+                        title="Remove account"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>

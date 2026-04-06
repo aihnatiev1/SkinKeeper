@@ -20,6 +20,9 @@ import {
   Package,
   Shuffle,
   Gamepad2,
+  Store,
+  TrendingUp,
+  Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useUIStore } from '@/lib/store';
@@ -30,6 +33,9 @@ import { useSteamStatus } from '@/lib/use-desktop';
 const WEB_NAV_ITEMS = [
   { href: '/portfolio', label: 'Portfolio', icon: LayoutDashboard },
   { href: '/inventory', label: 'Inventory', icon: Backpack },
+  { href: '/market', label: 'Market', icon: Store },
+  { href: '/deals', label: 'Deals', icon: TrendingUp },
+  { href: '/watchlist', label: 'Watchlist', icon: Eye },
   { href: '/trades', label: 'Trades', icon: ArrowLeftRight },
   { href: '/transactions', label: 'History', icon: History },
   { href: '/alerts', label: 'Alerts', icon: Bell },
@@ -39,6 +45,9 @@ const WEB_NAV_ITEMS = [
 const DESKTOP_NAV_ITEMS = [
   { href: '/overview', label: 'Overview', icon: BarChart3 },
   { href: '/inventory', label: 'Items', icon: Backpack },
+  { href: '/market', label: 'Market', icon: Store },
+  { href: '/deals', label: 'Deals', icon: TrendingUp },
+  { href: '/watchlist', label: 'Watchlist', icon: Eye },
   { href: '/transfer', label: 'Transfer', icon: ArrowUpDown },
   { href: '/trades', label: 'Trades', icon: ArrowLeftRight },
   { href: '/trade-ups', label: 'Trade Up', icon: Shuffle },
@@ -48,6 +57,7 @@ const DESKTOP_NAV_ITEMS = [
 export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
+  const accounts = useAuthStore((s) => s.accounts);
   const { sidebarOpen, mobileOpen, toggleSidebar, setMobileOpen } = useUIStore();
   const desktop = useIsDesktop();
   const { status: steamStatus } = useSteamStatus();
@@ -69,7 +79,7 @@ export function Sidebar() {
   const navContent = (
     <>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-border/50">
+      <Link href="/portfolio" className="flex items-center gap-3 px-4 h-16 border-b border-border/50 hover:bg-surface-light/50 transition-colors">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg shadow-primary/20">
           SK
         </div>
@@ -82,7 +92,7 @@ export function Sidebar() {
             SkinKeeper
           </motion.span>
         )}
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1">
@@ -136,6 +146,30 @@ export function Sidebar() {
             )} />
             <span>{steamStatus.loggedIn ? `Steam: ${steamStatus.personaName || 'Connected'}` : 'Steam: Disconnected'}</span>
           </div>
+        </div>
+      )}
+
+      {/* Session status — web (non-desktop) */}
+      {!desktop && (sidebarOpen || mobileOpen) && accounts.length > 0 && (
+        <div className="px-4 pb-1 space-y-0.5">
+          {accounts.map((acc) => {
+            const color =
+              acc.sessionStatus === 'valid' ? 'bg-profit'
+              : acc.sessionStatus === 'expiring' ? 'bg-warning'
+              : acc.sessionStatus === 'expired' ? 'bg-loss'
+              : 'bg-muted';
+            return (
+              <div key={acc.id} className="flex items-center gap-2 text-xs text-muted">
+                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', color)} />
+                <span className="truncate">{acc.displayName}</span>
+                {acc.sessionStatus === 'expired' && (
+                  <Link href="/settings" className="text-loss text-[10px] font-medium hover:underline ml-auto shrink-0">
+                    Reauth
+                  </Link>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -4,11 +4,12 @@ import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { CurrencyBanner } from '@/components/currency-banner';
 import { ItemDetailModal } from '@/components/item-detail-modal';
+import { BulkSellBar } from '@/components/bulk-sell-bar';
 import { useInventory, useRefreshInventory } from '@/lib/hooks';
-import { formatPrice, getItemIconUrl, getWearShort, cn } from '@/lib/utils';
+import { formatPrice, getItemIconUrl, getWearShort, cn, getDopplerPhase, isDoppler, isFade, calculateFadePercent } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
 import type { InventoryItem } from '@/lib/types';
-import { Search, RefreshCw, Grid3X3, List, SlidersHorizontal, Loader2, Package } from 'lucide-react';
+import { Search, RefreshCw, Grid3X3, List, SlidersHorizontal, Loader2, Package, Lock, CheckSquare } from 'lucide-react';
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -25,6 +26,22 @@ export default function InventoryPage() {
   const [tradableOnly, setTradableOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [rarityFilter, setRarityFilter] = useState('');
+  const [wearFilter, setWearFilter] = useState('');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [stattrakOnly, setStattrakOnly] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (assetId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(assetId)) next.delete(assetId);
+      else next.add(assetId);
+      return next;
+    });
+  };
 
   const refreshInventory = useRefreshInventory();
 
@@ -41,12 +58,40 @@ export default function InventoryPage() {
     fetchNextPage,
   } = useInventory({ sort, search: debouncedSearch, tradableOnly });
 
-  const items = useMemo(
+  const allItems = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
     [data]
   );
+
+  const items = useMemo(() => {
+    let filtered = allItems;
+    if (rarityFilter) filtered = filtered.filter((i) => i.rarity === rarityFilter);
+    if (wearFilter) filtered = filtered.filter((i) => i.wear === wearFilter);
+    if (stattrakOnly) filtered = filtered.filter((i) => i.market_hash_name.includes('StatTrak'));
+    if (minPrice) {
+      const min = parseFloat(minPrice);
+      if (!isNaN(min)) filtered = filtered.filter((i) => {
+        const p = i.prices?.steam || i.prices?.buff || i.prices?.skinport || 0;
+        return p >= min;
+      });
+    }
+    if (maxPrice) {
+      const max = parseFloat(maxPrice);
+      if (!isNaN(max)) filtered = filtered.filter((i) => {
+        const p = i.prices?.steam || i.prices?.buff || i.prices?.skinport || 0;
+        return p <= max;
+      });
+    }
+    return filtered;
+  }, [allItems, rarityFilter, wearFilter, stattrakOnly, minPrice, maxPrice]);
+
   const total = data?.pages[0]?.total ?? 0;
   const totalValue = data?.pages[0]?.totalValue ?? 0;
+
+  const selectedItems = useMemo(
+    () => items.filter((i) => selectedIds.has(i.asset_id)),
+    [items, selectedIds]
+  );
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastItemRef = useCallback(
@@ -116,6 +161,17 @@ export default function InventoryPage() {
             <SlidersHorizontal size={18} />
           </button>
 
+          <button
+            onClick={() => { setSelectMode(!selectMode); if (selectMode) setSelectedIds(new Set()); }}
+            className={cn(
+              'p-2.5 rounded-xl transition-all',
+              selectMode ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'glass text-muted hover:text-foreground'
+            )}
+            title={selectMode ? 'Cancel selection' : 'Select items to sell'}
+          >
+            <CheckSquare size={18} />
+          </button>
+
           <div className="flex glass rounded-xl overflow-hidden">
             <button
               onClick={() => setView('grid')}
@@ -150,7 +206,7 @@ export default function InventoryPage() {
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden"
             >
-              <div className="flex flex-wrap gap-3 p-4 glass rounded-xl">
+              <div className="flex flex-wrap gap-x-6 gap-y-3 p-4 glass rounded-xl items-end">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"
@@ -160,6 +216,89 @@ export default function InventoryPage() {
                   />
                   Tradable only
                 </label>
+
+                <div>
+                  <label className="text-[10px] text-muted block mb-1">Rarity</label>
+                  <select
+                    value={rarityFilter}
+                    onChange={(e) => setRarityFilter(e.target.value)}
+                    className="px-2.5 py-1.5 glass rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="">All</option>
+                    <option value="Consumer Grade">Consumer</option>
+                    <option value="Industrial Grade">Industrial</option>
+                    <option value="Mil-Spec Grade">Mil-Spec</option>
+                    <option value="Restricted">Restricted</option>
+                    <option value="Classified">Classified</option>
+                    <option value="Covert">Covert</option>
+                    <option value="Contraband">Contraband</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-muted block mb-1">Wear</label>
+                  <select
+                    value={wearFilter}
+                    onChange={(e) => setWearFilter(e.target.value)}
+                    className="px-2.5 py-1.5 glass rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="">All</option>
+                    <option value="Factory New">Factory New</option>
+                    <option value="Minimal Wear">Minimal Wear</option>
+                    <option value="Field-Tested">Field-Tested</option>
+                    <option value="Well-Worn">Well-Worn</option>
+                    <option value="Battle-Scarred">Battle-Scarred</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-muted block mb-1">Min price ($)</label>
+                  <input
+                    type="number"
+                    value={minPrice}
+                    onChange={(e) => setMinPrice(e.target.value)}
+                    placeholder="0"
+                    step="0.01"
+                    className="w-20 px-2.5 py-1.5 glass rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-muted block mb-1">Max price ($)</label>
+                  <input
+                    type="number"
+                    value={maxPrice}
+                    onChange={(e) => setMaxPrice(e.target.value)}
+                    placeholder="999999"
+                    step="0.01"
+                    className="w-20 px-2.5 py-1.5 glass rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={stattrakOnly}
+                    onChange={(e) => setStattrakOnly(e.target.checked)}
+                    className="rounded border-border accent-primary"
+                  />
+                  StatTrak
+                </label>
+
+                {(rarityFilter || wearFilter || minPrice || maxPrice || stattrakOnly) && (
+                  <button
+                    onClick={() => {
+                      setRarityFilter('');
+                      setWearFilter('');
+                      setMinPrice('');
+                      setMaxPrice('');
+                      setStattrakOnly(false);
+                    }}
+                    className="text-xs text-muted hover:text-foreground transition-colors"
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
             </motion.div>
           )}
@@ -186,9 +325,24 @@ export default function InventoryPage() {
         ) : view === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             {items.map((item, idx) => {
-              const price = item.prices?.steam || item.prices?.skinport || 0;
+              const price = item.prices?.steam || item.prices?.buff || item.prices?.skinport || 0;
               const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
               const isLast = idx === items.length - 1;
+
+              // Doppler phase
+              const dopplerPhase = item.paint_index && isDoppler(item.market_hash_name)
+                ? getDopplerPhase(item.paint_index)
+                : null;
+
+              // Fade %
+              const fadeInfo = item.paint_seed && isFade(item.market_hash_name)
+                ? calculateFadePercent(item.paint_seed)
+                : null;
+
+              // Sticker count
+              const stickers = Array.isArray(item.stickers) ? item.stickers : [];
+              const stickerCount = stickers.length;
+
               return (
                 <motion.div
                   key={item.asset_id}
@@ -196,11 +350,16 @@ export default function InventoryPage() {
                   layout
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  onClick={() => setSelectedItem(item)}
-                  className="item-card glass rounded-xl border border-border/30 overflow-hidden cursor-pointer group"
+                  onClick={() => selectMode ? toggleSelect(item.asset_id) : setSelectedItem(item)}
+                  className={cn(
+                    'item-card glass rounded-xl border overflow-hidden cursor-pointer group',
+                    selectedIds.has(item.asset_id)
+                      ? 'border-primary ring-1 ring-primary/30'
+                      : 'border-border/30'
+                  )}
                 >
                   <div
-                    className="relative p-3 flex items-center justify-center h-32"
+                    className="relative p-2 flex items-center justify-center h-28"
                     style={{
                       background: `linear-gradient(135deg, ${rarityColor}08, ${rarityColor}18)`,
                     }}
@@ -210,23 +369,79 @@ export default function InventoryPage() {
                       alt={item.market_hash_name}
                       className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform duration-300"
                     />
-                    {!item.tradable && (
-                      <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 bg-loss/20 text-loss rounded-md font-medium">
-                        Locked
+
+                    {/* Top row: trade lock + wear badge */}
+                    <div className="absolute top-1.5 left-1.5 right-1.5 flex items-start justify-between">
+                      <div className="flex items-center gap-1">
+                        {!item.tradable && (
+                          <span className="flex items-center justify-center w-5 h-5 bg-loss/80 rounded text-white">
+                            <Lock size={10} />
+                          </span>
+                        )}
+                      </div>
+                      {item.wear && (
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded font-bold leading-none',
+                          item.market_hash_name.includes('StatTrak')
+                            ? 'bg-orange-500/90 text-white'
+                            : 'bg-primary/80 text-white'
+                        )}>
+                          {item.market_hash_name.includes('StatTrak') ? 'ST ' : ''}
+                          {getWearShort(item.wear)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Doppler phase badge */}
+                    {dopplerPhase && (
+                      <span
+                        className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded font-bold leading-none text-white"
+                        style={{ backgroundColor: dopplerPhase.color }}
+                      >
+                        {dopplerPhase.phase}
                       </span>
                     )}
-                    {item.wear && (
-                      <span className="absolute bottom-2 right-2 text-[10px] px-1.5 py-0.5 bg-black/60 text-foreground rounded-md backdrop-blur-sm font-medium">
-                        {getWearShort(item.wear)}
+
+                    {/* Fade badge */}
+                    {fadeInfo && (
+                      <span
+                        className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded font-bold leading-none text-white"
+                        style={{ backgroundColor: fadeInfo.color }}
+                      >
+                        {fadeInfo.percentage}%
+                      </span>
+                    )}
+
+                    {/* Sticker count badge */}
+                    {stickerCount > 0 && (
+                      <span className="absolute bottom-1.5 right-1.5 text-[9px] px-1 py-0.5 bg-accent/80 text-white rounded font-bold leading-none">
+                        x{stickerCount}
                       </span>
                     )}
                   </div>
-                  <div className="p-3">
-                    <p className="text-xs truncate mb-1 text-muted">{item.market_hash_name}</p>
-                    <p className="text-sm font-bold">
+
+                  {/* Bottom info area */}
+                  <div className="px-2.5 pt-1 pb-2 space-y-0.5">
+                    {/* Float value */}
+                    {item.float_value != null && (
+                      <p className="text-[10px] font-mono text-muted leading-none">
+                        {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
+                      </p>
+                    )}
+
+                    {/* Price */}
+                    <p className="text-sm font-bold text-profit leading-tight">
                       {price > 0 ? formatPrice(price) : '—'}
                     </p>
+
+                    {/* Sticker value if significant */}
+                    {item.sticker_value != null && item.sticker_value > 1 && (
+                      <p className="text-[10px] text-accent leading-none">
+                        SP: {formatPrice(item.sticker_value)}
+                      </p>
+                    )}
                   </div>
+
                   {/* Rarity bar */}
                   <div className="h-[2px]" style={{ backgroundColor: rarityColor }} />
                 </motion.div>
@@ -239,15 +454,25 @@ export default function InventoryPage() {
               <thead>
                 <tr className="text-muted text-left border-b border-border/30">
                   <th className="px-4 py-3 font-medium">Item</th>
+                  <th className="px-4 py-3 font-medium hidden md:table-cell">Float</th>
                   <th className="px-4 py-3 font-medium hidden sm:table-cell">Wear</th>
+                  <th className="px-4 py-3 font-medium hidden lg:table-cell">Extra</th>
                   <th className="px-4 py-3 font-medium text-right">Price</th>
-                  <th className="px-4 py-3 font-medium text-center hidden sm:table-cell">Tradable</th>
+                  <th className="px-4 py-3 font-medium text-center hidden sm:table-cell">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, idx) => {
-                  const price = item.prices?.steam || item.prices?.skinport || 0;
+                  const price = item.prices?.steam || item.prices?.buff || item.prices?.skinport || 0;
                   const isLast = idx === items.length - 1;
+                  const dopplerPhase = item.paint_index && isDoppler(item.market_hash_name)
+                    ? getDopplerPhase(item.paint_index)
+                    : null;
+                  const fadeInfo = item.paint_seed && isFade(item.market_hash_name)
+                    ? calculateFadePercent(item.paint_seed)
+                    : null;
+                  const stickerCount = Array.isArray(item.stickers) ? item.stickers.length : 0;
+
                   return (
                     <tr
                       key={item.asset_id}
@@ -267,19 +492,56 @@ export default function InventoryPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-muted hidden sm:table-cell">
-                        {getWearShort(item.wear) || '—'}
+                      <td className="px-4 py-2.5 hidden md:table-cell">
+                        {item.float_value != null ? (
+                          <span className="text-xs font-mono text-muted">
+                            {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
+                          </span>
+                        ) : '—'}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-semibold">
+                      <td className="px-4 py-2.5 hidden sm:table-cell">
+                        {item.wear ? (
+                          <span className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded font-bold',
+                            item.market_hash_name.includes('StatTrak') ? 'bg-orange-500/20 text-orange-400' : 'bg-primary/10 text-primary'
+                          )}>
+                            {item.market_hash_name.includes('StatTrak') ? 'ST ' : ''}{getWearShort(item.wear)}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 hidden lg:table-cell">
+                        <div className="flex items-center gap-1.5">
+                          {dopplerPhase && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold text-white" style={{ backgroundColor: dopplerPhase.color }}>
+                              {dopplerPhase.phase}
+                            </span>
+                          )}
+                          {fadeInfo && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold text-white" style={{ backgroundColor: fadeInfo.color }}>
+                              {fadeInfo.percentage}%
+                            </span>
+                          )}
+                          {stickerCount > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-medium">
+                              x{stickerCount}
+                            </span>
+                          )}
+                          {item.sticker_value != null && item.sticker_value > 1 && (
+                            <span className="text-[10px] text-accent">
+                              SP: {formatPrice(item.sticker_value)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-profit">
                         {price > 0 ? formatPrice(price) : '—'}
                       </td>
                       <td className="px-4 py-2.5 text-center hidden sm:table-cell">
-                        <span
-                          className={cn(
-                            'inline-block w-2.5 h-2.5 rounded-full',
-                            item.tradable ? 'bg-profit' : 'bg-loss'
-                          )}
-                        />
+                        {!item.tradable ? (
+                          <Lock size={12} className="inline text-loss" />
+                        ) : (
+                          <span className="inline-block w-2.5 h-2.5 rounded-full bg-profit" />
+                        )}
                       </td>
                     </tr>
                   );
@@ -301,6 +563,14 @@ export default function InventoryPage() {
           <p className="text-center text-xs text-muted py-4">All items loaded</p>
         )}
       </div>
+
+      {/* Bulk sell bar */}
+      {selectMode && (
+        <BulkSellBar
+          selectedItems={selectedItems}
+          onClear={() => { setSelectedIds(new Set()); setSelectMode(false); }}
+        />
+      )}
 
       {/* Item detail modal */}
       <ItemDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />

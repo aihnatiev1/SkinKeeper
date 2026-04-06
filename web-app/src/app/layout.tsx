@@ -20,7 +20,14 @@ export const metadata: Metadata = {
   },
   description:
     'Track your CS2 skin portfolio value, analyze profit & loss, sell on Steam Market, manage trades between accounts, and get price alerts. Free for iOS, Android & Web.',
-  icons: { icon: '/favicon.ico' },
+  icons: { icon: '/favicon.ico', apple: '/icons/icon-192.png' },
+  manifest: '/manifest.json',
+  themeColor: '#6366F1',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'SkinKeeper',
+  },
   keywords: [
     'CS2 skins', 'CS2 inventory', 'CS2 portfolio', 'skin tracker',
     'CS2 profit loss', 'Steam Market sell', 'CS2 trade', 'skin prices',
