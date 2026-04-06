@@ -25,7 +25,10 @@ export async function apiRequest<T>(path: string, opts: ApiOptions = {}): Promis
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`[SkinKeeper API] ${opts.method || 'GET'} ${path} → ${res.status} ${res.statusText}`);
+      return null;
+    }
     if (res.status === 204) return null;
     return res.json();
   } catch {

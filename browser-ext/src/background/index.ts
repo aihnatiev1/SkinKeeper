@@ -174,10 +174,13 @@ async function handleMessage(msg: any): Promise<any> {
     case 'SYNC_ITEMS':
       // Push float/seed/paint data from Steam to backend
       if (Array.isArray(msg.items) && msg.items.length > 0) {
-        return apiRequest('/ext/items/enrich', {
+        console.log(`[SkinKeeper BG] Syncing ${msg.items.length} items to /ext/items/enrich`);
+        const syncResult = await apiRequest('/ext/items/enrich', {
           method: 'POST',
           body: { items: msg.items },
         });
+        console.log('[SkinKeeper BG] Sync response:', syncResult);
+        return syncResult;
       }
       return { ok: false };
 
