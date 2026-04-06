@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+const sharedSrc = path.resolve(process.cwd(), "../packages/skinkeeper-shared/src");
+
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
@@ -33,7 +35,7 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@skinkeeper/shared": path.resolve(__dirname, "../packages/skinkeeper-shared/src"),
+      "@skinkeeper/shared": sharedSrc,
     };
     return config;
   },
