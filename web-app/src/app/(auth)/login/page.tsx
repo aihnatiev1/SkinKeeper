@@ -24,6 +24,9 @@ function LoginContent() {
   const [nonce, setNonce] = useState<string | null>(null);
 
   const startLogin = useCallback(async () => {
+    // Open popup synchronously (in click handler) to avoid browser popup blockers
+    const popup = window.open('about:blank', 'steam_login', 'width=800,height=600');
+
     try {
       // Use our proxy to avoid CORS/CloudFlare issues
       const res = await fetch('/api/proxy/auth/qr/start', { method: 'POST' });
@@ -49,8 +52,14 @@ function LoginContent() {
       });
 
       const steamUrl = `https://steamcommunity.com/openid/login?${params}`;
-      window.open(steamUrl, 'steam_login', 'width=800,height=600');
+      if (popup && !popup.closed) {
+        popup.location.href = steamUrl;
+      } else {
+        // Popup was blocked — fall back to redirect in same window
+        window.location.href = steamUrl;
+      }
     } catch {
+      popup?.close();
       setStatus('error');
     }
   }, []);
@@ -67,6 +76,10 @@ function LoginContent() {
           clearInterval(interval);
           await authApi.setSession(data.token);
           router.push(redirect);
+        } else if (data.status === 'error') {
+          clearInterval(interval);
+          setStatus('error');
+          setNonce(null);
         }
       } catch {
         // Keep polling
