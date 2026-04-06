@@ -214,7 +214,18 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     if (nonce) {
       console.log(`[Auth] Storing token for nonce: ${nonce.substring(0, 8)}...`);
       pendingLogins.set(nonce, { token, createdAt: Date.now() });
-      res.send(`<html><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="font-size:28px">✅</h2><h2>Login successful!</h2><p style="color:#999;margin-top:12px">Go back to SkinKeeper</p></div></body></html>`);
+      // If opened in a popup, show success page; the opener tab is polling.
+      // If same-window redirect (mobile fallback), redirect back to login page
+      // so polling can resume from sessionStorage nonce.
+      const webAppUrl = process.env.WEB_APP_URL || "https://skinkeeper.store";
+      const isPopup = params.popup === "1";
+      if (isPopup) {
+        // Redirect popup back to same-origin page so window.close() works
+        res.redirect(`${webAppUrl}/login/success`);
+      } else {
+        // Mobile same-window redirect — go back to login page, sessionStorage nonce resumes polling
+        res.redirect(`${webAppUrl}/login`);
+      }
       return;
     }
 
