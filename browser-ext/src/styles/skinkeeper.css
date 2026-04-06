@@ -163,13 +163,29 @@
    └──────────────────────────────────────┘
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* ─── Hide competing extensions (SIH, CSFloat, CSGO Trader) ──────── */
+/* Their overlays on item cards — we replace them */
+.item.app730.context2 .sih-item-float,
+.item.app730.context2 .sih-price,
+.item.app730.context2 .sih-sticker,
+.item.app730.context2 .csfloat-item-float,
+.item.app730.context2 .csfloat-price,
+.item.app730.context2 [class*="csfloat-"],
+.item.app730.context2 [class*="sih-"],
+.item.app730.context2 [class*="csgotrader-"],
+.item.app730.context2 .csgofloat--overlay,
+.item.app730.context2 .float-patina {
+  display: none !important;
+  visibility: hidden !important;
+}
+
 /* Shared base for all overlays */
 .sk-price-tag, .sk-item-float, .sk-item-ext, .sk-item-seed,
 .sk-item-sticker-val, .sk-lock-badge, .sk-item-phase, .sk-dup-badge {
   position: absolute;
   font-family: var(--sk-font);
   pointer-events: none;
-  z-index: 5;
+  z-index: 100;
   line-height: 1.4;
   white-space: nowrap;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7);
@@ -200,7 +216,7 @@
   right: 3px;
   font-size: 10px;
   font-weight: 800;
-  z-index: 6;
+  z-index: 101;
   letter-spacing: 0.3px;
   background: rgba(0, 0, 0, 0.6);
   padding: 2px 5px;
@@ -227,15 +243,14 @@
   font-family: 'SF Mono', 'Consolas', monospace;
 }
 
-/* ─── TOP-CENTER: Phase / Fade % / Marble Fade ────────────────────── */
+/* ─── TOP-LEFT: Phase / Fade % / Marble Fade ─────────────────────── */
 .sk-item-phase {
   top: 3px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 3px;
   color: #fff;
   font-size: 9px;
   font-weight: 800;
-  z-index: 6;
+  z-index: 101;
   letter-spacing: 0.3px;
   background: rgba(0, 0, 0, 0.55);
   padding: 1px 5px;
@@ -243,18 +258,22 @@
   text-shadow: none;
 }
 
-/* ─── TOP-LEFT: Trade lock ────────────────────────────────────────── */
+/* ─── TOP-LEFT row 2: Trade lock (below phase if present) ─────────── */
 .sk-lock-badge {
-  top: 3px;
+  top: 18px;
   left: 3px;
   background: rgba(239, 68, 68, 0.85);
   color: #fff;
   font-size: 8px;
   font-weight: 700;
-  z-index: 6;
+  z-index: 101;
   padding: 1px 4px;
   border-radius: 3px;
   text-shadow: none;
+}
+/* When no phase badge, lock goes to top */
+.item.app730.context2:not(:has(.sk-item-phase)) .sk-lock-badge {
+  top: 3px;
 }
 
 /* ─── RIGHT bottom area: Duplicate count ──────────────────────────── */
@@ -271,7 +290,7 @@
   font-weight: 800;
   line-height: 14px;
   text-align: center;
-  z-index: 6;
+  z-index: 101;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
@@ -334,7 +353,7 @@
   font-weight: 700;
   font-family: var(--sk-font);
   line-height: 1.4;
-  z-index: 6;
+  z-index: 101;
   pointer-events: none;
 }
 

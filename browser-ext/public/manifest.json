@@ -16,7 +16,8 @@
     "https://api.skinkeeper.store/*",
     "https://prices.csgotrader.app/*",
     "https://steamrep.com/*",
-    "https://bymykel.github.io/*"
+    "https://bymykel.github.io/*",
+    "https://api.csfloat.com/*"
   ],
 
   "background": {
@@ -69,6 +70,11 @@
       "matches": ["https://steamcommunity.com/*"],
       "js": ["content/nsfw.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://app.skinkeeper.store/*", "https://skinkeeper.store/*"],
+      "js": ["content/auth.js"],
+      "run_at": "document_idle"
     }
   ],
 
@@ -100,7 +106,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["data/bluegem.json.gz"],
+      "resources": ["data/bluegem.json.gz", "data/dopplerIconMap.json", "inject.js"],
       "matches": ["https://steamcommunity.com/*"]
     }
   ],

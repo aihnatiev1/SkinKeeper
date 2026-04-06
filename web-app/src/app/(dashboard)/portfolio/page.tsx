@@ -39,8 +39,8 @@ export default function PortfolioPage() {
         <EcosystemTip
           id="portfolio-mobile-app"
           icon="\ud83d\udcf1"
-          message="Track your portfolio on the go — download the SkinKeeper app"
-          ctaText="App Store"
+          message="Your portfolio changes while you sleep. Get price alerts straight to your phone."
+          ctaText="Get the App"
           ctaUrl="https://apps.apple.com/us/app/skinkeeper/id6760600231"
         />
         {/* Stats grid */}

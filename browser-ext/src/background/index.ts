@@ -426,7 +426,7 @@ chrome.notifications.onClicked.addListener(() => {
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    chrome.tabs.create({ url: 'https://app.skinkeeper.store/settings?source=extension' });
+    // Don't redirect to login — extension works without account
     postToPostHog('extension_installed', {});
   }
 

@@ -303,19 +303,19 @@ export default async function LandingPage() {
             {
               icon: <Smartphone size={24} />,
               title: 'Every Platform',
-              desc: 'Available on iOS, Android, Web, Desktop, and as a Chrome Extension. Your data syncs everywhere in real-time.',
+              desc: 'Price alerts. Portfolio tracking. Your skins in your pocket. Available on iOS, Android, Web, Desktop, and Chrome.',
               gradient: 'from-warning/10 to-transparent',
             },
             {
               icon: <Puzzle size={24} />,
               title: 'Chrome Extension',
-              desc: 'Enhance Steam directly in your browser. See real prices, float values, and quick-trade buttons right on Steam pages.',
+              desc: 'Enhance every Steam page. Prices, floats, instant sell — right where you trade.',
               gradient: 'from-primary/10 to-transparent',
             },
             {
               icon: <Monitor size={24} />,
               title: 'Desktop App',
-              desc: 'Native desktop experience for Windows and macOS. Full-featured portfolio management without opening a browser.',
+              desc: 'Storage units, bulk operations, and advanced analytics for serious collectors.',
               gradient: 'from-accent/10 to-transparent',
             },
           ].map((f) => (
@@ -506,7 +506,7 @@ export default async function LandingPage() {
             Ready to take control of your <span className="text-gradient">CS2 inventory?</span>
           </h2>
           <p className="text-lg text-muted mb-8">
-            Join thousands of players who track, trade, and profit with SkinKeeper.
+            One ecosystem. Every platform. Zero blind spots. Join thousands who track, trade, and profit with SkinKeeper.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link

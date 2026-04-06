@@ -11,7 +11,6 @@ async function init() {
   if (!sk_token) {
     loginSection.style.display = 'block';
     dashboard.style.display = 'none';
-    setupLogin();
     return;
   }
 
@@ -26,7 +25,6 @@ async function init() {
     // Token expired
     loginSection.style.display = 'block';
     dashboard.style.display = 'none';
-    setupLogin();
     return;
   }
 
@@ -36,11 +34,7 @@ async function init() {
   setupToggles();
 }
 
-function setupLogin() {
-  document.getElementById('login-btn')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'https://app.skinkeeper.store/login?source=extension' });
-  });
-}
+// Login removed — popup links to skinkeeper.store for info
 
 function renderUser(user: any) {
   const row = document.getElementById('user-row')!;

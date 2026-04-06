@@ -9,12 +9,13 @@ module.exports = (env, argv) => {
     entry: {
       background: './src/background/index.ts',
       'content/inventory': './src/content/inventory.ts',
-      'content/marketListing': './src/content/marketListing.ts',
+      'content/marketListing': './src/content/marketListing/index.ts',
       'content/tradeOffer': './src/content/tradeOffer.ts',
       'content/tradeOffers': './src/content/tradeOffers.ts',
       'content/market': './src/content/market.ts',
       'content/profile': './src/content/profile.ts',
       'content/nsfw': './src/content/nsfw.ts',
+      'content/auth': './src/content/auth.ts',
       'popup/popup': './src/popup/popup.ts',
       'options/options': './src/options/options.ts',
     },
@@ -44,6 +45,7 @@ module.exports = (env, argv) => {
         patterns: [
           { from: 'public', to: '.' },
           { from: 'data/bluegem.json.gz', to: 'data/bluegem.json.gz' },
+          { from: 'data/dopplerIconMap.json', to: 'data/dopplerIconMap.json' },
         ],
       }),
       new MiniCssExtractPlugin({

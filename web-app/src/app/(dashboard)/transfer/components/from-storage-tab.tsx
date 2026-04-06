@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const STEAM_CDN = 'https://community.akamai.steamstatic.com/economy/image/';
+const STORAGE_UNIT_ICON = 'https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJG51EejH_XV0MGkITXE5AB094KtuwG0Exv1yMfkqXcCtvT_MPw5JPTKV2bDk7Z3sudtHSjr2w0ptCMWPT2u';
 
 function groupItems(items: any[]) {
   const map = new Map<string, { item: any; ids: string[]; count: number }>();
@@ -137,7 +138,7 @@ export function FromStorageTab() {
                   ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/30'
                   : 'border-border/50 glass hover:border-border'
               )}>
-              <Package size={14} className={cn('shrink-0', selectedUnitId === unit.id ? 'text-primary' : 'text-muted')} />
+              <img src={STORAGE_UNIT_ICON} alt="" className="w-8 h-8 shrink-0 object-contain rounded" />
               <div className="text-left min-w-0">
                 <p className="text-xs font-medium truncate">{unit.name || 'Activate'}</p>
                 <p className="text-[10px] text-muted tabular-nums">{unit.item_count} / 1000</p>

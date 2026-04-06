@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const STEAM_CDN = 'https://community.akamai.steamstatic.com/economy/image/';
+const STORAGE_UNIT_ICON = 'https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJG51EejH_XV0MGkITXE5AB094KtuwG0Exv1yMfkqXcCtvT_MPw5JPTKV2bDk7Z3sudtHSjr2w0ptCMWPT2u';
 
 // Group identical items by market_hash_name
 function groupItems(items: any[]) {
@@ -227,10 +228,7 @@ export function ToStorageTab() {
                   : unit.activated ? 'border-border/50 glass hover:border-border' : ''
               )}
             >
-              <Package size={14} className={cn(
-                'shrink-0',
-                !unit.activated ? 'text-warning' : selectedUnitId === unit.id ? 'text-primary' : 'text-muted'
-              )} />
+              <img src={STORAGE_UNIT_ICON} alt="" className="w-8 h-8 shrink-0 object-contain rounded" />
               <div className="text-left min-w-0 flex-1">
                 {editingUnit === unit.id ? (
                   <input

@@ -5,11 +5,12 @@ import {
   getItemPrice, getItemPriceEntry, getWalletCurrency, getWalletCurrencyCode,
   sellItemOnMarket, calcBuyerPrice, calcSellerReceives,
   getLowestListingPrice, getHighestBuyOrder,
+  getPriceAfterFees, formatCentsViaSteam, getSessionID,
   type SteamItem
 } from '../shared/steam';
 import { analyzePrice, createRatioBadge, createArbitrageBadge, type MultiPrice } from '../shared/pricing';
 import { formatFloat, getFloatColor, getWearName, getWearShort, getWearFromName, isLowFloat, createFloatBar } from '../shared/float';
-import { getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade, analyzeBlueGem, createPhaseBadge, type PhaseInfo } from '../shared/phases';
+import { getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade, analyzeBlueGem, createPhaseBadge, loadDopplerIconMap, getDopplerPhaseFromIcon, type PhaseInfo } from '../shared/phases';
 import { formatSP, calculateStickerSP, type StickerInfo } from '../shared/stickers';
 import { formatTradeLock } from '../shared/sell';
 import { calculateTradeUp, validateInputs, normalizeRarity, type TradeUpInput } from '../shared/tradeup';
@@ -69,6 +70,18 @@ function fmtUsd(usd: number): string {
 
 // ─── Init ─────────────────────────────────────────────────────────────
 
+// Set up detail panel enhancement IMMEDIATELY (don't wait for inventory load)
+function earlyInit() {
+  observeDetail();
+}
+
+// Run early init as soon as possible
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', earlyInit);
+} else {
+  earlyInit();
+}
+
 async function init() {
   await waitForElement('.itemHolder');
   await new Promise(r => setTimeout(r, 1500));
@@ -87,8 +100,9 @@ async function init() {
   }
   console.log(`[SkinKeeper] Own inventory: ${isOwnInventory}`);
 
-  // Preload blue gem data in parallel with prices
+  // Preload blue gem data + doppler icon map in parallel with prices
   preloadBlueGemData();
+  loadDopplerIconMap();
 
   const [prices, rates] = await Promise.all([
     loadBulkPrices('steam'),
@@ -126,6 +140,16 @@ async function init() {
       console.log(`[SkinKeeper] Sample: "${sample.market_hash_name}" float=${sample.floatValue} seed=${sample.paintSeed} paintIdx=${sample.paintIndex}`);
     }
     if (items.length === 0) return;
+
+    // Resolve Doppler phases from icon_url (Steam no longer provides paintIndex via properties)
+    let dopplerResolved = 0;
+    for (const item of items) {
+      if (!item.paintIndex && item.icon_url && item.market_hash_name.toLowerCase().includes('doppler')) {
+        const idx = getDopplerPhaseFromIcon(item.icon_url);
+        if (idx) { item.paintIndex = idx; dopplerResolved++; }
+      }
+    }
+    if (dopplerResolved > 0) console.log(`[SkinKeeper] Resolved ${dopplerResolved} doppler phases from icon_url`);
 
     assetMap = new Map(items.map(i => [i.assetid, i]));
 
@@ -234,108 +258,99 @@ async function fetchPLData() {
 // ─── Banner ───────────────────────────────────────────────────────────
 
 function injectBanner(count: number, unique: number, priced: number, total: number, storageUnits = 0, storedItems = 0) {
-  document.querySelector('.sk-banner')?.remove();
-  const target = document.querySelector('.inventory_page_right');
-  if (!target) return;
+  document.querySelector('#sk-mini-card')?.remove();
 
-  const banner = el('div', 'sk-banner');
+  const card = document.createElement('div');
+  card.id = 'sk-mini-card';
+  card.style.cssText = `
+    position: fixed; top: 10px; right: 10px; z-index: 9999;
+    background: rgba(13,17,23,0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    color: #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    width: 200px;
+    pointer-events: auto;
+  `;
 
-  // ── Top row: stats left, value right ──
-  const topRow = el('div', 'sk-banner-top');
+  const row = (label: string, value: string, color = '#fff') =>
+    `<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+      <span style="color:#8b949e">${label}</span>
+      <span style="font-weight:700;color:${color}">${value}</span>
+    </div>`;
 
-  if (isOwnInventory) {
-    const leftInfo = el('span', 'sk-banner-left');
-    const selSpan = el('span', 'sk-banner-selected');
-    selSpan.id = 'sk-selected-value';
-    selSpan.textContent = `Selected Items Value: ${currencySign}0`;
-    leftInfo.appendChild(selSpan);
-    topRow.appendChild(leftInfo);
-  }
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <div style="background:#6366f1;color:#fff;padding:2px 5px;border-radius:3px;font-weight:900;font-size:10px">SK</div>
+      <span style="font-size:10px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:0.8px">SkinKeeper</span>
+    </div>
+    ${row('Items', `${count} <span style="color:#8b949e;font-weight:400;font-size:10px">(${unique} unique)</span>`)}
+    ${row('Value', fmtPrice(total) || `${currencySign}0`, '#4ade80')}
+  `;
 
-  const rightInfo = el('span', 'sk-banner-right');
-  rightInfo.textContent = `Total Inventory Value: ${fmtPrice(total) || `${currencySign}0`}`;
-  topRow.appendChild(rightInfo);
+  // Check login — show P/L for logged users, teaser for others
+  sendMessage({ type: 'GET_USER' }).then((user: any) => {
+    if (user) {
+      // Logged in — fetch portfolio P/L
+      sendMessage({ type: 'GET_PORTFOLIO' }).then((portfolio: any) => {
+        if (!portfolio) return;
+        const invested = portfolio.totalInvestedCents || portfolio.total_invested_cents || 0;
+        const current = portfolio.totalCurrentCents || portfolio.total_current_cents || 0;
+        // Only show P/L if there's actual data
+        if (invested <= 0 && current <= 0) return;
+        const profitCents = current - invested;
+        const profitPct = invested > 0 ? ((profitCents / invested) * 100).toFixed(1) : '0.0';
+        const isProfit = profitCents >= 0;
+        const sign = isProfit ? '+' : '';
 
-  banner.appendChild(topRow);
+        const plDiv = document.createElement('div');
+        plDiv.style.cssText = 'border-top:1px solid rgba(255,255,255,0.06);margin-top:6px;padding-top:6px';
+        plDiv.innerHTML = `
+          ${row('Invested', fmtPrice((invested / 100) * exchangeRate))}
+          ${row('P/L', `${sign}${fmtPrice(Math.abs(profitCents / 100) * exchangeRate)} (${sign}${profitPct}%)`, isProfit ? '#4ade80' : '#f87171')}
+        `;
+        card.appendChild(plDiv);
+      });
+    } else {
+      // Not logged in — show locked teasers
+      const teaser = document.createElement('div');
+      teaser.style.cssText = 'border-top:1px solid rgba(255,255,255,0.06);margin-top:6px;padding-top:6px';
+      teaser.innerHTML = `
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+          <span style="color:#8b949e">P/L</span>
+          <span style="color:#4b5563;font-weight:600;filter:blur(3px)">+${currencySign}12,450 (+23%)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+          <span style="color:#8b949e">Buff vs Steam</span>
+          <span style="color:#4b5563;font-weight:600;filter:blur(3px)">0.82x (${currencySign}8,200 gap)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px">
+          <span style="color:#8b949e">Top gainer</span>
+          <span style="color:#4b5563;font-weight:600;filter:blur(3px)">AK Redline +45%</span>
+        </div>
+      `;
 
-  // ── Bottom row: actions left, sort right ──
-  const bottomRow = el('div', 'sk-banner-bottom');
-  const actions = el('div', 'sk-banner-actions');
+      const cta = document.createElement('a');
+      cta.href = 'https://app.skinkeeper.store?source=extension';
+      cta.target = '_blank';
+      cta.style.cssText = `
+        display:block; padding:5px 0; text-align:center;
+        font-size:10px; color:#6366f1; text-decoration:none;
+        font-weight:700; transition: color 0.15s;
+      `;
+      cta.textContent = 'Unlock full analytics \u2192';
+      cta.onmouseenter = () => { cta.style.color = '#818cf8'; };
+      cta.onmouseleave = () => { cta.style.color = '#6366f1'; };
 
-  // Sort dropdown
-  const sortSelect = el('select', 'sk-sort-select') as HTMLSelectElement;
-  const sortOptions: [string, string][] = [
-    ['default', 'Default'],
-    ['price-desc', 'Price ↓'], ['price-asc', 'Price ↑'],
-    ['name-asc', 'Name A→Z'], ['name-desc', 'Name Z→A'],
-    ['float-asc', 'Float ↑'], ['float-desc', 'Float ↓'],
-    ['rarity-desc', 'Rarity ↓'], ['rarity-asc', 'Rarity ↑'],
-    ['tradable', 'Tradable first'],
-  ];
-  for (const [val, label] of sortOptions) {
-    const opt = el('option') as HTMLOptionElement;
-    opt.value = val;
-    opt.textContent = label;
-    sortSelect.appendChild(opt);
-  }
-  sortSelect.addEventListener('change', () => sortInventory(sortSelect.value));
-
-  // Sell & Trade-Up — only on own inventory
-  if (isOwnInventory) {
-    const sellBtn = el('button', ['sk-banner-cta', 'sk-cta-sell', 'sk-sell-toggle']);
-    sellBtn.textContent = 'Sell';
-    sellBtn.addEventListener('click', toggleSellMode);
-    actions.appendChild(sellBtn);
-
-    const tuBtn = el('button', ['sk-banner-cta', 'sk-cta-amber', 'sk-tu-toggle']);
-    tuBtn.textContent = 'Trade-Up';
-    tuBtn.addEventListener('click', toggleTradeUpMode);
-    actions.appendChild(tuBtn);
-  }
-
-  // Export dropdown
-  const exportWrap = el('div');
-  exportWrap.style.cssText = 'position:relative;display:inline-flex';
-  const exportBtn = el('button', ['sk-banner-cta', 'sk-cta-secondary']);
-  exportBtn.textContent = 'Export';
-  const exportMenu = el('div', 'sk-export-menu');
-  exportMenu.style.display = 'none';
-
-  const addOption = (label: string, fn: () => void) => {
-    const opt = el('div', 'sk-export-option');
-    opt.textContent = label;
-    opt.addEventListener('click', () => { fn(); exportMenu.style.display = 'none'; });
-    exportMenu.appendChild(opt);
-  };
-  addOption('Download CSV', exportCSV);
-  addOption('Download JSON', exportJSON);
-  addOption('Copy Summary', exportClipboard);
-
-  exportBtn.addEventListener('click', () => {
-    exportMenu.style.display = exportMenu.style.display === 'none' ? '' : 'none';
+      teaser.appendChild(cta);
+      card.appendChild(teaser);
+    }
   });
-  document.addEventListener('click', (e) => {
-    if (!exportWrap.contains(e.target as Node)) exportMenu.style.display = 'none';
-  });
-  exportWrap.append(exportBtn, exportMenu);
-  actions.appendChild(exportWrap);
 
-  const cta = el('a', ['sk-banner-cta', 'sk-cta-secondary']) as HTMLAnchorElement;
-  cta.href = 'https://app.skinkeeper.store/portfolio';
-  cta.target = '_blank';
-  cta.textContent = 'Dashboard';
-  actions.appendChild(cta);
-
-  // Sort dropdown (right side)
-  const sortWrap = el('div', 'sk-banner-sort');
-  const sortLabel = el('span');
-  sortLabel.textContent = 'Sorting:';
-  sortLabel.style.cssText = 'color:var(--sk-text-dim);font-size:12px;margin-right:6px';
-  sortWrap.append(sortLabel, sortSelect);
-  bottomRow.append(actions, sortWrap);
-
-  banner.appendChild(bottomRow);
-  target.insertBefore(banner, target.firstChild);
+  document.body.appendChild(card);
 }
 
 // ─── Item Tags (on each item in Steam grid) ──────────────────────────
@@ -497,8 +512,13 @@ function tagItem(htmlEl: HTMLElement, item: SteamItem, assetId: string) {
     if (phase) {
       hasSpecial = true;
       const badge = el('div', 'sk-item-phase');
-      badge.textContent = phase.emoji;
-      badge.style.background = phase.color + 'cc';
+      if (phase.tier === 1) {
+        badge.textContent = phase.phase;
+        badge.style.cssText += `font-weight:800;font-size:10px;padding:2px 5px;line-height:1.4;background:linear-gradient(135deg,${phase.color}ee,${phase.color}99);text-shadow:0 0 8px ${phase.color};`;
+      } else {
+        badge.textContent = phase.emoji;
+        badge.style.background = phase.color + 'cc';
+      }
       badge.title = phase.phase;
       htmlEl.appendChild(badge);
     }
@@ -508,7 +528,7 @@ function tagItem(htmlEl: HTMLElement, item: SteamItem, assetId: string) {
     const fade = calculateFadePercent(paintSeed);
     const badge = el('div', 'sk-item-phase');
     badge.textContent = `${fade.percentage}%`;
-    badge.style.background = fade.color + 'cc';
+    badge.style.cssText += `font-weight:800;font-size:10px;padding:2px 5px;line-height:1.4;background:linear-gradient(135deg,#ff6b35,#f7c948,#6dd5ed);color:#000;text-shadow:0 0 3px rgba(255,255,255,0.4);`;
     badge.title = fade.tier;
     htmlEl.appendChild(badge);
   }
@@ -621,6 +641,11 @@ function tagItem(htmlEl: HTMLElement, item: SteamItem, assetId: string) {
     plTag.textContent = pctStr;
     plTag.title = `Bought: ${fmtPrice((pl.avgBuyCents / 100) * exchangeRate)}\nNow: ${fmtPrice((pl.currentCents / 100) * exchangeRate)}\nP/L: ${sign}${fmtPrice(Math.abs(profitUsd))} (${pctStr})`;
     htmlEl.appendChild(plTag);
+  }
+
+  // ── Colorful inventory — rarity-based border ──
+  if (item.rarityColor) {
+    htmlEl.style.borderLeft = `3px solid #${item.rarityColor}`;
   }
 
   // ── Value-based background highlight — only truly expensive items ──
@@ -761,6 +786,7 @@ function updateSelectedValue() {
 // ─── Detail Panel ─────────────────────────────────────────────────────
 
 function observeDetail() {
+  // Legacy Steam: iteminfo0/iteminfo1
   for (const id of ['iteminfo0', 'iteminfo1']) {
     const panel = document.getElementById(id);
     if (!panel) continue;
@@ -769,719 +795,207 @@ function observeDetail() {
       (panel as any)._sk = setTimeout(() => enhanceDetail(panel), 300);
     }).observe(panel, { childList: true, subtree: true });
   }
+
+  // New Steam React UI: [data-featuretarget="iteminfo"]
+  const reactPanel = document.querySelector('[data-featuretarget="iteminfo"]');
+  if (reactPanel) {
+    new MutationObserver(() => {
+      clearTimeout((reactPanel as any)._sk);
+      (reactPanel as any)._sk = setTimeout(() => enhanceDetail(reactPanel as HTMLElement), 300);
+    }).observe(reactPanel, { childList: true, subtree: true });
+  }
+
+  // Fallback: click listener on inventory items
+  const inv = document.getElementById('inventories');
+  if (inv) {
+    inv.addEventListener('click', (e) => {
+      const target = (e.target as HTMLElement).closest('.item.app730.context2');
+      if (!target) return;
+      setTimeout(() => {
+        const panel = document.querySelector('[data-featuretarget="iteminfo"]') as HTMLElement
+          || document.getElementById('iteminfo0')
+          || document.getElementById('iteminfo1');
+        if (panel) enhanceDetail(panel);
+      }, 500);
+    });
+  }
 }
 
 function enhanceDetail(panel: HTMLElement) {
-  panel.querySelectorAll('.sk-detail, .sk-inline').forEach(e => e.remove());
+  // Remove previously injected SK buttons
+  panel.querySelectorAll('.sk-quick-sell').forEach(e => e.remove());
 
-  const nameEl = panel.querySelector('.hover_item_name');
+  if (!isOwnInventory) return;
+
+  // Find item name from panel
+  const nameEl = panel.querySelector('.hover_item_name') || panel.querySelector('h1');
   const name = nameEl?.textContent?.trim();
   if (!name) return;
 
   const item = items.find(i => i.name === name || i.market_hash_name === name);
+  // If items not loaded yet, use name from panel; skip tradable check
   const marketName = item?.market_hash_name || name;
-  const steamPrice = getItemPrice(marketName, exchangeRate);
-  const priceEntry = getItemPriceEntry(marketName);
-  const count = dupCount.get(marketName) || 1;
-  const enriched = item ? enrichedMap.get(item.assetid) : undefined;
-  const floatVal = item?.floatValue ?? enriched?.float_value ?? null;
-  const paintSeed = item?.paintSeed ?? enriched?.paint_seed ?? null;
+  if (item && (!item.tradable || !item.marketable)) return;
 
-  const version = ++detailVersion;
-  const isOwn = isOwnInventory;
-
-  // ── Inline overlay: Copy links + count badge (injected into image area) ──
-  const panelId = panel.id; // e.g. 'iteminfo0'
-  const imageArea = panel.querySelector(`#${panelId}_item_icon`) || panel.querySelector('.item_desc_icon') || panel.querySelector('.economy_item_hovering');
-  if (imageArea) {
-    (imageArea as HTMLElement).style.position = 'relative';
-
-    // Copy links (top-left of image)
-    const copyBlock = el('div', 'sk-inline sk-copy-links');
-    const addCopy = (label: string, value: string) => {
-      const btn = el('div', 'sk-copy-btn');
-      btn.textContent = label;
-      btn.style.cursor = 'pointer';
-      btn.addEventListener('click', () => {
-        navigator.clipboard.writeText(value);
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = label, 1500);
-      });
-      copyBlock.appendChild(btn);
-    };
-    if (item?.assetid) addCopy('Copy ID', item.assetid);
-    addCopy('Copy Name', marketName);
-    if (item?.inspectLink) addCopy('Copy Link', item.inspectLink);
-    imageArea.appendChild(copyBlock);
-
-    // Count badge (bottom-right of image)
-    if (count > 1) {
-      const countBadge = el('div', 'sk-inline sk-count-badge');
-      countBadge.textContent = `x${count}`;
-      imageArea.appendChild(countBadge);
-    }
+  // Make item name clickable — goes to market listing page
+  if (nameEl && !(nameEl as HTMLElement).dataset.skLinked) {
+    (nameEl as HTMLElement).dataset.skLinked = '1';
+    (nameEl as HTMLElement).style.cursor = 'pointer';
+    (nameEl as HTMLElement).title = 'View on Market';
+    (nameEl as HTMLElement).addEventListener('click', () => {
+      window.open(`https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketName)}`, '_blank');
+    });
   }
+  const walletCurr = getWalletCurrency();
 
-  // ── Float + float bar (injected between image and name) ──
-  const actualNameEl = panel.querySelector(`#${panelId}_item_name`) || nameEl;
-  if (floatVal != null && actualNameEl) {
-    const floatBlock = el('div', 'sk-inline sk-detail-float');
-    const floatText = el('span');
-    floatText.textContent = `Float: ${floatVal.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')}`;
-    floatText.style.cssText = 'color:var(--sk-text);font-size:13px;font-weight:600';
-    floatBlock.appendChild(floatText);
+  // Already injected? Skip
+  if (panel.querySelector('.sk-quick-sell')) return;
 
-    // Float bar
-    const bar = el('div', 'sk-detail-float-bar');
-    const marker = el('div', 'sk-detail-float-marker');
-    marker.style.left = `${(floatVal * 100).toFixed(1)}%`;
-    bar.appendChild(marker);
-    floatBlock.appendChild(bar);
+  // Find Steam's Sell button
+  const sellBtn = panel.querySelector('button[data-accent-color="green"]')
+    || Array.from(panel.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Sell');
+  if (!sellBtn) return;
 
-    actualNameEl.parentElement?.insertBefore(floatBlock, actualNameEl);
-  }
+  // Shared button style
+  const btnStyle = `
+    padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+    border: none; border-radius: 4px; color: #fff; white-space: nowrap;
+    transition: filter 0.15s ease;
+  `;
 
-  // ── Main section (appended to item_desc_content) ──
-  const section = el('div', 'sk-detail');
-
-  // ── Storage Unit special display ──
-  if (item?.type === 'Storage Unit') {
-    const countRow = el('div', 'sk-price-row');
-    const cLabel = el('span', 'sk-price-source');
-    cLabel.textContent = 'Stored Items';
-    const cVal = el('span', 'sk-price-value');
-    cVal.textContent = `${item.casketItemCount || 0}`;
-    countRow.append(cLabel, cVal);
-    section.appendChild(countRow);
-
-    const target = panel.querySelector('.item_desc_content') || panel.querySelector('[id$="_content"]');
-    if (target) target.appendChild(section);
-    return;
-  }
-
-  // ── Prices (Steam from CDN, rest from enriched) ──
-  if (steamPrice) {
-    const row = el('div', 'sk-price-row');
-    const src = el('span', 'sk-price-source');
-    src.textContent = 'Steam';
-    const val = el('span', 'sk-price-value');
-    val.textContent = fmtPrice(steamPrice);
-    if (priceEntry) {
-      const cur = priceEntry.last_24h ?? priceEntry.last_7d;
-      const prev = priceEntry.last_7d ?? priceEntry.last_30d;
-      if (cur && prev && prev > 0) {
-        const pct = ((cur - prev) / prev) * 100;
-        if (Math.abs(pct) > 0.5) {
-          const t = el('span', ['sk-price-trend', pct > 0 ? 'sk-up' : 'sk-down']);
-          t.textContent = ` ${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
-          val.appendChild(t);
+  // 🏷️ Quick Sell (first — most common action)
+  const quickBtn = document.createElement('button') as HTMLButtonElement;
+  quickBtn.className = 'sk-quick-sell';
+  quickBtn.textContent = 'Quick Sell';
+  quickBtn.style.cssText = btnStyle + 'background:#6366f1; margin-left:6px;';
+  quickBtn.title = 'List 1 cent cheaper than lowest listing';
+  quickBtn.onmouseenter = () => { quickBtn.style.filter = 'brightness(1.2)'; };
+  quickBtn.onmouseleave = () => { quickBtn.style.filter = ''; };
+  quickBtn.addEventListener('click', async () => {
+    quickBtn.textContent = 'Loading...';
+    quickBtn.disabled = true;
+    try {
+      const lowestBuyerPays = await getLowestListingPrice(marketName, walletCurr);
+      if (!lowestBuyerPays) { quickBtn.textContent = 'No listings'; quickBtn.disabled = false; return; }
+      // Currencies without decimals: undercut by 1 whole unit
+      // Currencies with cents (USD, EUR, GBP): undercut by 1 cent
+      const NO_DECIMALS: number[] = [5, 9, 10, 11, 14, 15, 17, 18, 29, 30, 37]; // RUB, NOK, CLP, PEN, COP, PHP, TRY, UAH, CRC, UYU, KZT
+      const step = NO_DECIMALS.includes(walletCurr) ? 100 : 1;
+      const undercutBuyerPays = Math.max(step, lowestBuyerPays - step);
+      const sellerGets = getPriceAfterFees(undercutBuyerPays);
+      const buyerStr = formatCentsViaSteam(undercutBuyerPays);
+      const sellerStr = formatCentsViaSteam(sellerGets);
+      if (confirm(`Quick Sell "${marketName}"?\n\nBuyer pays: ${buyerStr}\nYou receive: ${sellerStr}\n(Cheapest on market)`)) {
+        const assetId = item?.assetid || document.querySelector('.activeInfo')?.id?.split('_')[2] || '';
+        const res = await sellItemOnMarket(assetId, sellerGets);
+        if (res.success) {
+          quickBtn.textContent = 'Listed!';
+          quickBtn.style.background = '#16a34a';
+          showSellNotification(`"${marketName}" listed for ${buyerStr}. Confirm in Steam Mobile app.`);
+        } else {
+          quickBtn.textContent = 'Failed';
+          quickBtn.style.background = '#dc2626';
         }
-      }
-    }
-    row.append(src, val);
-    section.appendChild(row);
-  }
-
-  // Multi-source from enriched data (instant, no extra API call)
-  if (enriched?.prices) {
-    const sourceMap: [string, string][] = [
-      ['buff', 'Buff163'], ['csfloat', 'CSFloat'], ['skinport', 'Skinport'],
-      ['dmarket', 'DMarket'], ['bitskins', 'BitSkins'],
-    ];
-    for (const [key, label] of sourceMap) {
-      const p = enriched.prices[key];
-      if (!p || p <= 0) continue;
-      const row = el('div', 'sk-price-row');
-      const src = el('span', 'sk-price-source');
-      src.textContent = label;
-      const val = el('span', 'sk-price-value');
-      val.textContent = fmtUsd(p);
-      row.append(src, val);
-      section.appendChild(row);
-    }
-  }
-
-  // Use page data first, enriched as supplement
-  const detailFloat = item?.floatValue ?? enriched?.float_value ?? null;
-  const detailSeed = item?.paintSeed ?? enriched?.paint_seed ?? null;
-  const detailPaintIdx = item?.paintIndex ?? enriched?.paint_index ?? null;
-
-  // ── Badges row: ratio, arbitrage, phase, fade, blue gem, SP ──
-  const badges = el('div');
-  badges.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0';
-
-  // Buff/Steam ratio + Arbitrage
-  if (enriched?.prices && steamPrice) {
-    const mp: MultiPrice = {
-      steam: Math.round((steamPrice / exchangeRate) * 100),
-      buff: enriched.prices.buff ? Math.round(enriched.prices.buff * 100) : undefined,
-      csfloat: enriched.prices.csfloat ? Math.round(enriched.prices.csfloat * 100) : undefined,
-      skinport: enriched.prices.skinport ? Math.round(enriched.prices.skinport * 100) : undefined,
-    };
-    const analysis = analyzePrice(mp);
-    if (analysis.buffSteamRatio !== null) badges.appendChild(createRatioBadge(analysis.buffSteamRatio));
-    if (analysis.arbitrage?.viable) badges.appendChild(createArbitrageBadge(analysis.arbitrage));
-  }
-
-  // Phase / Fade / Marble Fade / Blue Gem — from page data!
-  if (detailPaintIdx) {
-    const phase = getDopplerPhase(detailPaintIdx);
-    if (phase) badges.appendChild(createPhaseBadge(phase));
-  }
-  if (detailSeed != null && isFade(marketName)) {
-    const fade = calculateFadePercent(detailSeed);
-    const fb = el('span', 'sk-phase-badge');
-    fb.style.cssText = `background:${fade.color}22;color:${fade.color};border:1px solid ${fade.color}44;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700`;
-    fb.textContent = fade.tier;
-    badges.appendChild(fb);
-  }
-  if (detailSeed != null && isMarbleFade(marketName)) {
-    badges.appendChild(createPhaseBadge(analyzeMarbleFade(detailSeed)));
-  }
-  if (detailSeed != null && isBlueGemEligible(marketName)) {
-    const bgDetail = (detailPaintIdx != null || item?.defindex)
-      ? getBlueGemPercentSync(item?.defindex || 0, detailPaintIdx || 44, detailSeed)
-      : null;
-    if (bgDetail && bgDetail.pb > 0) {
-      const bgBadge = el('span', 'sk-phase-badge');
-      const tier = bgDetail.pb >= 90 ? 'Tier 1' : bgDetail.pb >= 70 ? 'Tier 2' : bgDetail.pb >= 50 ? 'Tier 3' : '';
-      const label = tier ? `${tier} ${bgDetail.pb}%` : `${bgDetail.pb}% blue`;
-      bgBadge.style.cssText = 'background:rgba(0,191,255,0.15);color:deepskyblue;border:1px solid rgba(0,191,255,0.3);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700';
-      bgBadge.textContent = `💎 ${label}`;
-      bgBadge.title = `Playside: ${bgDetail.pb}% blue\nBackside: ${bgDetail.bb}% blue`;
-      badges.appendChild(bgBadge);
-    } else {
-      // Fallback to heuristic analysis
-      const gem = analyzeBlueGem(marketName, detailSeed);
-      if (gem) badges.appendChild(createPhaseBadge(gem));
-    }
-  }
-
-  // Sticker Premium
-  if (enriched?.sticker_value && enriched.sticker_value > 0 && steamPrice) {
-    const baseCents = Math.round((steamPrice / exchangeRate) * 100);
-    const svCents = Math.round(enriched.sticker_value * 100);
-    if (svCents > 0) {
-      const spPct = Math.round((svCents / baseCents) * 1000) / 10;
-      if (spPct > 1) {
-        const spBadge = el('span', 'sk-phase-badge');
-        const color = spPct >= 50 ? '#ef4444' : spPct >= 20 ? '#f97316' : spPct >= 5 ? '#4ade80' : '#94a3b8';
-        spBadge.style.cssText = `background:${color}15;color:${color};border:1px solid ${color}33;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700`;
-        spBadge.textContent = `SP ${spPct}%`;
-        spBadge.title = `Sticker value: ${fmtUsd(enriched.sticker_value)} (${spPct}% of skin price)`;
-        badges.appendChild(spBadge);
-      }
-    }
-  }
-
-  // StatTrak badge
-  if (item?.isStatTrak) {
-    const stBadge = el('span', 'sk-phase-badge');
-    stBadge.style.cssText = 'background:rgba(207,106,50,0.15);color:#cf6a32;border:1px solid rgba(207,106,50,0.3);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700';
-    stBadge.textContent = 'StatTrak™';
-    badges.appendChild(stBadge);
-  }
-  if (item?.isSouvenir) {
-    const svBadge = el('span', 'sk-phase-badge');
-    svBadge.style.cssText = 'background:rgba(255,215,0,0.15);color:#ffd700;border:1px solid rgba(255,215,0,0.3);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700';
-    svBadge.textContent = 'Souvenir';
-    badges.appendChild(svBadge);
-  }
-
-  if (badges.childElementCount > 0) section.appendChild(badges);
-
-  // ── Float (from page data!) ──
-  if (detailFloat != null) {
-    const row = el('div', 'sk-price-row');
-    const label = el('span', 'sk-price-source');
-    label.textContent = 'Float';
-    const val = el('span', 'sk-price-value');
-    val.style.fontFamily = 'monospace';
-    val.style.color = getFloatColor(detailFloat);
-    val.textContent = `${formatFloat(detailFloat)} ${getWearName(detailFloat)}`;
-    if (isLowFloat(detailFloat, getWearName(detailFloat))) {
-      const low = el('span');
-      low.style.cssText = 'font-size:9px;color:#fbbf24;margin-left:4px;font-weight:700';
-      low.textContent = 'LOW';
-      val.appendChild(low);
-    }
-    row.append(label, val);
-    section.appendChild(row);
-
-    // Float bar with colored segments
-    const barWrap = el('div');
-    barWrap.style.cssText = 'position:relative;height:6px;border-radius:3px;margin:3px 0;overflow:hidden;display:flex';
-    const segments: [string, number][] = [
-      ['#57cbde', 7], ['#90ba3c', 8], ['#fbbf24', 23], ['#f97316', 7], ['#ef4444', 55],
-    ];
-    for (const [color, width] of segments) {
-      const seg = el('div');
-      seg.style.cssText = `width:${width}%;height:100%;background:${color}`;
-      barWrap.appendChild(seg);
-    }
-    const pointer = el('div');
-    pointer.style.cssText = `position:absolute;left:${detailFloat * 100}%;top:-2px;width:2px;height:10px;background:#fff;border-radius:1px;transform:translateX(-50%);box-shadow:0 0 3px rgba(0,0,0,0.8)`;
-    barWrap.appendChild(pointer);
-    section.appendChild(barWrap);
-  }
-
-  // ── Paint Seed / Pattern ──
-  if (detailSeed != null) {
-    const row = el('div', 'sk-price-row');
-    const label = el('span', 'sk-price-source');
-    label.textContent = 'Pattern';
-    const val = el('span', 'sk-price-value');
-    val.style.fontFamily = 'monospace';
-    val.textContent = `${detailSeed}`;
-    row.append(label, val);
-    section.appendChild(row);
-  }
-
-  // ── P/L (cost basis) ──
-  const pl = plMap.get(marketName);
-  if (pl && pl.avgBuyCents > 0) {
-    const buyRow = el('div', 'sk-price-row');
-    const buyLabel = el('span', 'sk-price-source');
-    buyLabel.textContent = 'Bought at';
-    const buyVal = el('span', 'sk-price-value');
-    buyVal.textContent = fmtPrice((pl.avgBuyCents / 100) * exchangeRate);
-    buyRow.append(buyLabel, buyVal);
-    section.appendChild(buyRow);
-
-    const plRow = el('div', 'sk-price-row');
-    const plLabel = el('span', 'sk-price-source');
-    plLabel.textContent = 'P/L';
-    const plVal = el('span', 'sk-price-value');
-    const profitUsd = (pl.profitCents / 100) * exchangeRate;
-    const isProfit = pl.profitCents >= 0;
-    const sign = isProfit ? '+' : '';
-    plVal.style.color = isProfit ? 'var(--sk-green)' : 'var(--sk-red)';
-    plVal.textContent = `${sign}${fmtPrice(Math.abs(profitUsd))} (${sign}${pl.profitPct.toFixed(1)}%)`;
-    plRow.append(plLabel, plVal);
-    section.appendChild(plRow);
-  }
-
-  // ── Quantity ──
-  if (count > 1) {
-    const allOfType = items.filter(i => i.market_hash_name === marketName);
-    const tradableCount = allOfType.filter(i => i.tradable).length;
-    const lockedCount = count - tradableCount;
-
-    const row = el('div', 'sk-price-row');
-    const label = el('span', 'sk-price-source');
-    label.textContent = 'Quantity';
-    const val = el('span', 'sk-price-value');
-    if (lockedCount > 0 && tradableCount > 0) {
-      val.innerHTML = `${count} <span style="font-size:10px;color:var(--sk-text-dim);font-weight:500">(${tradableCount} tradable, ${lockedCount} locked)</span>`;
-    } else if (lockedCount === count) {
-      val.innerHTML = `${count} <span style="font-size:10px;color:var(--sk-red);font-weight:500">(all locked)</span>`;
-    } else {
-      val.textContent = `${count}`;
-    }
-    row.append(label, val);
-    section.appendChild(row);
-
-    if (steamPrice) {
-      const totalRow = el('div', 'sk-price-row');
-      const tl = el('span', 'sk-price-source');
-      tl.textContent = 'Total Value';
-      const tv = el('span', 'sk-price-value');
-      tv.style.color = 'var(--sk-primary-light)';
-      tv.textContent = fmtPrice(steamPrice * count);
-      totalRow.append(tl, tv);
-      section.appendChild(totalRow);
-    }
-  }
-
-  // ── Rarity ──
-  if (item?.rarity) {
-    const rarity = el('span', 'sk-rarity');
-    rarity.textContent = item.rarity;
-    if (item.rarityColor) {
-      rarity.style.color = '#' + item.rarityColor;
-      rarity.style.borderColor = '#' + item.rarityColor + '44';
-    }
-    section.appendChild(rarity);
-  }
-
-  // ── Stickers with wear % (from page data or enriched) ──
-  const stickerList = enriched?.stickers?.length ? enriched.stickers : (item?.stickers || []);
-  if (stickerList.length > 0) {
-    const div = el('div', 'sk-stickers');
-    for (const s of stickerList) {
-      const chip = el('span', 'sk-sticker-chip');
-      const wearPct = s.wear != null ? Math.round(Math.abs(1 - s.wear) * 100) : null;
-      if (wearPct != null && wearPct < 100) {
-        chip.innerHTML = `${s.name} <span style="color:${wearPct > 80 ? 'var(--sk-green)' : wearPct > 50 ? 'var(--sk-amber)' : 'var(--sk-red)'};font-weight:700">${wearPct}%</span>`;
-        chip.style.opacity = String(Math.max(0.4, wearPct / 100));
       } else {
-        chip.textContent = s.name;
+        quickBtn.textContent = 'Quick Sell';
+        quickBtn.disabled = false;
       }
-      div.appendChild(chip);
+    } catch {
+      quickBtn.textContent = 'Error';
+      quickBtn.disabled = false;
     }
-    if (enriched?.sticker_value && enriched.sticker_value > 0) {
-      const total = el('span', 'sk-sticker-chip');
-      total.style.cssText = 'color:var(--sk-amber);border-color:rgba(251,191,36,0.2);font-weight:700';
-      total.textContent = `= ${fmtUsd(enriched.sticker_value)}`;
-      div.appendChild(total);
-    }
-    section.appendChild(div);
-  }
+  });
 
-  // ── Trade lock countdown ──
-  if (enriched?.trade_ban_until) {
-    const remaining = formatTradeLock(enriched.trade_ban_until);
-    if (remaining) {
-      const row = el('div', 'sk-price-row');
-      const label = el('span', 'sk-price-source');
-      label.textContent = 'Trade Lock';
-      const val = el('span', 'sk-price-value');
-      val.style.color = 'var(--sk-red)';
-      val.textContent = remaining;
-      row.append(label, val);
-      section.appendChild(row);
-    }
-  } else if (count === 1 && item && !item.tradable) {
-    const row = el('div', 'sk-price-row');
-    const label = el('span', 'sk-price-source');
-    label.textContent = 'Status';
-    const val = el('span', 'sk-price-value');
-    val.style.color = 'var(--sk-red)';
-    val.textContent = 'Not Tradable';
-    row.append(label, val);
-    section.appendChild(row);
-  }
-
-  // ── StatTrak kills (from Steam DOM descriptions) ──
-  const descArea = panel.querySelector('.item_desc_descriptors, .item_desc_description');
-  if (descArea) {
-    const descText = descArea.textContent || '';
-    const stMatch = descText.match(/StatTrak.*?:\s*([\d,]+)/i);
-    if (stMatch) {
-      const row = el('div', 'sk-price-row');
-      const label = el('span', 'sk-price-source');
-      label.textContent = 'StatTrak™ Kills';
-      const val = el('span', 'sk-price-value');
-      val.style.color = '#cf6a32';
-      val.textContent = stMatch[1];
-      row.append(label, val);
-      section.appendChild(row);
-    }
-  }
-
-  // ── Case contents (from Steam DOM) ──
-  const allDescs = Array.from(panel.querySelectorAll('.item_desc_description'));
-  for (const desc of allDescs) {
-    const html = desc.innerHTML || '';
-    if (html.includes('Contains one of the following') || html.includes('Contains the following')) {
-      const itemLinks = desc.querySelectorAll('a, .hover_item_name');
-      if (itemLinks.length > 0) {
-        const caseRow = el('div', 'sk-price-row');
-        const label = el('span', 'sk-price-source');
-        label.textContent = 'Contains';
-        const val = el('span', 'sk-price-value');
-        val.textContent = `${itemLinks.length} items`;
-        val.style.fontSize = '11px';
-        caseRow.append(label, val);
-        section.appendChild(caseRow);
-      }
-      break;
-    }
-  }
-
-  // ── Market data (async — starting price + volume) ──
-  if (item?.marketable) {
-    const marketWrap = el('div', 'sk-detail');
-    marketWrap.style.cssText = 'margin:0;padding:0;border:0;background:none;backdrop-filter:none';
-    const loadingLabel = el('div', 'sk-price-source');
-    loadingLabel.textContent = 'Loading market data...';
-    loadingLabel.style.fontSize = '10px';
-    marketWrap.appendChild(loadingLabel);
-    section.appendChild(marketWrap);
-
-    const url = `https://steamcommunity.com/market/priceoverview/?appid=730&currency=${getWalletCurrency()}&market_hash_name=${encodeURIComponent(marketName)}`;
-    sendMessage({ type: 'FETCH_JSON', url }).then((data: any) => {
-      if (version !== detailVersion) return;
-      marketWrap.innerHTML = '';
-      if (!data) return;
-      if (data.lowest_price) {
-        const row = el('div', 'sk-price-row');
-        const l = el('span', 'sk-price-source'); l.textContent = 'Starting at';
-        const v = el('span', 'sk-price-value'); v.textContent = data.lowest_price;
-        row.append(l, v);
-        marketWrap.appendChild(row);
-      }
-      if (data.volume) {
-        const row = el('div', 'sk-price-row');
-        const l = el('span', 'sk-price-source'); l.textContent = 'Volume';
-        const v = el('span', 'sk-price-value'); v.textContent = `${data.volume} sold in the last 24 hours`;
-        v.style.fontSize = '11px';
-        row.append(l, v);
-        marketWrap.appendChild(row);
-      }
-    }).catch(() => { marketWrap.innerHTML = ''; });
-  }
-
-  // ── Instant Sell / Quick Sell — only on own inventory ──
-  // Detect own inventory: Steam shows trade/market links only for own items
-  const isOwnDetail = isOwnInventory;
-  if (isOwnDetail && item?.tradable && item?.marketable) {
-    const sellRow = el('div', 'sk-detail-links');
-    const walletCurr = getWalletCurrency();
-
-    const instantBtn = el('button', 'sk-ext-link') as HTMLButtonElement;
-    instantBtn.textContent = '⚡ Instant Sell';
-    instantBtn.style.cursor = 'pointer';
-    instantBtn.title = 'Sell at highest buy order (instant)';
-    instantBtn.addEventListener('click', async () => {
-      instantBtn.textContent = '⚡ Loading...';
-      const buyOrder = await getHighestBuyOrder(marketName, walletCurr);
-      if (!buyOrder || version !== detailVersion) { instantBtn.textContent = '⚡ No orders'; return; }
-      const sellerGets = calcSellerReceives(buyOrder);
-      if (confirm(`Instant Sell "${item.name}" for ${fmtPrice(sellerGets / 100 * exchangeRate)}? (Buyer pays ${fmtPrice(buyOrder / 100 * exchangeRate)})`)) {
-        const res = await sellItemOnMarket(item.assetid, sellerGets);
-        instantBtn.textContent = res.success ? '✓ Sold!' : '✗ Failed';
-        instantBtn.style.color = res.success ? '#4ade80' : '#f87171';
-      } else {
-        instantBtn.textContent = `⚡ ${fmtPrice(sellerGets / 100 * exchangeRate)}`;
-      }
-    });
-    sellRow.appendChild(instantBtn);
-
-    const quickBtn = el('button', 'sk-ext-link') as HTMLButtonElement;
-    quickBtn.textContent = '🏷️ Quick Sell';
-    quickBtn.style.cursor = 'pointer';
-    quickBtn.title = 'List at lowest price -1¢ (cheapest listing)';
-    quickBtn.addEventListener('click', async () => {
-      quickBtn.textContent = '🏷️ Loading...';
-      const lowest = await getLowestListingPrice(marketName, walletCurr);
-      if (!lowest || version !== detailVersion) { quickBtn.textContent = '🏷️ No listings'; return; }
-      const undercut = Math.max(3, lowest - 1); // -1¢, min 3¢
-      const sellerGets = calcSellerReceives(undercut);
-      if (confirm(`Quick Sell "${item.name}" for ${fmtPrice(sellerGets / 100 * exchangeRate)}? (Undercuts lowest by 1¢)`)) {
-        const res = await sellItemOnMarket(item.assetid, sellerGets);
-        quickBtn.textContent = res.success ? '✓ Listed!' : '✗ Failed';
-        quickBtn.style.color = res.success ? '#4ade80' : '#f87171';
-      } else {
-        quickBtn.textContent = `🏷️ ${fmtPrice(sellerGets / 100 * exchangeRate)}`;
-      }
-    });
-    sellRow.appendChild(quickBtn);
-
-    section.appendChild(sellRow);
-  }
-
-  // ── Show Technical (expandable — full float, paint index, origin, min/max) ──
-  if (detailFloat != null || detailSeed != null || detailPaintIdx != null) {
-    const techToggle = el('div', 'sk-ext-link');
-    techToggle.textContent = '▸ Show Technical';
-    techToggle.style.cssText += 'cursor:pointer;font-size:10px;margin:2px 0;display:inline-block';
-    const techDiv = el('div');
-    techDiv.style.cssText = 'display:none;font-size:10px;color:var(--sk-text-dim);font-family:monospace;padding:4px 0;line-height:1.6';
-    const lines: string[] = [];
-    if (detailFloat != null) lines.push(`Float: ${detailFloat}`);
-    if (detailSeed != null) lines.push(`Paint Seed: ${detailSeed}`);
-    if (detailPaintIdx != null) lines.push(`Paint Index: ${detailPaintIdx}`);
-    if (item?.defindex) lines.push(`Def Index: ${item.defindex}`);
-    if (item?.nameTag) lines.push(`Name Tag: "${item.nameTag}"`);
-    techDiv.innerHTML = lines.join('<br>');
-    techToggle.addEventListener('click', () => {
-      const open = techDiv.style.display !== 'none';
-      techDiv.style.display = open ? 'none' : 'block';
-      techToggle.textContent = open ? '▸ Show Technical' : '▾ Hide Technical';
-    });
-    section.append(techToggle, techDiv);
-  }
-
-  // ── Other Exteriors (links to all 5 wear conditions on market) ──
-  const baseNameMatch = marketName.match(/^(.+?)\s*\((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/);
-  if (baseNameMatch) {
-    const baseName = baseNameMatch[1].trim();
-    const extRow = el('div', 'sk-detail-links');
-    const wears: [string, string][] = [['FN', 'Factory New'], ['MW', 'Minimal Wear'], ['FT', 'Field-Tested'], ['WW', 'Well-Worn'], ['BS', 'Battle-Scarred']];
-    for (const [short, full] of wears) {
-      const link = el('a', 'sk-ext-link') as HTMLAnchorElement;
-      link.href = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(`${baseName} (${full})`)}`;
-      link.target = '_blank';
-      link.textContent = short;
-      if (full === baseNameMatch[2]) { link.style.color = 'var(--sk-primary-light)'; link.style.fontWeight = '800'; }
-      extRow.appendChild(link);
-    }
-    // StatTrak variant
-    if (!item?.isStatTrak && !item?.isSouvenir) {
-      const stLink = el('a', 'sk-ext-link') as HTMLAnchorElement;
-      stLink.href = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(`StatTrak™ ${baseName} (${baseNameMatch[2]})`)}`;
-      stLink.target = '_blank';
-      stLink.textContent = 'ST';
-      stLink.style.color = '#cf6a32';
-      extRow.appendChild(stLink);
-    }
-    section.appendChild(extRow);
-  }
-
-  // ── Inspect links (Game, 3D Server, Browser screenshot) ──
-  const inspectLinks = el('div', 'sk-detail-links');
-  if (item?.inspectLink) {
-    const gameBtn = el('a', 'sk-ext-link') as HTMLAnchorElement;
-    gameBtn.href = item.inspectLink;
-    gameBtn.textContent = '🎮 Inspect in Game';
-    inspectLinks.appendChild(gameBtn);
-
-    const serverBtn = el('a', 'sk-ext-link') as HTMLAnchorElement;
-    serverBtn.href = `https://www.cs2inspects.com/?apply=${encodeURIComponent(item.inspectLink)}`;
-    serverBtn.target = '_blank';
-    serverBtn.textContent = '🖥️ 3D Inspect';
-    inspectLinks.appendChild(serverBtn);
-
-    const screenshotBtn = el('a', 'sk-ext-link') as HTMLAnchorElement;
-    screenshotBtn.href = `https://swap.gg/screenshot?inspectLink=${encodeURIComponent(item.inspectLink)}`;
-    screenshotBtn.target = '_blank';
-    screenshotBtn.textContent = '📷 Screenshot';
-    inspectLinks.appendChild(screenshotBtn);
-  }
-  if (inspectLinks.childElementCount > 0) section.appendChild(inspectLinks);
-
-  // ── External links (Market, Buff, CSFloat, FloatDB) ──
-  const extLinks = el('div', 'sk-detail-links');
-  const mktLink = el('a', 'sk-ext-link') as HTMLAnchorElement;
-  mktLink.href = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketName)}`;
-  mktLink.target = '_blank';
-  mktLink.textContent = '🛒 Market';
-  extLinks.appendChild(mktLink);
-
-  if (isOwnDetail && count > 1 && item?.marketable) {
-    const multiLink = el('a', 'sk-ext-link') as HTMLAnchorElement;
-    multiLink.href = `https://steamcommunity.com/market/multisell?appid=730&contextid=2&items[]=${encodeURIComponent(marketName)}`;
-    multiLink.target = '_blank';
-    multiLink.textContent = '📦 Multisell';
-    extLinks.appendChild(multiLink);
-  }
-
-  const buffLink = el('a', 'sk-ext-link') as HTMLAnchorElement;
-  buffLink.href = `https://buff.163.com/market/csgo#tab=selling&page_num=1&search=${encodeURIComponent(marketName)}`;
-  buffLink.target = '_blank';
-  buffLink.textContent = 'Buff163';
-  extLinks.appendChild(buffLink);
-
-  const csfLink = el('a', 'sk-ext-link') as HTMLAnchorElement;
-  csfLink.href = `https://csfloat.com/search?market_hash_name=${encodeURIComponent(marketName)}`;
-  csfLink.target = '_blank';
-  csfLink.textContent = 'CSFloat';
-  extLinks.appendChild(csfLink);
-
-  const skinportLink = el('a', 'sk-ext-link') as HTMLAnchorElement;
-  skinportLink.href = `https://skinport.com/market?search=${encodeURIComponent(marketName)}&cat=any`;
-  skinportLink.target = '_blank';
-  skinportLink.textContent = 'Skinport';
-  extLinks.appendChild(skinportLink);
-  section.appendChild(extLinks);
-
-  // ── Copy buttons ──
-  const copyRow = el('div', 'sk-detail-links');
-  if (item) {
-    const mkCopy = (label: string, value: string) => {
-      const btn = el('span', 'sk-ext-link');
-      btn.textContent = label;
-      btn.style.cursor = 'pointer';
-      btn.addEventListener('click', () => {
-        navigator.clipboard.writeText(value).then(() => {
-          btn.textContent = '✓ Copied';
-          setTimeout(() => { btn.textContent = label; }, 1500);
-        });
-      });
-      return btn;
-    };
-    copyRow.appendChild(mkCopy('📋 Name', marketName));
-    copyRow.appendChild(mkCopy('📋 ID', item.assetid));
-    if (item.inspectLink) copyRow.appendChild(mkCopy('📋 Link', item.inspectLink));
-  }
-  if (copyRow.childElementCount > 0) section.appendChild(copyRow);
-
-  // ── Actions ──
-  const actions = el('div', 'sk-actions');
-
-  // Bookmark + Notify (ported from CSGO Trader)
-  if (item && !item.tradable) {
-    const bmBtn = el('button', 'sk-alert-btn');
-    bmBtn.textContent = '🔔 Bookmark & Notify';
-    bmBtn.addEventListener('click', async () => {
-      const tradeLock = enriched?.trade_ban_until || item.tradeLockDate || null;
-      const bookmark = {
-        assetid: item.assetid,
-        name: item.market_hash_name,
-        icon_url: item.icon_url,
-        tradeLockDate: tradeLock,
-        added: Date.now(),
-      };
-      const res = await sendMessage({ type: 'ADD_BOOKMARK', bookmark });
-      if (res?.ok) {
-        bmBtn.textContent = '✓ Bookmarked!';
-        bmBtn.style.color = '#4ade80';
-        if (tradeLock) {
-          bmBtn.title = `Will notify when tradable (${tradeLock})`;
+  // ⚡ Instant Sell (second — more aggressive)
+  const instantBtn = document.createElement('button') as HTMLButtonElement;
+  instantBtn.className = 'sk-quick-sell';
+  instantBtn.textContent = 'Instant Sell';
+  instantBtn.style.cssText = btnStyle + 'background:#dc2626; margin-left:6px;';
+  instantBtn.title = 'Sell at highest buy order (instant)';
+  instantBtn.onmouseenter = () => { instantBtn.style.filter = 'brightness(1.2)'; };
+  instantBtn.onmouseleave = () => { instantBtn.style.filter = ''; };
+  instantBtn.addEventListener('click', async () => {
+    instantBtn.textContent = 'Loading...';
+    instantBtn.disabled = true;
+    try {
+      const buyerPays = await getHighestBuyOrder(marketName, walletCurr);
+      if (!buyerPays) { instantBtn.textContent = 'No orders'; instantBtn.disabled = false; return; }
+      const sellerGets = getPriceAfterFees(buyerPays);
+      const buyerStr = formatCentsViaSteam(buyerPays);
+      const sellerStr = formatCentsViaSteam(sellerGets);
+      if (confirm(`Instant Sell "${marketName}"?\n\nBuyer pays: ${buyerStr}\nYou receive: ${sellerStr}`)) {
+        const assetId = item?.assetid || document.querySelector('.activeInfo')?.id?.split('_')[2] || '';
+        const res = await sellItemOnMarket(assetId, sellerGets);
+        if (res.success) {
+          instantBtn.textContent = 'Sold!';
+          instantBtn.style.background = '#16a34a';
+          showSellNotification(`"${marketName}" listed for ${buyerStr}. Confirm in Steam Mobile app.`);
+        } else {
+          instantBtn.textContent = 'Failed';
+          instantBtn.style.background = '#dc2626';
         }
+      } else {
+        instantBtn.textContent = 'Instant Sell';
+        instantBtn.disabled = false;
       }
-    });
-    actions.appendChild(bmBtn);
+    } catch {
+      instantBtn.textContent = 'Error';
+      instantBtn.disabled = false;
+    }
+  });
+
+  // Insert inline — same row as Steam's Sell button
+  sellBtn.insertAdjacentElement('afterend', instantBtn);
+  sellBtn.insertAdjacentElement('afterend', quickBtn);
+}
+
+// ─── Sell Notification Toast ──────────────────────────────────────────
+
+function showSellNotification(message: string) {
+  document.querySelector('#sk-sell-toast')?.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'sk-sell-toast';
+  toast.style.cssText = `
+    position: fixed; bottom: 20px; right: 20px; z-index: 99999;
+    background: rgba(13,17,23,0.95); backdrop-filter: blur(8px);
+    border: 1px solid rgba(74,222,128,0.4); border-radius: 8px;
+    padding: 14px 18px; max-width: 340px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    color: #e2e8f0; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    animation: sk-toast-in 0.3s ease-out;
+  `;
+  toast.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <span style="font-size:20px;line-height:1">✅</span>
+      <div>
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">Item Listed</div>
+        <div style="font-size:12px;color:#8b949e;line-height:1.4">${message}</div>
+      </div>
+    </div>
+  `;
+
+  // Add animation keyframes if not already added
+  if (!document.querySelector('#sk-toast-style')) {
+    const style = document.createElement('style');
+    style.id = 'sk-toast-style';
+    style.textContent = `
+      @keyframes sk-toast-in { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      @keyframes sk-toast-out { from { opacity: 1; } to { opacity: 0; transform: translateY(10px); } }
+    `;
+    document.head.appendChild(style);
   }
 
-  actions.appendChild(skBadge('Track', () => {
-    window.open(`https://app.skinkeeper.store/inventory?search=${encodeURIComponent(marketName)}`, '_blank');
-  }));
-  if (steamPrice) {
-    const alertBtn = el('button', 'sk-alert-btn');
-    alertBtn.textContent = 'Set Alert';
-    alertBtn.addEventListener('click', () => {
-      try {
-        sendMessage({ type: 'CREATE_ALERT', market_hash_name: marketName, condition: 'below', threshold: Math.round(steamPrice * 100 * 0.9) });
-        alertBtn.textContent = 'Alert Set!';
-        alertBtn.style.color = '#4ade80';
-      } catch { window.open('https://app.skinkeeper.store/alerts', '_blank'); }
-    });
-    actions.appendChild(alertBtn);
-  }
-  section.appendChild(actions);
+  document.body.appendChild(toast);
 
-  // ── Smart CTAs — contextual cross-promotion ──
-  const ctaDiv = el('div', 'sk-powered');
-  ctaDiv.style.cssText = 'display:flex;flex-direction:column;gap:2px;margin-top:4px';
-  if (pl && pl.avgBuyCents > 0) {
-    const plCta = el('a', 'sk-powered') as HTMLAnchorElement;
-    plCta.href = `https://app.skinkeeper.store/portfolio?search=${encodeURIComponent(marketName)}`;
-    plCta.target = '_blank';
-    plCta.innerHTML = '📊 <a href="https://app.skinkeeper.store/portfolio" target="_blank" style="color:var(--sk-primary-light)">See full P/L history & charts →</a>';
-    ctaDiv.appendChild(plCta);
-  } else if (steamPrice && steamPrice > 5) {
-    const trackCta = el('div', 'sk-powered');
-    trackCta.innerHTML = '💰 <a href="https://app.skinkeeper.store/portfolio" target="_blank" style="color:var(--sk-primary-light)">Track profit/loss across accounts →</a>';
-    ctaDiv.appendChild(trackCta);
-  }
-  if (item?.type === 'Storage Unit') {
-    const suCta = el('div', 'sk-powered');
-    suCta.innerHTML = '📦 <a href="https://app.skinkeeper.store/storage-units" target="_blank" style="color:var(--sk-primary-light)">Browse storage contents in Desktop App →</a>';
-    ctaDiv.appendChild(suCta);
-  }
-  // Expensive items ($50+): promote mobile app for price alerts
-  const priceUsd = steamPrice ? steamPrice / exchangeRate : 0;
-  if (priceUsd > 50) {
-    const appCta = el('div', 'sk-powered');
-    appCta.innerHTML = '📈 <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" style="color:var(--sk-text-dim);transition:color 0.2s" onmouseover="this.style.color=\'var(--sk-primary-light)\'" onmouseout="this.style.color=\'var(--sk-text-dim)\'">Track price history & set alerts → SkinKeeper App</a>';
-    ctaDiv.appendChild(appCta);
-  }
-  // All priced items: promote web dashboard
-  if (steamPrice) {
-    const webCta = el('div', 'sk-powered');
-    webCta.innerHTML = '📊 <a href="https://app.skinkeeper.store/portfolio" target="_blank" style="color:var(--sk-text-dim);transition:color 0.2s" onmouseover="this.style.color=\'var(--sk-primary-light)\'" onmouseout="this.style.color=\'var(--sk-text-dim)\'">Full P&L analytics & portfolio → skinkeeper.store</a>';
-    ctaDiv.appendChild(webCta);
-  }
-  section.appendChild(ctaDiv);
+  // Auto-dismiss after 6 seconds
+  setTimeout(() => {
+    toast.style.animation = 'sk-toast-out 0.3s ease-in forwards';
+    setTimeout(() => toast.remove(), 300);
+  }, 6000);
 
-  const powered = el('div', 'sk-powered');
-  powered.innerHTML = 'by <a href="https://skinkeeper.store" target="_blank">SkinKeeper</a>';
-  section.appendChild(powered);
-
-  const target = panel.querySelector('.item_desc_content') || panel.querySelector('[id$="_content"]');
-  if (target) target.appendChild(section);
+  // Click to dismiss
+  toast.addEventListener('click', () => toast.remove());
 }
 
 // ═══════════════════════════════════════════════════════════════════════

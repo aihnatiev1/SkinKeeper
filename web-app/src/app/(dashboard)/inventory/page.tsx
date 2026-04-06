@@ -78,8 +78,8 @@ export default function InventoryPage() {
         <EcosystemTip
           id="inventory-extension"
           icon="\ud83e\udde9"
-          message="Quick sell & price overlay on Steam — get the browser extension"
-          ctaText="Get Extension"
+          message="One-click sell on Steam. Float overlay. Price tags on every skin. All inside your browser."
+          ctaText="Install Extension"
           ctaUrl="https://chromewebstore.google.com/detail/skinkeeper/placeholder"
         />
         {/* Toolbar */}

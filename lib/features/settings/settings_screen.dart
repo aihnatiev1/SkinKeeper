@@ -228,7 +228,7 @@ class SettingsScreen extends ConsumerWidget {
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: Text(
-                    'SkinKeeper Ecosystem',
+                    'Get More From Your Skins',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -240,7 +240,7 @@ class SettingsScreen extends ConsumerWidget {
                   leading: const Icon(Icons.extension, color: AppTheme.accent),
                   title: const Text('Browser Extension'),
                   subtitle: const Text(
-                    'Enhance Steam with price overlays & quick sell',
+                    'Prices, float values & deals overlaid right on Steam. One click install.',
                     style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                   trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
@@ -248,25 +248,25 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.desktop_windows, color: AppTheme.accent),
-                  title: const Text('Desktop App'),
-                  subtitle: const Text(
-                    'Advanced trading & storage unit management',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
-                  onTap: () => launchUrl(Uri.parse('https://skinkeeper.store/download')),
-                ),
-                const Divider(height: 1),
-                ListTile(
                   leading: const Icon(Icons.language, color: AppTheme.accent),
                   title: const Text('Web Dashboard'),
                   subtitle: const Text(
-                    'Full analytics & portfolio tracking',
+                    'Big screen. Full charts. Deep analytics. Your portfolio deserves it.',
                     style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                   trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
                   onTap: () => launchUrl(Uri.parse('https://app.skinkeeper.store')),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.desktop_windows, color: AppTheme.accent),
+                  title: const Text('Desktop App'),
+                  subtitle: const Text(
+                    'Storage units. Bulk trades. Mass operations. Desktop power.',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
+                  onTap: () => launchUrl(Uri.parse('https://skinkeeper.store/download')),
                 ),
               ],
             ),
@@ -582,8 +582,8 @@ class _ExtensionBannerState extends State<_ExtensionBanner> {
     if (_dismissed) return const SizedBox.shrink();
     return EcosystemBanner(
       icon: '\u{1F9E9}',
-      message: 'Overlay prices directly on Steam',
-      cta: 'Get Extension',
+      message: 'See real prices & float values on every Steam item',
+      cta: 'Install Free',
       url: 'https://chromewebstore.google.com/detail/skinkeeper/placeholder',
       onDismiss: () => setState(() => _dismissed = true),
     ).animate().fadeIn(duration: 300.ms, delay: 135.ms).slideY(begin: 0.05, end: 0);

@@ -168,6 +168,8 @@ export function readInventoryFromPage(): SteamItem[] {
           if (!item.paintIndex && d.app_data && d.app_data.paint_index) {
             item.paintIndex = parseInt(d.app_data.paint_index);
           }
+          // Fallback: detect Doppler phase from instanceid mapping
+          // Steam encodes phase info in instanceid — mapped via CSFloat API as last resort
           if (d.descriptions) {
             var stickers = [];
             for (var i = 0; i < d.descriptions.length; i++) {
@@ -286,6 +288,28 @@ export function formatPriceViaSteam(cents: number): string | null {
     } catch(e) { document.body.setAttribute('sk_formatted', ''); }`,
     'sk_formatted'
   );
+}
+
+/**
+ * Get seller-receives price from buyer-pays total, using Steam's own GetItemPriceFromTotal().
+ * This is the CORRECT way — Steam's fee calc is complex and varies by game.
+ * Same approach as CSGO Trader.
+ */
+export function getPriceAfterFees(buyerPaysCents: number): number {
+  const raw = runInPage(
+    `try {
+      document.body.setAttribute('sk_price_after_fees', GetItemPriceFromTotal(${buyerPaysCents}, g_rgWalletInfo).toString());
+    } catch(e) { document.body.setAttribute('sk_price_after_fees', '0'); }`,
+    'sk_price_after_fees'
+  );
+  return parseInt(raw || '0', 10);
+}
+
+/**
+ * Format cents in user's wallet currency using Steam's v_currencyformat().
+ */
+export function formatCentsViaSteam(cents: number): string {
+  return formatPriceViaSteam(cents) || `${cents / 100}`;
 }
 
 // ─── Bulk Price Loading ──────────────────────────────────────────────
@@ -473,6 +497,122 @@ export function sellItemOnMarket(assetId: string, priceCents: number): Promise<{
   });
 }
 
+// ─── Market Buy / Order API (ported from CSGO Trader) ────────────────
+
+/**
+ * Buy a listing instantly (one click, no dialog).
+ * Listing object needs: listingid, converted_price, converted_fee, converted_currencyid
+ */
+export function buyListing(listing: { listingid: string; converted_price: number; converted_fee: number; converted_currencyid: number }): Promise<boolean> {
+  return new Promise((resolve) => {
+    const currencyID = listing.converted_currencyid - 2000;
+    const total = listing.converted_price + listing.converted_fee;
+    const resultKey = `sk_buy_${listing.listingid}`;
+
+    // Execute in page context (has full session/cookies)
+    const script = `
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://steamcommunity.com/market/buylisting/${listing.listingid}', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+        xhr.onreadystatechange = function() {
+          if (xhr.readyState === 4) {
+            document.body.setAttribute('${resultKey}', (xhr.status === 200 || xhr.status === 406) ? 'ok' : 'fail_' + xhr.status);
+          }
+        };
+        var billingCountry = document.getElementById('billing_country_buynow') || document.getElementById('billing_country');
+        var params = 'sessionid=' + g_sessionID
+          + '&currency=${currencyID}'
+          + '&fee=${listing.converted_fee}'
+          + '&subtotal=${listing.converted_price}'
+          + '&total=${total}'
+          + '&quantity=1'
+          + '&billing_state=' + encodeURIComponent((document.getElementById('billing_state_buynow') || document.getElementById('billing_state') || {}).value || '')
+          + '&first_name=' + encodeURIComponent((document.getElementById('first_name_buynow') || document.getElementById('first_name') || {}).value || '')
+          + '&last_name=' + encodeURIComponent((document.getElementById('last_name_buynow') || document.getElementById('last_name') || {}).value || '')
+          + '&billing_address=' + encodeURIComponent((document.getElementById('billing_address_buynow') || document.getElementById('billing_address') || {}).value || '')
+          + '&billing_address_two=' + encodeURIComponent((document.getElementById('billing_address_two_buynow') || document.getElementById('billing_address_two') || {}).value || '')
+          + '&billing_country=' + encodeURIComponent((billingCountry || {}).value || '')
+          + '&billing_city=' + encodeURIComponent((document.getElementById('billing_city_buynow') || document.getElementById('billing_city') || {}).value || '')
+          + '&billing_postal_code=' + encodeURIComponent((document.getElementById('billing_postal_code_buynow') || document.getElementById('billing_postal_code') || {}).value || '')
+          + '&save_my_address=1';
+        xhr.send(params);
+      } catch(e) {
+        document.body.setAttribute('${resultKey}', 'fail_error');
+      }
+    `;
+
+    const div = document.createElement('div');
+    div.setAttribute('onreset', script);
+    div.dispatchEvent(new CustomEvent('reset'));
+    div.remove();
+
+    // Poll for result
+    const check = setInterval(() => {
+      const result = document.body.getAttribute(resultKey);
+      if (result) {
+        document.body.removeAttribute(resultKey);
+        clearInterval(check);
+        resolve(result === 'ok');
+      }
+    }, 100);
+    setTimeout(() => { clearInterval(check); resolve(false); }, 15000);
+  });
+}
+
+/** Read billing KYC data from Steam's hidden form fields */
+function getBuyerKYCFromPage(): Record<string, string> {
+  // Steam uses different suffixes for commodity vs non-commodity items
+  for (const suffix of ['_buynow', '']) {
+    const country = document.getElementById(`billing_country${suffix}`) as HTMLInputElement | null;
+    if (country?.value) {
+      const val = (id: string) => {
+        const el = document.getElementById(`${id}${suffix}`) as HTMLInputElement | null;
+        return el?.value ? encodeURIComponent(el.value) : '';
+      };
+      return {
+        first_name: val('first_name'),
+        last_name: val('last_name'),
+        billing_address: val('billing_address'),
+        billing_address_two: val('billing_address_two'),
+        billing_country: val('billing_country'),
+        billing_city: val('billing_city'),
+        billing_state: val('billing_state'),
+        billing_postal_code: val('billing_postal_code'),
+      };
+    }
+  }
+  return {
+    first_name: '', last_name: '', billing_address: '', billing_address_two: '',
+    billing_country: '', billing_city: '', billing_state: '', billing_postal_code: '',
+  };
+}
+
+/**
+ * Create a buy order on the market.
+ */
+export async function createBuyOrder(marketHashName: string, priceCents: number, quantity = 1): Promise<{ success: boolean; message?: string }> {
+  const sessionId = getSessionID();
+  if (!sessionId) return { success: false, message: 'No session' };
+
+  const walletInfo = getWalletInfo();
+  const currency = walletInfo?.wallet_currency || 1;
+
+  try {
+    const res = await fetch('https://steamcommunity.com/market/createbuyorder/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      credentials: 'include',
+      body: `sessionid=${sessionId}&currency=${currency}&appid=730&market_hash_name=${encodeURIComponent(marketHashName)}&price_total=${priceCents * quantity}&quantity=${quantity}&first_name=&last_name=&billing_address=&billing_address_two=&billing_country=&billing_city=&billing_state=&billing_postal_code=&save_my_address=0`,
+    });
+    if (!res.ok) return { success: false, message: `HTTP ${res.status}` };
+    const data = await res.json();
+    return data?.success === 1 ? { success: true } : { success: false, message: data?.message || 'Failed' };
+  } catch (e) {
+    return { success: false, message: String(e) };
+  }
+}
+
 /**
  * Calculate what buyer pays given what seller wants to receive.
  * Steam fee: 5% (min 1¢), CS2 game fee: 10% (min 1¢)
@@ -511,40 +651,55 @@ export function calcSellerReceives(buyerPriceCents: number): number {
  * Used for "Quick Sell" = undercut by 1¢
  */
 export async function getLowestListingPrice(marketHashName: string, currencyId: number): Promise<number | null> {
-  const url = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}/render/?query=&start=0&count=5&country=US&language=english&currency=${currencyId}`;
-  const data = await bgFetch<any>(url);
-  if (!data?.listinginfo) return null;
+  // Direct fetch from content script (same-origin, like CSGO Trader)
+  try {
+    const url = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}/render/?query=&start=0&count=10&country=US&language=english&currency=${currencyId}`;
+    const res = await fetch(url);
+    if (!res.ok) { console.warn(`[SkinKeeper] Quick Sell fetch failed: ${res.status}`); return null; }
+    const data = await res.json();
+    if (!data?.success || !data?.listinginfo) return null;
 
-  const listings = Object.values(data.listinginfo) as any[];
-  for (const listing of listings) {
-    if (listing.converted_price !== undefined && listing.converted_fee !== undefined) {
-      return listing.converted_price + listing.converted_fee; // total cents buyer pays
+    const listings = Object.values(data.listinginfo) as any[];
+    for (const listing of listings) {
+      if (listing.converted_price !== undefined && listing.converted_fee !== undefined) {
+        return listing.converted_price + listing.converted_fee;
+      }
     }
+    return null;
+  } catch (e) {
+    console.warn('[SkinKeeper] Quick Sell error:', e);
+    return null;
   }
-  return null;
 }
 
 /**
  * Get highest buy order (cents) via /market/itemordershistogram
- * Used for "Instant Sell" = sell to highest bidder
  * Two-step: first get item_nameid from listing page, then fetch histogram
  */
 export async function getHighestBuyOrder(marketHashName: string, currencyId: number): Promise<number | null> {
-  // Step 1: Get item_nameid from market listing page
-  const pageUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}`;
-  const pageHtml = await bgFetch<string>(pageUrl);
-  if (!pageHtml || typeof pageHtml !== 'string') return null;
+  try {
+    // Step 1: Get item_nameid from market listing page
+    const pageUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}`;
+    const pageRes = await fetch(pageUrl);
+    if (!pageRes.ok) return null;
+    const pageHtml = await pageRes.text();
 
-  const match = pageHtml.match(/Market_LoadOrderSpread\(\s*(\d+)/);
-  if (!match) return null;
-  const itemNameId = match[1];
+    const match = pageHtml.match(/Market_LoadOrderSpread\(\s*(\d+)/);
+    if (!match) return null;
+    const itemNameId = match[1];
 
-  // Step 2: Fetch histogram
-  const histUrl = `https://steamcommunity.com/market/itemordershistogram?country=US&language=english&currency=${currencyId}&item_nameid=${itemNameId}`;
-  const hist = await bgFetch<any>(histUrl);
-  if (!hist?.highest_buy_order) return null;
+    // Step 2: Fetch histogram
+    const histUrl = `https://steamcommunity.com/market/itemordershistogram?country=US&language=english&currency=${currencyId}&item_nameid=${itemNameId}`;
+    const histRes = await fetch(histUrl);
+    if (!histRes.ok) return null;
+    const hist = await histRes.json();
+    if (!hist?.highest_buy_order) return null;
 
-  return parseInt(hist.highest_buy_order); // cents
+    return parseInt(hist.highest_buy_order);
+  } catch (e) {
+    console.warn('[SkinKeeper] Instant Sell error:', e);
+    return null;
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────

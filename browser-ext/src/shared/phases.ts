@@ -57,6 +57,31 @@ export function getDopplerPhase(paintIndex: number): PhaseInfo | null {
   return DOPPLER_PHASES[paintIndex] || null;
 }
 
+/**
+ * Detect Doppler phase from icon_url using CSGO Trader's mapping.
+ * Returns paintIndex (415-572) or null.
+ */
+let _iconMap: Record<string, number> | null = null;
+
+export async function loadDopplerIconMap(): Promise<void> {
+  if (_iconMap) return;
+  try {
+    const url = chrome.runtime.getURL('data/dopplerIconMap.json');
+    const res = await fetch(url);
+    if (res.ok) {
+      _iconMap = await res.json();
+      console.log(`[SkinKeeper] Doppler icon map loaded: ${Object.keys(_iconMap!).length} entries`);
+    }
+  } catch (e) {
+    console.warn('[SkinKeeper] Failed to load doppler icon map:', e);
+  }
+}
+
+export function getDopplerPhaseFromIcon(iconUrl: string): number | null {
+  if (!_iconMap || !iconUrl) return null;
+  return _iconMap[iconUrl] ?? null;
+}
+
 export function isDoppler(marketHashName: string): boolean {
   const lower = marketHashName.toLowerCase();
   return lower.includes('doppler') || lower.includes('gamma doppler');
