@@ -359,38 +359,44 @@ export default function InventoryPage() {
                   )}
                 >
                   <div
-                    className="relative p-2 flex items-center justify-center h-28"
+                    className="relative flex items-center justify-center"
                     style={{
                       background: `linear-gradient(135deg, ${rarityColor}08, ${rarityColor}18)`,
+                      aspectRatio: '1',
                     }}
                   >
                     <img
                       src={getItemIconUrl(item.icon_url)}
                       alt={item.market_hash_name}
-                      className="max-h-full max-w-full object-contain group-hover:scale-110 transition-transform duration-300"
+                      className="max-h-[70%] max-w-[85%] object-contain group-hover:scale-110 transition-transform duration-300"
                     />
 
-                    {/* Top row: trade lock + wear badge */}
-                    <div className="absolute top-1.5 left-1.5 right-1.5 flex items-start justify-between">
-                      <div className="flex items-center gap-1">
-                        {!item.tradable && (
-                          <span className="flex items-center justify-center w-5 h-5 bg-loss/80 rounded text-white">
-                            <Lock size={10} />
-                          </span>
-                        )}
-                      </div>
-                      {item.wear && (
-                        <span className={cn(
-                          'text-[10px] px-1.5 py-0.5 rounded font-bold leading-none',
-                          item.market_hash_name.includes('StatTrak')
-                            ? 'bg-orange-500/90 text-white'
-                            : 'bg-primary/80 text-white'
-                        )}>
-                          {item.market_hash_name.includes('StatTrak') ? 'ST ' : ''}
-                          {getWearShort(item.wear)}
-                        </span>
-                      )}
-                    </div>
+                    {/* Top-left: float value */}
+                    {item.float_value != null && (
+                      <span className="absolute top-1.5 left-1.5 text-[9px] font-mono text-white/70 leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                        {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
+                      </span>
+                    )}
+
+                    {/* Top-right: wear badge */}
+                    {item.wear && (
+                      <span className={cn(
+                        'absolute top-1.5 right-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold leading-none',
+                        item.market_hash_name.includes('StatTrak')
+                          ? 'bg-orange-500/90 text-white'
+                          : 'bg-primary/80 text-white'
+                      )}>
+                        {item.market_hash_name.includes('StatTrak') ? 'ST ' : ''}
+                        {getWearShort(item.wear)}
+                      </span>
+                    )}
+
+                    {/* Trade lock icon top-left (below float) */}
+                    {!item.tradable && (
+                      <span className="absolute top-1.5 left-1.5 flex items-center justify-center w-4 h-4 bg-loss/80 rounded text-white" style={item.float_value != null ? { top: '18px' } : undefined}>
+                        <Lock size={9} />
+                      </span>
+                    )}
 
                     {/* Doppler phase badge */}
                     {dopplerPhase && (
@@ -403,7 +409,7 @@ export default function InventoryPage() {
                     )}
 
                     {/* Fade badge */}
-                    {fadeInfo && (
+                    {fadeInfo && !dopplerPhase && (
                       <span
                         className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded font-bold leading-none text-white"
                         style={{ backgroundColor: fadeInfo.color }}
@@ -412,34 +418,24 @@ export default function InventoryPage() {
                       </span>
                     )}
 
-                    {/* Sticker count badge */}
+                    {/* Sticker count badge — bottom right */}
                     {stickerCount > 0 && (
                       <span className="absolute bottom-1.5 right-1.5 text-[9px] px-1 py-0.5 bg-accent/80 text-white rounded font-bold leading-none">
                         x{stickerCount}
                       </span>
                     )}
-                  </div>
 
-                  {/* Bottom info area */}
-                  <div className="px-2.5 pt-1 pb-2 space-y-0.5">
-                    {/* Float value */}
-                    {item.float_value != null && (
-                      <p className="text-[10px] font-mono text-muted leading-none">
-                        {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
+                    {/* Bottom-left overlay: price + sticker value */}
+                    <div className="absolute bottom-1.5 left-1.5">
+                      <p className="text-sm font-bold text-profit leading-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                        {price > 0 ? formatPrice(price) : '—'}
                       </p>
-                    )}
-
-                    {/* Price */}
-                    <p className="text-sm font-bold text-profit leading-tight">
-                      {price > 0 ? formatPrice(price) : '—'}
-                    </p>
-
-                    {/* Sticker value if significant */}
-                    {item.sticker_value != null && item.sticker_value > 1 && (
-                      <p className="text-[10px] text-accent leading-none">
-                        SP: {formatPrice(item.sticker_value)}
-                      </p>
-                    )}
+                      {item.sticker_value != null && item.sticker_value > 1 && (
+                        <p className="text-[9px] text-accent leading-none mt-0.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                          SP: {formatPrice(item.sticker_value)}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Rarity bar */}
