@@ -2,27 +2,58 @@
 
 import { useAccounts } from '@/lib/hooks';
 import { useIsDesktop } from '@/lib/use-desktop';
-import { AlertTriangle, Monitor, Puzzle, X, ExternalLink } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, Monitor, Puzzle, X, ExternalLink, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+
+const DISMISS_KEY = 'sk_session_banner_dismissed';
 
 /**
  * Shows a prominent banner when user has no active Steam session.
  * Without a session, inventory/trades/market features don't work.
  * Guides user to connect via Desktop app or Browser extension.
+ *
+ * Two modes:
+ * - "no session" → large banner with connect instructions (localStorage dismiss)
+ * - "expired" → small inline banner with reconnect link (always visible)
  */
 export function SessionConnectBanner() {
   const { data: accounts } = useAccounts();
   const isDesktop = useIsDesktop();
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(true); // start hidden to avoid flash
 
-  if (dismissed || !accounts) return null;
+  useEffect(() => {
+    setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
+  }, []);
 
-  // Check if ANY account lacks a session
+  if (!accounts) return null;
+
   const noSession = accounts.some((a) => a.sessionStatus === 'none');
   const allExpired = accounts.length > 0 && accounts.every((a) => a.sessionStatus === 'expired' || a.sessionStatus === 'none');
+  const someExpired = !noSession && accounts.some((a) => a.sessionStatus === 'expired');
 
-  if (!noSession && !allExpired) return null;
+  // Expired-only: show small banner (not dismissible permanently)
+  if (someExpired && !noSession) {
+    return (
+      <div className="flex items-center gap-3 glass rounded-xl border border-warning/20 p-3 mb-4">
+        <RefreshCw size={16} className="text-warning shrink-0" />
+        <p className="text-xs text-muted flex-1">
+          Steam session expired for {accounts.filter(a => a.sessionStatus === 'expired').map(a => a.displayName).join(', ')}.
+          Reconnect to keep data fresh.
+        </p>
+        <Link href="/settings" className="text-xs text-primary font-semibold hover:underline shrink-0">
+          Reconnect
+        </Link>
+      </div>
+    );
+  }
+
+  if ((!noSession && !allExpired) || dismissed) return null;
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    localStorage.setItem(DISMISS_KEY, '1');
+  };
 
   return (
     <div className="relative glass-strong rounded-2xl border border-warning/30 p-5 mb-4 overflow-hidden">
@@ -30,7 +61,7 @@ export function SessionConnectBanner() {
       <div className="absolute inset-0 bg-gradient-to-r from-warning/5 via-transparent to-orange-500/5" />
 
       <button
-        onClick={() => setDismissed(true)}
+        onClick={handleDismiss}
         className="absolute top-3 right-3 p-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors z-10"
       >
         <X size={16} />
