@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to SkinKeeper</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0B0F19;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      max-width: 520px;
+      padding: 40px;
+      text-align: center;
+    }
+    .logo {
+      width: 64px; height: 64px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #6366F1, #06B6D4);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+    }
+    h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 32px; }
+
+    .slides { position: relative; }
+    .slide { display: none; animation: fadeIn 0.3s ease; }
+    .slide.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .feature-card {
+      background: rgba(30,41,59,0.5);
+      border: 1px solid rgba(99,102,241,0.15);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    .feature-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .feature-card p { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+
+    .highlight {
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 16px 0;
+      text-align: left;
+    }
+    .highlight h4 { font-size: 14px; font-weight: 700; color: #6366F1; margin-bottom: 4px; }
+    .highlight p { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+
+    .dots { display: flex; justify-content: center; gap: 6px; margin: 24px 0 16px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(148,163,184,0.3); cursor: pointer; transition: all 0.2s; }
+    .dot.active { background: #6366F1; width: 24px; border-radius: 4px; }
+
+    .btn-row { display: flex; gap: 12px; justify-content: center; }
+    .btn {
+      padding: 10px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #6366F1; color: #fff; }
+    .btn-primary:hover { background: #5558e6; box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+    .btn-secondary { background: rgba(30,41,59,0.5); color: #94a3b8; border: 1px solid rgba(30,41,59,0.8); }
+    .btn-secondary:hover { color: #e2e8f0; }
+
+    .footer { margin-top: 24px; font-size: 11px; color: #64748b; }
+    .footer a { color: #6366F1; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">SK</div>
+    <h1>Welcome to SkinKeeper</h1>
+    <p class="subtitle">Your CS2 inventory just got superpowers</p>
+
+    <div class="slides">
+      <!-- Slide 1: Features overview -->
+      <div class="slide active" data-slide="0">
+        <div class="feature-card">
+          <h3>&#x1f4b0; Real-Time Prices</h3>
+          <p>See Steam, Buff, CSFloat, and Skinport prices on every item. Directly on Steam pages.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f52c; Float & Phase Detection</h3>
+          <p>Float values, Doppler phases (Ruby, Sapphire), Fade %, Blue Gem — all visible at a glance.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f4ca; Trade P&L Analysis</h3>
+          <p>See profit/loss on every trade offer before you accept. Never make a bad trade again.</p>
+        </div>
+      </div>
+
+      <!-- Slide 2: Collect Prices explanation -->
+      <div class="slide" data-slide="1">
+        <div class="highlight">
+          <h4>&#x1f91d; Community Price Network</h4>
+          <p>
+            SkinKeeper users help each other by sharing price data. When you browse Steam Market,
+            the extension passively reads prices that Steam already shows you — <strong>zero extra requests</strong>.
+          </p>
+          <p style="margin-top: 8px;">
+            This data keeps prices fresh for everyone. No personal data is sent — only item names and prices.
+          </p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x2705; Collect Prices is ON by default</h3>
+          <p>
+            You're helping the community just by browsing Steam. You can turn this off anytime in extension settings.
+            We never make extra requests to Steam — only read what's already loaded.
+          </p>
+        </div>
+      </div>
+
+      <!-- Slide 3: Ecosystem -->
+      <div class="slide" data-slide="2">
+        <div class="feature-card">
+          <h3>&#x1f4f1; Part of the Ecosystem</h3>
+          <p>SkinKeeper works across all your devices. Your data syncs automatically.</p>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
+          <a href="https://skinkeeper.store/portfolio" target="_blank" class="feature-card" style="text-decoration: none; color: inherit; margin: 0;">
+            <h3 style="font-size: 13px;">&#x1f310; Web App</h3>
+            <p style="font-size: 11px;">Full dashboard</p>
+          </a>
+          <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" class="feature-card" style="text-decoration: none; color: inherit; margin: 0;">
+            <h3 style="font-size: 13px;">&#x1f4f1; Mobile App</h3>
+            <p style="font-size: 11px;">iOS & Android</p>
+          </a>
+        </div>
+        <div style="margin-top: 16px;">
+          <a href="https://skinkeeper.store/login?source=extension" target="_blank" class="btn btn-primary" style="display: inline-block; text-decoration: none; width: 100%;">
+            Sign in to sync your data
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="dots">
+      <div class="dot active" data-dot="0"></div>
+      <div class="dot" data-dot="1"></div>
+      <div class="dot" data-dot="2"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="prevBtn" style="display:none;">Back</button>
+      <button class="btn btn-primary" id="nextBtn">Next</button>
+    </div>
+
+    <p class="footer">
+      <a href="https://skinkeeper.store/privacy-extension" target="_blank">Privacy Policy</a>
+      &nbsp;·&nbsp;
+      <a href="https://skinkeeper.store" target="_blank">skinkeeper.store</a>
+    </p>
+  </div>
+
+  <script>
+    let current = 0;
+    const slides = document.querySelectorAll('.slide');
+    const dots = document.querySelectorAll('.dot');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    function show(idx) {
+      current = idx;
+      slides.forEach((s, i) => s.classList.toggle('active', i === idx));
+      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+      prevBtn.style.display = idx > 0 ? '' : 'none';
+      nextBtn.textContent = idx === slides.length - 1 ? 'Get Started' : 'Next';
+    }
+
+    nextBtn.addEventListener('click', () => {
+      if (current < slides.length - 1) show(current + 1);
+      else window.close();
+    });
+    prevBtn.addEventListener('click', () => { if (current > 0) show(current - 1); });
+    dots.forEach(d => d.addEventListener('click', () => show(parseInt(d.dataset.dot))));
+  </script>
+</body>
+</html>

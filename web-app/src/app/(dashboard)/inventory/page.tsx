@@ -14,6 +14,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { EcosystemTip } from '@/components/ecosystem-tip';
+import { SessionConnectBanner } from '@/components/session-connect-banner';
 
 type SortOption = 'price-desc' | 'price-asc' | 'name' | 'rarity';
 type ViewMode = 'grid' | 'list';
@@ -120,6 +121,7 @@ export default function InventoryPage() {
       <Header title="Inventory" />
       <CurrencyBanner />
       <div className="p-4 lg:p-6 space-y-4">
+        <SessionConnectBanner />
         <EcosystemTip
           id="inventory-extension"
           icon="\ud83e\udde9"

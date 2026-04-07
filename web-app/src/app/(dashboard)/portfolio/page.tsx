@@ -5,6 +5,7 @@ import { StatCard } from '@/components/stat-card';
 import { CardSkeleton } from '@/components/loading';
 import { PremiumGate, ProBadge } from '@/components/premium-gate';
 import { PortfolioSelector } from '@/components/portfolio-selector';
+import { SessionConnectBanner } from '@/components/session-connect-banner';
 import { usePortfolioSummary, useProfitLoss, usePLItems } from '@/lib/hooks';
 import { formatPrice, formatPriceChange } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
@@ -37,6 +38,7 @@ export default function PortfolioPage() {
     <div>
       <Header title="Portfolio" />
       <div className="p-4 lg:p-6 space-y-6">
+        <SessionConnectBanner />
         <EcosystemTip
           id="portfolio-mobile-app"
           icon="\ud83d\udcf1"

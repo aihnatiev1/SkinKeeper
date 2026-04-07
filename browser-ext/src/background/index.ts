@@ -444,7 +444,8 @@ chrome.notifications.onClicked.addListener(() => {
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    // Don't redirect to login — extension works without account
+    // Open welcome/onboarding page
+    chrome.tabs.create({ url: chrome.runtime.getURL('welcome/welcome.html') });
     postToPostHog('extension_installed', {});
   }
 
