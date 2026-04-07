@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ExternalLink, Copy, Check, TrendingUp, Eye } from 'lucide-react';
+import { X, ExternalLink, Copy, Check, TrendingUp, Eye, DollarSign } from 'lucide-react';
 import type { InventoryItem } from '@/lib/types';
 import { formatPrice, getItemIconUrl, getWearShort } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 interface ItemDetailModalProps {
   item: InventoryItem | null;
   onClose: () => void;
+  onSell?: (item: InventoryItem) => void;
 }
 
 const PRICE_SOURCES: { key: string; label: string; color: string }[] = [
@@ -31,7 +32,7 @@ const PRICE_SOURCES: { key: string; label: string; color: string }[] = [
   { key: 'bitskins', label: 'BitSkins', color: 'text-yellow-400' },
 ];
 
-export function ItemDetailModal({ item, onClose }: ItemDetailModalProps) {
+export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
   const [historyDays, setHistoryDays] = useState(30);
   const { data: historyData } = usePriceHistory(item?.market_hash_name ?? null, historyDays);
@@ -143,6 +144,15 @@ export function ItemDetailModal({ item, onClose }: ItemDetailModalProps) {
                 <button onClick={handleWatchlist} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors shrink-0" title="Add to watchlist">
                   <Eye size={14} />
                 </button>
+                {onSell && item.tradable && (
+                  <button
+                    onClick={() => onSell(item)}
+                    className="p-1.5 rounded-lg text-muted hover:text-profit hover:bg-profit/10 transition-colors shrink-0"
+                    title="Sell on Steam Market"
+                  >
+                    <DollarSign size={14} />
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2 mt-1">
                 {item.wear && (
@@ -316,6 +326,17 @@ export function ItemDetailModal({ item, onClose }: ItemDetailModalProps) {
                 </div>
               );
             })()}
+
+            {/* Sell button */}
+            {onSell && item.tradable && (
+              <button
+                onClick={() => onSell(item)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25"
+              >
+                <DollarSign size={16} />
+                Sell on Steam Market
+              </button>
+            )}
 
             {/* External links */}
             <div className="flex flex-wrap gap-2 pt-2 border-t border-border/30">

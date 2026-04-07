@@ -266,6 +266,32 @@ export interface SellOperationItem {
   priceCents: number;
   status: string;
   error?: string;
+  requiresConfirmation?: boolean;
+}
+
+// GET /api/market/quickprice/:marketHashName
+export interface QuickPrice {
+  sellerReceivesCents: number;
+  stale: boolean;
+  source: string;
+  marketUrl: string;
+  currencyId: number;
+  currencyCode: string;
+  currencySymbol: string;
+}
+
+// POST /api/market/refresh-prices
+export interface RefreshPricesResult {
+  prices: Record<string, {
+    sellerReceivesCents: number;
+    highestBuyOrder: number;
+    lowestSellOrder: number;
+    currencyId: number;
+    fresh: boolean;
+  }>;
+  currencyId: number;
+  currencyCode: string;
+  currencySymbol: string;
 }
 
 // ─── Deals / Arbitrage ────────────────────────────────────────────────

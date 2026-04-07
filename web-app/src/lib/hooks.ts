@@ -22,6 +22,8 @@ import type {
   PriceHistoryPoint,
   FeeCalcResult,
   Portfolio,
+  QuickPrice,
+  RefreshPricesResult,
 } from './types';
 import { useAuthStore, useUIStore } from './store';
 
@@ -425,6 +427,40 @@ export function useSellOperationStatus(operationId: string | null) {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === 'pending' || status === 'in_progress' ? 2000 : false;
+    },
+  });
+}
+
+export function useQuickPrice(marketHashName: string | null, accountId?: number) {
+  return useQuery({
+    queryKey: ['market', 'quickprice', marketHashName, accountId],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (accountId) params.set('accountId', String(accountId));
+      const qs = params.toString();
+      return api.get<QuickPrice>(
+        `/market/quickprice/${encodeURIComponent(marketHashName!)}${qs ? `?${qs}` : ''}`
+      );
+    },
+    enabled: !!marketHashName,
+    staleTime: 60_000,
+  });
+}
+
+export function useRefreshPrices() {
+  return useMutation({
+    mutationFn: (data: { names: string[]; accountId?: number }) =>
+      api.post<RefreshPricesResult>('/market/refresh-prices', data),
+  });
+}
+
+export function useCancelSellOperation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (operationId: string) =>
+      api.post(`/market/sell-operation/${operationId}/cancel`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['market'] });
     },
   });
 }

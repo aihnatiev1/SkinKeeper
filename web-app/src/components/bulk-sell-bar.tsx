@@ -1,127 +1,148 @@
 'use client';
 
-import { useState } from 'react';
-import { useCreateSellOperation, useSellOperationStatus } from '@/lib/hooks';
-import { formatPrice } from '@/lib/utils';
 import type { InventoryItem } from '@/lib/types';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingCart, X, Loader2, Check, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
+import { formatPrice, getItemIconUrl } from '@/lib/utils';
+import { DollarSign, ChevronDown, X, Zap, Timer } from 'lucide-react';
 
 interface BulkSellBarProps {
   selectedItems: InventoryItem[];
   onClear: () => void;
+  onSell: (items: InventoryItem[]) => void;
+  onQuickSell?: (items: InventoryItem[]) => void;
+  onRemoveItem?: (assetId: string) => void;
 }
 
-export function BulkSellBar({ selectedItems, onClear }: BulkSellBarProps) {
-  const createSell = useCreateSellOperation();
-  const [operationId, setOperationId] = useState<string | null>(null);
-  const { data: operation } = useSellOperationStatus(operationId);
-
+export function BulkSellBar({ selectedItems, onClear, onSell, onQuickSell, onRemoveItem }: BulkSellBarProps) {
   const totalValue = selectedItems.reduce((sum, item) => {
     const price = item.prices?.steam || item.prices?.buff || 0;
     return sum + price;
   }, 0);
 
-  // Estimate seller receives (after 13% Steam commission)
   const sellerReceives = totalValue * 0.87;
+  const tradableCount = selectedItems.filter(i => i.tradable).length;
+  const hasItems = selectedItems.length > 0;
+  const canSell = tradableCount > 0 && hasItems;
 
-  const handleSell = () => {
-    const items = selectedItems
-      .filter((item) => item.tradable && item.prices?.steam)
-      .map((item) => ({
-        assetId: item.asset_id,
-        marketHashName: item.market_hash_name,
-        priceCents: Math.round((item.prices.steam || 0) * 100),
-      }));
-
-    if (items.length === 0) {
-      toast.error('No sellable items selected');
-      return;
-    }
-
-    createSell.mutate(items, {
-      onSuccess: (data) => {
-        setOperationId(data.operationId);
-        toast.success(`Listing ${items.length} items on Steam Market`);
-      },
-      onError: (err: any) => {
-        toast.error(err?.message || 'Failed to create sell operation');
-      },
-    });
-  };
-
-  if (selectedItems.length === 0) return null;
-
-  const isRunning = operationId && operation && (operation.status === 'pending' || operation.status === 'in_progress');
-  const isDone = operationId && operation && operation.status === 'completed';
+  const slotCount = Math.max(8, selectedItems.length);
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ y: 80, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 80, opacity: 0 }}
-        className="fixed bottom-0 left-0 right-0 z-40 lg:left-[72px]"
-      >
-        <div className="max-w-5xl mx-auto px-4 pb-4">
-          <div className="glass-strong rounded-2xl border border-border/50 p-4 flex items-center gap-4 shadow-2xl">
-            {/* Item count */}
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <ShoppingCart size={18} className="text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-bold">{selectedItems.length} items</p>
-                <p className="text-[10px] text-muted">selected</p>
-              </div>
-            </div>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#141519' }}>
+      <div className="px-4 py-3">
+        {/* Remove All + Slots + Price */}
+        <div className="flex items-center gap-3">
+          {/* Remove All */}
+          <button
+            onClick={onClear}
+            disabled={!hasItems}
+            className="flex items-center gap-1 shrink-0 disabled:opacity-25 hover:opacity-80 transition-opacity"
+            style={{ color: '#6b7280', fontSize: '12px' }}
+          >
+            <ChevronDown size={16} />
+            <span>Remove All</span>
+          </button>
 
-            {/* Value summary */}
-            <div className="flex-1 flex items-center gap-4">
-              <div>
-                <p className="text-[10px] text-muted">Market Value</p>
-                <p className="text-sm font-semibold">{formatPrice(totalValue)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted">You receive (~)</p>
-                <p className="text-sm font-semibold text-profit">{formatPrice(sellerReceives)}</p>
-              </div>
-            </div>
+          {/* Item slot cells */}
+          <div className="flex-1 flex gap-[6px] overflow-x-auto scrollbar-hide py-1">
+            {Array.from({ length: slotCount }).map((_, i) => {
+              const item = selectedItems[i];
+              return (
+                <div
+                  key={item?.asset_id ?? `e-${i}`}
+                  className="group relative shrink-0 flex items-center justify-center"
+                  style={{
+                    width: '88px',
+                    height: '68px',
+                    borderRadius: '6px',
+                    border: item ? '1.5px solid rgba(59,130,246,0.5)' : '1.5px solid #1e2028',
+                    backgroundColor: item ? 'rgba(59,130,246,0.06)' : '#1a1c22',
+                  }}
+                >
+                  {item ? (
+                    <>
+                      <img
+                        src={getItemIconUrl(item.icon_url)}
+                        alt=""
+                        className="w-full h-full object-contain p-1.5"
+                      />
+                      {onRemoveItem && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onRemoveItem(item.asset_id); }}
+                          className="absolute -top-2 -right-2 w-[18px] h-[18px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                          style={{ backgroundColor: '#ef4444' }}
+                        >
+                          <X size={9} className="text-white" />
+                        </button>
+                      )}
+                    </>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
 
-            {/* Operation progress */}
-            {isRunning && (
-              <div className="flex items-center gap-2 text-xs text-primary">
-                <Loader2 size={14} className="animate-spin" />
-                <span>Listing {operation.completedItems ?? 0}/{operation.totalItems}...</span>
-              </div>
+          {/* Price */}
+          <div className="shrink-0 text-right pl-3">
+            {hasItems ? (
+              <p className="text-lg font-bold" style={{ color: '#4ade80' }}>
+                ≈ {formatPrice(sellerReceives)}
+              </p>
+            ) : (
+              <p style={{ color: '#374151', fontSize: '13px' }}>Select items</p>
             )}
-
-            {isDone && (
-              <div className="flex items-center gap-2 text-xs text-profit">
-                <Check size={14} />
-                <span>All listed!</span>
-              </div>
-            )}
-
-            {/* Actions */}
-            <button
-              onClick={handleSell}
-              disabled={createSell.isPending || !!isRunning}
-              className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25 disabled:opacity-50"
-            >
-              {createSell.isPending ? 'Creating...' : 'List on Market'}
-            </button>
-
-            <button
-              onClick={() => { onClear(); setOperationId(null); }}
-              className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors"
-            >
-              <X size={18} />
-            </button>
           </div>
         </div>
-      </motion.div>
-    </AnimatePresence>
+
+        {/* Buttons row */}
+        <div className="flex items-center mt-2.5 gap-2">
+          {hasItems && (
+            <span style={{ color: '#6b7280', fontSize: '12px' }}>
+              <span className="font-semibold" style={{ color: '#e5e7eb' }}>{selectedItems.length}</span>
+              {' '}selected
+              {tradableCount < selectedItems.length && (
+                <span style={{ color: '#eab308' }}> ({tradableCount} tradable)</span>
+              )}
+            </span>
+          )}
+
+          <div className="flex-1" />
+
+          <button
+            onClick={() => onSell(selectedItems)}
+            disabled={!canSell}
+            className="px-5 py-[7px] rounded-md text-[13px] font-semibold transition-opacity disabled:opacity-25 hover:opacity-90"
+            style={{ backgroundColor: '#3b82f6', color: '#fff' }}
+          >
+            <span className="flex items-center gap-1.5">
+              <DollarSign size={14} />
+              Sell
+            </span>
+          </button>
+
+          <button
+            onClick={() => onQuickSell ? onQuickSell(selectedItems) : onSell(selectedItems)}
+            disabled={!canSell}
+            className="px-5 py-[7px] rounded-md text-[13px] font-semibold transition-opacity disabled:opacity-25 hover:opacity-90"
+            style={{ backgroundColor: '#16a34a', color: '#fff' }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Zap size={14} />
+              Quick Sell
+            </span>
+          </button>
+
+          <button
+            disabled={!canSell}
+            title="Instant sell at highest buy order"
+            className="px-5 py-[7px] rounded-md text-[13px] font-semibold transition-opacity disabled:opacity-25 hover:opacity-90"
+            style={{ backgroundColor: '#d97706', color: '#fff' }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Timer size={14} />
+              Instant Sell
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

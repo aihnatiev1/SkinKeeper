@@ -79,7 +79,7 @@ export function Sidebar() {
   const navContent = (
     <>
       {/* Logo */}
-      <Link href="/portfolio" className="flex items-center gap-3 px-4 h-16 border-b border-border/50 hover:bg-surface-light/50 transition-colors">
+      <Link href="/" className="flex items-center gap-3 px-4 h-16 border-b border-border/50 hover:bg-surface-light/50 transition-colors">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg shadow-primary/20">
           SK
         </div>
