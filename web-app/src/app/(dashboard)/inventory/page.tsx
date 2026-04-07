@@ -430,10 +430,10 @@ export default function InventoryPage() {
                 {search && <p className="text-xs mt-1">Try a different search term</p>}
               </div>
             ) : view === 'grid' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7" style={{ gap: '8px' }}>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7" style={{ gap: '6px' }}>
                 {items.map((item, idx) => {
                   const price = item.prices?.steam || item.prices?.buff || item.prices?.skinport || 0;
-                  const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
+                  const rc = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
                   const isLast = idx === items.length - 1;
                   const isST = item.market_hash_name.includes('StatTrak');
                   const isSV = item.market_hash_name.includes('Souvenir');
@@ -446,9 +446,11 @@ export default function InventoryPage() {
                   const fi = ps != null && isFade(item.market_hash_name) ? calculateFadePercent(ps) : null;
                   const mf = ps != null && isMarbleFade(item.market_hash_name) ? analyzeMarbleFade(ps) : null;
                   const stk = Array.isArray(item.stickers) ? item.stickers : [];
-                  const W: Record<string,string> = {FN:'#4ade80',MW:'#22d3ee',FT:'#a78bfa',WW:'#f97316',BS:'#ef4444'};
+                  const WC: Record<string,string> = {FN:'#4ade80',MW:'#22d3ee',FT:'#a78bfa',WW:'#f97316',BS:'#ef4444'};
                   const ws = getWearShort(item.wear);
-                  const wc = isST ? '#cf6a32' : isSV ? '#ffd700' : (ws && W[ws]) || '#818cf8';
+                  const wc = isST ? '#cf6a32' : isSV ? '#ffd700' : (ws && WC[ws]) || '#818cf8';
+                  // Short name: remove weapon prefix for card bottom
+                  const shortName = item.market_hash_name.replace(/^(StatTrak™ |Souvenir |★ )/, '').replace(/^[^|]+\| /, '').trim();
 
                   return (
                     <div
@@ -456,89 +458,100 @@ export default function InventoryPage() {
                       ref={isLast ? lastItemRef : undefined}
                       onClick={() => toggleSelect(item.asset_id)}
                       onDoubleClick={() => setSelectedItem(item)}
-                      className={cn('relative cursor-pointer group', isSel && 'ring-2 ring-primary')}
-                      style={{ background: '#1e2028', borderRadius: '8px', border: '1px solid #2a2d38', overflow: 'hidden' }}
+                      className={cn(
+                        'relative cursor-pointer group flex flex-col',
+                        isSel ? 'ring-2 ring-primary ring-offset-1 ring-offset-[#13151c]' : 'hover:ring-1 hover:ring-white/10'
+                      )}
+                      style={{ background: '#1a1d25', borderRadius: '8px', border: `1px solid ${isSel ? 'transparent' : '#272b36'}`, overflow: 'hidden' }}
                     >
-                      {/* ═══ PRICE BAR (top) ═══ */}
-                      <div style={{ padding: '7px 8px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                          <span style={{ color: '#facc15', fontSize: '11px', lineHeight: 1 }}>⚡</span>
-                          <span style={{ color: price >= 100 ? '#4ade80' : '#facc15', fontSize: '13px', fontWeight: 800 }}>
+                      {/* ═══ TOP ROW: price + badges ═══ */}
+                      <div style={{ padding: '6px 7px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                        {/* Price */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                          <span style={{ color: '#eab308', fontSize: 10 }}>⚡</span>
+                          <span style={{ color: '#eab308', fontSize: 13, fontWeight: 800, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
                             {price > 0 ? formatPrice(price) : '—'}
                           </span>
                         </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)' }}
-                        >
-                          <Info size={11} className="text-white/50" />
-                        </button>
+                        {/* Right badges */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                          {isST && <span style={{ fontSize: 9, fontWeight: 800, color: '#f97316', background: 'rgba(249,115,22,0.15)', padding: '1px 4px', borderRadius: 3, lineHeight: '14px' }}>ST</span>}
+                          {isSV && <span style={{ fontSize: 9, fontWeight: 800, color: '#eab308', background: 'rgba(234,179,8,0.15)', padding: '1px 4px', borderRadius: 3, lineHeight: '14px' }}>SV</span>}
+                          {ws && <span style={{ fontSize: 9, fontWeight: 800, color: wc, background: `${wc}18`, padding: '1px 4px', borderRadius: 3, lineHeight: '14px' }}>{ws}</span>}
+                          {!item.tradable && <Lock size={10} style={{ color: '#ef4444', opacity: 0.7 }} />}
+                        </div>
                       </div>
 
-                      {/* ═══ IMAGE (middle) ═══ */}
-                      <div className="relative" style={{ aspectRatio: '4/3', padding: '0 12px' }}>
-                        <img
-                          src={getItemIconUrl(item.icon_url)}
-                          alt={item.market_hash_name}
-                          className={cn('w-full h-full object-contain transition-transform duration-200', isSel ? 'scale-[0.85] opacity-50' : 'group-hover:scale-[1.06]')}
-                        />
-                        {/* Selected */}
-                        {isSel && (
-                          <div className="absolute inset-0 flex items-center justify-center z-20">
-                            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', padding: '4px 12px', borderRadius: 6 }}>Selected</span>
-                          </div>
-                        )}
-                        {/* On sale */}
-                        {onSale && !isSel && (
-                          <div className="absolute inset-0 flex items-center justify-center z-20">
-                            <span style={{ fontSize: 10, fontWeight: 700, color: '#34d399', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', padding: '3px 8px', borderRadius: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <Tag size={9} /> On sale
-                            </span>
-                          </div>
-                        )}
-                        {/* Doppler/Fade/Marble — image overlay */}
-                        {dp && <div className="absolute top-1 left-1 text-[9px] px-1 py-px rounded font-extrabold text-white z-10" style={dp.tier===1 ? {background:`linear-gradient(135deg,${dp.color}ee,${dp.color}88)`,textShadow:`0 0 6px ${dp.color}`} : {background:dp.color+'cc'}}>{dp.tier===1?dp.phase:dp.phase.replace('Phase ','P').replace('Gamma ','G')}</div>}
-                        {fi && !dp && <div className="absolute top-1 left-1 text-[9px] px-1 py-px rounded font-extrabold text-black z-10" style={{background:'linear-gradient(135deg,#ff6b35,#f7c948,#6dd5ed)'}}>{fi.percentage}%</div>}
-                        {mf && !dp && !fi && <div className="absolute top-1 left-1 text-[9px] px-1 py-px rounded font-extrabold text-white z-10" style={{background:mf.color+'cc'}}>{mf.pattern==='Fire & Ice'?'🔥❄️':mf.pattern.substring(0,3)}</div>}
-                        {/* Paint seed */}
-                        {ps != null && (dp||fi||mf) && <span className="absolute top-1 right-1 text-[8px] font-mono text-slate-500 z-10">{ps}</span>}
-                        {/* Stickers — bottom of image */}
-                        {stk.length > 0 && (
-                          <div className="absolute bottom-0 left-1 flex gap-[2px] z-10">
-                            {stk.slice(0,4).map((s,i) => s.icon_url ? <img key={i} src={s.icon_url} alt="" className="w-[15px] h-[11px] object-contain drop-shadow" /> : null)}
-                          </div>
-                        )}
-                        {/* Sticker value */}
-                        {item.sticker_value != null && item.sticker_value > 5 && stk.length > 0 && (
-                          <span className="absolute bottom-0 right-1 text-[8px] font-bold text-amber-400 z-10">{formatPrice(item.sticker_value)}</span>
-                        )}
-                      </div>
+                      {/* ═══ IMAGE AREA ═══ */}
+                      <div className="relative flex-1" style={{ minHeight: 0, padding: '4px 8px 2px' }}>
+                        <div className="relative w-full" style={{ aspectRatio: '4/3' }}>
+                          <img
+                            src={getItemIconUrl(item.icon_url)}
+                            alt={item.market_hash_name}
+                            className={cn('w-full h-full object-contain transition-transform duration-200', isSel ? 'scale-[0.85] opacity-40' : 'group-hover:scale-105')}
+                          />
 
-                      {/* ═══ FOOTER (bottom) ═══ */}
-                      <div style={{ padding: '4px 8px 6px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 28, borderTop: '1px solid #2a2d3800' }}>
-                        <div>
-                          {(item.wear || isST || isSV) && (
-                            <div style={{ fontSize: 10, fontWeight: 700, color: wc, lineHeight: 1.2 }}>
-                              {isST ? 'ST ' : ''}{isSV ? 'SV ' : ''}{ws || ''}
+                          {/* Selected overlay */}
+                          {isSel && (
+                            <div className="absolute inset-0 flex items-center justify-center z-20">
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#e2e8f0', background: 'rgba(15,17,23,0.6)', padding: '3px 10px', borderRadius: 4 }}>Selected</span>
                             </div>
                           )}
+
+                          {/* On sale */}
+                          {onSale && !isSel && (
+                            <div className="absolute inset-0 flex items-center justify-center z-20">
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#34d399', background: 'rgba(15,17,23,0.6)', padding: '3px 8px', borderRadius: 4 }}>On sale</span>
+                            </div>
+                          )}
+
+                          {/* Doppler / Fade / Marble badge */}
+                          {dp && <div className="absolute top-0 left-0 text-[9px] px-[3px] py-px rounded-sm font-extrabold text-white z-10" style={dp.tier===1?{background:`linear-gradient(135deg,${dp.color}ee,${dp.color}88)`,textShadow:`0 0 6px ${dp.color}`}:{background:dp.color+'cc'}}>{dp.tier===1?dp.phase:dp.phase.replace('Phase ','P').replace('Gamma ','G')}</div>}
+                          {fi && !dp && <div className="absolute top-0 left-0 text-[9px] px-[3px] py-px rounded-sm font-extrabold text-black z-10" style={{background:'linear-gradient(135deg,#ff6b35,#f7c948,#6dd5ed)'}}>{fi.percentage}%</div>}
+                          {mf && !dp && !fi && <div className="absolute top-0 left-0 text-[9px] px-[3px] py-px rounded-sm font-extrabold text-white z-10" style={{background:mf.color+'cc'}}>{mf.pattern==='Fire & Ice'?'🔥❄️':mf.pattern.substring(0,3)}</div>}
+
+                          {/* Paint seed */}
+                          {ps != null && (dp||fi||mf) && <span className="absolute top-0 right-0 text-[8px] font-mono text-white/30 z-10">{ps}</span>}
+
+                          {/* Float value — bottom left overlay */}
                           {fv != null && (
-                            <div style={{ fontSize: 8, fontFamily: 'monospace', color: '#64748b', lineHeight: 1.2, marginTop: 1 }}>
-                              {fv.toFixed(fv < 0.001 ? 7 : fv < 0.01 ? 6 : 4)}
-                            </div>
+                            <span className="absolute bottom-0 left-0 z-10" style={{ fontSize: 9, fontFamily: 'monospace', color: 'rgba(255,255,255,0.55)', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+                              {fv.toFixed(7)}
+                            </span>
                           )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                          {!item.tradable && <Lock size={11} style={{ color: '#ef4444', opacity: 0.7 }} />}
-                          {item.account_avatar_url && (
-                            <img src={item.account_avatar_url} alt="" title={item.account_name} style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #333' }} />
+
+                          {/* Sticker icons row — bottom right */}
+                          {stk.length > 0 && (
+                            <div className="absolute bottom-0 right-0 flex gap-px z-10">
+                              {stk.slice(0,4).map((s,i) => s.icon_url ? <img key={i} src={s.icon_url} alt="" style={{ width: 16, height: 12, objectFit: 'contain', filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.6))' }} /> : null)}
+                            </div>
                           )}
                         </div>
                       </div>
 
-                      {/* ═══ RARITY BAR (very bottom) ═══ */}
-                      <div style={{ height: 2, background: rarityColor }} />
+                      {/* ═══ BOTTOM: name + source icon ═══ */}
+                      <div style={{ padding: '3px 7px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                        <span style={{ fontSize: 10, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{shortName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                          {item.sticker_value != null && item.sticker_value > 5 && (
+                            <span style={{ fontSize: 8, fontWeight: 700, color: '#fbbf24' }}>${item.sticker_value.toFixed(0)}</span>
+                          )}
+                          {item.account_avatar_url && (
+                            <img src={item.account_avatar_url} alt="" title={item.account_name} style={{ width: 14, height: 14, borderRadius: '50%', border: '1px solid #333' }} />
+                          )}
+                          {/* Info button */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ width: 16, height: 16, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.06)' }}
+                          >
+                            <Info size={9} className="text-white/40" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Rarity bar */}
+                      <div style={{ height: 2, background: rc, opacity: 0.8 }} />
                     </div>
                   );
                 })}
