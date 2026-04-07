@@ -728,7 +728,7 @@ export default function InventoryPage() {
         </div>
 
         {/* Spacer so content doesn't hide behind fixed sell bar */}
-        <div className="h-[140px]" />
+        <div className="h-[180px]" />
       </div>
 
       {/* Fixed bottom sell tray */}
