@@ -5,13 +5,24 @@ import rateLimit from "express-rate-limit";
 
 const router = Router();
 
-// Rate limit price submissions: 20 per minute per user
+// Rate limit price submissions: 20 per minute per user/IP
 const priceLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: AuthRequest) => `ext:${req.userId || 'anon'}`,
+  keyGenerator: (req: AuthRequest) => `ext:${req.userId || req.ip || 'anon'}`,
+  message: { error: "Too many price submissions" },
+  validate: false,
+});
+
+// Stricter rate limit for anonymous: 10 per minute per IP
+const anonPriceLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `ext-anon:${req.ip}`,
   message: { error: "Too many price submissions" },
   validate: false,
 });
@@ -83,6 +94,59 @@ router.post(
       res.json({ ok: true, processed: inserted });
     } catch (err) {
       console.error("[Extension] Price ingestion error:", err);
+      res.status(500).json({ error: "Failed to process prices" });
+    }
+  }
+);
+
+// ─── POST /api/ext/prices/anon — anonymous crowdsourced price data ────
+// No auth required — anyone with the extension can contribute prices.
+// Stricter rate limit (10/min vs 20/min) and same upsert logic.
+router.post(
+  "/prices/anon",
+  anonPriceLimiter,
+  async (req, res: Response) => {
+    try {
+      const { items } = req.body;
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ error: "No items provided" });
+        return;
+      }
+
+      const batch = items.slice(0, 200);
+      let inserted = 0;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        for (const item of batch) {
+          if (!item.market_hash_name || !item.price_cents || item.price_cents <= 0) continue;
+          const source = item.source === "steam_buyorder" ? "ext_buyorder" : "ext_steam";
+          await client.query(
+            `INSERT INTO current_prices (market_hash_name, source, price_usd, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (market_hash_name, source) DO UPDATE SET
+               price_usd = CASE
+                 WHEN current_prices.updated_at < NOW() - INTERVAL '30 seconds'
+                 THEN EXCLUDED.price_usd ELSE current_prices.price_usd END,
+               updated_at = CASE
+                 WHEN current_prices.updated_at < NOW() - INTERVAL '30 seconds'
+                 THEN NOW() ELSE current_prices.updated_at END`,
+            [item.market_hash_name, source, item.price_cents / 100]
+          );
+          inserted++;
+        }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      res.json({ ok: true, processed: inserted });
+    } catch (err) {
+      console.error("[Extension] Anonymous price ingestion error:", err);
       res.status(500).json({ error: "Failed to process prices" });
     }
   }

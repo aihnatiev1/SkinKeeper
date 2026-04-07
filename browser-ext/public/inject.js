@@ -1,4 +1,5 @@
 (function() {
+  // ─── Inventory extraction (existing) ─────────────────────────────────
   function checkInventory() {
     try {
       if (typeof UserYou !== 'undefined' && UserYou.getInventory) {
@@ -20,7 +21,6 @@
                 paintIndex: null
               };
 
-              // Extract properties (Float is propertyid 2)
               const props = allProps[asset.assetid];
               if (props && Array.isArray(props)) {
                 props.forEach(p => {
@@ -34,12 +34,12 @@
             }
           }
 
-          window.dispatchEvent(new CustomEvent('sk_inventory_ready', { 
-            detail: { 
+          window.dispatchEvent(new CustomEvent('sk_inventory_ready', {
+            detail: {
               count: items.length,
               currency: typeof g_rgWalletInfo !== 'undefined' ? g_rgWalletInfo.wallet_currency : 1,
               items: items
-            } 
+            }
           }));
           return true;
         }
@@ -52,4 +52,142 @@
 
   const timer = setInterval(() => { if (checkInventory()) clearInterval(timer); }, 500);
   setTimeout(() => clearInterval(timer), 15000);
+
+  // ─── Steam fetch/XHR interception ───────────────────────────────────
+  // Passively intercept Steam API responses the user already triggers.
+  // Zero extra requests — we only read responses that Steam returns.
+
+  const walletCurrency = (typeof g_rgWalletInfo !== 'undefined') ? g_rgWalletInfo.wallet_currency : 1;
+
+  // Dispatch intercepted data to content script via CustomEvent
+  function emitPrice(data) {
+    window.dispatchEvent(new CustomEvent('sk_price_intercepted', { detail: data }));
+  }
+
+  // ── Intercept fetch() ────────────────────────────────────────────────
+  const originalFetch = window.fetch;
+  window.fetch = async function(...args) {
+    const response = await originalFetch.apply(this, args);
+    try {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+
+      // priceoverview — Steam returns lowest_price, median_price, volume
+      if (url.includes('market/priceoverview')) {
+        const clone = response.clone();
+        clone.json().then(data => {
+          if (!data || !data.success) return;
+          const params = new URL(url, location.origin).searchParams;
+          const name = params.get('market_hash_name');
+          if (!name) return;
+
+          const prices = [];
+          if (data.lowest_price) {
+            const cents = parseSteamPrice(data.lowest_price);
+            if (cents > 0) prices.push({ market_hash_name: name, price_cents: cents, currency_id: walletCurrency, source: 'steam_listing', timestamp: Date.now() });
+          }
+          if (data.volume) {
+            const vol = parseInt(data.volume.replace(/[^0-9]/g, ''));
+            if (vol > 0 && prices.length > 0) prices[0].volume = vol;
+          }
+          if (prices.length > 0) emitPrice({ type: 'priceoverview', prices });
+        }).catch(() => {});
+      }
+
+      // itemordershistogram — buy/sell order book
+      if (url.includes('itemordershistogram')) {
+        const clone = response.clone();
+        clone.json().then(data => {
+          if (!data || !data.success) return;
+          const prices = [];
+          // Extract item name from the page context
+          const name = document.querySelector('.market_listing_nav a:last-child')?.textContent?.trim();
+          if (!name) return;
+
+          if (data.highest_buy_order) {
+            prices.push({ market_hash_name: name, price_cents: parseInt(data.highest_buy_order), currency_id: walletCurrency, source: 'steam_buyorder', timestamp: Date.now() });
+          }
+          if (data.lowest_sell_order) {
+            prices.push({ market_hash_name: name, price_cents: parseInt(data.lowest_sell_order), currency_id: walletCurrency, source: 'steam_listing', timestamp: Date.now() });
+          }
+          if (prices.length > 0) emitPrice({ type: 'histogram', prices });
+        }).catch(() => {});
+      }
+
+      // myhistory (market transaction history) — completed sales
+      if (url.includes('market/myhistory')) {
+        const clone = response.clone();
+        clone.json().then(data => {
+          if (!data || !data.success || !data.assets || !data.assets['730']) return;
+          const prices = [];
+          const assets = data.assets['730']['2'] || {};
+          const events = data.events || [];
+          for (const ev of events) {
+            if (ev.event_type === 4 || ev.event_type === 3) { // 3=listing created, 4=listing sold
+              const asset = assets[ev.listingid] || assets[ev.purchaseid] || {};
+              const name = asset.market_hash_name;
+              if (name && ev.price) {
+                prices.push({ market_hash_name: name, price_cents: ev.price + (ev.fee || 0), currency_id: walletCurrency, source: 'steam_sale', timestamp: Date.now() });
+              }
+            }
+          }
+          if (prices.length > 0) emitPrice({ type: 'myhistory', prices });
+        }).catch(() => {});
+      }
+
+    } catch (e) { /* silent — never break Steam pages */ }
+    return response;
+  };
+
+  // ── Intercept XMLHttpRequest ──────────────────────────────────────────
+  const originalXHROpen = XMLHttpRequest.prototype.open;
+  const originalXHRSend = XMLHttpRequest.prototype.send;
+
+  XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+    this._sk_url = typeof url === 'string' ? url : url?.toString() || '';
+    return originalXHROpen.apply(this, [method, url, ...rest]);
+  };
+
+  XMLHttpRequest.prototype.send = function(...args) {
+    this.addEventListener('load', function() {
+      try {
+        const url = this._sk_url || '';
+
+        if (url.includes('market/priceoverview') || url.includes('itemordershistogram') || url.includes('market/myhistory')) {
+          let data;
+          try { data = JSON.parse(this.responseText); } catch { return; }
+          if (!data || !data.success) return;
+
+          if (url.includes('market/priceoverview')) {
+            const params = new URL(url, location.origin).searchParams;
+            const name = params.get('market_hash_name');
+            if (!name) return;
+            const prices = [];
+            if (data.lowest_price) {
+              const cents = parseSteamPrice(data.lowest_price);
+              if (cents > 0) prices.push({ market_hash_name: name, price_cents: cents, currency_id: walletCurrency, source: 'steam_listing', timestamp: Date.now() });
+            }
+            if (prices.length > 0) emitPrice({ type: 'priceoverview', prices });
+          }
+
+          if (url.includes('itemordershistogram')) {
+            const name = document.querySelector('.market_listing_nav a:last-child')?.textContent?.trim();
+            if (!name) return;
+            const prices = [];
+            if (data.highest_buy_order) prices.push({ market_hash_name: name, price_cents: parseInt(data.highest_buy_order), currency_id: walletCurrency, source: 'steam_buyorder', timestamp: Date.now() });
+            if (data.lowest_sell_order) prices.push({ market_hash_name: name, price_cents: parseInt(data.lowest_sell_order), currency_id: walletCurrency, source: 'steam_listing', timestamp: Date.now() });
+            if (prices.length > 0) emitPrice({ type: 'histogram', prices });
+          }
+        }
+      } catch (e) { /* silent */ }
+    });
+    return originalXHRSend.apply(this, args);
+  };
+
+  // ── Parse Steam price strings like "$12.34", "12,34€", "1 234,56₽" ──
+  function parseSteamPrice(str) {
+    if (!str) return 0;
+    const cleaned = str.replace(/[^\d.,]/g, '').replace(/\.(?=.*\.)/g, '').replace(',', '.');
+    const val = parseFloat(cleaned);
+    return isNaN(val) ? 0 : Math.round(val * 100);
+  }
 })();

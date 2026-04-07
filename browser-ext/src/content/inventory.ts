@@ -1,4 +1,5 @@
 import '../styles/skinkeeper.css';
+import { initCollector } from '../shared/collector';
 import { waitForElement, el, skBadge, sendMessage } from '../shared/dom';
 import {
   readInventoryFromPage, loadFullInventory, loadBulkPrices, loadExchangeRates,
@@ -83,6 +84,7 @@ if (document.readyState === 'loading') {
 }
 
 async function init() {
+  initCollector(); // Start passive price interception
   await waitForElement('.itemHolder');
   await new Promise(r => setTimeout(r, 1500));
 

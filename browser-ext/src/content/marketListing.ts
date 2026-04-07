@@ -2,6 +2,9 @@ import '../styles/skinkeeper.css';
 import { waitForElement, el, skBadge, sendMessage } from '../shared/dom';
 import { readMarketListings, loadBulkPrices, loadExchangeRates, getItemPrice, getItemPriceEntry, getWalletCurrency, parseSteamPriceString } from '../shared/steam';
 import { trackEvent } from '../shared/analytics';
+import { initCollector } from '../shared/collector';
+
+initCollector();
 
 let exchangeRate = 1;
 let currencySign = '$';

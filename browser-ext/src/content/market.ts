@@ -1,4 +1,5 @@
 import '../styles/skinkeeper.css';
+import { initCollector } from '../shared/collector';
 
-// Market home — no injections needed for now
-console.log('[SkinKeeper] Market page detected');
+// Market home — collect prices passively from Steam API responses
+initCollector();

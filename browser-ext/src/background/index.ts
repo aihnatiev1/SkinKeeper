@@ -18,12 +18,6 @@ async function flushPriceBatch() {
     return;
   }
 
-  const loggedIn = await isLoggedIn();
-  if (!loggedIn) {
-    priceBatch = [];
-    return;
-  }
-
   // Deduplicate: keep latest price per item
   const deduped = new Map<string, CollectedPrice>();
   for (const p of priceBatch) {
@@ -38,10 +32,21 @@ async function flushPriceBatch() {
   priceBatch = [];
 
   try {
-    await apiRequest('/ext/prices', {
-      method: 'POST',
-      body: { items } satisfies Omit<PriceBatch, 'collector_id' | 'page'>,
-    });
+    // Try authenticated request first (logged in users)
+    const loggedIn = await isLoggedIn();
+    if (loggedIn) {
+      await apiRequest('/ext/prices', {
+        method: 'POST',
+        body: { items },
+      });
+    } else {
+      // Anonymous crowdsource — no auth header, use public endpoint
+      await fetch('https://api.skinkeeper.store/api/ext/prices/anon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+    }
   } catch {
     // Re-queue failed items (up to limit)
     if (priceBatch.length < MAX_BATCH_SIZE) {
