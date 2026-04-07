@@ -6,8 +6,9 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect } from 'react';
 
 if (typeof window !== 'undefined') {
-  posthog.init('phc_nr4yi6RxaaFQdxjxoJGNXY3j76SqUdmxrgdSLESuAyR8', {
-    api_host: 'https://us.i.posthog.com',
+  posthog.init('phc_Aq5w2n4aGfQELBG7sj8gxb45jPkdofXBPWouAUJzZNy6', {
+    api_host: '/ingest',
+    ui_host: 'https://us.posthog.com',
     capture_pageview: false, // We capture manually below for SPA navigation
     capture_pageleave: true,
   });

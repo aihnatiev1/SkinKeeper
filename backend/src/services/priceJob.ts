@@ -144,8 +144,9 @@ export function startPriceJobs() {
   // Lower priority — runs every 2.5h, parallel per slot.
   startSteamCrawlers();
 
-  // CSFloat: parallel crawlers (one per proxy slot)
-  startCSFloatCrawler();
+  // CSFloat crawler disabled — CSFloat aggressively 429s our IPs.
+  // Prices still come via CSGOTrader daily seed (midnight UTC).
+  // startCSFloatCrawler();
 
   // Daily P/L snapshots at 00:05 UTC
   scheduledTasks.push(cron.schedule("5 0 * * *", async () => {

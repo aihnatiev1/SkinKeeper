@@ -41,23 +41,27 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: true
+  artifactName: SkinKeeper-${version}-Setup.${ext}
 
 # ─── macOS ────────────────────────────────────────────────────────────
 mac:
   target:
     - target: dmg
       arch:
-        - x64
-        - arm64
+        - universal
+    - target: zip
+      arch:
+        - universal
   icon: build/icon.png
   category: public.app-category.utilities
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
 
 dmg:
-  sign: false
+  artifactName: SkinKeeper-${version}.${ext}
 
 # ─── Linux ────────────────────────────────────────────────────────────
 linux:
@@ -67,10 +71,11 @@ linux:
         - x64
   icon: build/icons
   category: Utility
+  artifactName: SkinKeeper-${version}.${ext}
 
 # ─── Auto-update ──────────────────────────────────────────────────────
 publish:
   provider: github
-  owner: skinkeeper
-  repo: skinkeeper-desktop
+  owner: aihnatiev1
+  repo: SkinKeeper
   releaseType: release

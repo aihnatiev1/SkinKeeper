@@ -1081,7 +1081,7 @@ async function hotWorker(
     await waitForRate(slotIdx, "steamcommunity.com");
 
     try {
-      const info = await getMarketPrice(name);
+      const info = await getMarketPrice(name, 1, slotIdx);
       if (info.lowestPrice !== null && info.lowestPrice > 0) {
         await savePrices(new Map([[name, info.lowestPrice / 100]]), "steam");
         updated++;

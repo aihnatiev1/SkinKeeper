@@ -6,6 +6,7 @@ import { log } from "../utils/logger.js";
 import { getLatestPrices, getFreshSteamPrice } from "./prices.js";
 import { getSteamDepth } from "./steamMarketDepth.js";
 import { fetchHistogramPrice } from "./steamHistogram.js";
+import { getSlotConfig } from "./proxyPool.js";
 
 interface SellResult {
   success: boolean;
@@ -21,11 +22,14 @@ interface MarketPriceInfo {
 
 // Get current lowest price from Steam Market
 // currency: Steam currency ID (1=USD, 18=UAH, etc.)
+// slotIndex: proxy pool slot (-1 = direct, no proxy)
 export async function getMarketPrice(
   marketHashName: string,
-  currency: number = 1
+  currency: number = 1,
+  slotIndex: number = -1
 ): Promise<MarketPriceInfo> {
   try {
+    const proxyConfig = slotIndex >= 0 ? getSlotConfig(slotIndex) : {};
     const { data } = await axios.get(
       "https://steamcommunity.com/market/priceoverview/",
       {
@@ -35,6 +39,7 @@ export async function getMarketPrice(
           market_hash_name: marketHashName,
         },
         timeout: 10000,
+        ...proxyConfig,
       }
     );
 
@@ -55,7 +60,9 @@ export async function getMarketPrice(
       medianPrice: parsePrice(data.median_price),
       volume: data.volume ?? null,
     };
-  } catch {
+  } catch (err: any) {
+    // Re-throw 429 so callers (HotSteam) can handle rate-limiting properly
+    if (err?.response?.status === 429) throw err;
     return { lowestPrice: null, medianPrice: null, volume: null };
   }
 }

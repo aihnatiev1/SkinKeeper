@@ -1,0 +1,106 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.1.0)'
+        required: false
+
+# Cancel in-progress runs for the same ref
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: universal
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            desktop-app/package-lock.json
+            web-app/package-lock.json
+
+      # ── Build renderer (Next.js standalone) ──────────────────────
+      - name: Install web-app dependencies
+        working-directory: web-app
+        run: npm ci
+
+      - name: Install shared package dependencies
+        working-directory: packages/skinkeeper-shared
+        run: npm ci --ignore-scripts 2>/dev/null || true
+
+      - name: Build renderer (standalone)
+        working-directory: web-app
+        env:
+          NEXT_OUTPUT: standalone
+          NEXT_PUBLIC_API_URL: https://api.skinkeeper.store
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+        run: npx next build
+
+      # ── Build main process (Electron) ────────────────────────────
+      - name: Install desktop-app dependencies
+        working-directory: desktop-app
+        run: npm ci
+
+      - name: Build main process
+        working-directory: desktop-app
+        run: npm run build:main
+
+      # ── Package with electron-builder ────────────────────────────
+      - name: Build Electron app
+        working-directory: desktop-app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code signing
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows code signing
+          WIN_CSC_LINK: ${{ secrets.WIN_CERT_PFX }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+        run: npx electron-builder --${{ matrix.platform }} --publish always
+
+      # ── Upload artifacts (backup, always available) ──────────────
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: skinkeeper-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            desktop-app/release/*.dmg
+            desktop-app/release/*.zip
+            desktop-app/release/*.exe
+            desktop-app/release/*.AppImage
+            desktop-app/release/*.yml
+            desktop-app/release/*.blockmap
+          if-no-files-found: warn

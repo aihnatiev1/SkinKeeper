@@ -333,19 +333,24 @@ export default function InventoryPage() {
               const isStatTrak = item.market_hash_name.includes('StatTrak');
               const isSouvenir = item.market_hash_name.includes('Souvenir');
 
+              // Parse numeric fields (may come as strings from DB)
+              const floatVal = item.float_value != null ? Number(item.float_value) : null;
+              const paintSeed = item.paint_seed != null ? Number(item.paint_seed) : null;
+              const paintIndex = item.paint_index != null ? Number(item.paint_index) : null;
+
               // Doppler phase
-              const dopplerPhase = item.paint_index && isDoppler(item.market_hash_name)
-                ? getDopplerPhase(item.paint_index)
+              const dopplerPhase = paintIndex && isDoppler(item.market_hash_name)
+                ? getDopplerPhase(paintIndex)
                 : null;
 
               // Fade %
-              const fadeInfo = item.paint_seed != null && isFade(item.market_hash_name)
-                ? calculateFadePercent(item.paint_seed)
+              const fadeInfo = paintSeed != null && isFade(item.market_hash_name)
+                ? calculateFadePercent(paintSeed)
                 : null;
 
               // Marble Fade
-              const marbleFade = item.paint_seed != null && isMarbleFade(item.market_hash_name)
-                ? analyzeMarbleFade(item.paint_seed)
+              const marbleFade = paintSeed != null && isMarbleFade(item.market_hash_name)
+                ? analyzeMarbleFade(paintSeed)
                 : null;
 
               const hasSpecialBadge = dopplerPhase || fadeInfo || marbleFade;
@@ -468,22 +473,22 @@ export default function InventoryPage() {
                     )}
 
                     {/* === RIGHT SIDE: Paint seed (row 2) === */}
-                    {item.paint_seed != null && (dopplerPhase || fadeInfo || marbleFade) && (
+                    {paintSeed != null && (dopplerPhase || fadeInfo || marbleFade) && (
                       <div
                         className="absolute right-[3px] font-mono z-10"
                         style={{ top: '32px', color: '#94a3b8', fontSize: '9px', fontWeight: 600, textShadow: txtSh }}
                       >
-                        {item.paint_seed}
+                        {paintSeed}
                       </div>
                     )}
 
                     {/* === BOTTOM-LEFT: Float value === */}
-                    {item.float_value != null && (
+                    {floatVal != null && (
                       <div
                         className="absolute left-[4px] font-mono z-10"
                         style={{ bottom: '19px', fontSize: '9px', fontWeight: 500, color: 'rgba(255,255,255,0.85)', textShadow: txtSh }}
                       >
-                        {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
+                        {floatVal.toFixed(floatVal < 0.01 ? 6 : 4)}
                       </div>
                     )}
 
@@ -515,7 +520,7 @@ export default function InventoryPage() {
                     )}
 
                     {/* === BOTTOM: Float bar (full width gradient) === */}
-                    {item.float_value != null && (
+                    {floatVal != null && (
                       <div
                         className="absolute bottom-0 left-0 right-0 z-10"
                         style={{
@@ -529,7 +534,7 @@ export default function InventoryPage() {
                           position: 'absolute', top: '-2px',
                           width: '3px', height: '7px',
                           background: '#fff', borderRadius: '1px',
-                          left: `${item.float_value * 100}%`,
+                          left: `${floatVal * 100}%`,
                           transform: 'translateX(-50%)',
                           boxShadow: '0 0 3px rgba(0,0,0,0.8)',
                         }} />
@@ -559,14 +564,17 @@ export default function InventoryPage() {
                   const isLast = idx === items.length - 1;
                   const isStatTrak = item.market_hash_name.includes('StatTrak');
                   const isSouvenir = item.market_hash_name.includes('Souvenir');
-                  const dopplerPhase = item.paint_index && isDoppler(item.market_hash_name)
-                    ? getDopplerPhase(item.paint_index)
+                  const floatVal = item.float_value != null ? Number(item.float_value) : null;
+                  const paintSeed = item.paint_seed != null ? Number(item.paint_seed) : null;
+                  const paintIndex = item.paint_index != null ? Number(item.paint_index) : null;
+                  const dopplerPhase = paintIndex && isDoppler(item.market_hash_name)
+                    ? getDopplerPhase(paintIndex)
                     : null;
-                  const fadeInfo = item.paint_seed != null && isFade(item.market_hash_name)
-                    ? calculateFadePercent(item.paint_seed)
+                  const fadeInfo = paintSeed != null && isFade(item.market_hash_name)
+                    ? calculateFadePercent(paintSeed)
                     : null;
-                  const marbleFade = item.paint_seed != null && isMarbleFade(item.market_hash_name)
-                    ? analyzeMarbleFade(item.paint_seed)
+                  const marbleFade = paintSeed != null && isMarbleFade(item.market_hash_name)
+                    ? analyzeMarbleFade(paintSeed)
                     : null;
                   const stickerCount = Array.isArray(item.stickers) ? item.stickers.length : 0;
                   const wearShort = getWearShort(item.wear);
@@ -595,9 +603,9 @@ export default function InventoryPage() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 hidden md:table-cell">
-                        {item.float_value != null ? (
+                        {floatVal != null ? (
                           <span className="text-xs font-mono text-muted">
-                            {item.float_value.toFixed(item.float_value < 0.01 ? 6 : 4)}
+                            {floatVal.toFixed(floatVal < 0.01 ? 6 : 4)}
                           </span>
                         ) : '—'}
                       </td>
@@ -634,8 +642,8 @@ export default function InventoryPage() {
                               {marbleFade.pattern === 'Fire & Ice' ? '\ud83d\udd25\u2744\ufe0f' : marbleFade.pattern}
                             </span>
                           )}
-                          {item.paint_seed != null && (dopplerPhase || fadeInfo || marbleFade) && (
-                            <span className="text-[10px] font-mono text-slate-400">#{item.paint_seed}</span>
+                          {paintSeed != null && (dopplerPhase || fadeInfo || marbleFade) && (
+                            <span className="text-[10px] font-mono text-slate-400">#{paintSeed}</span>
                           )}
                           {stickerCount > 0 && (
                             <span className="text-[10px] px-1.5 py-0.5 bg-accent/20 text-accent rounded font-medium">

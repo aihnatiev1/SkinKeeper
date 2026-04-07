@@ -60,12 +60,13 @@ export class DataStore {
       this.items.set(item.assetid, updated);
 
       // Queue items that have float/seed/paint data for backend sync
-      if (item.float != null || item.paintSeed != null || item.paintIndex != null) {
+      if (item.float != null || item.paintSeed != null || item.paintIndex != null || (item.stickers && item.stickers.length > 0)) {
         toSync.push({
           asset_id: item.assetid,
           float_value: item.float,
           paint_seed: item.paintSeed,
           paint_index: item.paintIndex,
+          stickers: item.stickers && item.stickers.length > 0 ? item.stickers : null,
         });
       }
     });

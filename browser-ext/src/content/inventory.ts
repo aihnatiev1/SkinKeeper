@@ -205,12 +205,13 @@ async function fetchEnrichedInventory() {
   // Sync float/seed/paint data to backend first
   if (isOwnInventory) {
     const toSync = items
-      .filter(i => i.floatValue != null || i.paintSeed != null || i.paintIndex != null)
+      .filter(i => i.floatValue != null || i.paintSeed != null || i.paintIndex != null || (i.stickers && i.stickers.length > 0))
       .map(i => ({
         asset_id: i.assetid,
         float_value: i.floatValue ?? null,
         paint_seed: i.paintSeed ?? null,
         paint_index: i.paintIndex ?? null,
+        stickers: i.stickers && i.stickers.length > 0 ? i.stickers : null,
       }));
     console.log(`[SkinKeeper] Items to sync: ${toSync.length} (of ${items.length} total)`);
     if (toSync.length > 0) {
