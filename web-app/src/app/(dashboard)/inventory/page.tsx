@@ -3,7 +3,7 @@
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { CurrencyBanner } from '@/components/currency-banner';
-import { ItemDetailModal } from '@/components/item-detail-modal';
+import { ItemDetailPanel } from '@/components/item-detail-panel';
 import { BulkSellBar } from '@/components/bulk-sell-bar';
 import { SellModal } from '@/components/sell-modal';
 import { SellProgressModal } from '@/components/sell-progress-modal';
@@ -445,12 +445,18 @@ export default function InventoryPage() {
                   const dp = pi && isDoppler(item.market_hash_name) ? getDopplerPhase(pi) : null;
                   const fi = ps != null && isFade(item.market_hash_name) ? calculateFadePercent(ps) : null;
                   const mf = ps != null && isMarbleFade(item.market_hash_name) ? analyzeMarbleFade(ps) : null;
+                  // Blue Gem detection (Case Hardened)
+                  const isCH = item.market_hash_name.includes('Case Hardened');
                   const stk = Array.isArray(item.stickers) ? item.stickers : [];
                   const WC: Record<string,string> = {FN:'#4ade80',MW:'#22d3ee',FT:'#a78bfa',WW:'#f97316',BS:'#ef4444'};
                   const ws = getWearShort(item.wear);
                   const wc = isST ? '#cf6a32' : isSV ? '#ffd700' : (ws && WC[ws]) || '#818cf8';
-                  // Short name: remove weapon prefix for card bottom
                   const shortName = item.market_hash_name.replace(/^(StatTrak™ |Souvenir |★ )/, '').replace(/^[^|]+\| /, '').trim();
+                  // Trade lock days
+                  const tlDays = !item.tradable && item.trade_ban_until
+                    ? Math.max(0, Math.ceil((new Date(item.trade_ban_until).getTime() - Date.now()) / 86400000))
+                    : null;
+                  const selMode = selectedIds.size > 0;
 
                   return (
                     <div
@@ -466,8 +472,15 @@ export default function InventoryPage() {
                     >
                       {/* ═══ TOP ROW: price + badges ═══ */}
                       <div style={{ padding: '6px 7px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                        {/* Price */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                        {/* Left: checkbox (hover/selection mode) + price */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={isSel}
+                            onChange={() => toggleSelect(item.asset_id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className={cn('accent-primary w-3 h-3 rounded cursor-pointer transition-opacity', selMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-60')}
+                          />
                           <span style={{ color: '#eab308', fontSize: 10 }}>⚡</span>
                           <span style={{ color: '#eab308', fontSize: 13, fontWeight: 800, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
                             {price > 0 ? formatPrice(price) : '—'}
@@ -478,7 +491,12 @@ export default function InventoryPage() {
                           {isST && <span style={{ fontSize: 9, fontWeight: 800, color: '#f97316', background: 'rgba(249,115,22,0.15)', padding: '1px 4px', borderRadius: 3, lineHeight: '14px' }}>ST</span>}
                           {isSV && <span style={{ fontSize: 9, fontWeight: 800, color: '#eab308', background: 'rgba(234,179,8,0.15)', padding: '1px 4px', borderRadius: 3, lineHeight: '14px' }}>SV</span>}
                           {ws && <span style={{ fontSize: 9, fontWeight: 800, color: wc, background: `${wc}18`, padding: '1px 4px', borderRadius: 3, lineHeight: '14px' }}>{ws}</span>}
-                          {!item.tradable && <Lock size={10} style={{ color: '#ef4444', opacity: 0.7 }} />}
+                          {tlDays != null && tlDays > 0 && (
+                            <span style={{ fontSize: 8, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.12)', padding: '1px 4px', borderRadius: 3, lineHeight: '14px', display: 'flex', alignItems: 'center', gap: 2 }}>
+                              <Lock size={8} />{tlDays}d
+                            </span>
+                          )}
+                          {!item.tradable && tlDays === 0 && <Lock size={10} style={{ color: '#ef4444', opacity: 0.6 }} />}
                         </div>
                       </div>
 
@@ -505,10 +523,11 @@ export default function InventoryPage() {
                             </div>
                           )}
 
-                          {/* Doppler / Fade / Marble badge */}
-                          {dp && <div className="absolute top-0 left-0 text-[9px] px-[3px] py-px rounded-sm font-extrabold text-white z-10" style={dp.tier===1?{background:`linear-gradient(135deg,${dp.color}ee,${dp.color}88)`,textShadow:`0 0 6px ${dp.color}`}:{background:dp.color+'cc'}}>{dp.tier===1?dp.phase:dp.phase.replace('Phase ','P').replace('Gamma ','G')}</div>}
-                          {fi && !dp && <div className="absolute top-0 left-0 text-[9px] px-[3px] py-px rounded-sm font-extrabold text-black z-10" style={{background:'linear-gradient(135deg,#ff6b35,#f7c948,#6dd5ed)'}}>{fi.percentage}%</div>}
-                          {mf && !dp && !fi && <div className="absolute top-0 left-0 text-[9px] px-[3px] py-px rounded-sm font-extrabold text-white z-10" style={{background:mf.color+'cc'}}>{mf.pattern==='Fire & Ice'?'🔥❄️':mf.pattern.substring(0,3)}</div>}
+                          {/* Doppler / Fade / Marble / Blue Gem badge */}
+                          {dp && <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded font-extrabold text-white z-10" style={dp.tier===1?{background:`linear-gradient(135deg,${dp.color}ee,${dp.color}88)`,textShadow:`0 0 6px ${dp.color}`}:{background:dp.color+'cc'}}>{dp.tier===1?dp.phase:dp.phase.replace('Phase ','P').replace('Gamma ','G')}</div>}
+                          {fi && !dp && <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded font-extrabold text-black z-10" style={{background:'linear-gradient(135deg,#ff6b35,#f7c948,#6dd5ed)'}}>Fade {fi.percentage}%</div>}
+                          {mf && !dp && !fi && <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded font-extrabold text-white z-10" style={{background:mf.color+'cc'}}>{mf.pattern==='Fire & Ice'?'🔥❄️ F&I':mf.pattern}</div>}
+                          {isCH && !dp && !fi && !mf && <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded font-extrabold text-white z-10" style={{background:'#3b82f6cc'}}>Case Hardened</div>}
 
                           {/* Paint seed */}
                           {ps != null && (dp||fi||mf) && <span className="absolute top-0 right-0 text-[8px] font-mono text-white/30 z-10">{ps}</span>}
@@ -729,8 +748,8 @@ export default function InventoryPage() {
         />
       </div>
 
-      {/* Item detail modal */}
-      <ItemDetailModal
+      {/* Item detail side panel */}
+      <ItemDetailPanel
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
         onSell={(item) => {
