@@ -430,7 +430,7 @@ export default function InventoryPage() {
                 {search && <p className="text-xs mt-1">Try a different search term</p>}
               </div>
             ) : view === 'grid' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-[6px]">
                 {items.map((item, idx) => {
                   const price = item.prices?.steam || item.prices?.buff || item.prices?.skinport || 0;
                   const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
@@ -445,249 +445,162 @@ export default function InventoryPage() {
                   const paintIndex = item.paint_index != null ? Number(item.paint_index) : null;
 
                   const dopplerPhase = paintIndex && isDoppler(item.market_hash_name)
-                    ? getDopplerPhase(paintIndex)
-                    : null;
+                    ? getDopplerPhase(paintIndex) : null;
                   const fadeInfo = paintSeed != null && isFade(item.market_hash_name)
-                    ? calculateFadePercent(paintSeed)
-                    : null;
+                    ? calculateFadePercent(paintSeed) : null;
                   const marbleFade = paintSeed != null && isMarbleFade(item.market_hash_name)
-                    ? analyzeMarbleFade(paintSeed)
-                    : null;
+                    ? analyzeMarbleFade(paintSeed) : null;
 
-                  const hasSpecialBadge = dopplerPhase || fadeInfo || marbleFade;
                   const stickers = Array.isArray(item.stickers) ? item.stickers : [];
-                  const dupCount = allItems.filter(i => i.market_hash_name === item.market_hash_name).length;
 
-                  const WEAR_COLORS: Record<string, string> = { FN: '#4ade80', MW: '#22d3ee', FT: '#a78bfa', WW: '#f97316', BS: '#ef4444' };
-                  const wearShort = getWearShort(item.wear);
-                  const wearColor = isStatTrak ? '#cf6a32' : isSouvenir ? '#ffd700' : (wearShort && WEAR_COLORS[wearShort]) || '#818cf8';
-                  const txtSh = '0 1px 2px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.7)';
-
-                  let cardBg = `linear-gradient(135deg, ${rarityColor}10, ${rarityColor}20)`;
-                  let cardShadow: string | undefined;
-                  if (dopplerPhase && dopplerPhase.tier === 1) {
-                    cardBg = `linear-gradient(135deg, ${dopplerPhase.color}55, ${dopplerPhase.color}20)`;
-                    cardShadow = `inset 0 0 20px ${dopplerPhase.color}30, 0 0 8px ${dopplerPhase.color}40`;
-                  } else if (price >= 2000) {
-                    cardBg = 'linear-gradient(135deg, rgba(220,38,38,0.30), rgba(220,38,38,0.10))';
-                  } else if (price >= 1000) {
-                    cardBg = 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(220,38,38,0.05))';
-                  }
+                  const W: Record<string, string> = { FN: '#4ade80', MW: '#22d3ee', FT: '#a78bfa', WW: '#f97316', BS: '#ef4444' };
+                  const ws = getWearShort(item.wear);
+                  const wc = isStatTrak ? '#cf6a32' : isSouvenir ? '#ffd700' : (ws && W[ws]) || '#818cf8';
 
                   return (
-                    <motion.div
+                    <div
                       key={item.asset_id}
                       ref={isLast ? lastItemRef : undefined}
-                      layout
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
                       onClick={() => toggleSelect(item.asset_id)}
                       onDoubleClick={() => setSelectedItem(item)}
                       className={cn(
-                        'relative overflow-hidden cursor-pointer group rounded-md transition-all',
-                        isSelected && 'ring-2 ring-primary shadow-lg shadow-primary/20'
+                        'relative cursor-pointer group',
+                        isSelected ? 'ring-2 ring-primary' : 'hover:brightness-110'
                       )}
                       style={{
-                        background: cardBg,
-                        boxShadow: cardShadow,
-                        borderLeft: `3px solid ${rarityColor}`,
+                        background: '#1a1d26',
+                        borderRadius: '6px',
+                        borderBottom: `2px solid ${rarityColor}`,
+                        overflow: 'hidden',
                       }}
                     >
-                      {/* Image area */}
-                      <div className="relative" style={{ aspectRatio: '4/3' }}>
+                      {/* ── TOP: Price row ── */}
+                      <div className="flex items-center justify-between px-[6px] pt-[5px] pb-0">
+                        <div className="flex items-center gap-[3px]">
+                          <span style={{ color: '#facc15', fontSize: '10px' }}>⚡</span>
+                          <span style={{ color: '#facc15', fontSize: '12px', fontWeight: 800, letterSpacing: '-0.3px' }}>
+                            {price > 0 ? formatPrice(price) : '—'}
+                          </span>
+                        </div>
+                        {/* Info button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
+                          className="w-[18px] h-[18px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ background: 'rgba(255,255,255,0.1)' }}
+                        >
+                          <Info size={10} className="text-white/60" />
+                        </button>
+                      </div>
+
+                      {/* ── IMAGE AREA ── */}
+                      <div className="relative" style={{ aspectRatio: '1', padding: '4px 10px 2px' }}>
                         <img
                           src={getItemIconUrl(item.icon_url)}
                           alt={item.market_hash_name}
                           className={cn(
-                            'absolute inset-0 w-full h-full object-contain p-3 transition-all duration-300',
-                            isSelected ? 'scale-95 opacity-70' : 'group-hover:scale-110'
+                            'w-full h-full object-contain transition-transform duration-200',
+                            isSelected ? 'scale-90 opacity-60' : 'group-hover:scale-105'
                           )}
                         />
 
-                        {/* === SELECTED OVERLAY === */}
+                        {/* Selected overlay */}
                         {isSelected && (
-                          <div className="absolute inset-0 bg-primary/15 flex items-center justify-center z-20">
-                            <span className="text-xs font-bold text-primary bg-primary/10 backdrop-blur-sm px-3 py-1 rounded-lg border border-primary/30">
+                          <div className="absolute inset-0 flex items-center justify-center z-20">
+                            <span className="text-[11px] font-bold text-white/80 bg-black/40 backdrop-blur-sm px-3 py-1 rounded">
                               Selected
                             </span>
                           </div>
                         )}
 
-                        {/* === ON SALE BADGE === */}
+                        {/* On Sale overlay */}
                         {isOnSale && !isSelected && (
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 backdrop-blur-sm px-2.5 py-1 rounded-lg border border-emerald-500/30 flex items-center gap-1">
-                              <Tag size={10} />
-                              On sale
+                          <div className="absolute inset-0 flex items-center justify-center z-20">
+                            <span className="text-[10px] font-bold text-emerald-400 bg-black/40 backdrop-blur-sm px-2 py-1 rounded flex items-center gap-1">
+                              <Tag size={9} /> On sale
                             </span>
                           </div>
                         )}
 
-                        {/* === TOP-LEFT: Phase / Fade / Marble Fade badge === */}
+                        {/* Doppler / Fade / Marble badge — top-left of image */}
                         {dopplerPhase && (
-                          <div
-                            className="absolute top-[3px] left-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold text-white whitespace-nowrap z-10"
-                            style={{
-                              ...(dopplerPhase.tier === 1
-                                ? { background: `linear-gradient(135deg, ${dopplerPhase.color}ee, ${dopplerPhase.color}99)`, textShadow: `0 0 8px ${dopplerPhase.color}` }
-                                : { background: dopplerPhase.color + 'cc' }),
-                              lineHeight: '1.4',
-                            }}
+                          <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded-[2px] font-extrabold text-white z-10"
+                            style={dopplerPhase.tier === 1
+                              ? { background: `linear-gradient(135deg, ${dopplerPhase.color}ee, ${dopplerPhase.color}88)`, textShadow: `0 0 6px ${dopplerPhase.color}` }
+                              : { background: dopplerPhase.color + 'cc' }}
                           >
                             {dopplerPhase.tier === 1 ? dopplerPhase.phase : dopplerPhase.phase.replace('Phase ', 'P').replace('Gamma ', 'G')}
                           </div>
                         )}
                         {fadeInfo && !dopplerPhase && (
-                          <div
-                            className="absolute top-[3px] left-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold text-black whitespace-nowrap z-10"
-                            style={{ background: 'linear-gradient(135deg, #ff6b35, #f7c948, #6dd5ed)', textShadow: '0 0 3px rgba(255,255,255,0.4)', lineHeight: '1.4' }}
-                          >
+                          <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded-[2px] font-extrabold text-black z-10"
+                            style={{ background: 'linear-gradient(135deg, #ff6b35, #f7c948, #6dd5ed)' }}>
                             {fadeInfo.percentage}%
                           </div>
                         )}
                         {marbleFade && !dopplerPhase && !fadeInfo && (
-                          <div
-                            className="absolute top-[3px] left-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold text-white whitespace-nowrap z-10"
-                            style={{ background: marbleFade.color + 'cc', lineHeight: '1.4' }}
-                          >
-                            {marbleFade.pattern === 'Fire & Ice' ? '\ud83d\udd25\u2744\ufe0f' : marbleFade.pattern.substring(0, 3)}
+                          <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded-[2px] font-extrabold text-white z-10"
+                            style={{ background: marbleFade.color + 'cc' }}>
+                            {marbleFade.pattern === 'Fire & Ice' ? '🔥❄️' : marbleFade.pattern.substring(0, 3)}
                           </div>
                         )}
 
-                        {/* === TOP-RIGHT: Wear badge === */}
-                        {(item.wear || isStatTrak || isSouvenir) && (
-                          <div
-                            className="absolute top-[3px] right-[3px] text-[10px] px-[5px] py-[2px] rounded-[3px] font-extrabold z-10"
-                            style={{ background: 'rgba(0,0,0,0.6)', color: wearColor, letterSpacing: '0.3px', lineHeight: '1.4' }}
-                          >
-                            {isStatTrak ? 'ST ' : ''}{isSouvenir ? 'SV ' : ''}{wearShort || ''}
-                          </div>
-                        )}
-
-                        {/* === Trade lock === */}
-                        {!item.tradable && (
-                          <div
-                            className="absolute left-[3px] px-[4px] py-[1px] rounded-[3px] text-white text-[8px] font-bold z-10"
-                            style={{ top: hasSpecialBadge ? '20px' : '3px', background: 'rgba(239,68,68,0.85)' }}
-                          >
-                            {item.trade_ban_until ? (() => {
-                              const days = Math.ceil((new Date(item.trade_ban_until).getTime() - Date.now()) / 86400000);
-                              return days > 0 ? `${days}d` : '\ud83d\udd12';
-                            })() : '\ud83d\udd12'}
-                          </div>
-                        )}
-
-                        {/* === RIGHT SIDE: Sticker value === */}
-                        {item.sticker_value != null && item.sticker_value > 1 && (
-                          <div
-                            className="absolute right-[3px] z-10"
-                            style={{ top: '18px', color: '#fbbf24', fontSize: '9px', fontWeight: 700, textShadow: txtSh }}
-                          >
-                            {formatPrice(item.sticker_value)}
-                          </div>
-                        )}
-
-                        {/* === RIGHT SIDE: Paint seed === */}
+                        {/* Paint seed — top-right of image */}
                         {paintSeed != null && (dopplerPhase || fadeInfo || marbleFade) && (
-                          <div
-                            className="absolute right-[3px] font-mono z-10"
-                            style={{ top: '32px', color: '#94a3b8', fontSize: '9px', fontWeight: 600, textShadow: txtSh }}
-                          >
-                            {paintSeed}
-                          </div>
+                          <span className="absolute top-0 right-0 text-[8px] font-mono text-slate-500 z-10">{paintSeed}</span>
                         )}
 
-                        {/* === BOTTOM-LEFT: Float value === */}
-                        {floatVal != null && (
-                          <div
-                            className="absolute left-[4px] font-mono z-10"
-                            style={{ bottom: '19px', fontSize: '9px', fontWeight: 500, color: 'rgba(255,255,255,0.85)', textShadow: txtSh }}
-                          >
-                            {floatVal.toFixed(floatVal < 0.01 ? 6 : 4)}
-                          </div>
-                        )}
-
-                        {/* === BOTTOM-LEFT: Price === */}
-                        {price > 0 && (
-                          <div
-                            className="absolute left-[4px] z-10"
-                            style={{ bottom: '3px', color: '#fde047', fontSize: '12px', fontWeight: 800, textShadow: txtSh }}
-                          >
-                            {formatPrice(price)}
-                          </div>
-                        )}
-
-                        {/* === BOTTOM-RIGHT: Duplicate count === */}
-                        {dupCount > 1 && (
-                          <div
-                            className="absolute z-10 text-center text-white"
-                            style={{
-                              bottom: '16px', right: '2px',
-                              minWidth: '14px', height: '14px', padding: '0 3px',
-                              borderRadius: '7px', lineHeight: '14px',
-                              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                              fontSize: '8px', fontWeight: 800,
-                              boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                            }}
-                          >
-                            x{dupCount}
-                          </div>
-                        )}
-
-                        {/* === Sticker icons === */}
+                        {/* Sticker icons row — bottom of image */}
                         {stickers.length > 0 && (
-                          <div className="absolute right-[2px] z-10 flex gap-[1px]" style={{ bottom: '3px' }}>
+                          <div className="absolute bottom-0 left-0 flex gap-[2px] z-10">
                             {stickers.slice(0, 4).map((s, i) => (
-                              s.icon_url ? (
-                                <img key={i} src={s.icon_url} alt="" className="w-[16px] h-[12px] object-contain drop-shadow-md" />
-                              ) : null
+                              s.icon_url ? <img key={i} src={s.icon_url} alt="" className="w-[14px] h-[11px] object-contain drop-shadow" /> : null
                             ))}
+                            {stickers.length > 4 && <span className="text-[7px] text-white/50 self-end">+{stickers.length - 4}</span>}
                           </div>
                         )}
 
-                        {/* === Account avatar badge === */}
-                        {item.account_avatar_url && (
-                          <img
-                            src={item.account_avatar_url}
-                            alt={item.account_name}
-                            title={item.account_name}
-                            className="absolute bottom-[4px] right-[3px] w-[18px] h-[18px] rounded-full border border-black/50 z-10"
-                            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
-                          />
-                        )}
-
-                        {/* === Info button (opens detail) === */}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
-                          className="absolute top-[3px] right-[3px] w-[20px] h-[20px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
-                          style={{ backgroundColor: 'rgba(0,0,0,0.7)', top: item.wear || isStatTrak || isSouvenir ? '22px' : '3px' }}
-                        >
-                          <Info size={11} className="text-white/80" />
-                        </button>
-
-                        {/* === Float bar === */}
-                        {floatVal != null && (
-                          <div
-                            className="absolute bottom-0 left-0 right-0 z-10"
-                            style={{
-                              height: '3px',
-                              background: 'linear-gradient(to right, #4ade80 0%, #86efac 7%, #facc15 15%, #f97316 38%, #ef4444 60%, #991b1b 100%)',
-                              opacity: 0.9,
-                              borderRadius: '0 0 4px 4px',
-                            }}
-                          >
-                            <div style={{
-                              position: 'absolute', top: '-2px',
-                              width: '3px', height: '7px',
-                              background: '#fff', borderRadius: '1px',
-                              left: `${floatVal * 100}%`,
-                              transform: 'translateX(-50%)',
-                              boxShadow: '0 0 3px rgba(0,0,0,0.8)',
-                            }} />
-                          </div>
+                        {/* Sticker value — next to stickers */}
+                        {item.sticker_value != null && item.sticker_value > 5 && stickers.length > 0 && (
+                          <span className="absolute bottom-0 right-0 text-[8px] font-bold text-amber-400 z-10">
+                            {formatPrice(item.sticker_value)}
+                          </span>
                         )}
                       </div>
-                    </motion.div>
+
+                      {/* ── BOTTOM: Wear + Float + icons ── */}
+                      <div className="px-[6px] pb-[5px] pt-[2px] flex items-end justify-between" style={{ minHeight: '22px' }}>
+                        <div className="flex flex-col gap-0">
+                          {/* Wear badge */}
+                          {(item.wear || isStatTrak || isSouvenir) && (
+                            <span className="text-[10px] font-bold leading-none" style={{ color: wc }}>
+                              {isStatTrak ? 'ST ' : ''}{isSouvenir ? 'SV ' : ''}{ws || ''}
+                            </span>
+                          )}
+                          {/* Float */}
+                          {floatVal != null && (
+                            <span className="text-[8px] font-mono text-slate-500 leading-none mt-[1px]">
+                              {floatVal.toFixed(floatVal < 0.001 ? 7 : floatVal < 0.01 ? 6 : 4)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-[3px]">
+                          {/* Trade lock */}
+                          {!item.tradable && (
+                            <Lock size={10} className="text-red-500/80" />
+                          )}
+                          {/* Account avatar */}
+                          {item.account_avatar_url && (
+                            <img
+                              src={item.account_avatar_url}
+                              alt={item.account_name}
+                              title={item.account_name}
+                              className="w-[14px] h-[14px] rounded-full border border-black/40"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
