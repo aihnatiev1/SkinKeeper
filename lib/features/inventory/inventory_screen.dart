@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/analytics_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
@@ -40,6 +41,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    Analytics.screen('inventory');
+  }
 
   Future<void> _showSellSheet(List<InventoryItem> items) async {
     if (!await requireSession(context, ref)) return;

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/analytics_service.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../widgets/shared_ui.dart';
@@ -67,6 +68,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    Analytics.onboardingStarted();
+  }
+
+  @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
@@ -86,6 +93,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _finish({bool showPaywall = false}) async {
     HapticFeedback.mediumImpact();
+    Analytics.onboardingCompleted();
     await markOnboardingComplete();
     ref.invalidate(onboardingCompleteProvider);
     if (mounted) {
@@ -114,7 +122,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Align(
                 alignment: Alignment.topRight,
                 child: GestureDetector(
-                  onTap: _finish,
+                  onTap: () { Analytics.onboardingSkipped(atSlide: _page); _finish(); },
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 20, 8),
                     child: Text(
@@ -131,7 +139,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Expanded(
                 child: PageView.builder(
                   controller: _ctrl,
-                  onPageChanged: (i) => setState(() => _page = i),
+                  onPageChanged: (i) {
+                    setState(() => _page = i);
+                    Analytics.onboardingSlide(slide: i);
+                  },
                   itemCount: _pages.length,
                   itemBuilder: (_, i) => _OnboardingPage(data: _pages[i]),
                 ),

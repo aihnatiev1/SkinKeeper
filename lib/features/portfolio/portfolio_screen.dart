@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/analytics_service.dart';
 import '../../core/cache_service.dart';
 import '../../core/api_client.dart';
 import '../../core/router.dart';
@@ -52,10 +53,9 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
   @override
   void initState() {
     super.initState();
+    Analytics.screen('portfolio');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initSequence();
-      // Background sync on every mount so P/L block shows up immediately.
-      // _runInitialSync only runs after login (needsSync guard); this covers cold starts.
       _backgroundRefresh();
     });
   }

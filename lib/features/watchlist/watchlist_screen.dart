@@ -6,17 +6,29 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/analytics_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/steam_image.dart';
 import '../../core/theme.dart';
 import '../../widgets/shared_ui.dart';
 import 'watchlist_provider.dart';
 
-class WatchlistScreen extends ConsumerWidget {
+class WatchlistScreen extends ConsumerStatefulWidget {
   const WatchlistScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WatchlistScreen> createState() => _WatchlistScreenState();
+}
+
+class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Analytics.screen('watchlist');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final watchlistAsync = ref.watch(watchlistProvider);
 
     return Scaffold(

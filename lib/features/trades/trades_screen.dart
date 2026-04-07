@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/analytics_service.dart';
 import '../../core/api_client.dart';
 import '../../core/review_service.dart';
 import '../../core/settings_provider.dart';
@@ -39,6 +40,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
   @override
   void initState() {
     super.initState();
+    Analytics.screen('trades');
     _pageCtrl = PageController();
   }
 

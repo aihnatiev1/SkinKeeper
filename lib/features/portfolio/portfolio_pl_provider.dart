@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/analytics_service.dart';
 import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../models/profit_loss.dart';
@@ -241,6 +242,7 @@ class PortfoliosNotifier extends AsyncNotifier<List<Portfolio>> {
     final api = ref.read(apiClientProvider);
     final hex = '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
     final res = await api.post('/portfolios', data: {'name': name, 'color': hex});
+    Analytics.portfolioCreated();
     ref.invalidateSelf();
     return Portfolio.fromJson(res.data as Map<String, dynamic>);
   }

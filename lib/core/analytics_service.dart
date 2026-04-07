@@ -63,6 +63,85 @@ class Analytics {
     await _event('account_linked');
   }
 
+  // ─── Onboarding Events ─────────────────────────────────────────────
+
+  static Future<void> onboardingStarted() async {
+    await _event('onboarding_started');
+  }
+
+  static Future<void> onboardingSlide({required int slide}) async {
+    await _event('onboarding_slide', {'slide': slide});
+  }
+
+  static Future<void> onboardingCompleted() async {
+    await _event('onboarding_completed');
+  }
+
+  static Future<void> onboardingSkipped({required int atSlide}) async {
+    await _event('onboarding_skipped', {'at_slide': atSlide});
+  }
+
+  // ─── Session Events ───────────────────────────────────────────────
+
+  static Future<void> sessionConnected({required String method}) async {
+    await _event('session_connected', {'method': method});
+  }
+
+  static Future<void> sessionExpired() async {
+    await _event('session_expired');
+  }
+
+  static Future<void> accountSwitched() async {
+    await _event('account_switched');
+  }
+
+  // ─── Navigation / Engagement ──────────────────────────────────────
+
+  static Future<void> inventoryViewed({required int itemCount, required double totalValue}) async {
+    await _event('inventory_viewed', {'item_count': itemCount, 'total_value': totalValue});
+  }
+
+  static Future<void> itemDetailViewed({required String itemName, required double price}) async {
+    await _event('item_detail_viewed', {'item_name': itemName, 'price': price});
+  }
+
+  static Future<void> portfolioViewed({required double totalValue, int? portfolioId}) async {
+    await _event('portfolio_viewed', {
+      'total_value': totalValue,
+      if (portfolioId != null) 'portfolio_id': portfolioId,
+    });
+  }
+
+  static Future<void> tradeOfferViewed({required String status, required int itemCount}) async {
+    await _event('trade_offer_viewed', {'status': status, 'item_count': itemCount});
+  }
+
+  static Future<void> dealsViewed({required int dealCount}) async {
+    await _event('deals_viewed', {'deal_count': dealCount});
+  }
+
+  static Future<void> watchlistViewed({required int itemCount}) async {
+    await _event('watchlist_viewed', {'item_count': itemCount});
+  }
+
+  // ─── Feature Adoption ─────────────────────────────────────────────
+
+  static Future<void> watchlistItemAdded() async {
+    await _event('watchlist_item_added');
+  }
+
+  static Future<void> portfolioCreated() async {
+    await _event('portfolio_created');
+  }
+
+  static Future<void> csvExported({required String type}) async {
+    await _event('csv_exported', {'type': type});
+  }
+
+  static Future<void> bulkSellStarted({required int itemCount}) async {
+    await _event('bulk_sell_started', {'item_count': itemCount});
+  }
+
   // ─── Sell Events ───────────────────────────────────────────────────
 
   static Future<void> sellStarted({required int itemCount, required String source}) async {

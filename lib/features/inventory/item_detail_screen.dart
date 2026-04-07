@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/analytics_service.dart';
 import '../../core/api_client.dart';
 import '../../core/export_service.dart';
 import '../auth/session_gate.dart';
@@ -53,6 +54,10 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
   void initState() {
     super.initState();
     _item = widget.item;
+    Analytics.itemDetailViewed(
+      itemName: widget.item.marketHashName,
+      price: widget.item.steamPrice ?? widget.item.bestPrice ?? 0,
+    );
     _fetchHistory();
   }
 

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
+import '../../core/analytics_service.dart';
 import '../../core/cache_service.dart';
 import '../../models/user.dart';
 import '../alerts/alerts_provider.dart';
@@ -41,6 +42,7 @@ class AccountsNotifier extends AsyncNotifier<List<SteamAccount>> {
   Future<void> setActive(int accountId) async {
     final api = ref.read(apiClientProvider);
     await api.put('/auth/accounts/$accountId/active');
+    Analytics.accountSwitched();
     await CacheService.clearAccountData();
     ref.read(accountScopeProvider.notifier).state = null;
     ref.invalidateSelf();

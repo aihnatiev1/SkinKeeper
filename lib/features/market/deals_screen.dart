@@ -5,17 +5,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/analytics_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../inventory/widgets/price_comparison_table.dart' show sourceColor;
 import '../../widgets/shared_ui.dart';
 import 'deals_provider.dart';
 
-class DealsScreen extends ConsumerWidget {
+class DealsScreen extends ConsumerStatefulWidget {
   const DealsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DealsScreen> createState() => _DealsScreenState();
+}
+
+class _DealsScreenState extends ConsumerState<DealsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Analytics.screen('deals');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final dealsAsync = ref.watch(dealsProvider);
 
     return Scaffold(
