@@ -430,32 +430,25 @@ export default function InventoryPage() {
                 {search && <p className="text-xs mt-1">Try a different search term</p>}
               </div>
             ) : view === 'grid' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-[6px]">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7" style={{ gap: '8px' }}>
                 {items.map((item, idx) => {
                   const price = item.prices?.steam || item.prices?.buff || item.prices?.skinport || 0;
                   const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
                   const isLast = idx === items.length - 1;
-                  const isStatTrak = item.market_hash_name.includes('StatTrak');
-                  const isSouvenir = item.market_hash_name.includes('Souvenir');
-                  const isSelected = selectedIds.has(item.asset_id);
-                  const isOnSale = onSaleIds.has(item.asset_id);
-
-                  const floatVal = item.float_value != null ? Number(item.float_value) : null;
-                  const paintSeed = item.paint_seed != null ? Number(item.paint_seed) : null;
-                  const paintIndex = item.paint_index != null ? Number(item.paint_index) : null;
-
-                  const dopplerPhase = paintIndex && isDoppler(item.market_hash_name)
-                    ? getDopplerPhase(paintIndex) : null;
-                  const fadeInfo = paintSeed != null && isFade(item.market_hash_name)
-                    ? calculateFadePercent(paintSeed) : null;
-                  const marbleFade = paintSeed != null && isMarbleFade(item.market_hash_name)
-                    ? analyzeMarbleFade(paintSeed) : null;
-
-                  const stickers = Array.isArray(item.stickers) ? item.stickers : [];
-
-                  const W: Record<string, string> = { FN: '#4ade80', MW: '#22d3ee', FT: '#a78bfa', WW: '#f97316', BS: '#ef4444' };
+                  const isST = item.market_hash_name.includes('StatTrak');
+                  const isSV = item.market_hash_name.includes('Souvenir');
+                  const isSel = selectedIds.has(item.asset_id);
+                  const onSale = onSaleIds.has(item.asset_id);
+                  const fv = item.float_value != null ? Number(item.float_value) : null;
+                  const ps = item.paint_seed != null ? Number(item.paint_seed) : null;
+                  const pi = item.paint_index != null ? Number(item.paint_index) : null;
+                  const dp = pi && isDoppler(item.market_hash_name) ? getDopplerPhase(pi) : null;
+                  const fi = ps != null && isFade(item.market_hash_name) ? calculateFadePercent(ps) : null;
+                  const mf = ps != null && isMarbleFade(item.market_hash_name) ? analyzeMarbleFade(ps) : null;
+                  const stk = Array.isArray(item.stickers) ? item.stickers : [];
+                  const W: Record<string,string> = {FN:'#4ade80',MW:'#22d3ee',FT:'#a78bfa',WW:'#f97316',BS:'#ef4444'};
                   const ws = getWearShort(item.wear);
-                  const wc = isStatTrak ? '#cf6a32' : isSouvenir ? '#ffd700' : (ws && W[ws]) || '#818cf8';
+                  const wc = isST ? '#cf6a32' : isSV ? '#ffd700' : (ws && W[ws]) || '#818cf8';
 
                   return (
                     <div
@@ -463,143 +456,89 @@ export default function InventoryPage() {
                       ref={isLast ? lastItemRef : undefined}
                       onClick={() => toggleSelect(item.asset_id)}
                       onDoubleClick={() => setSelectedItem(item)}
-                      className={cn(
-                        'relative cursor-pointer group',
-                        isSelected ? 'ring-2 ring-primary' : 'hover:brightness-110'
-                      )}
-                      style={{
-                        background: '#1a1d26',
-                        borderRadius: '6px',
-                        borderBottom: `2px solid ${rarityColor}`,
-                        overflow: 'hidden',
-                      }}
+                      className={cn('relative cursor-pointer group', isSel && 'ring-2 ring-primary')}
+                      style={{ background: '#1e2028', borderRadius: '8px', border: '1px solid #2a2d38', overflow: 'hidden' }}
                     >
-                      {/* ── TOP: Price row ── */}
-                      <div className="flex items-center justify-between px-[6px] pt-[5px] pb-0">
-                        <div className="flex items-center gap-[3px]">
-                          <span style={{ color: '#facc15', fontSize: '10px' }}>⚡</span>
-                          <span style={{ color: '#facc15', fontSize: '12px', fontWeight: 800, letterSpacing: '-0.3px' }}>
+                      {/* ═══ PRICE BAR (top) ═══ */}
+                      <div style={{ padding: '7px 8px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <span style={{ color: '#facc15', fontSize: '11px', lineHeight: 1 }}>⚡</span>
+                          <span style={{ color: price >= 100 ? '#4ade80' : '#facc15', fontSize: '13px', fontWeight: 800 }}>
                             {price > 0 ? formatPrice(price) : '—'}
                           </span>
                         </div>
-                        {/* Info button */}
                         <button
                           onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
-                          className="w-[18px] h-[18px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)' }}
                         >
-                          <Info size={10} className="text-white/60" />
+                          <Info size={11} className="text-white/50" />
                         </button>
                       </div>
 
-                      {/* ── IMAGE AREA ── */}
-                      <div className="relative" style={{ aspectRatio: '1', padding: '4px 10px 2px' }}>
+                      {/* ═══ IMAGE (middle) ═══ */}
+                      <div className="relative" style={{ aspectRatio: '4/3', padding: '0 12px' }}>
                         <img
                           src={getItemIconUrl(item.icon_url)}
                           alt={item.market_hash_name}
-                          className={cn(
-                            'w-full h-full object-contain transition-transform duration-200',
-                            isSelected ? 'scale-90 opacity-60' : 'group-hover:scale-105'
-                          )}
+                          className={cn('w-full h-full object-contain transition-transform duration-200', isSel ? 'scale-[0.85] opacity-50' : 'group-hover:scale-[1.06]')}
                         />
-
-                        {/* Selected overlay */}
-                        {isSelected && (
+                        {/* Selected */}
+                        {isSel && (
                           <div className="absolute inset-0 flex items-center justify-center z-20">
-                            <span className="text-[11px] font-bold text-white/80 bg-black/40 backdrop-blur-sm px-3 py-1 rounded">
-                              Selected
-                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', padding: '4px 12px', borderRadius: 6 }}>Selected</span>
                           </div>
                         )}
-
-                        {/* On Sale overlay */}
-                        {isOnSale && !isSelected && (
+                        {/* On sale */}
+                        {onSale && !isSel && (
                           <div className="absolute inset-0 flex items-center justify-center z-20">
-                            <span className="text-[10px] font-bold text-emerald-400 bg-black/40 backdrop-blur-sm px-2 py-1 rounded flex items-center gap-1">
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#34d399', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', padding: '3px 8px', borderRadius: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
                               <Tag size={9} /> On sale
                             </span>
                           </div>
                         )}
-
-                        {/* Doppler / Fade / Marble badge — top-left of image */}
-                        {dopplerPhase && (
-                          <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded-[2px] font-extrabold text-white z-10"
-                            style={dopplerPhase.tier === 1
-                              ? { background: `linear-gradient(135deg, ${dopplerPhase.color}ee, ${dopplerPhase.color}88)`, textShadow: `0 0 6px ${dopplerPhase.color}` }
-                              : { background: dopplerPhase.color + 'cc' }}
-                          >
-                            {dopplerPhase.tier === 1 ? dopplerPhase.phase : dopplerPhase.phase.replace('Phase ', 'P').replace('Gamma ', 'G')}
+                        {/* Doppler/Fade/Marble — image overlay */}
+                        {dp && <div className="absolute top-1 left-1 text-[9px] px-1 py-px rounded font-extrabold text-white z-10" style={dp.tier===1 ? {background:`linear-gradient(135deg,${dp.color}ee,${dp.color}88)`,textShadow:`0 0 6px ${dp.color}`} : {background:dp.color+'cc'}}>{dp.tier===1?dp.phase:dp.phase.replace('Phase ','P').replace('Gamma ','G')}</div>}
+                        {fi && !dp && <div className="absolute top-1 left-1 text-[9px] px-1 py-px rounded font-extrabold text-black z-10" style={{background:'linear-gradient(135deg,#ff6b35,#f7c948,#6dd5ed)'}}>{fi.percentage}%</div>}
+                        {mf && !dp && !fi && <div className="absolute top-1 left-1 text-[9px] px-1 py-px rounded font-extrabold text-white z-10" style={{background:mf.color+'cc'}}>{mf.pattern==='Fire & Ice'?'🔥❄️':mf.pattern.substring(0,3)}</div>}
+                        {/* Paint seed */}
+                        {ps != null && (dp||fi||mf) && <span className="absolute top-1 right-1 text-[8px] font-mono text-slate-500 z-10">{ps}</span>}
+                        {/* Stickers — bottom of image */}
+                        {stk.length > 0 && (
+                          <div className="absolute bottom-0 left-1 flex gap-[2px] z-10">
+                            {stk.slice(0,4).map((s,i) => s.icon_url ? <img key={i} src={s.icon_url} alt="" className="w-[15px] h-[11px] object-contain drop-shadow" /> : null)}
                           </div>
                         )}
-                        {fadeInfo && !dopplerPhase && (
-                          <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded-[2px] font-extrabold text-black z-10"
-                            style={{ background: 'linear-gradient(135deg, #ff6b35, #f7c948, #6dd5ed)' }}>
-                            {fadeInfo.percentage}%
-                          </div>
-                        )}
-                        {marbleFade && !dopplerPhase && !fadeInfo && (
-                          <div className="absolute top-0 left-0 text-[9px] px-[4px] py-[1px] rounded-[2px] font-extrabold text-white z-10"
-                            style={{ background: marbleFade.color + 'cc' }}>
-                            {marbleFade.pattern === 'Fire & Ice' ? '🔥❄️' : marbleFade.pattern.substring(0, 3)}
-                          </div>
-                        )}
-
-                        {/* Paint seed — top-right of image */}
-                        {paintSeed != null && (dopplerPhase || fadeInfo || marbleFade) && (
-                          <span className="absolute top-0 right-0 text-[8px] font-mono text-slate-500 z-10">{paintSeed}</span>
-                        )}
-
-                        {/* Sticker icons row — bottom of image */}
-                        {stickers.length > 0 && (
-                          <div className="absolute bottom-0 left-0 flex gap-[2px] z-10">
-                            {stickers.slice(0, 4).map((s, i) => (
-                              s.icon_url ? <img key={i} src={s.icon_url} alt="" className="w-[14px] h-[11px] object-contain drop-shadow" /> : null
-                            ))}
-                            {stickers.length > 4 && <span className="text-[7px] text-white/50 self-end">+{stickers.length - 4}</span>}
-                          </div>
-                        )}
-
-                        {/* Sticker value — next to stickers */}
-                        {item.sticker_value != null && item.sticker_value > 5 && stickers.length > 0 && (
-                          <span className="absolute bottom-0 right-0 text-[8px] font-bold text-amber-400 z-10">
-                            {formatPrice(item.sticker_value)}
-                          </span>
+                        {/* Sticker value */}
+                        {item.sticker_value != null && item.sticker_value > 5 && stk.length > 0 && (
+                          <span className="absolute bottom-0 right-1 text-[8px] font-bold text-amber-400 z-10">{formatPrice(item.sticker_value)}</span>
                         )}
                       </div>
 
-                      {/* ── BOTTOM: Wear + Float + icons ── */}
-                      <div className="px-[6px] pb-[5px] pt-[2px] flex items-end justify-between" style={{ minHeight: '22px' }}>
-                        <div className="flex flex-col gap-0">
-                          {/* Wear badge */}
-                          {(item.wear || isStatTrak || isSouvenir) && (
-                            <span className="text-[10px] font-bold leading-none" style={{ color: wc }}>
-                              {isStatTrak ? 'ST ' : ''}{isSouvenir ? 'SV ' : ''}{ws || ''}
-                            </span>
+                      {/* ═══ FOOTER (bottom) ═══ */}
+                      <div style={{ padding: '4px 8px 6px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 28, borderTop: '1px solid #2a2d3800' }}>
+                        <div>
+                          {(item.wear || isST || isSV) && (
+                            <div style={{ fontSize: 10, fontWeight: 700, color: wc, lineHeight: 1.2 }}>
+                              {isST ? 'ST ' : ''}{isSV ? 'SV ' : ''}{ws || ''}
+                            </div>
                           )}
-                          {/* Float */}
-                          {floatVal != null && (
-                            <span className="text-[8px] font-mono text-slate-500 leading-none mt-[1px]">
-                              {floatVal.toFixed(floatVal < 0.001 ? 7 : floatVal < 0.01 ? 6 : 4)}
-                            </span>
+                          {fv != null && (
+                            <div style={{ fontSize: 8, fontFamily: 'monospace', color: '#64748b', lineHeight: 1.2, marginTop: 1 }}>
+                              {fv.toFixed(fv < 0.001 ? 7 : fv < 0.01 ? 6 : 4)}
+                            </div>
                           )}
                         </div>
-
-                        <div className="flex items-center gap-[3px]">
-                          {/* Trade lock */}
-                          {!item.tradable && (
-                            <Lock size={10} className="text-red-500/80" />
-                          )}
-                          {/* Account avatar */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                          {!item.tradable && <Lock size={11} style={{ color: '#ef4444', opacity: 0.7 }} />}
                           {item.account_avatar_url && (
-                            <img
-                              src={item.account_avatar_url}
-                              alt={item.account_name}
-                              title={item.account_name}
-                              className="w-[14px] h-[14px] rounded-full border border-black/40"
-                            />
+                            <img src={item.account_avatar_url} alt="" title={item.account_name} style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #333' }} />
                           )}
                         </div>
                       </div>
+
+                      {/* ═══ RARITY BAR (very bottom) ═══ */}
+                      <div style={{ height: 2, background: rarityColor }} />
                     </div>
                   );
                 })}
