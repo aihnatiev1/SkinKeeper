@@ -183,11 +183,30 @@
     return originalXHRSend.apply(this, args);
   };
 
-  // ── Parse Steam price strings like "$12.34", "12,34€", "1 234,56₽" ──
+  // ── Parse Steam price strings like "$12.34", "12,34€", "1 234,56₽", "$1,234.56" ──
   function parseSteamPrice(str) {
     if (!str) return 0;
-    const cleaned = str.replace(/[^\d.,]/g, '').replace(/\.(?=.*\.)/g, '').replace(',', '.');
-    const val = parseFloat(cleaned);
+    // Remove all non-numeric except dots and commas
+    var cleaned = str.replace(/[^\d.,]/g, '');
+    if (!cleaned) return 0;
+
+    // Detect format: if last separator is comma and has 2 digits after → European (12,34)
+    // If last separator is dot and has 2 digits after → US/standard (12.34)
+    var lastComma = cleaned.lastIndexOf(',');
+    var lastDot = cleaned.lastIndexOf('.');
+
+    if (lastComma > lastDot) {
+      // European: "1.234,56" or "12,34" — comma is decimal
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    } else if (lastDot > lastComma) {
+      // US/standard: "1,234.56" or "12.34" — dot is decimal
+      cleaned = cleaned.replace(/,/g, '');
+    } else {
+      // Only one type or none — try as-is
+      cleaned = cleaned.replace(/,/g, '.');
+    }
+
+    var val = parseFloat(cleaned);
     return isNaN(val) ? 0 : Math.round(val * 100);
   }
 })();
