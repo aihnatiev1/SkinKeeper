@@ -9,6 +9,7 @@ import { initAnalytics, trackEvent, shutdownAnalytics } from './analytics';
 
 const isDev = !app.isPackaged;
 const RENDERER_DEV_URL = 'http://localhost:3001';
+const PRODUCTION_URL = 'https://skinkeeper.store';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -18,42 +19,8 @@ function getRendererURL(): string {
   if (isDev) {
     return RENDERER_DEV_URL;
   }
-  // In production, Next.js standalone server runs on this port
-  return 'http://localhost:3847';
-}
-
-async function startProductionServer() {
-  if (isDev) return;
-
-  const serverPath = path.join(process.resourcesPath, 'renderer', 'server.js');
-  const { fork } = require('child_process');
-
-  const server = fork(serverPath, [], {
-    env: {
-      ...process.env,
-      PORT: '3847',
-      HOSTNAME: 'localhost',
-      NODE_ENV: 'production',
-    },
-    stdio: 'pipe',
-  });
-
-  // Wait for server to be ready
-  await new Promise<void>((resolve) => {
-    server.stdout?.on('data', (data: Buffer) => {
-      const msg = data.toString();
-      if (msg.includes('Ready') || msg.includes('started')) {
-        resolve();
-      }
-    });
-    // Fallback: resolve after 3 seconds
-    setTimeout(resolve, 3000);
-  });
-
-  // Clean up server on app quit
-  app.on('before-quit', () => {
-    server.kill();
-  });
+  // Production: load live web app — always up to date
+  return PRODUCTION_URL;
 }
 
 function createWindow() {
@@ -83,9 +50,13 @@ function createWindow() {
     mainWindow?.show();
   });
 
-  // Open external links in default browser
+  // Open external links in default browser, keep skinkeeper.store internal
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) {
+      // Steam OpenID popups and our own domain stay in-app
+      if (url.includes('steamcommunity.com/openid') || url.includes('skinkeeper.store')) {
+        return { action: 'allow' };
+      }
       shell.openExternal(url);
     }
     return { action: 'deny' };
@@ -212,9 +183,6 @@ if (!gotTheLock) {
     registerSteamIPC(steamClient);
     registerAuthIPC();
     registerAutomationIPC(steamClient);
-
-    // Start production renderer server if needed
-    await startProductionServer();
 
     createWindow();
     createTray();
