@@ -58,3 +58,4 @@ ecosystem.config.js
 browser-ext/dist/
 browser-ext/*.zip
 iScreen*.png
+web-app/public/downloads/

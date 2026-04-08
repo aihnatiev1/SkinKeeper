@@ -31,8 +31,9 @@ import { useIsDesktop } from '@/lib/use-desktop';
 import { useSteamStatus } from '@/lib/use-desktop';
 
 const WEB_NAV_ITEMS = [
-  { href: '/portfolio', label: 'Portfolio', icon: LayoutDashboard },
+  { href: '/portfolio', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/inventory', label: 'Inventory', icon: Backpack },
+  { href: '/portfolios', label: 'Portfolios', icon: BarChart3 },
   { href: '/market', label: 'Market', icon: Store },
   { href: '/deals', label: 'Deals', icon: TrendingUp },
   { href: '/watchlist', label: 'Watchlist', icon: Eye },
@@ -79,19 +80,14 @@ export function Sidebar() {
   const navContent = (
     <>
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-3 px-4 h-16 border-b border-border/50 hover:bg-surface-light/50 transition-colors">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg shadow-primary/20">
-          SK
-        </div>
-        {(sidebarOpen || mobileOpen) && (
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-lg font-bold whitespace-nowrap"
-          >
-            SkinKeeper
-          </motion.span>
-        )}
+      <Link href="/" className="flex items-center px-4 h-16 border-b border-border/50 hover:bg-surface-light/50 transition-colors">
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-lg font-bold whitespace-nowrap text-gradient"
+        >
+          {(sidebarOpen || mobileOpen) ? 'SkinKeeper' : 'S'}
+        </motion.span>
       </Link>
 
       {/* Navigation */}
@@ -245,7 +241,7 @@ export function Sidebar() {
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="fixed left-0 top-0 bottom-0 z-50 w-[280px] flex flex-col bg-surface border-r border-border/50 lg:hidden"
+              className="fixed left-0 top-0 bottom-0 z-50 w-[280px] max-w-[85vw] flex flex-col bg-surface border-r border-border/50 lg:hidden"
             >
               <button
                 onClick={() => setMobileOpen(false)}

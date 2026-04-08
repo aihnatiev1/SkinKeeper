@@ -3,13 +3,14 @@
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { useWatchlist, useRemoveFromWatchlist, useAddToWatchlist } from '@/lib/hooks';
-import { formatPrice, getItemIconUrl } from '@/lib/utils';
+import { useFormatPrice, getItemIconUrl } from '@/lib/utils';
 import { Eye, Trash2, Plus, Search, TrendingDown, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EcosystemTip } from '@/components/ecosystem-tip';
 
 export default function WatchlistPage() {
+  const formatPrice = useFormatPrice();
   const { data: items, isLoading } = useWatchlist();
   const removeFromWatchlist = useRemoveFromWatchlist();
   const addToWatchlist = useAddToWatchlist();
@@ -49,7 +50,7 @@ export default function WatchlistPage() {
       <div className="p-4 lg:p-6 space-y-4">
         <EcosystemTip
           id="watchlist-alerts"
-          icon="\ud83d\udd14"
+          icon="🔔"
           message="Get push notifications when watchlist items hit your target price. Download the mobile app."
           ctaText="Get the App"
           ctaUrl="https://apps.apple.com/us/app/skinkeeper/id6760600231"
@@ -68,8 +69,8 @@ export default function WatchlistPage() {
 
         {/* Add form */}
         {showAdd && (
-          <div className="glass rounded-xl p-4 flex flex-wrap items-end gap-3 border border-primary/20">
-            <div className="flex-1 min-w-[200px]">
+          <div className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-3 border border-primary/20">
+            <div className="flex-1 sm:min-w-[200px]">
               <label className="text-xs text-muted mb-1 block">Item Name</label>
               <input
                 type="text"
@@ -79,7 +80,7 @@ export default function WatchlistPage() {
                 className="w-full px-3 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
-            <div className="w-32">
+            <div className="sm:w-32">
               <label className="text-xs text-muted mb-1 block">Target Price ($)</label>
               <input
                 type="number"

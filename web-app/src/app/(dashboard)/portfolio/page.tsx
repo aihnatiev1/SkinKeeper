@@ -5,10 +5,9 @@ import { StatCard } from '@/components/stat-card';
 import { CardSkeleton } from '@/components/loading';
 import { PremiumGate, ProBadge } from '@/components/premium-gate';
 import { PortfolioSelector } from '@/components/portfolio-selector';
-import { SessionConnectBanner } from '@/components/session-connect-banner';
 import { usePortfolioSummary, useProfitLoss, usePLItems } from '@/lib/hooks';
-import { formatPrice, formatPriceChange } from '@/lib/utils';
-import { useAuthStore } from '@/lib/store';
+import { useFormatPrice, useFormatPriceChange } from '@/lib/utils';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import { TrendingUp, TrendingDown, Package, DollarSign, Wallet, BarChart3, Download } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useMemo } from 'react';
@@ -27,6 +26,9 @@ const fadeUp = {
 };
 
 export default function PortfolioPage() {
+  const formatPrice = useFormatPrice();
+  const formatPriceChange = useFormatPriceChange();
+  const currency = useUIStore((s) => s.currency);
   const user = useAuthStore((s) => s.user);
   const { data: summary, isLoading: summaryLoading } = usePortfolioSummary();
   const { data: pl } = useProfitLoss();
@@ -38,10 +40,9 @@ export default function PortfolioPage() {
     <div>
       <Header title="Portfolio" />
       <div className="p-4 lg:p-6 space-y-6">
-        <SessionConnectBanner />
         <EcosystemTip
           id="portfolio-mobile-app"
-          icon="\ud83d\udcf1"
+          icon="📱"
           message="Your portfolio changes while you sleep. Get price alerts straight to your phone."
           ctaText="Get the App"
           ctaUrl="https://apps.apple.com/us/app/skinkeeper/id6760600231"
@@ -54,7 +55,7 @@ export default function PortfolioPage() {
           variants={container}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4"
+          className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4"
         >
           {summaryLoading ? (
             <><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
@@ -137,7 +138,7 @@ export default function PortfolioPage() {
           className="glass rounded-2xl border border-border/50 p-4 lg:p-6"
         >
           <h2 className="text-lg font-bold mb-4">Portfolio History</h2>
-          <div className="h-64 lg:h-80">
+          <div className="h-48 sm:h-64 lg:h-80">
             {history.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={history}>
@@ -162,7 +163,7 @@ export default function PortfolioPage() {
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v) => `$${v}`}
+                    tickFormatter={(v) => `${currency} ${v}`}
                   />
                   <Tooltip
                     contentStyle={{
@@ -174,7 +175,7 @@ export default function PortfolioPage() {
                       boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
                     }}
                     labelFormatter={(v) => new Date(String(v)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Value']}
+                    formatter={(value) => [formatPrice(Number(value)), 'Value']}
                   />
                   <Area
                     type="monotone"

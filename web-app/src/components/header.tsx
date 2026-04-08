@@ -65,7 +65,7 @@ export function Header({ title }: { title: string }) {
           </button>
 
           {open && (
-            <div className="absolute right-0 top-full mt-2 w-60 glass-strong rounded-xl shadow-2xl z-50 py-1 border border-border/50">
+            <div className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] glass-strong rounded-xl shadow-2xl z-50 py-1 border border-border/50">
               {/* All accounts option */}
               <button
                 onClick={() => {

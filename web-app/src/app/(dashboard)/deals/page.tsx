@@ -3,7 +3,7 @@
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { useDeals } from '@/lib/hooks';
-import { formatPrice, getItemIconUrl } from '@/lib/utils';
+import { useFormatPrice, getItemIconUrl } from '@/lib/utils';
 import { TrendingUp, ExternalLink, ArrowRight, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { EcosystemTip } from '@/components/ecosystem-tip';
@@ -20,6 +20,7 @@ const SOURCE_COLORS: Record<string, string> = {
 };
 
 export default function DealsPage() {
+  const formatPrice = useFormatPrice();
   const [minProfit, setMinProfit] = useState(5);
   const [limit, setLimit] = useState(50);
   const { data, isLoading } = useDeals(minProfit, limit);
@@ -32,7 +33,7 @@ export default function DealsPage() {
       <div className="p-4 lg:p-6 space-y-4">
         <EcosystemTip
           id="deals-extension"
-          icon="\ud83d\udcb0"
+          icon="💰"
           message="See arbitrage opportunities inline on Steam Market pages with our browser extension."
           ctaText="Install Extension"
           ctaUrl="https://chromewebstore.google.com/detail/skinkeeper/placeholder"
@@ -44,7 +45,7 @@ export default function DealsPage() {
             <p className="text-sm font-medium">Arbitrage Opportunities</p>
             <p className="text-xs text-muted mt-0.5">
               Items where buying on an external marketplace and selling on Steam is profitable.
-              Profit is calculated after Steam&apos;s 13% commission.
+              Profit is calculated after Steam&apos;s 15% commission.
             </p>
           </div>
         </div>
@@ -123,14 +124,14 @@ export default function DealsPage() {
                 </div>
 
                 {/* Price breakdown */}
-                <div className={`grid ${deal.buffBidPrice ? 'grid-cols-4' : 'grid-cols-3'} gap-px bg-border/20`}>
-                  <div className="glass p-2.5 text-center">
+                <div className={`grid ${deal.buffBidPrice ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-px bg-border/20`}>
+                  <div className="glass p-2 sm:p-2.5 text-center">
                     <p className="text-[10px] text-muted">Buy ({deal.buySource})</p>
-                    <p className="text-sm font-semibold">{formatPrice(deal.buyPrice)}</p>
+                    <p className="text-xs sm:text-sm font-semibold">{formatPrice(deal.buyPrice)}</p>
                   </div>
-                  <div className="glass p-2.5 text-center">
+                  <div className="glass p-2 sm:p-2.5 text-center">
                     <p className="text-[10px] text-muted">Steam</p>
-                    <p className="text-sm font-semibold">{formatPrice(deal.sellPrice)}</p>
+                    <p className="text-xs sm:text-sm font-semibold">{formatPrice(deal.sellPrice)}</p>
                     <p className="text-[9px] text-muted">
                       {deal.sellPrice > 0 ? `${Math.round((deal.buyPrice / deal.sellPrice) * 100)}%` : '—'}
                     </p>
@@ -144,7 +145,7 @@ export default function DealsPage() {
                   <div className="glass p-2.5 text-center">
                     <p className="text-[10px] text-muted">You Get</p>
                     <p className="text-sm font-semibold text-profit">
-                      {formatPrice(deal.sellPrice * 0.87)}
+                      {formatPrice(deal.sellPrice * 0.85)}
                     </p>
                   </div>
                 </div>

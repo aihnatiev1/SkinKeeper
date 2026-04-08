@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useState, useEffect, Suspense } from 'react';
 import { useIsDesktop } from '@/lib/use-desktop';
 import { SteamConnect } from '@/components/steam-connect';
+import { SteamSessionModal } from '@/components/steam-session-modal';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 12 },
@@ -38,6 +39,7 @@ function SettingsContent() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [refreshingSession, setRefreshingSession] = useState<number | null>(null);
   const [unlinkingAccount, setUnlinkingAccount] = useState<number | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   // Handle Stripe redirect results
   useEffect(() => {
@@ -228,26 +230,31 @@ function SettingsContent() {
                   <p className="text-sm font-semibold truncate">{acc.displayName}</p>
                   <p className="text-xs text-muted font-mono">{acc.steamId}</p>
                 </div>
-                <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                    acc.sessionStatus === 'valid'
-                      ? 'bg-profit/10 text-profit'
-                      : acc.sessionStatus === 'expired'
-                      ? 'bg-loss/10 text-loss'
-                      : 'bg-muted/10 text-muted'
-                  }`}
-                >
-                  {acc.sessionStatus}
-                </span>
+                {acc.sessionStatus === 'expired' ? (
+                  <button
+                    onClick={() => setQrOpen(true)}
+                    className="text-xs px-2.5 py-1 rounded-full font-semibold bg-loss/10 text-loss hover:bg-loss/20 transition-colors cursor-pointer"
+                  >
+                    expired
+                  </button>
+                ) : (
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
+                      acc.sessionStatus === 'valid'
+                        ? 'bg-profit/10 text-profit'
+                        : 'bg-muted/10 text-muted'
+                    }`}
+                  >
+                    {acc.sessionStatus}
+                  </span>
+                )}
                 <div className="flex items-center gap-1.5">
                   {acc.sessionStatus === 'expired' && (
                     <button
-                      onClick={() => handleRefreshSession(acc.id)}
-                      disabled={refreshingSession === acc.id}
-                      className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                      title="Refresh session"
+                      onClick={() => setQrOpen(true)}
+                      className="text-xs text-primary font-semibold hover:text-primary-hover transition-colors"
                     >
-                      <RefreshCw size={12} className={refreshingSession === acc.id ? 'animate-spin' : ''} />
+                      Reauth
                     </button>
                   )}
                   {acc.isActive ? (
@@ -328,7 +335,7 @@ function SettingsContent() {
               <p className="text-sm text-muted mb-4">
                 Unlock P&L analytics, bulk sell, 20 alerts, CSV export, push notifications, and more.
               </p>
-              <ul className="grid grid-cols-2 gap-2 text-sm mb-6">
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-6">
                 {[
                   'P&L Analytics',
                   'Real Market Prices',
@@ -410,6 +417,16 @@ function SettingsContent() {
           Sign Out
         </button>
       </div>
+
+      <SteamSessionModal
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        onSuccess={() => {
+          setQrOpen(false);
+          toast.success('Steam session connected');
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }

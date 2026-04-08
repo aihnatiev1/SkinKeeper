@@ -70,6 +70,15 @@ export function useSwitchAccount() {
   });
 }
 
+// ─── Session guard ────────────────────────────────────────────────────
+
+/** Returns true if at least one linked account has a valid/expiring Steam session */
+export function useHasSession() {
+  const { data: accounts } = useAccounts();
+  if (!accounts) return undefined; // still loading
+  return accounts.some((a) => a.sessionStatus === 'valid' || a.sessionStatus === 'expiring');
+}
+
 // ─── Portfolios (named) ───────────────────────────────────────────────
 
 export function usePortfolios() {
@@ -173,6 +182,27 @@ export function usePLHistory(days = 30) {
   });
 }
 
+/** Fetch P&L for a specific portfolio (by explicit ID, ignores portfolioScope) */
+export function usePortfolioPL(portfolioId: number | null) {
+  const user = useAuthStore((s) => s.user);
+  return useQuery({
+    queryKey: ['portfolio', 'pl', 'byId', portfolioId],
+    queryFn: () => api.get<ProfitLoss>(`/portfolio/pl?portfolioId=${portfolioId}`),
+    enabled: !!user?.is_premium && portfolioId != null,
+  });
+}
+
+/** Fetch P&L items for a specific portfolio */
+export function usePortfolioPLItems(portfolioId: number | null) {
+  const user = useAuthStore((s) => s.user);
+  return useQuery({
+    queryKey: ['portfolio', 'pl', 'items', 'byId', portfolioId],
+    queryFn: () =>
+      api.get<{ items: PLItem[]; total: number }>(`/portfolio/pl/items?portfolioId=${portfolioId}&limit=200`),
+    enabled: !!user?.is_premium && portfolioId != null,
+  });
+}
+
 // ─── Inventory ─────────────────────────────────────────────────────────
 
 interface InventoryPage {
@@ -193,7 +223,7 @@ interface InventoryFilters {
   accountId?: number;
 }
 
-const INVENTORY_PAGE_SIZE = 20;
+const INVENTORY_PAGE_SIZE = 500;
 
 export function useInventory(filters: InventoryFilters = {}) {
   const scope = useUIStore((s) => s.accountScope);
@@ -411,7 +441,7 @@ export function useCreateSellOperation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (items: Array<{ assetId: string; marketHashName: string; priceCents: number }>) =>
-      api.post<SellOperation>('/market/sell-operation', { items }),
+      api.post<{ operationId: string; status: string; totalItems: number; skippedAssetIds: string[] }>('/market/sell-operation', { items }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['market'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
@@ -507,10 +537,19 @@ export function useRemoveFromWatchlist() {
 export function usePriceHistory(marketHashName: string | null, days = 30) {
   return useQuery({
     queryKey: ['prices', 'history', marketHashName, days],
-    queryFn: () =>
-      api.get<{ market_hash_name: string; history: PriceHistoryPoint[]; partial?: boolean }>(
+    queryFn: async () => {
+      const data = await api.get<{ market_hash_name: string; history: any[]; partial?: boolean }>(
         `/prices/${encodeURIComponent(marketHashName!)}/history?days=${days}`
-      ),
+      );
+      // Backend returns { recorded_at, price_usd } — normalize to { date, price }
+      if (data.history) {
+        data.history = data.history.map((p: any) => ({
+          date: p.date || p.recorded_at,
+          price: p.price ?? p.price_usd,
+        }));
+      }
+      return data as { market_hash_name: string; history: PriceHistoryPoint[]; partial?: boolean };
+    },
     enabled: !!marketHashName,
   });
 }

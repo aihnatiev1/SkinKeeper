@@ -2,10 +2,11 @@
 
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
-import { useInventory } from '@/lib/hooks';
+import { ExtensionRequiredModal } from '@/components/extension-required-modal';
+import { useInventory, useHasSession } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import type { SteamFriend, TradeAccount, PartnerInventoryItem } from '@/lib/types';
-import { formatPrice, getItemIconUrl, cn } from '@/lib/utils';
+import { useFormatPrice, getItemIconUrl, cn } from '@/lib/utils';
 import { Search, Send, Users, ArrowLeftRight, ChevronLeft, Wifi, WifiOff } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -14,11 +15,14 @@ import { toast } from 'sonner';
 type Step = 'pick-partner' | 'select-items';
 
 export default function NewTradePage() {
+  const formatPrice = useFormatPrice();
   const router = useRouter();
   const { data: invData, isLoading: invLoading } = useInventory({ tradableOnly: true });
   const myItems = useMemo(() => invData?.pages.flatMap((p) => p.items) ?? [], [invData]);
 
   const [step, setStep] = useState<Step>('pick-partner');
+  const [showSessionGate, setShowSessionGate] = useState(false);
+  const hasSession = useHasSession();
 
   // Partner selection
   const [friends, setFriends] = useState<SteamFriend[]>([]);
@@ -116,6 +120,7 @@ export default function NewTradePage() {
 
   const handleSend = async () => {
     if (!partner || (selectedGive.size === 0 && selectedReceive.size === 0)) return;
+    if (!hasSession) { setShowSessionGate(true); return; }
     setSending(true);
     setError('');
     try {
@@ -275,11 +280,11 @@ export default function NewTradePage() {
         </div>
 
         {/* Summary & send */}
-        <div className="glass rounded-2xl p-5">
-          <div className="flex items-center gap-4 mb-4">
+        <div className="glass rounded-2xl p-4 sm:p-5">
+          <div className="flex items-center gap-3 sm:gap-4 mb-4">
             <div className="text-center flex-1">
               <p className="text-xs text-muted mb-1">You give</p>
-              <p className="text-lg font-semibold text-loss">{selectedGive.size > 0 ? formatPrice(giveValue) : '—'}</p>
+              <p className="text-base sm:text-lg font-semibold text-loss">{selectedGive.size > 0 ? formatPrice(giveValue) : '—'}</p>
               <p className="text-xs text-muted">{selectedGive.size} items</p>
             </div>
             <ArrowLeftRight size={24} className="text-muted shrink-0" />
@@ -310,6 +315,13 @@ export default function NewTradePage() {
           </button>
         </div>
       </div>
+
+      {/* Session gate — shown when user tries to trade without a connected session */}
+      <ExtensionRequiredModal
+        open={showSessionGate}
+        onClose={() => setShowSessionGate(false)}
+        action="trade"
+      />
     </div>
   );
 }
@@ -353,7 +365,7 @@ function ItemGrid({ title, search, onSearchChange, loading, items, selected, onT
             className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded-lg text-xs focus:outline-none focus:border-primary" />
         </div>
       </div>
-      <div className="max-h-96 overflow-y-auto p-2 grid grid-cols-4 sm:grid-cols-5 gap-1.5">
+      <div className="max-h-96 overflow-y-auto p-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
         {loading ? (
           <div className="col-span-full py-8"><PageLoader /></div>
         ) : items.length === 0 ? (

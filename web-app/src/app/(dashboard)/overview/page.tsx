@@ -9,7 +9,7 @@ import { StatCard } from '@/components/stat-card';
 import { CardSkeleton } from '@/components/loading';
 import { useIsDesktop, useSteamStatus } from '@/lib/use-desktop';
 import { useAccounts, usePortfolioSummary } from '@/lib/hooks';
-import { formatPrice, formatPriceChange } from '@/lib/utils';
+import { useFormatPrice, useFormatPriceChange } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { useQueries } from '@tanstack/react-query';
 import type { PortfolioSummary, SteamAccount } from '@/lib/types';
@@ -24,6 +24,8 @@ const fadeUp = {
 };
 
 export default function OverviewPage() {
+  const formatPrice = useFormatPrice();
+  const formatPriceChange = useFormatPriceChange();
   const router = useRouter();
   const desktop = useIsDesktop();
   const { status: steamStatus } = useSteamStatus();
@@ -62,7 +64,7 @@ export default function OverviewPage() {
           variants={container}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4"
+          className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4"
         >
           {isLoading ? (
             <><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>

@@ -229,6 +229,7 @@ if (!gotTheLock) {
   });
 
   app.on('activate', () => {
+    if (!app.isReady()) return;
     if (mainWindow === null) {
       createWindow();
     } else {

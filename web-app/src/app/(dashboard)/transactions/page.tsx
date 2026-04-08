@@ -5,7 +5,7 @@ import { PageLoader } from '@/components/loading';
 import { StatCard } from '@/components/stat-card';
 import { useTransactions, useTransactionStats, useSyncTransactions, useImportTransactions, useDeleteTransaction, usePortfolios } from '@/lib/hooks';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { formatPrice, formatDate, getItemIconUrl, cn } from '@/lib/utils';
+import { useFormatPrice, formatDate, getItemIconUrl, cn } from '@/lib/utils';
 import { RefreshCw, ShoppingCart, Tag, Search, Receipt, Plus, Download, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -25,6 +25,7 @@ const fadeUp = {
 };
 
 export default function TransactionsPage() {
+  const formatPrice = useFormatPrice();
   const [typeFilter, setTypeFilter] = useState<TxFilter>('all');
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -140,7 +141,7 @@ export default function TransactionsPage() {
             ))}
           </div>
 
-          <div className="relative flex-1 min-w-[180px] max-w-sm">
+          <div className="relative flex-1 min-w-[140px] sm:min-w-[180px] max-w-sm">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="text"
@@ -208,8 +209,9 @@ export default function TransactionsPage() {
 
         {/* Manual add form */}
         {showAdd && (
-          <div className="glass rounded-xl p-4 flex flex-wrap items-end gap-3 border border-primary/20">
-            <div className="flex-1 min-w-[180px]">
+          <div className="glass rounded-xl p-4 border border-primary/20">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-3">
+            <div className="col-span-2 sm:flex-1 sm:min-w-[180px]">
               <label className="text-[10px] text-muted block mb-1">Item Name</label>
               <input
                 type="text"
@@ -219,7 +221,7 @@ export default function TransactionsPage() {
                 className="w-full px-3 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
-            <div className="w-24">
+            <div className="sm:w-24">
               <label className="text-[10px] text-muted block mb-1">Type</label>
               <select
                 value={addType}
@@ -230,7 +232,7 @@ export default function TransactionsPage() {
                 <option value="sell">Sell</option>
               </select>
             </div>
-            <div className="w-24">
+            <div className="sm:w-24">
               <label className="text-[10px] text-muted block mb-1">Price ($)</label>
               <input
                 type="number"
@@ -241,7 +243,7 @@ export default function TransactionsPage() {
                 className="w-full px-3 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
-            <div className="w-16">
+            <div className="sm:w-16">
               <label className="text-[10px] text-muted block mb-1">Qty</label>
               <input
                 type="number"
@@ -251,7 +253,7 @@ export default function TransactionsPage() {
                 className="w-full px-2 py-2 glass rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
-            <div className="w-36">
+            <div className="sm:w-36">
               <label className="text-[10px] text-muted block mb-1">Date (optional)</label>
               <input
                 type="date"
@@ -278,10 +280,11 @@ export default function TransactionsPage() {
             <button
               onClick={handleAdd}
               disabled={importTx.isPending}
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 transition-all"
+              className="col-span-2 sm:col-span-1 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 transition-all"
             >
               {importTx.isPending ? 'Adding...' : 'Add'}
             </button>
+            </div>
           </div>
         )}
 

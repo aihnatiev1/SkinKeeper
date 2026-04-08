@@ -3,9 +3,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ExternalLink, Copy, Check, Eye, ShoppingCart, Zap, Link2 } from 'lucide-react';
 import type { InventoryItem } from '@/lib/types';
-import { formatPrice, getItemIconUrl, getWearShort, getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade } from '@/lib/utils';
+import { useFormatPrice, getItemIconUrl, getWearShort, getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
-import { usePriceHistory, useItemPrices, useAddToWatchlist } from '@/lib/hooks';
+import { usePriceHistory, useItemPrices, useAddToWatchlist, useWatchlist, useRemoveFromWatchlist } from '@/lib/hooks';
 import { useState, useMemo } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { toast } from 'sonner';
@@ -26,11 +26,18 @@ interface Props {
 }
 
 export function ItemDetailPanel({ item, onClose, onSell }: Props) {
+  const formatPrice = useFormatPrice();
   const [copied, setCopied] = useState(false);
   const [histDays, setHistDays] = useState(30);
   const { data: histData } = usePriceHistory(item?.market_hash_name ?? null, histDays);
   const { data: pricesData } = useItemPrices(item?.market_hash_name ?? null);
   const addWatch = useAddToWatchlist();
+  const removeWatch = useRemoveFromWatchlist();
+  const { data: watchlist } = useWatchlist();
+  const watchlistEntry = useMemo(
+    () => watchlist?.find((w) => w.market_hash_name === item?.market_hash_name),
+    [watchlist, item?.market_hash_name]
+  );
 
   const prices = useMemo(() => ({ ...(item?.prices ?? {}), ...(pricesData?.current_prices ?? {}) }), [item?.prices, pricesData]);
   const steamPrice = prices.steam || 0;
@@ -47,7 +54,7 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
   if (!item) return null;
 
   const ws = getWearShort(item.wear);
-  const rc = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
+  const rc = (item.rarity && RARITY_COLORS[item.rarity]) || (item.rarity_color ? `#${item.rarity_color}` : '#64748B');
   const fv = item.float_value != null ? Number(item.float_value) : null;
   const pi = item.paint_index != null ? Number(item.paint_index) : null;
   const ps = item.paint_seed != null ? Number(item.paint_seed) : null;
@@ -79,7 +86,7 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-0 bottom-0 w-full max-w-lg overflow-y-auto"
+          className="absolute right-0 top-0 bottom-0 w-full sm:max-w-lg overflow-y-auto"
           style={{ background: '#14161e' }}
         >
           {/* Close */}
@@ -88,8 +95,8 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
           </button>
 
           {/* Image */}
-          <div className="relative flex items-center justify-center" style={{ height: 280, background: `radial-gradient(ellipse at center, ${rc}15, transparent 70%)` }}>
-            <img src={getItemIconUrl(item.icon_url)} alt={item.market_hash_name} className="max-h-[200px] max-w-[80%] object-contain drop-shadow-2xl" />
+          <div className="relative flex items-center justify-center h-[200px] sm:h-[280px]" style={{ background: `radial-gradient(ellipse at center, ${rc}15, transparent 70%)` }}>
+            <img src={getItemIconUrl(item.icon_url)} alt={item.market_hash_name} className="max-h-[140px] sm:max-h-[200px] max-w-[80%] object-contain drop-shadow-2xl" />
             {/* Rarity bar */}
             <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{ background: rc }} />
           </div>
@@ -226,12 +233,21 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
                 )}
                 <button
                   onClick={() => {
-                    addWatch.mutate({ marketHashName: item.market_hash_name, targetPrice: steamPrice * 0.9, iconUrl: item.icon_url });
-                    toast.success('Added to watchlist');
+                    if (watchlistEntry) {
+                      removeWatch.mutate(watchlistEntry.id);
+                      toast.success('Removed from watchlist');
+                    } else {
+                      addWatch.mutate({ marketHashName: item.market_hash_name, targetPrice: steamPrice * 0.9, iconUrl: item.icon_url });
+                      toast.success('Added to watchlist');
+                    }
                   }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium text-white/60 hover:text-white hover:bg-white/5 transition-colors border border-white/10"
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                    watchlistEntry
+                      ? 'text-primary border-primary/30 bg-primary/10 hover:bg-primary/20'
+                      : 'text-white/60 hover:text-white hover:bg-white/5 border-white/10'
+                  }`}
                 >
-                  <Eye size={12} /> Watchlist
+                  <Eye size={12} /> {watchlistEntry ? 'Watching' : 'Watchlist'}
                 </button>
               </div>
 

@@ -3,7 +3,7 @@
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { useMarketListings, useSellVolume } from '@/lib/hooks';
-import { formatPrice, getItemIconUrl, cn } from '@/lib/utils';
+import { useFormatPrice, getItemIconUrl, cn } from '@/lib/utils';
 import type { MarketListing } from '@/lib/types';
 import { Store, Package, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
@@ -17,6 +17,7 @@ const STATE_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function MarketPage() {
+  const formatPrice = useFormatPrice();
   const { data, isLoading, refetch, isFetching } = useMarketListings();
   const { data: volume } = useSellVolume();
   const [stateFilter, setStateFilter] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export default function MarketPage() {
       <div className="p-4 lg:p-6 space-y-4">
         <EcosystemTip
           id="market-desktop"
-          icon="\ud83d\udda5\ufe0f"
+          icon="🖥️"
           message="List items faster with Quick Sell in the desktop app. Automatic re-pricing and bulk operations."
           ctaText="Get Desktop App"
           ctaUrl="https://skinkeeper.store"
@@ -78,8 +79,8 @@ export default function MarketPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-3">
-          <div className="flex glass rounded-xl overflow-hidden">
+        <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
+          <div className="flex glass rounded-xl overflow-hidden shrink-0">
             <button
               onClick={() => setStateFilter(null)}
               className={cn('px-3 py-2 text-sm transition-colors', !stateFilter ? 'bg-primary/10 text-primary' : 'text-muted hover:text-foreground')}
