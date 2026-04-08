@@ -379,10 +379,11 @@ function injectBanner(count: number, unique: number, priced: number, total: numb
 
 // ─── Control Bar (sort, select-value, sell, trade-up, export) ────────
 
+let selectMode = false;
+
 function injectControlBar() {
   if (document.getElementById('sk-control-bar')) return;
 
-  // Find Steam's inventory navigation/controls area
   const anchor = document.querySelector('.filter_ctn.inventory_filters')
     || document.querySelector('#inventory_applogo')
     || document.querySelector('.inventory_links');
@@ -411,11 +412,44 @@ function injectControlBar() {
   sortSelect.addEventListener('change', () => sortInventory(sortSelect.value));
   bar.appendChild(sortSelect);
 
-  // Selected value counter
+  // ── Selection buttons (SIH-style) ──
+  const selectItemsBtn = el('button', ['sk-banner-cta', 'sk-cta-secondary']);
+  selectItemsBtn.id = 'sk-select-items-btn';
+  selectItemsBtn.textContent = 'SELECT ITEMS';
+  selectItemsBtn.style.cssText += 'padding:5px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px';
+  selectItemsBtn.addEventListener('click', () => enterSelectMode());
+  bar.appendChild(selectItemsBtn);
+
+  const selectAllBtn = el('button', ['sk-banner-cta', 'sk-cta-secondary']);
+  selectAllBtn.id = 'sk-select-all-btn';
+  selectAllBtn.textContent = 'SELECT ALL';
+  selectAllBtn.style.cssText += 'padding:5px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px';
+  selectAllBtn.addEventListener('click', () => selectAllItems());
+  bar.appendChild(selectAllBtn);
+
+  // Cancel button (hidden initially)
+  const cancelBtn = el('button', ['sk-banner-cta', 'sk-cta-cancel']);
+  cancelBtn.id = 'sk-cancel-select-btn';
+  cancelBtn.textContent = 'CANCEL';
+  cancelBtn.style.cssText += 'padding:5px 12px;font-size:11px;display:none;text-transform:uppercase;letter-spacing:0.5px';
+  cancelBtn.addEventListener('click', () => exitSelectMode());
+  bar.appendChild(cancelBtn);
+
+  // Select locked checkbox (hidden initially)
+  const lockLabel = el('label');
+  lockLabel.id = 'sk-select-locked-label';
+  lockLabel.style.cssText = 'display:none;font-size:11px;color:var(--sk-text-dim);cursor:pointer;align-items:center;gap:4px';
+  const lockCb = document.createElement('input');
+  lockCb.type = 'checkbox';
+  lockCb.id = 'sk-select-locked';
+  lockCb.style.cssText = 'accent-color:var(--sk-primary)';
+  lockLabel.append(lockCb, document.createTextNode('Select locked'));
+  bar.appendChild(lockLabel);
+
+  // Selected counter (hidden initially)
   const selectedVal = el('span');
   selectedVal.id = 'sk-selected-value';
-  selectedVal.style.cssText = 'font-size:12px;color:var(--sk-text-dim);margin-left:4px;white-space:nowrap';
-  selectedVal.textContent = `Selected: ${currencySign}0`;
+  selectedVal.style.cssText = 'font-size:12px;color:var(--sk-primary-light);font-weight:700;display:none;white-space:nowrap';
   bar.appendChild(selectedVal);
 
   // Spacer
@@ -423,12 +457,13 @@ function injectControlBar() {
   spacer.style.flex = '1';
   bar.appendChild(spacer);
 
-  // Sell button
-  const sellBtn = el('button', ['sk-banner-cta', 'sk-cta-sell', 'sk-sell-toggle']);
-  sellBtn.textContent = 'Sell';
-  sellBtn.style.cssText += 'padding:5px 12px;font-size:11px';
-  sellBtn.addEventListener('click', () => toggleSellMode());
-  bar.appendChild(sellBtn);
+  // GO TO SALE button (hidden initially, appears after selection)
+  const goSaleBtn = el('button', ['sk-banner-cta', 'sk-cta-sell']);
+  goSaleBtn.id = 'sk-go-sale-btn';
+  goSaleBtn.textContent = 'GO TO SALE';
+  goSaleBtn.style.cssText += 'padding:6px 16px;font-size:12px;font-weight:700;display:none;text-transform:uppercase;letter-spacing:0.5px;background:linear-gradient(135deg,#059669,#10b981);border:none;color:#fff';
+  goSaleBtn.addEventListener('click', () => openSellQueue());
+  bar.appendChild(goSaleBtn);
 
   // Trade-Up button
   const tuBtn = el('button', ['sk-banner-cta', 'sk-cta-amber', 'sk-tu-toggle']);
@@ -476,9 +511,91 @@ function injectControlBar() {
   if (anchor) {
     anchor.parentElement?.insertBefore(bar, anchor.nextSibling);
   } else {
-    // Fallback: insert before the first inventory page
     const invPage = document.querySelector('.inventory_page');
     invPage?.parentElement?.insertBefore(bar, invPage);
+  }
+}
+
+// ─── Select Mode (SIH-style) ────────────────────────────────────────
+
+function enterSelectMode() {
+  selectMode = true;
+  selectedAssets.clear();
+  updateSelectModeUI();
+  // Show checkboxes on tradable items
+  document.querySelectorAll('.item.app730.context2').forEach(elem => {
+    const htmlEl = elem as HTMLElement;
+    const assetId = htmlEl.id?.split('_')[2];
+    if (!assetId) return;
+    const item = assetMap.get(assetId);
+    if (!item || !item.marketable) return;
+    const includeLocked = (document.getElementById('sk-select-locked') as HTMLInputElement)?.checked;
+    if (!item.tradable && !includeLocked) return;
+    htmlEl.style.cursor = 'pointer';
+  });
+}
+
+function exitSelectMode() {
+  selectMode = false;
+  selectedAssets.clear();
+  document.querySelectorAll('.sk-item-sell-selected').forEach(e => e.classList.remove('sk-item-sell-selected'));
+  updateSelectModeUI();
+  // Close sell queue if open
+  document.getElementById('sk-sell-queue')?.remove();
+}
+
+function selectAllItems() {
+  selectMode = true;
+  selectedAssets.clear();
+  const includeLocked = (document.getElementById('sk-select-locked') as HTMLInputElement)?.checked;
+  document.querySelectorAll('.item.app730.context2').forEach(elem => {
+    const htmlEl = elem as HTMLElement;
+    const assetId = htmlEl.id?.split('_')[2];
+    if (!assetId) return;
+    const item = assetMap.get(assetId);
+    if (!item || !item.marketable) return;
+    if (!item.tradable && !includeLocked) return;
+    selectedAssets.add(assetId);
+    htmlEl.classList.add('sk-item-sell-selected');
+  });
+  updateSelectModeUI();
+}
+
+function updateSelectModeUI() {
+  const selectBtn = document.getElementById('sk-select-items-btn');
+  const selectAllbtn = document.getElementById('sk-select-all-btn');
+  const cancelBtn = document.getElementById('sk-cancel-select-btn');
+  const lockLabel = document.getElementById('sk-select-locked-label');
+  const counter = document.getElementById('sk-selected-value');
+  const goSaleBtn = document.getElementById('sk-go-sale-btn');
+
+  if (selectMode) {
+    if (selectBtn) selectBtn.style.display = 'none';
+    if (selectAllbtn) selectAllbtn.style.display = '';
+    if (cancelBtn) cancelBtn.style.display = '';
+    if (lockLabel) lockLabel.style.display = 'flex';
+    if (counter) counter.style.display = '';
+  } else {
+    if (selectBtn) selectBtn.style.display = '';
+    if (selectAllbtn) selectAllbtn.style.display = '';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (lockLabel) lockLabel.style.display = 'none';
+    if (counter) counter.style.display = 'none';
+    if (goSaleBtn) goSaleBtn.style.display = 'none';
+    return;
+  }
+
+  // Update counter
+  let totalValue = 0;
+  for (const id of selectedAssets) {
+    const item = assetMap.get(id);
+    if (item) totalValue += getItemPrice(item.market_hash_name, exchangeRate);
+  }
+  if (counter) {
+    counter.textContent = `Selected: ${selectedAssets.size} pc \u00b7 ${fmtPrice(totalValue)}`;
+  }
+  if (goSaleBtn) {
+    goSaleBtn.style.display = selectedAssets.size > 0 ? '' : 'none';
   }
 }
 
@@ -846,7 +963,7 @@ async function loadActiveOfferItems() {
   }
 }
 
-// ─── Selected Items Value (ported from CSGO Trader) ──────────────────
+// ─── Item Selection (SIH-style click to select) ─────────────────────
 
 let selectedAssetIds = new Set<string>();
 
@@ -854,33 +971,54 @@ function setupItemSelection() {
   document.addEventListener('click', (e) => {
     const target = (e.target as HTMLElement).closest?.('.item.app730.context2') as HTMLElement | null;
     if (!target) return;
-    // Don't interfere with sell mode or trade-up mode
-    if (sellMode || document.querySelector('.sk-tu-panel')) return;
+    if (document.querySelector('.sk-tu-panel')) return; // don't interfere with trade-up
 
     const assetId = target.id?.split('_')[2];
     if (!assetId) return;
     const item = assetMap.get(assetId);
     if (!item) return;
 
-    if (e.ctrlKey || e.metaKey) {
-      // Ctrl+click: select/deselect ALL items with same name
-      const allOfType = document.querySelectorAll('.item.app730.context2');
-      const isCurrentlySelected = selectedAssetIds.has(assetId);
-      allOfType.forEach((elem) => {
-        const id = elem.id?.split('_')[2];
-        if (!id) return;
-        const it = assetMap.get(id);
-        if (it?.market_hash_name !== item.market_hash_name) return;
-        if (isCurrentlySelected) {
-          selectedAssetIds.delete(id);
-          (elem as HTMLElement).classList.remove('sk-item-selected');
+    // In select mode: click toggles selection for selling
+    if (selectMode) {
+      if (!item.marketable) return;
+      const includeLocked = (document.getElementById('sk-select-locked') as HTMLInputElement)?.checked;
+      if (!item.tradable && !includeLocked) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+click: select/deselect ALL items with same name
+        const isSelected = selectedAssets.has(assetId);
+        document.querySelectorAll('.item.app730.context2').forEach((elem) => {
+          const id = elem.id?.split('_')[2];
+          if (!id) return;
+          const it = assetMap.get(id);
+          if (it?.market_hash_name !== item.market_hash_name) return;
+          if (!it.marketable || (!it.tradable && !includeLocked)) return;
+          if (isSelected) {
+            selectedAssets.delete(id);
+            (elem as HTMLElement).classList.remove('sk-item-sell-selected');
+          } else {
+            selectedAssets.add(id);
+            (elem as HTMLElement).classList.add('sk-item-sell-selected');
+          }
+        });
+      } else {
+        if (selectedAssets.has(assetId)) {
+          selectedAssets.delete(assetId);
+          target.classList.remove('sk-item-sell-selected');
         } else {
-          selectedAssetIds.add(id);
-          (elem as HTMLElement).classList.add('sk-item-selected');
+          selectedAssets.add(assetId);
+          target.classList.add('sk-item-sell-selected');
         }
-      });
-    } else {
-      // Normal click: toggle single item
+      }
+      updateSelectModeUI();
+      // Also update sell queue if open
+      const queue = document.getElementById('sk-sell-queue');
+      if (queue) renderSellQueue();
+      return;
+    }
+
+    // Normal mode: Ctrl+click for value calculation
+    if (e.ctrlKey || e.metaKey) {
       if (selectedAssetIds.has(assetId)) {
         selectedAssetIds.delete(assetId);
         target.classList.remove('sk-item-selected');
@@ -889,27 +1027,7 @@ function setupItemSelection() {
         target.classList.add('sk-item-selected');
       }
     }
-
-    updateSelectedValue();
   });
-}
-
-function updateSelectedValue() {
-  let totalValue = 0;
-  for (const id of selectedAssetIds) {
-    const item = assetMap.get(id);
-    if (item) totalValue += getItemPrice(item.market_hash_name, exchangeRate);
-  }
-  const counter = document.getElementById('sk-selected-value');
-  if (counter) {
-    if (selectedAssetIds.size === 0) {
-      counter.textContent = `Selected Items Value: ${currencySign}0`;
-      counter.style.color = 'var(--sk-text-dim)';
-    } else {
-      counter.textContent = `Selected Items Value: ${fmtPrice(totalValue)} (${selectedAssetIds.size})`;
-      counter.style.color = 'var(--sk-primary-light)';
-    }
-  }
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────
@@ -1128,127 +1246,168 @@ function showSellNotification(message: string) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Bulk Sell System
+// Bulk Sell System (SIH-style queue sidebar + sell modal)
 // ═══════════════════════════════════════════════════════════════════════
 
-let sellMode = false;
 let selectedAssets = new Set<string>(); // assetIds selected for selling
 let sellInProgress = false;
 
-function toggleSellMode() {
-  sellMode = !sellMode;
-  selectedAssets.clear();
-
-  const btn = document.querySelector('.sk-sell-toggle');
-  if (btn) {
-    btn.textContent = sellMode ? 'Cancel Sell' : 'Sell';
-    btn.classList.toggle('sk-cta-sell', !sellMode);
-    btn.classList.toggle('sk-cta-cancel', sellMode);
-  }
-
-  // Toggle checkboxes on items
-  document.querySelectorAll('.item.app730.context2').forEach(elem => {
-    const htmlEl = elem as HTMLElement;
-    const assetId = htmlEl.id?.split('_')[2];
-    if (!assetId) return;
-    const item = assetMap.get(assetId);
-    if (!item || !item.tradable || !item.marketable) return;
-
-    let cb = htmlEl.querySelector('.sk-sell-cb') as HTMLElement | null;
-    if (sellMode) {
-      if (!cb) {
-        cb = el('div', 'sk-sell-cb');
-        cb.addEventListener('click', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          if (selectedAssets.has(assetId)) {
-            selectedAssets.delete(assetId);
-            cb!.classList.remove('sk-checked');
-            htmlEl.classList.remove('sk-item-sell-selected');
-          } else {
-            selectedAssets.add(assetId);
-            cb!.classList.add('sk-checked');
-            htmlEl.classList.add('sk-item-sell-selected');
-          }
-          updateSellBar();
-        });
-        htmlEl.appendChild(cb);
-      }
-      cb.style.display = '';
-    } else {
-      if (cb) cb.style.display = 'none';
-      cb?.classList.remove('sk-checked');
-      htmlEl.classList.remove('sk-item-sell-selected');
-    }
-  });
-
-  if (sellMode) {
-    showSellBar();
-  } else {
-    hideSellBar();
-  }
+function openSellQueue() {
+  if (document.getElementById('sk-sell-queue')) return;
+  renderSellQueue();
 }
 
-function showSellBar() {
-  if (document.getElementById('sk-sell-bar')) return;
+function renderSellQueue() {
+  let panel = document.getElementById('sk-sell-queue');
+  if (!panel) {
+    panel = el('div');
+    panel.id = 'sk-sell-queue';
+    panel.style.cssText = `
+      position:fixed;top:0;right:0;bottom:0;width:300px;z-index:10000;
+      background:rgba(13,17,23,0.97);backdrop-filter:blur(16px);
+      border-left:1px solid var(--sk-border);
+      font-family:var(--sk-font);color:var(--sk-text);
+      display:flex;flex-direction:column;
+      box-shadow:-4px 0 24px rgba(0,0,0,0.5);
+      overflow:hidden;
+    `;
+    document.body.appendChild(panel);
+  }
 
-  const bar = el('div');
-  bar.id = 'sk-sell-bar';
-  bar.className = 'sk-sell-bar';
-  bar.innerHTML = `
-    <div class="sk-sell-bar-info">
-      <span class="sk-sell-count">0 items</span>
-      <span class="sk-sell-total"></span>
+  // Calculate totals
+  let totalValue = 0;
+  let totalAfterFees = 0;
+  const queueItems: Array<{ assetId: string; name: string; price: number; icon_url?: string }> = [];
+  for (const assetId of selectedAssets) {
+    const item = assetMap.get(assetId);
+    if (!item) continue;
+    const price = getItemPrice(item.market_hash_name, exchangeRate);
+    totalValue += price;
+    const sellerGets = calcSellerReceives(Math.round(price / exchangeRate * 100));
+    totalAfterFees += (sellerGets / 100) * exchangeRate;
+    queueItems.push({ assetId, name: item.market_hash_name, price, icon_url: item.icon_url });
+  }
+
+  panel.innerHTML = `
+    <div style="padding:14px 16px;border-bottom:1px solid var(--sk-border-subtle);flex-shrink:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-weight:700;font-size:14px">ITEMS</span>
+        <span style="background:var(--sk-primary);color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700">${selectedAssets.size}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span style="color:var(--sk-text-dim)">Total</span>
+        <span style="font-weight:700">${fmtPrice(totalValue)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:var(--sk-text-dim)">Without commission</span>
+        <span style="font-weight:700;color:var(--sk-green)">${fmtPrice(totalAfterFees)}</span>
+      </div>
     </div>
-    <div class="sk-sell-bar-controls">
-      <select class="sk-sell-strategy">
-        <option value="steam_lowest">Steam lowest - 1¢</option>
+
+    <div style="padding:8px 12px;border-bottom:1px solid var(--sk-border-subtle);display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+      <button class="sk-queue-filter" data-filter="lower" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.1);color:#f87171;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--sk-font)">Remove lower</button>
+      <button class="sk-queue-filter" data-filter="higher" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.1);color:#f87171;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--sk-font)">Remove higher</button>
+      <button class="sk-queue-filter" data-filter="in-trade" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.1);color:#f87171;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--sk-font)">Remove in-trade</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+        <span style="font-size:10px;color:var(--sk-text-dim)">Sort items</span>
+        <select class="sk-sort-select" id="sk-queue-sort" style="float:none;font-size:10px">
+          <option value="price-desc">By Price ↓</option>
+          <option value="price-asc">By Price ↑</option>
+          <option value="name-asc">By Name</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="sk-queue-items" style="flex:1;overflow-y:auto;padding:8px 0"></div>
+
+    <div style="padding:12px 16px;border-top:1px solid var(--sk-border-subtle);flex-shrink:0">
+      <select id="sk-sell-strategy" style="width:100%;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--sk-text);font-size:12px;font-family:var(--sk-font);margin-bottom:8px">
+        <option value="auto">Auto-selling (lowest - 1¢)</option>
         <option value="buff_match">Match Buff price</option>
         <option value="buff_plus5">Buff + 5%</option>
       </select>
-      <button class="sk-sell-btn" disabled>List on Market</button>
+      <button id="sk-start-sell" style="width:100%;padding:10px;border-radius:8px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:var(--sk-font);transition:filter 0.15s" ${selectedAssets.size === 0 ? 'disabled' : ''}>
+        List ${selectedAssets.size} items on Market
+      </button>
     </div>
   `;
-  document.body.appendChild(bar);
 
-  bar.querySelector('.sk-sell-btn')?.addEventListener('click', startBulkSell);
-}
-
-function hideSellBar() {
-  document.getElementById('sk-sell-bar')?.remove();
-}
-
-function updateSellBar() {
-  const countEl = document.querySelector('.sk-sell-count');
-  const totalEl = document.querySelector('.sk-sell-total');
-  const btnEl = document.querySelector('.sk-sell-btn') as HTMLButtonElement | null;
-
-  if (!countEl) return;
-
-  let total = 0;
-  for (const assetId of selectedAssets) {
-    const item = assetMap.get(assetId);
-    if (item) total += getItemPrice(item.market_hash_name, exchangeRate);
+  // Render queue items
+  const itemsContainer = panel.querySelector('#sk-queue-items')!;
+  for (const qi of queueItems) {
+    const row = el('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 12px;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03)';
+    const iconSrc = qi.icon_url
+      ? `https://community.fastly.steamstatic.com/economy/image/${qi.icon_url}/64x64`
+      : '';
+    const shortName = qi.name.length > 28 ? qi.name.substring(0, 28) + '\u2026' : qi.name;
+    row.innerHTML = `
+      ${iconSrc ? `<img src="${iconSrc}" style="width:32px;height:32px;border-radius:4px;flex-shrink:0" />` : ''}
+      <div style="flex:1;min-width:0">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${qi.name}">${shortName}</div>
+        <div style="color:var(--sk-text-dim);font-size:10px">${qi.price > 0 ? fmtPrice(qi.price) : '\u2014'}</div>
+      </div>
+      <button class="sk-queue-remove" data-asset="${qi.assetId}" style="background:none;border:none;color:var(--sk-red);cursor:pointer;font-size:14px;padding:4px" title="Remove">\u00d7</button>
+    `;
+    itemsContainer.appendChild(row);
   }
 
-  countEl.textContent = `${selectedAssets.size} item${selectedAssets.size !== 1 ? 's' : ''}`;
-  if (totalEl) totalEl.textContent = total > 0 ? `~ ${fmtPrice(total)}` : '';
-  if (btnEl) btnEl.disabled = selectedAssets.size === 0 || sellInProgress;
+  // Event: remove single item
+  panel.querySelectorAll('.sk-queue-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = (btn as HTMLElement).dataset.asset!;
+      selectedAssets.delete(id);
+      document.getElementById(`730_2_${id}`)?.classList.remove('sk-item-sell-selected');
+      updateSelectModeUI();
+      renderSellQueue();
+    });
+  });
+
+  // Event: filter buttons
+  panel.querySelectorAll('.sk-queue-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const filter = (btn as HTMLElement).dataset.filter;
+      if (!filter) return;
+      const prices = [...selectedAssets].map(id => {
+        const item = assetMap.get(id);
+        return { id, price: item ? getItemPrice(item.market_hash_name, exchangeRate) : 0 };
+      });
+      if (prices.length < 2) return;
+      const median = prices.sort((a, b) => a.price - b.price)[Math.floor(prices.length / 2)].price;
+
+      const toRemove: string[] = [];
+      for (const { id, price } of prices) {
+        const item = assetMap.get(id);
+        if (filter === 'lower' && price < median) toRemove.push(id);
+        if (filter === 'higher' && price > median) toRemove.push(id);
+        if (filter === 'in-trade' && item && itemsInOffers.has(id)) toRemove.push(id);
+      }
+      for (const id of toRemove) {
+        selectedAssets.delete(id);
+        document.getElementById(`730_2_${id}`)?.classList.remove('sk-item-sell-selected');
+      }
+      updateSelectModeUI();
+      renderSellQueue();
+    });
+  });
+
+  // Event: start selling
+  panel.querySelector('#sk-start-sell')?.addEventListener('click', () => startBulkSell());
 }
 
 async function startBulkSell() {
   if (selectedAssets.size === 0 || sellInProgress) return;
 
-  const strategy = (document.querySelector('.sk-sell-strategy') as HTMLSelectElement)?.value || 'steam_lowest';
+  const strategy = (document.getElementById('sk-sell-strategy') as HTMLSelectElement)?.value || 'auto';
+  const walletCurr = getWalletCurrency();
 
   // Build sell queue with prices
   const queue: Array<{ assetId: string; name: string; priceCents: number }> = [];
-
   for (const assetId of selectedAssets) {
     const item = assetMap.get(assetId);
     if (!item) continue;
 
-    const steamPriceUsd = getItemPrice(item.market_hash_name, 1); // USD
+    const steamPriceUsd = getItemPrice(item.market_hash_name, 1);
     const enriched = enrichedMap.get(assetId);
     const buffPriceUsd = enriched?.prices?.buff || steamPriceUsd;
 
@@ -1260,78 +1419,55 @@ async function startBulkSell() {
       case 'buff_plus5':
         sellerReceivesCents = Math.round(buffPriceUsd * 100 * 1.05);
         break;
-      case 'steam_lowest':
-      default:
-        // Seller receives = steam price (what buyer pays) minus fees
+      default: // auto
         sellerReceivesCents = calcSellerReceives(Math.round(steamPriceUsd * 100));
-        if (sellerReceivesCents > 1) sellerReceivesCents -= 1; // undercut by 1¢
+        if (sellerReceivesCents > 1) sellerReceivesCents -= 1;
         break;
     }
-
-    if (sellerReceivesCents < 3) sellerReceivesCents = 3; // Steam minimum
-
+    if (sellerReceivesCents < 3) sellerReceivesCents = 3;
     queue.push({ assetId, name: item.market_hash_name, priceCents: sellerReceivesCents });
   }
-
   if (queue.length === 0) return;
 
-  // Confirmation
   const totalBuyer = queue.reduce((s, q) => s + calcBuyerPrice(q.priceCents), 0);
   const totalSeller = queue.reduce((s, q) => s + q.priceCents, 0);
-
-  const confirmed = confirm(
+  if (!confirm(
     `List ${queue.length} items on Steam Market?\n\n` +
     `Buyers pay: ~$${(totalBuyer / 100).toFixed(2)}\n` +
     `You receive: ~$${(totalSeller / 100).toFixed(2)}\n` +
-    `Fees: ~$${((totalBuyer - totalSeller) / 100).toFixed(2)}\n\n` +
-    `This will take ~${Math.ceil(queue.length * 1.5 / 60)} minutes.`
-  );
-  if (!confirmed) return;
+    `Fees: ~$${((totalBuyer - totalSeller) / 100).toFixed(2)}`
+  )) return;
 
-  // Execute queue
   sellInProgress = true;
-  const btnEl = document.querySelector('.sk-sell-btn') as HTMLButtonElement | null;
-  const countEl = document.querySelector('.sk-sell-count');
-  let success = 0;
-  let failed = 0;
+  const startBtn = document.getElementById('sk-start-sell') as HTMLButtonElement;
+  let success = 0, failed = 0;
 
   for (let i = 0; i < queue.length; i++) {
     const q = queue[i];
-    if (countEl) countEl.textContent = `Selling ${i + 1}/${queue.length}...`;
-    if (btnEl) btnEl.textContent = `${i + 1}/${queue.length}`;
+    if (startBtn) startBtn.textContent = `Selling ${i + 1}/${queue.length}...`;
 
     const result = await sellItemOnMarket(q.assetId, q.priceCents);
     if (result.success) {
       success++;
-      // Mark item as sold visually
       const itemEl = document.getElementById(`730_2_${q.assetId}`);
-      if (itemEl) {
-        itemEl.style.opacity = '0.3';
-        itemEl.classList.remove('sk-item-sell-selected');
-        const cb = itemEl.querySelector('.sk-sell-cb');
-        if (cb) (cb as HTMLElement).style.display = 'none';
-      }
+      if (itemEl) { itemEl.style.opacity = '0.3'; itemEl.classList.remove('sk-item-sell-selected'); }
       selectedAssets.delete(q.assetId);
     } else {
       failed++;
-      console.warn(`[SkinKeeper] Failed to sell ${q.name}: ${result.message}`);
     }
-
-    // Rate limit: 1.5s between requests
-    if (i < queue.length - 1) {
-      await new Promise(r => setTimeout(r, 1500));
-    }
+    if (i < queue.length - 1) await new Promise(r => setTimeout(r, 1500));
   }
 
   sellInProgress = false;
-  if (countEl) countEl.textContent = `Done: ${success} listed, ${failed} failed`;
-  if (btnEl) { btnEl.textContent = 'List on Market'; btnEl.disabled = true; }
+  if (startBtn) startBtn.textContent = `Done: ${success} listed, ${failed} failed`;
+  updateSelectModeUI();
 
-  // Exit sell mode after 3s
-  setTimeout(() => {
-    if (sellMode) toggleSellMode();
-  }, 3000);
+  // Re-render queue to reflect removals
+  setTimeout(() => renderSellQueue(), 2000);
 }
+
+// Keep old function name for compatibility with detail panel sell buttons
+function toggleSellMode() { enterSelectMode(); }
 
 // ═══════════════════════════════════════════════════════════════════════
 // Trade-Up Calculator
@@ -1341,7 +1477,7 @@ let tradeUpMode = false;
 let tuSelected = new Set<string>(); // assetIds
 
 function toggleTradeUpMode() {
-  if (sellMode) toggleSellMode(); // exit sell mode first
+  if (selectMode) exitSelectMode(); // exit select mode first
   tradeUpMode = !tradeUpMode;
   tuSelected.clear();
 
