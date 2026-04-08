@@ -77,25 +77,9 @@ router.post(
       let walletCurrencyId = accRows[0]?.wallet_currency
         ?? (await pool.query("SELECT wallet_currency FROM users WHERE id = $1", [req.userId])).rows[0]?.wallet_currency;
 
-      // Auto-detect wallet currency if not set (critical for correct price conversion)
-      if (!walletCurrencyId && session) {
-        try {
-          const { detectWalletCurrency } = await import("../services/currency.js");
-          const detected = await detectWalletCurrency(session.steamLoginSecure);
-          if (detected) {
-            walletCurrencyId = detected;
-            await pool.query(
-              "UPDATE steam_accounts SET wallet_currency = $1 WHERE id = $2",
-              [detected, accountId]
-            );
-            console.log(`[Transactions] Auto-detected wallet currency: ${detected} for account ${accountId}`);
-          }
-        } catch (err: any) {
-          console.warn(`[Transactions] Currency detection failed:`, err.message);
-        }
-      }
-
-      walletCurrencyId = walletCurrencyId || 1; // last resort fallback to USD
+      // No auto-detect — server IP gives wrong country.
+      // User sets currency in Settings. Fallback to USD.
+      walletCurrencyId = walletCurrencyId || 1;
       console.log(`[Transactions] Wallet currency ID: ${walletCurrencyId}, accountId: ${steamAccountId}`);
 
       // For incremental sync: get latest known tx date to estimate how far back we need to go

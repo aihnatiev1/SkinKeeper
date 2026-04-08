@@ -77,11 +77,20 @@ export default function InventoryPage() {
     });
   };
 
+  const MAX_SELL_ITEMS = 100;
+
   const toggleSelect = (assetId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(assetId)) next.delete(assetId);
-      else next.add(assetId);
+      if (next.has(assetId)) {
+        next.delete(assetId);
+      } else {
+        if (next.size >= MAX_SELL_ITEMS) {
+          toast.error(`Maximum ${MAX_SELL_ITEMS} items per sell operation`);
+          return prev;
+        }
+        next.add(assetId);
+      }
       return next;
     });
   };
@@ -101,8 +110,13 @@ export default function InventoryPage() {
       const next = new Set(prev);
       // Remove all from this group first
       for (const item of pickerGroup.items) next.delete(item.asset_id);
-      // Add selected ones
-      for (const id of assetIds) next.add(id);
+      // Check limit
+      const remaining = MAX_SELL_ITEMS - next.size;
+      const toAdd = assetIds.slice(0, remaining);
+      if (toAdd.length < assetIds.length) {
+        toast.error(`Maximum ${MAX_SELL_ITEMS} items per sell operation. Added ${toAdd.length} of ${assetIds.length}.`);
+      }
+      for (const id of toAdd) next.add(id);
       return next;
     });
     setPickerGroup(null);

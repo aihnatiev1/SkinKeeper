@@ -79,6 +79,10 @@ export interface ExtSettings {
   quickSell: boolean;
   collectPrices: boolean;
   conflictDetection: boolean;
+  apiKeyGuard: boolean;
+  autoSkipAge: boolean;
+  autoAcceptSSA: boolean;
+  marketListingFloats: boolean;
 }
 
 export const DEFAULT_SETTINGS: ExtSettings = {
@@ -99,4 +103,8 @@ export const DEFAULT_SETTINGS: ExtSettings = {
   quickSell: true,
   collectPrices: true,
   conflictDetection: true,
+  apiKeyGuard: true,
+  autoSkipAge: true,
+  autoAcceptSSA: true,
+  marketListingFloats: true,
 };

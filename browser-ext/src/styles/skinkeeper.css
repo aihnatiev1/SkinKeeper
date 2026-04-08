@@ -1103,6 +1103,37 @@
   margin-bottom: 4px;
 }
 
+/* ─── Market Listing Float Values ─────────────────────────────────── */
+.sk-listing-float {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sk-listing-float .sk-float-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sk-listing-float .sk-seed {
+  color: var(--sk-primary-light);
+  font-size: 10px;
+}
+
+.sk-listing-loading {
+  font-size: 10px;
+  color: var(--sk-text-dim);
+  margin-top: 2px;
+  opacity: 0.5;
+}
+
 /* ─── Loading shimmer ──────────────────────────────────────────────── */
 @keyframes sk-shimmer {
   0% { background-position: -200px 0; }

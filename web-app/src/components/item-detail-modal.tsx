@@ -3,9 +3,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ExternalLink, Copy, Check, TrendingUp, Eye, DollarSign } from 'lucide-react';
 import type { InventoryItem } from '@/lib/types';
-import { formatPrice, getItemIconUrl, getWearShort } from '@/lib/utils';
+import { useFormatPrice, getItemIconUrl, getWearShort } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
-import { usePriceHistory, useItemPrices, useAddToWatchlist } from '@/lib/hooks';
+import { usePriceHistory, useItemPrices, useAddToWatchlist, useWatchlist, useRemoveFromWatchlist } from '@/lib/hooks';
 import { useState, useEffect, useMemo } from 'react';
 import {
   ResponsiveContainer,
@@ -33,11 +33,18 @@ const PRICE_SOURCES: { key: string; label: string; color: string }[] = [
 ];
 
 export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps) {
+  const formatPrice = useFormatPrice();
   const [copied, setCopied] = useState(false);
   const [historyDays, setHistoryDays] = useState(30);
   const { data: historyData } = usePriceHistory(item?.market_hash_name ?? null, historyDays);
   const { data: pricesData } = useItemPrices(item?.market_hash_name ?? null);
   const addToWatchlist = useAddToWatchlist();
+  const removeFromWatchlist = useRemoveFromWatchlist();
+  const { data: watchlist } = useWatchlist();
+  const watchlistEntry = useMemo(
+    () => watchlist?.find((w) => w.market_hash_name === item?.market_hash_name),
+    [watchlist, item?.market_hash_name]
+  );
 
   useEffect(() => {
     if (!item) return;
@@ -57,18 +64,25 @@ export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps)
 
   const handleWatchlist = () => {
     if (!item) return;
-    const steamPrice = prices.steam || prices.skinport || 0;
-    addToWatchlist.mutate(
-      {
-        marketHashName: item.market_hash_name,
-        targetPrice: steamPrice * 0.9,
-        iconUrl: item.icon_url,
-      },
-      {
-        onSuccess: () => toast.success('Added to watchlist'),
-        onError: () => toast.error('Failed to add'),
-      }
-    );
+    if (watchlistEntry) {
+      removeFromWatchlist.mutate(watchlistEntry.id, {
+        onSuccess: () => toast.success('Removed from watchlist'),
+        onError: () => toast.error('Failed to remove'),
+      });
+    } else {
+      const steamPrice = prices.steam || prices.skinport || 0;
+      addToWatchlist.mutate(
+        {
+          marketHashName: item.market_hash_name,
+          targetPrice: steamPrice * 0.9,
+          iconUrl: item.icon_url,
+        },
+        {
+          onSuccess: () => toast.success('Added to watchlist'),
+          onError: () => toast.error('Failed to add'),
+        }
+      );
+    }
   };
 
   // Merge prices from item props and fresh API data
@@ -89,7 +103,7 @@ export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps)
   if (!item) return null;
 
   const bestPrice = Math.max(...Object.values(prices).filter((v) => typeof v === 'number' && v > 0), 0);
-  const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || '#64748B';
+  const rarityColor = (item.rarity && RARITY_COLORS[item.rarity]) || (item.rarity_color ? `#${item.rarity_color}` : '#64748B');
   const encodedName = encodeURIComponent(item.market_hash_name);
 
   return (
@@ -141,7 +155,15 @@ export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps)
                 <button onClick={copyName} className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors shrink-0" title="Copy name">
                   {copied ? <Check size={14} className="text-profit" /> : <Copy size={14} />}
                 </button>
-                <button onClick={handleWatchlist} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors shrink-0" title="Add to watchlist">
+                <button
+                  onClick={handleWatchlist}
+                  className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                    watchlistEntry
+                      ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                      : 'text-muted hover:text-primary hover:bg-primary/10'
+                  }`}
+                  title={watchlistEntry ? 'Remove from watchlist' : 'Add to watchlist'}
+                >
                   <Eye size={14} />
                 </button>
                 {onSell && item.tradable && (
@@ -210,7 +232,7 @@ export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps)
                 .sort((a, b) => a[1] - b[1])[0];
               const buffSteamRatio = buff > 0 && steam > 0 ? Math.round((buff / steam) * 100) : null;
               const arbitrage = cheapest && steam > 0
-                ? { source: cheapest[0], profit: steam * 0.87 - cheapest[1], pct: ((steam * 0.87 / cheapest[1] - 1) * 100) }
+                ? { source: cheapest[0], profit: steam * 0.85 - cheapest[1], pct: ((steam * 0.85 / cheapest[1] - 1) * 100) }
                 : null;
 
               if (!buffSteamRatio && !arbitrage) return null;

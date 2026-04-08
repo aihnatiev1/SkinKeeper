@@ -115,7 +115,7 @@ export function SellProgressModal({ operationId, onClose, onRetry }: SellProgres
                   {isActive ? 'Listing Items...' : 'Sell Complete'}
                 </h2>
                 <p className="text-xs text-muted">
-                  {operation ? `${(operation.completedItems ?? 0) + (operation.failedItems ?? 0)}/${operation.totalItems} processed` : 'Starting...'}
+                  {operation ? `${(operation.succeeded ?? 0) + (operation.failed ?? 0)}/${operation.totalItems} processed` : 'Starting...'}
                 </p>
               </div>
             </div>
@@ -132,7 +132,7 @@ export function SellProgressModal({ operationId, onClose, onRetry }: SellProgres
               <div
                 className="h-full bg-primary transition-all duration-500"
                 style={{
-                  width: `${Math.round(((operation.completedItems ?? 0) + (operation.failedItems ?? 0)) / operation.totalItems * 100)}%`,
+                  width: `${Math.round(((operation.succeeded ?? 0) + (operation.failed ?? 0)) / operation.totalItems * 100)}%`,
                 }}
               />
             </div>
@@ -149,8 +149,8 @@ export function SellProgressModal({ operationId, onClose, onRetry }: SellProgres
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium truncate">{item.marketHashName}</p>
-                    {item.error && (
-                      <p className="text-[10px] text-loss truncate">{item.error}</p>
+                    {item.errorMessage && (
+                      <p className="text-[10px] text-loss truncate">{item.errorMessage}</p>
                     )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">

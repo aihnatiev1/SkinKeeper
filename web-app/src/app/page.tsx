@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+
 import {
   LayoutDashboard,
   Backpack,
@@ -24,7 +24,7 @@ import {
 export default async function LandingPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get('sk_token');
-  if (token?.value) redirect('/portfolio');
+  const isLoggedIn = !!token?.value;
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -102,10 +102,7 @@ export default async function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 glass-strong">
         <div className="flex items-center justify-between px-6 lg:px-16 h-16 max-w-7xl mx-auto">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-shadow">
-              SK
-            </div>
-            <span className="text-lg font-bold">SkinKeeper</span>
+            <span className="text-xl font-bold text-gradient">SkinKeeper</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-muted">
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
@@ -113,10 +110,10 @@ export default async function LandingPage() {
             <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
           </div>
           <Link
-            href="/login"
+            href={isLoggedIn ? '/portfolio' : '/login'}
             className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
           >
-            Sign in with Steam
+            {isLoggedIn ? 'Go to Dashboard' : 'Sign in with Steam'}
           </Link>
         </div>
       </nav>
@@ -538,7 +535,7 @@ export default async function LandingPage() {
               Google Play
             </a>
             <a
-              href="https://chromewebstore.google.com/detail/skinkeeper/placeholder"
+              href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd"
               target="_blank"
               rel="noopener"
               className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-sm font-medium hover:bg-surface-light transition-colors"
@@ -563,10 +560,7 @@ export default async function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-xs">
-                  SK
-                </div>
-                <span className="font-bold">SkinKeeper</span>
+                <span className="text-lg font-bold text-gradient">SkinKeeper</span>
               </div>
               <p className="text-sm text-muted leading-relaxed">
                 The ultimate CS2 inventory manager. Track, trade, and profit from your skins.
@@ -589,7 +583,7 @@ export default async function LandingPage() {
               <ul className="space-y-2 text-sm text-muted">
                 <li><a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">iOS App</a></li>
                 <li><a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Android App</a></li>
-                <li><a href="https://chromewebstore.google.com/detail/skinkeeper/placeholder" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Chrome Extension</a></li>
+                <li><a href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Chrome Extension</a></li>
                 <li><a href="https://skinkeeper.store/download" className="hover:text-foreground transition-colors">Desktop App</a></li>
               </ul>
             </div>

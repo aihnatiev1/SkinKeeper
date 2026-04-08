@@ -3,7 +3,7 @@
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { useTrades, useSyncTrades } from '@/lib/hooks';
-import { formatPrice, formatRelativeTime, getItemIconUrl, cn } from '@/lib/utils';
+import { useFormatPrice, formatRelativeTime, getItemIconUrl, cn } from '@/lib/utils';
 import { RefreshCw, ArrowRight, ArrowDown, ArrowUp, Clock, CheckCircle2, XCircle, Ban, Plus, ArrowLeftRight } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -27,6 +27,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 function cents(v: number) { return v / 100; }
 
 export default function TradesPage() {
+  const formatPrice = useFormatPrice();
   const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
   const [offset, setOffset] = useState(0);
   const { data, isLoading } = useTrades(activeTab, 20, offset);

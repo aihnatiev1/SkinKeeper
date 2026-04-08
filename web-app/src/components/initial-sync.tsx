@@ -90,8 +90,8 @@ export function InitialSync() {
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-sm glass-strong rounded-2xl p-8 text-center"
       >
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-xl mx-auto mb-6">
-          SK
+        <div className="text-2xl font-bold text-gradient mx-auto mb-6">
+          SkinKeeper
         </div>
 
         <h2 className="text-lg font-bold mb-2">

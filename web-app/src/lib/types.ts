@@ -250,23 +250,31 @@ export interface SellVolume {
   remaining: number;
 }
 
-// POST /api/market/sell-operation
+// POST /api/market/sell-operation (create response)
+// GET  /api/market/sell-operation/:id (poll response)
 export interface SellOperation {
-  operationId: string;
+  operationId: string;  // from create
+  id?: string;          // from poll
   status: string;
   totalItems: number;
-  completedItems?: number;
-  failedItems?: number;
+  succeeded?: number;
+  failed?: number;
+  skippedAssetIds?: string[];
+  createdAt?: string;
+  completedAt?: string | null;
   items?: SellOperationItem[];
 }
 
 export interface SellOperationItem {
+  id?: number;
   assetId: string;
   marketHashName: string;
   priceCents: number;
+  accountId?: number | null;
   status: string;
-  error?: string;
+  errorMessage?: string | null;
   requiresConfirmation?: boolean;
+  updatedAt?: string;
 }
 
 // GET /api/market/quickprice/:marketHashName

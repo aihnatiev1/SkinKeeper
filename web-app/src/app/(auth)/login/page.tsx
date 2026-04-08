@@ -39,8 +39,8 @@ function LoginContent() {
       const callbackBase = typeof window !== 'undefined' ? window.location.origin : 'https://api.skinkeeper.store';
       const isDev = callbackBase.includes('localhost');
       const returnTo = isDev
-        ? `${callbackBase}/api/proxy/auth/steam/callback?nonce=${loginNonce}`
-        : `https://api.skinkeeper.store/api/auth/steam/callback?nonce=${loginNonce}`;
+        ? `${callbackBase}/api/proxy/auth/steam/callback?nonce=${loginNonce}&popup=1`
+        : `https://api.skinkeeper.store/api/auth/steam/callback?nonce=${loginNonce}&popup=1`;
       const realm = isDev ? callbackBase : 'https://api.skinkeeper.store';
       const params = new URLSearchParams({
         'openid.ns': 'http://specs.openid.net/auth/2.0',

@@ -209,6 +209,20 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       { expiresIn: "30d" }
     );
 
+    // Try to auto-refresh Steam session if we have a refresh token
+    try {
+      const { rows: acctRows } = await pool.query(
+        `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`,
+        [user.id, steamId]
+      );
+      if (acctRows[0]) {
+        const refreshResult = await SteamSessionService.refreshSession(acctRows[0].id);
+        console.log(`[Auth] Auto-refresh Steam session for account ${acctRows[0].id}:`, refreshResult);
+      }
+    } catch (err) {
+      console.warn(`[Auth] Auto-refresh Steam session failed (non-fatal):`, err);
+    }
+
     // Polling-based login: nonce comes as direct query param
     const nonce = params.nonce;
     if (nonce) {
@@ -220,15 +234,11 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       const webAppUrl = process.env.WEB_APP_URL || "https://skinkeeper.store";
       const isPopup = params.popup === "1";
       if (isPopup) {
-        // Popup: notify opener via postMessage, then close; fallback to JS redirect
-        res.send(`<html><head><script>
-try { window.opener && window.opener.postMessage({type:"sk_login_done"},"${webAppUrl}"); } catch(e){}
-try { window.close(); } catch(e){}
-setTimeout(function(){ window.location.replace("${webAppUrl}/login"); },1000);
-</script></head><body style="background:#0a0e1a;color:white;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2>Login successful!</h2><p style="color:#999">Closing...</p></div></body></html>`);
+        // Redirect popup back to same-origin page so window.close() works
+        res.redirect(`${webAppUrl}/login/success`);
       } else {
-        // Mobile same-window redirect
-        res.send(`<html><head><script>window.location.replace("${webAppUrl}/login")</script></head><body style="background:#0a0e1a"></body></html>`);
+        // Mobile same-window redirect — go back to login page
+        res.redirect(`${webAppUrl}/login`);
       }
       return;
     }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { formatPrice } from '@/lib/utils';
+import { useFormatPrice } from '@/lib/utils';
 import { Calculator } from 'lucide-react';
 
 /**
@@ -9,6 +9,7 @@ import { Calculator } from 'lucide-react';
  * Uses local calculation (no API call needed): 5% Valve + 10% CS2 = 15% total.
  */
 export function FeeCalculator() {
+  const formatPrice = useFormatPrice();
   const [mode, setMode] = useState<'buyer' | 'seller'>('buyer');
   const [input, setInput] = useState('');
 

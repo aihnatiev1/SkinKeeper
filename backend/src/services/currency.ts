@@ -415,27 +415,15 @@ export async function detectWalletCurrency(
  */
 export async function getWalletCurrency(
   accountId: number,
-  steamLoginSecure?: string
+  _steamLoginSecure?: string
 ): Promise<number | null> {
-  // Check DB first (steam_accounts table)
+  // Return stored currency — no auto-detect (server IP gives wrong country).
+  // User sets currency in Settings. Returns null if not set (caller defaults to USD).
   const { rows } = await pool.query(
     "SELECT wallet_currency FROM steam_accounts WHERE id = $1",
     [accountId]
   );
-  const stored = rows[0]?.wallet_currency;
-  if (stored) return stored;
-
-  // Need to detect — requires steamLoginSecure
-  if (!steamLoginSecure) return null;
-
-  const detected = await detectWalletCurrency(steamLoginSecure);
-  if (detected) {
-    await pool.query(
-      "UPDATE steam_accounts SET wallet_currency = $1 WHERE id = $2",
-      [detected, accountId]
-    );
-  }
-  return detected;
+  return rows[0]?.wallet_currency ?? null;
 }
 
 /**

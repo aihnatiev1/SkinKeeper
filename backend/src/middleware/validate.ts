@@ -9,6 +9,7 @@ export function validateBody(schema: ZodSchema) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
+      console.warn("[Validate] Body failed:", req.path, JSON.stringify(req.body).slice(0, 500), formatZodError(result.error));
       res.status(400).json({
         error: "Validation failed",
         details: formatZodError(result.error),

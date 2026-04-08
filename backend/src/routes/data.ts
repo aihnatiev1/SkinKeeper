@@ -27,7 +27,7 @@ const DOPPLER_PHASES: Record<number, { phase: string; color: string; tier: numbe
 };
 
 const MARKETPLACE_FEES: Record<string, number> = {
-  steam: 0.1304, buff: 0.025, csfloat: 0.02, skinport: 0.06, dmarket: 0.05, bitskins: 0.05,
+  steam: 0.15, buff: 0.025, csfloat: 0.02, skinport: 0.06, dmarket: 0.05, bitskins: 0.05,
 };
 
 router.get("/doppler-phases", (_req: Request, res: Response) => {

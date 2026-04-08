@@ -5,13 +5,14 @@ import { PageLoader } from '@/components/loading';
 import { CreateAlertModal } from '@/components/create-alert-modal';
 import { useAlerts, useDeleteAlert, useToggleAlert } from '@/lib/hooks';
 import { useAuthStore } from '@/lib/store';
-import { formatPrice, cn } from '@/lib/utils';
+import { useFormatPrice, cn } from '@/lib/utils';
 import { Bell, Trash2, TrendingUp, TrendingDown, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 export default function AlertsPage() {
+  const formatPrice = useFormatPrice();
   const user = useAuthStore((s) => s.user);
   const { data: alerts, isLoading } = useAlerts();
   const deleteAlert = useDeleteAlert();

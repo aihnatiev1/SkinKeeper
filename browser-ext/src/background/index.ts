@@ -456,6 +456,38 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
+// ─── Steam Session Extraction ────────────────────────────────────────
+
+async function saveSteamSession(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const loggedIn = await isLoggedIn();
+    if (!loggedIn) return { ok: false, error: 'Not logged in to SkinKeeper. Open app.skinkeeper.store and log in first.' };
+
+    const slsCookie = await chrome.cookies.get({ url: 'https://steamcommunity.com', name: 'steamLoginSecure' });
+    if (!slsCookie?.value) return { ok: false, error: 'Not logged in to Steam. Open steamcommunity.com and sign in.' };
+
+    const sidCookie = await chrome.cookies.get({ url: 'https://steamcommunity.com', name: 'sessionid' });
+
+    const result = await apiRequest<{ status: string }>('/session/token', {
+      method: 'POST',
+      body: {
+        steamLoginSecure: slsCookie.value,
+        sessionId: sidCookie?.value || undefined,
+      },
+    });
+
+    if (!result) return { ok: false, error: 'Failed to save session. Try again.' };
+    if (result.status === 'authenticated') {
+      console.log('[SkinKeeper] Steam session saved via extension');
+      return { ok: true };
+    }
+    return { ok: false, error: 'Unexpected response from server.' };
+  } catch (e: any) {
+    console.error('[SkinKeeper] saveSteamSession error:', e);
+    return { ok: false, error: e.message || 'Unknown error' };
+  }
+}
+
 // ─── External messages (from skinkeeper.store) ────────────────────────
 
 chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
@@ -464,6 +496,18 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
       chrome.storage.local.set({ sk_token: msg.token }).then(() => {
         sendResponse({ ok: true });
       });
+      return true;
+    }
+
+    if (msg.type === 'CONNECT_STEAM_SESSION') {
+      saveSteamSession().then((result) => {
+        sendResponse(result);
+      });
+      return true; // keep channel open for async response
+    }
+
+    if (msg.type === 'PING') {
+      sendResponse({ ok: true, extensionId: chrome.runtime.id });
       return true;
     }
   }

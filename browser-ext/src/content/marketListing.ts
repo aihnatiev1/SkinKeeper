@@ -3,6 +3,7 @@ import { waitForElement, el, skBadge, sendMessage } from '../shared/dom';
 import { readMarketListings, loadBulkPrices, loadExchangeRates, getItemPrice, getItemPriceEntry, getWalletCurrency, parseSteamPriceString } from '../shared/steam';
 import { trackEvent } from '../shared/analytics';
 import { initCollector } from '../shared/collector';
+import { getFloatColor, fetchFloat, formatFloat } from '../shared/float';
 
 initCollector();
 
@@ -46,6 +47,13 @@ async function init() {
 
   trackEvent('market_listing_viewed', { item_name: itemName, listing_count: listings.length });
   console.log(`[SkinKeeper] Market: ${itemName}, ${listings.length} listings`);
+
+  // Load float values for all visible listings (if enabled)
+  const { sk_settings } = await chrome.storage.local.get('sk_settings');
+  if (sk_settings?.marketListingFloats !== false) {
+    loadListingFloats();
+    observeNewListings();
+  }
 }
 
 function extractName(): string | null {
@@ -333,6 +341,89 @@ function injectPanel(name: string, listingCount: number, price: number, priceEnt
   panel.appendChild(powered);
 
   nav.parentElement?.insertBefore(panel, nav.nextSibling);
+}
+
+// ─── Float Values on Listings (CSFloat-style) ───────────────────────
+
+async function loadListingFloats() {
+  const rows = document.querySelectorAll('.market_listing_row.market_recent_listing_row');
+  if (rows.length === 0) return;
+
+  const CONCURRENCY = 3;
+  const queue = Array.from(rows);
+
+  async function processRow(row: Element) {
+    const inspectLink = row.querySelector('a[href*="csgo_econ_action_preview"]') as HTMLAnchorElement;
+    if (!inspectLink?.href) return;
+
+    // Skip if already processed
+    if ((row as HTMLElement).dataset.skFloat) return;
+
+    try {
+      const data = await fetchFloat(inspectLink.href);
+      if (!data?.floatValue) return;
+
+      const nameBlock = row.querySelector('.market_listing_item_name_block');
+      if (!nameBlock) return;
+
+      const floatEl = el('div', 'sk-listing-float');
+      floatEl.style.cssText = 'font-size:11px;color:#94a3b8;font-family:monospace;margin-top:2px;display:flex;align-items:center;gap:4px';
+
+      const floatColor = getFloatColor(data.floatValue);
+      floatEl.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${floatColor}"></span> ${data.floatValue.toFixed(10)}`;
+
+      // Show paint seed if available
+      if (data.paintSeed) {
+        floatEl.innerHTML += ` <span style="color:#6366f1;font-size:10px">Seed: ${data.paintSeed}</span>`;
+      }
+
+      nameBlock.appendChild(floatEl);
+
+      // Store float on row for sorting
+      (row as HTMLElement).dataset.skFloat = String(data.floatValue);
+    } catch {
+      // Silently fail for individual items
+    }
+  }
+
+  // Process with concurrency limit
+  async function next() {
+    while (queue.length > 0) {
+      const row = queue.shift()!;
+      await processRow(row);
+    }
+  }
+
+  const workers = Array(Math.min(CONCURRENCY, queue.length)).fill(null).map(() => next());
+  await Promise.all(workers);
+}
+
+// Observe for new listings being loaded (pagination, "Load 100 listings", etc.)
+function observeNewListings() {
+  const container = document.getElementById('searchResultsRows');
+  if (!container) return;
+
+  const observer = new MutationObserver((mutations) => {
+    let hasNewRows = false;
+    for (const mutation of mutations) {
+      for (const node of Array.from(mutation.addedNodes)) {
+        if (node instanceof HTMLElement && (
+          node.classList?.contains('market_recent_listing_row') ||
+          node.querySelector?.('.market_recent_listing_row')
+        )) {
+          hasNewRows = true;
+          break;
+        }
+      }
+      if (hasNewRows) break;
+    }
+    if (hasNewRows) {
+      // Debounce: wait a tick for all rows to be added
+      setTimeout(() => loadListingFloats(), 100);
+    }
+  });
+
+  observer.observe(container, { childList: true, subtree: true });
 }
 
 init();

@@ -7,8 +7,8 @@ export default function NotFound() {
       <div className="absolute inset-0 dot-pattern opacity-20" />
 
       <div className="relative z-10 text-center max-w-md">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-2xl shadow-xl shadow-primary/30 mx-auto mb-6">
-          SK
+        <div className="text-3xl font-bold text-gradient mx-auto mb-6">
+          SkinKeeper
         </div>
         <h1 className="text-6xl font-bold mb-2">404</h1>
         <p className="text-lg text-muted mb-8">Page not found</p>

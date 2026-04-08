@@ -1,30 +1,29 @@
 'use client';
 
 import { useAccounts } from '@/lib/hooks';
-import { useIsDesktop } from '@/lib/use-desktop';
-import { AlertTriangle, Monitor, Puzzle, X, ExternalLink, RefreshCw } from 'lucide-react';
+import { AlertTriangle, X, RefreshCw, Puzzle, Monitor } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { SteamSessionModal } from './steam-session-modal';
 
 const DISMISS_KEY = 'sk_session_banner_dismissed';
 
-/**
- * Shows a prominent banner when user has no active Steam session.
- * Without a session, inventory/trades/market features don't work.
- * Guides user to connect via Desktop app or Browser extension.
- *
- * Two modes:
- * - "no session" → large banner with connect instructions (localStorage dismiss)
- * - "expired" → small inline banner with reconnect link (always visible)
- */
 export function SessionConnectBanner() {
   const { data: accounts } = useAccounts();
-  const isDesktop = useIsDesktop();
-  const [dismissed, setDismissed] = useState(true); // start hidden to avoid flash
+  const queryClient = useQueryClient();
+  const [dismissed, setDismissed] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
   }, []);
+
+  const handleSuccess = () => {
+    setModalOpen(false);
+    toast.success('Steam session connected');
+    window.location.reload();
+  };
 
   if (!accounts) return null;
 
@@ -32,19 +31,22 @@ export function SessionConnectBanner() {
   const allExpired = accounts.length > 0 && accounts.every((a) => a.sessionStatus === 'expired' || a.sessionStatus === 'none');
   const someExpired = !noSession && accounts.some((a) => a.sessionStatus === 'expired');
 
-  // Expired-only: show small banner (not dismissible permanently)
+  // Expired session — compact banner
   if (someExpired && !noSession) {
     return (
-      <div className="flex items-center gap-3 glass rounded-xl border border-warning/20 p-3 mb-4">
-        <RefreshCw size={16} className="text-warning shrink-0" />
-        <p className="text-xs text-muted flex-1">
-          Steam session expired for {accounts.filter(a => a.sessionStatus === 'expired').map(a => a.displayName).join(', ')}.
-          Reconnect to keep data fresh.
-        </p>
-        <Link href="/settings" className="text-xs text-primary font-semibold hover:underline shrink-0">
-          Reconnect
-        </Link>
-      </div>
+      <>
+        <div className="flex items-center gap-3 glass rounded-xl border border-warning/20 p-3 mb-4">
+          <RefreshCw size={16} className="text-warning shrink-0" />
+          <p className="text-xs text-muted flex-1">
+            Session expired for {accounts.filter(a => a.sessionStatus === 'expired').map((a, i, arr) => <><span key={a.id} className="text-foreground font-semibold">{a.displayName}</span>{i < arr.length - 1 ? ', ' : ''}</>)}.
+            Use the <span className="text-foreground font-medium">Extension</span> or <span className="text-foreground font-medium">Desktop App</span> to reconnect.
+          </p>
+          <button onClick={() => setModalOpen(true)} className="text-xs text-primary font-semibold hover:underline shrink-0">
+            Reconnect
+          </button>
+        </div>
+        <SteamSessionModal open={modalOpen} onClose={() => setModalOpen(false)} onSuccess={handleSuccess} />
+      </>
     );
   }
 
@@ -56,86 +58,55 @@ export function SessionConnectBanner() {
   };
 
   return (
-    <div className="relative glass-strong rounded-2xl border border-warning/30 p-5 mb-4 overflow-hidden">
-      {/* Background accent */}
-      <div className="absolute inset-0 bg-gradient-to-r from-warning/5 via-transparent to-orange-500/5" />
+    <>
+      <div className="relative glass-strong rounded-2xl border border-primary/20 p-5 mb-4 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5" />
 
-      <button
-        onClick={handleDismiss}
-        className="absolute top-3 right-3 p-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors z-10"
-      >
-        <X size={16} />
-      </button>
+        <button
+          onClick={handleDismiss}
+          className="absolute top-3 right-3 p-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors z-10"
+        >
+          <X size={16} />
+        </button>
 
-      <div className="relative">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
-            <AlertTriangle size={20} className="text-warning" />
-          </div>
-          <div>
-            <h3 className="font-bold text-sm">Connect your Steam session</h3>
-            <p className="text-xs text-muted mt-0.5">
-              {noSession
-                ? 'Your account is verified but Steam session is not connected. Without it, inventory sync, trades, and market features won\'t work.'
-                : 'Your Steam session has expired. Reconnect to keep your data fresh.'}
-            </p>
-          </div>
-        </div>
+        <div className="relative">
+          <h3 className="font-bold text-sm mb-1.5">Connect your Steam session</h3>
+          <p className="text-xs text-muted mb-4">
+            To enable trading, market selling, and real-time sync — connect via Extension or Desktop App.
+          </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Option 1: Desktop app */}
-          <div className="glass rounded-xl p-4 border border-border/30">
-            <div className="flex items-center gap-2 mb-2">
-              <Monitor size={16} className="text-primary" />
-              <span className="text-sm font-semibold">Desktop App</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-profit/10 text-profit font-medium">Recommended</span>
-            </div>
-            <p className="text-xs text-muted mb-3">
-              Connects directly to Steam client. Auto-refreshes session. Enables transfers and trade-ups.
-            </p>
-            {isDesktop ? (
-              <Link
-                href="/settings"
-                className="flex items-center justify-center gap-1.5 w-full px-3 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold transition-all"
-              >
-                Connect in Settings
-              </Link>
-            ) : (
-              <a
-                href="https://skinkeeper.store"
-                target="_blank"
-                rel="noopener"
-                className="flex items-center justify-center gap-1.5 w-full px-3 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold transition-all"
-              >
-                Download Desktop App <ExternalLink size={10} />
-              </a>
-            )}
-          </div>
-
-          {/* Option 2: Browser extension */}
-          <div className="glass rounded-xl p-4 border border-border/30">
-            <div className="flex items-center gap-2 mb-2">
-              <Puzzle size={16} className="text-accent" />
-              <span className="text-sm font-semibold">Browser Extension</span>
-            </div>
-            <p className="text-xs text-muted mb-3">
-              Syncs your Steam session automatically when you browse Steam. Also adds price overlays and Quick Sell.
-            </p>
-            <a
-              href="https://chromewebstore.google.com/detail/skinkeeper/lbihgifhfhpeahokiegleeknffkihbpd"
-              target="_blank"
-              rel="noopener"
-              className="flex items-center justify-center gap-1.5 w-full px-3 py-2 glass hover:bg-surface-light rounded-lg text-xs font-semibold transition-all"
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Extension */}
+            <button
+              onClick={() => setModalOpen(true)}
+              className="flex items-center gap-3 p-3 glass rounded-xl text-left hover:bg-surface-light/50 transition-colors group"
             >
-              Install Extension <ExternalLink size={10} />
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                <Puzzle size={18} className="text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Browser Extension</p>
+                <p className="text-[10px] text-muted">Instant connect, no warnings</p>
+              </div>
+            </button>
+
+            {/* Desktop App */}
+            <a
+              href="/download"
+              className="flex items-center gap-3 p-3 glass rounded-xl text-left hover:bg-surface-light/50 transition-colors group"
+            >
+              <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0 group-hover:bg-accent/20 transition-colors">
+                <Monitor size={18} className="text-accent" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Desktop App</p>
+                <p className="text-[10px] text-muted">Full access + storage unit transfers</p>
+              </div>
             </a>
           </div>
         </div>
-
-        <p className="text-[10px] text-muted mt-3 text-center">
-          Both methods are secure — we never see your Steam password. Session is used only for API calls on your behalf.
-        </p>
       </div>
-    </div>
+      <SteamSessionModal open={modalOpen} onClose={() => setModalOpen(false)} onSuccess={handleSuccess} />
+    </>
   );
 }

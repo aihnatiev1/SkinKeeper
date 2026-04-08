@@ -9,8 +9,6 @@ export const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
 export const CURRENCY_SYMBOLS: Record<string, string> = Object.fromEntries(
   Object.values(CURRENCY_MAP).map(([code, sign]) => [code, sign])
 );
-// Add extra currencies not in Steam map
-Object.assign(CURRENCY_SYMBOLS, { PLN: 'zł' });
 
 // Wear labels — re-export from shared
 export const WEAR_LABELS = WEAR_SHORT;
@@ -23,4 +21,13 @@ export const RARITY_COLORS: Record<string, string> = {
   'Classified': '#D32CE6',
   'Covert': '#EB4B4B',
   'Contraband': '#E4AE39',
+  // Gloves, knives, agents — alternative rarity labels from Steam
+  'Extraordinary': '#EB4B4B',
+  'Remarkable': '#D32CE6',
+  'Exotic': '#8847FF',
+  'Distinguished': '#4B69FF',
+  'Superior': '#D32CE6',
+  'Master': '#EB4B4B',
+  'High Grade': '#4B69FF',
+  'Base Grade': '#B0C3D9',
 };

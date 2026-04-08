@@ -18,6 +18,10 @@ const DEFAULT_SETTINGS: Record<string, any> = {
   quickSell: true,
   collectPrices: true,
   conflictDetection: true,
+  apiKeyGuard: true,
+  autoSkipAge: true,
+  autoAcceptSSA: true,
+  marketListingFloats: true,
 };
 
 let currentSettings: Record<string, any> = {};

@@ -38,7 +38,7 @@ export const DOPPLER_PHASES: Record<number, PhaseInfo> = {
 
 // ─── Marketplace Fees ────────────────────────────────────────────────
 export const MARKETPLACE_FEES: Record<string, number> = {
-  steam: 0.1304,    // 5% Steam + 10% CS2 game fee ≈ 13.04%
+  steam: 0.15,      // 5% Steam + 10% CS2 game fee = 15%
   buff: 0.025,      // 2.5%
   csfloat: 0.02,    // 2%
   skinport: 0.06,   // 6%
@@ -48,9 +48,18 @@ export const MARKETPLACE_FEES: Record<string, number> = {
 
 // ─── Steam Currency Map ──────────────────────────────────────────────
 export const CURRENCY_MAP: Record<number, [string, string]> = {
-  1: ['USD', '$'], 2: ['GBP', '£'], 3: ['EUR', '€'], 5: ['RUB', '₽'],
-  7: ['BRL', 'R$'], 17: ['TRY', '₺'], 18: ['UAH', '₴'], 20: ['CAD', 'CA$'],
-  21: ['AUD', 'A$'], 23: ['CNY', '¥'], 37: ['KZT', '₸'],
+  1: ['USD', '$'], 2: ['GBP', '£'], 3: ['EUR', '€'], 4: ['CHF', 'CHF'],
+  5: ['RUB', '₽'], 6: ['PLN', 'zł'], 7: ['BRL', 'R$'], 8: ['JPY', '¥'],
+  9: ['NOK', 'kr'], 10: ['IDR', 'Rp'], 11: ['MYR', 'RM'], 12: ['PHP', '₱'],
+  13: ['SGD', 'S$'], 14: ['THB', '฿'], 15: ['VND', '₫'], 16: ['KRW', '₩'],
+  17: ['TRY', '₺'], 18: ['UAH', '₴'], 19: ['MXN', 'Mex$'], 20: ['CAD', 'CA$'],
+  21: ['AUD', 'A$'], 22: ['NZD', 'NZ$'], 23: ['CNY', '¥'], 24: ['INR', '₹'],
+  25: ['CLP', 'CLP$'], 26: ['PEN', 'S/.'], 27: ['COP', 'COL$'], 28: ['ZAR', 'R'],
+  29: ['HKD', 'HK$'], 30: ['TWD', 'NT$'], 31: ['SAR', 'SR'], 32: ['AED', 'AED'],
+  34: ['ARS', 'ARS$'], 35: ['ILS', '₪'], 37: ['KZT', '₸'], 38: ['KWD', 'KD'],
+  39: ['QAR', 'QR'], 40: ['CRC', '₡'], 41: ['UYU', '$U'], 42: ['BGN', 'лв'],
+  43: ['HRK', 'kn'], 44: ['CZK', 'Kč'], 45: ['DKK', 'kr'], 46: ['HUF', 'Ft'],
+  47: ['RON', 'lei'], 48: ['SEK', 'kr'],
 };
 
 // ─── Rarity Order ────────────────────────────────────────────────────

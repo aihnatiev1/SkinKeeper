@@ -81,25 +81,11 @@ router.get(
         ? paramId
         : await SteamSessionService.getActiveAccountId(req.userId!);
 
-      // Try to get stored wallet info first
-      let info = await getWalletInfo(accountId);
-
-      // If not detected yet, try to detect now
-      if (!info) {
-        const session = await SteamSessionService.getSession(accountId);
-        if (session?.steamLoginSecure) {
-          const currencyId = await detectWalletCurrency(session.steamLoginSecure);
-          if (currencyId) {
-            await pool.query(
-              "UPDATE steam_accounts SET wallet_currency = $1 WHERE id = $2",
-              [currencyId, accountId]
-            );
-            info = await getWalletInfo(accountId);
-          }
-        }
-      }
+      // Use stored wallet currency — no auto-detection (server IP gives wrong country)
+      const info = await getWalletInfo(accountId);
 
       if (!info) {
+        // No currency set — default to USD
         res.json({ detected: false, currencyId: 1, code: "USD", symbol: "$", rate: 1, source: "default" });
         return;
       }

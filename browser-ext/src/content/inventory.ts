@@ -176,6 +176,7 @@ async function init() {
     }
 
     injectBanner(items.length, uniqueNames.size, pricedNames.size, totalValue, storageUnits, storedItems);
+    if (isOwnInventory) injectControlBar();
     trackEvent('inventory_loaded', { item_count: items.length, unique_items: uniqueNames.size });
     tagAllItems();
 
@@ -374,6 +375,111 @@ function injectBanner(count: number, unique: number, priced: number, total: numb
   });
 
   document.body.appendChild(card);
+}
+
+// ─── Control Bar (sort, select-value, sell, trade-up, export) ────────
+
+function injectControlBar() {
+  if (document.getElementById('sk-control-bar')) return;
+
+  // Find Steam's inventory navigation/controls area
+  const anchor = document.querySelector('.filter_ctn.inventory_filters')
+    || document.querySelector('#inventory_applogo')
+    || document.querySelector('.inventory_links');
+
+  const bar = el('div');
+  bar.id = 'sk-control-bar';
+  bar.style.cssText = `
+    display:flex;align-items:center;gap:8px;padding:8px 0;margin:6px 0;
+    font-family:var(--sk-font);flex-wrap:wrap;
+  `;
+
+  // Sort dropdown
+  const sortSelect = document.createElement('select');
+  sortSelect.className = 'sk-sort-select';
+  sortSelect.innerHTML = `
+    <option value="default">Default Order</option>
+    <option value="price-desc">Price: High → Low</option>
+    <option value="price-asc">Price: Low → High</option>
+    <option value="float-asc">Float: Low → High</option>
+    <option value="float-desc">Float: High → Low</option>
+    <option value="name-asc">Name: A → Z</option>
+    <option value="name-desc">Name: Z → A</option>
+    <option value="rarity-desc">Rarity: High → Low</option>
+    <option value="tradable">Tradable First</option>
+  `;
+  sortSelect.addEventListener('change', () => sortInventory(sortSelect.value));
+  bar.appendChild(sortSelect);
+
+  // Selected value counter
+  const selectedVal = el('span');
+  selectedVal.id = 'sk-selected-value';
+  selectedVal.style.cssText = 'font-size:12px;color:var(--sk-text-dim);margin-left:4px;white-space:nowrap';
+  selectedVal.textContent = `Selected: ${currencySign}0`;
+  bar.appendChild(selectedVal);
+
+  // Spacer
+  const spacer = el('div');
+  spacer.style.flex = '1';
+  bar.appendChild(spacer);
+
+  // Sell button
+  const sellBtn = el('button', ['sk-banner-cta', 'sk-cta-sell', 'sk-sell-toggle']);
+  sellBtn.textContent = 'Sell';
+  sellBtn.style.cssText += 'padding:5px 12px;font-size:11px';
+  sellBtn.addEventListener('click', () => toggleSellMode());
+  bar.appendChild(sellBtn);
+
+  // Trade-Up button
+  const tuBtn = el('button', ['sk-banner-cta', 'sk-cta-amber', 'sk-tu-toggle']);
+  tuBtn.textContent = 'Trade-Up';
+  tuBtn.style.cssText += 'padding:5px 12px;font-size:11px';
+  tuBtn.addEventListener('click', () => toggleTradeUpMode());
+  bar.appendChild(tuBtn);
+
+  // Export dropdown
+  const exportWrap = el('div');
+  exportWrap.style.cssText = 'position:relative';
+  const exportBtn = el('button', ['sk-banner-cta', 'sk-cta-secondary']);
+  exportBtn.textContent = 'Export ▾';
+  exportBtn.style.cssText += 'padding:5px 12px;font-size:11px';
+  const exportMenu = el('div', 'sk-export-menu');
+  exportMenu.style.cssText = `
+    display:none;position:absolute;top:100%;right:0;margin-top:4px;z-index:999;
+    background:rgba(13,17,23,0.95);backdrop-filter:blur(8px);
+    border:1px solid var(--sk-border);border-radius:var(--sk-radius-sm);
+    padding:4px 0;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.4);
+  `;
+  const menuItem = (label: string, fn: () => void) => {
+    const item = el('div', 'sk-export-option');
+    item.textContent = label;
+    item.style.cssText = 'padding:6px 12px;font-size:12px;color:var(--sk-text);cursor:pointer;font-family:var(--sk-font)';
+    item.onmouseenter = () => { item.style.background = 'rgba(99,102,241,0.15)'; };
+    item.onmouseleave = () => { item.style.background = ''; };
+    item.addEventListener('click', () => { fn(); exportMenu.style.display = 'none'; });
+    return item;
+  };
+  exportMenu.append(
+    menuItem('CSV', exportCSV),
+    menuItem('JSON', exportJSON),
+    menuItem('Copy Summary', exportClipboard),
+  );
+  exportBtn.addEventListener('click', () => {
+    exportMenu.style.display = exportMenu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', (e) => {
+    if (!exportWrap.contains(e.target as Node)) exportMenu.style.display = 'none';
+  });
+  exportWrap.append(exportBtn, exportMenu);
+  bar.appendChild(exportWrap);
+
+  if (anchor) {
+    anchor.parentElement?.insertBefore(bar, anchor.nextSibling);
+  } else {
+    // Fallback: insert before the first inventory page
+    const invPage = document.querySelector('.inventory_page');
+    invPage?.parentElement?.insertBefore(bar, invPage);
+  }
 }
 
 // ─── Item Tags (on each item in Steam grid) ──────────────────────────

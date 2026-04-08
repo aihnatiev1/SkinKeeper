@@ -36,24 +36,8 @@ export function createOgImage(title: string, subtitle: string, emoji?: string) {
           }}
         />
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 40 }}>
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: 'linear-gradient(135deg, #8B5CF6, #06B6D4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: 28,
-              fontWeight: 800,
-            }}
-          >
-            SK
-          </div>
-          <span style={{ color: 'white', fontSize: 32, fontWeight: 800 }}>SkinKeeper</span>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40 }}>
+          <span style={{ fontSize: 36, fontWeight: 800, background: 'linear-gradient(135deg, #8B5CF6, #06B6D4)', backgroundClip: 'text', color: 'transparent' }}>SkinKeeper</span>
         </div>
         {/* Emoji */}
         {emoji && (

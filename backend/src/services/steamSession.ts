@@ -209,19 +209,8 @@ export class SteamSessionService {
       ]
     );
 
-    // Detect wallet currency in the background (non-blocking)
-    detectWalletCurrency(session.steamLoginSecure)
-      .then(async (currencyId) => {
-        if (currencyId) {
-          await pool.query(
-            "UPDATE steam_accounts SET wallet_currency = $1 WHERE id = $2",
-            [currencyId, accountId]
-          );
-        }
-      })
-      .catch((err) => {
-        console.warn("[Session] Wallet currency detection failed:", err.message);
-      });
+    // Wallet currency is set by the user in Settings.
+    // No auto-detection — server IP gives wrong country.
 
     // Auto-fetch trade token in the background (non-blocking)
     import("./tradeOffers.js")
@@ -323,6 +312,7 @@ export class SteamSessionService {
     accountId: number
   ): Promise<{ qrImage: string; qrUrl: string; nonce: string }> {
     const loginSession = new LoginSession(EAuthTokenPlatformType.WebBrowser);
+    loginSession.loginTimeout = 120_000;
     const startResult = await loginSession.startWithQR();
 
     if (!startResult.qrChallengeUrl) {

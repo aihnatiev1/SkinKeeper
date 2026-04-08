@@ -244,7 +244,7 @@ class SettingsScreen extends ConsumerWidget {
                     style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                   trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
-                  onTap: () => launchUrl(Uri.parse('https://chromewebstore.google.com/detail/skinkeeper/placeholder')),
+                  onTap: () => launchUrl(Uri.parse('https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd')),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -584,7 +584,7 @@ class _ExtensionBannerState extends State<_ExtensionBanner> {
       icon: '\u{1F9E9}',
       message: 'See real prices & float values on every Steam item',
       cta: 'Install Free',
-      url: 'https://chromewebstore.google.com/detail/skinkeeper/placeholder',
+      url: 'https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd',
       onDismiss: () => setState(() => _dismissed = true),
     ).animate().fadeIn(duration: 300.ms, delay: 135.ms).slideY(begin: 0.05, end: 0);
   }

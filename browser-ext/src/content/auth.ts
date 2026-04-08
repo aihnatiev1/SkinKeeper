@@ -73,5 +73,14 @@ function showBanner(message: string, type: 'success' | 'info') {
   }
 }
 
+// Inject extension presence flag so the web app can detect us
+function injectPresenceFlag() {
+  const script = document.createElement('script');
+  script.textContent = `window.__SK_EXT=true;window.__SK_EXT_ID="${chrome.runtime.id}";`;
+  document.documentElement.appendChild(script);
+  script.remove();
+}
+
 // Run on page load
+injectPresenceFlag();
 syncToken();

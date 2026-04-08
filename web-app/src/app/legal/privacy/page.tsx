@@ -12,8 +12,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen gradient-mesh">
       <nav className="flex items-center justify-between px-6 lg:px-16 h-16 border-b border-border/50 glass-strong">
         <Link href="/" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm">SK</div>
-          <span className="text-lg font-bold">SkinKeeper</span>
+          <span className="text-lg font-bold text-gradient">SkinKeeper</span>
         </Link>
       </nav>
       <main className="max-w-3xl mx-auto px-6 py-16">

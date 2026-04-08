@@ -36,7 +36,7 @@ export default function DealsPage() {
           icon="💰"
           message="See arbitrage opportunities inline on Steam Market pages with our browser extension."
           ctaText="Install Extension"
-          ctaUrl="https://chromewebstore.google.com/detail/skinkeeper/placeholder"
+          ctaUrl="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd"
         />
         {/* Info banner */}
         <div className="glass rounded-xl p-4 flex items-start gap-3 border border-primary/20">
