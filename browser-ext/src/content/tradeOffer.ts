@@ -2,10 +2,15 @@ import '../styles/skinkeeper.css';
 import { waitForElement, el } from '../shared/dom';
 import { loadBulkPrices, loadExchangeRates, getItemPrice, getWalletCurrency } from '../shared/steam';
 
+/* ═══════════════════════════════════════════════════════════════════
+   SkinKeeper — Trade Offer Enhancement
+   Sidebar with items/prices/P&L, inventory price tags, bulk actions
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ─── State ───────────────────────────────────────────────────────
+
 let exchangeRate = 1;
 let currencySign = '$';
-let yourItems: TradeItem[] = [];
-let theirItems: TradeItem[] = [];
 
 const CURRENCY_MAP: Record<number, [string, string]> = {
   1: ['USD', '$'], 2: ['GBP', '\u00a3'], 3: ['EUR', '\u20ac'], 5: ['RUB', '\u20bd'],
@@ -23,11 +28,21 @@ function fmtPrice(v: number): string {
   if (!v) return `${currencySign}0`;
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
-  if (abs >= 1000) return `${sign}${currencySign}${Math.round(abs).toLocaleString()}`;
   if (abs >= 100) return `${sign}${currencySign}${Math.round(abs).toLocaleString()}`;
   if (abs >= 10) return `${sign}${currencySign}${abs.toFixed(1)}`;
   return `${sign}${currencySign}${abs.toFixed(2)}`;
 }
+
+function itemName(el: HTMLElement): string {
+  return el.querySelector('.trade_item_name')?.textContent?.trim()
+    || (el.querySelector('img') as HTMLImageElement)?.alt?.trim() || '';
+}
+
+function itemPrice(name: string): number {
+  return getItemPrice(name, exchangeRate);
+}
+
+// ─── Init ────────────────────────────────────────────────────────
 
 async function init() {
   const tradeBox = await waitForElement('.trade_area, .tradeoffer');
@@ -39,177 +54,378 @@ async function init() {
   currencySign = s;
   exchangeRate = rates?.[cc] || 1;
 
-  await new Promise(r => setTimeout(r, 3000));
+  // Wait for Steam to render items
+  await new Promise(r => setTimeout(r, 2000));
 
-  yourItems = collectItems('.tradeoffer_items.primary .trade_item, #your_slots .item');
-  theirItems = collectItems('.tradeoffer_items.secondary .trade_item, #their_slots .item');
-  if (yourItems.length === 0 && theirItems.length === 0) return;
+  // Determine page type: create trade or view trade
+  const isCreate = !!document.getElementById('your_slots');
 
-  injectSummary();
-  injectSortControls();
-  addPriceTags();
+  // Build sidebar
+  const sidebar = buildSidebar(isCreate);
+  document.body.appendChild(sidebar);
 
-  console.log(`[SkinKeeper] Trade: give ${yourItems.length} / receive ${theirItems.length}`);
+  // Initial update
+  updateSidebar();
+
+  // Add price tags to inventory items
+  tagInventoryPrices();
+
+  // Inventory controls (create mode only)
+  if (isCreate) addInventoryControls();
+
+  // Observe trade slot changes
+  observeChanges();
+
+  console.log('[SkinKeeper] Trade offer enhanced');
 }
 
-function collectItems(selector: string): TradeItem[] {
-  const items: TradeItem[] = [];
-  document.querySelectorAll(selector).forEach((item) => {
-    const name = item.querySelector('.trade_item_name')?.textContent?.trim()
-      || (item.querySelector('img') as HTMLImageElement)?.alt || '';
-    if (name) {
-      items.push({
-        name,
-        price: getItemPrice(name, exchangeRate),
-        element: item as HTMLElement,
-      });
-    }
-  });
-  return items;
-}
+// ═══════════════════════════════════════════════════════════════════
+//  SIDEBAR
+// ═══════════════════════════════════════════════════════════════════
 
-// ─── Summary Banner ───────────────────────────────────────────────────
+function buildSidebar(isCreate: boolean): HTMLElement {
+  const panel = el('div', 'sk-trade-sidebar');
 
-function injectSummary() {
-  document.querySelector('.sk-trade-summary')?.remove();
+  // ── Your Items section ──
+  const yourSec = el('div', 'sk-sidebar-section');
+  const yourHead = el('div', 'sk-sidebar-header');
+  yourHead.textContent = 'Your Items:';
+  const yourList = el('div', 'sk-sidebar-items');
+  yourList.id = 'sk-your-list';
+  const yourTotal = el('div', 'sk-sidebar-total');
+  yourTotal.id = 'sk-your-total';
+  yourSec.append(yourHead, yourList, yourTotal);
 
-  const yourTotal = yourItems.reduce((s, i) => s + i.price, 0);
-  const theirTotal = theirItems.reduce((s, i) => s + i.price, 0);
-  const diff = theirTotal - yourTotal;
-  const isProfit = diff >= 0;
-  const pctChange = yourTotal > 0 ? (diff / yourTotal) * 100 : 0;
+  // ── Their Items section ──
+  const theirSec = el('div', 'sk-sidebar-section');
+  const theirHead = el('div', 'sk-sidebar-header');
+  theirHead.textContent = "Their Items:";
+  const theirList = el('div', 'sk-sidebar-items');
+  theirList.id = 'sk-their-list';
+  const theirTotal = el('div', 'sk-sidebar-total');
+  theirTotal.id = 'sk-their-total';
+  theirSec.append(theirHead, theirList, theirTotal);
 
-  const tradeArea = document.querySelector('.trade_area, .tradeoffer_items_ctn, .tradeoffer');
-  if (!tradeArea) return;
+  // ── P/L ──
+  const plSec = el('div', 'sk-sidebar-pl');
+  plSec.id = 'sk-trade-pl';
 
-  const summary = el('div', 'sk-trade-summary');
-  summary.style.flexDirection = 'column';
-  summary.style.gap = '8px';
+  panel.append(yourSec, theirSec, plSec);
 
-  // ── Header row: Your total | P/L | Their total ──
-  const row = el('div');
-  row.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
+  // ── Action buttons (create mode only) ──
+  if (isCreate) {
+    panel.appendChild(divider());
 
-  // Your side
-  const yourSide = el('div', 'sk-trade-side');
-  const yourLabel = el('div', 'sk-trade-label');
-  yourLabel.textContent = `You Give (${yourItems.length} items)`;
-  const yourValue = el('div', 'sk-trade-value');
-  yourValue.textContent = fmtPrice(yourTotal);
-  yourSide.append(yourLabel, yourValue);
+    const actions = el('div', 'sk-sidebar-actions');
 
-  // P/L delta with percentage
-  const delta = el('div', 'sk-trade-delta');
-  const deltaLabel = el('div', 'sk-trade-delta-label');
-  deltaLabel.textContent = 'P/L';
-  const deltaValue = el('div', 'sk-trade-delta-value');
-  deltaValue.style.color = isProfit ? 'var(--sk-green)' : 'var(--sk-red)';
-  deltaValue.textContent = `${isProfit ? '+' : ''}${fmtPrice(diff)}`;
+    actions.appendChild(actionBtn('By Price', 'sk-act-primary', sortInventoryByPrice));
 
-  // Percentage
-  if (yourTotal > 0) {
-    const pctEl = el('div', 'sk-trade-delta-label');
-    pctEl.style.color = isProfit ? 'var(--sk-green)' : 'var(--sk-red)';
-    pctEl.textContent = `${isProfit ? '+' : ''}${pctChange.toFixed(1)}%`;
-    delta.append(deltaLabel, deltaValue, pctEl);
-  } else {
-    delta.append(deltaLabel, deltaValue);
+    actions.appendChild(actionBtn('Remove all', 'sk-act-red', () => {
+      clickAll('#your_slots .item');
+    }));
+
+    actions.appendChild(actionBtn('Take all', 'sk-act-green', () => {
+      const inv = document.querySelectorAll(
+        '#trade_theirs .inventory_page .item:not(.in_trade),'
+        + '#their_slots .item'
+      );
+      clickAll(null, Array.from(inv) as HTMLElement[]);
+    }));
+
+    actions.appendChild(divider());
+
+    actions.appendChild(actionBtn('Add lower priced', 'sk-act-green', () => {
+      const v = prompt(`Add items priced below (${currencySign}):`);
+      if (v) addByPrice(parseFloat(v), 'below');
+    }));
+
+    actions.appendChild(actionBtn('Add higher priced', 'sk-act-green', () => {
+      const v = prompt(`Add items priced above (${currencySign}):`);
+      if (v) addByPrice(parseFloat(v), 'above');
+    }));
+
+    actions.appendChild(divider());
+
+    actions.appendChild(actionBtn('Remove from trade', 'sk-act-red', () => {
+      clickAll('#your_slots .item');
+    }));
+
+    actions.appendChild(actionBtn('Remove lower priced', 'sk-act-red', () => {
+      const v = prompt(`Remove items priced below (${currencySign}):`);
+      if (v) removeByPrice(parseFloat(v), 'below');
+    }));
+
+    actions.appendChild(actionBtn('Remove higher priced', 'sk-act-red', () => {
+      const v = prompt(`Remove items priced above (${currencySign}):`);
+      if (v) removeByPrice(parseFloat(v), 'above');
+    }));
+
+    panel.appendChild(actions);
   }
 
-  // Their side
-  const theirSide = el('div', 'sk-trade-side');
-  theirSide.style.textAlign = 'right';
-  const theirLabel = el('div', 'sk-trade-label');
-  theirLabel.textContent = `You Receive (${theirItems.length} items)`;
-  const theirValue = el('div', 'sk-trade-value');
-  theirValue.textContent = fmtPrice(theirTotal);
-  theirSide.append(theirLabel, theirValue);
+  // ── Footer ──
+  const footer = el('div', 'sk-sidebar-footer');
+  footer.innerHTML = '<a href="https://skinkeeper.store" target="_blank">SkinKeeper</a>';
+  panel.appendChild(footer);
 
-  row.append(yourSide, delta, theirSide);
-  summary.appendChild(row);
-
-  // ── Warnings ──
-  if (yourItems.length > 0 && theirItems.length === 0) {
-    const warn = el('div', 'sk-trade-warning');
-    warn.textContent = 'One-sided trade \u2014 you give items and receive nothing!';
-    summary.appendChild(warn);
-  }
-
-  if (!isProfit && Math.abs(pctChange) > 10) {
-    const warn = el('div', 'sk-trade-warning');
-    warn.textContent = `You are losing ${Math.abs(pctChange).toFixed(1)}% value in this trade!`;
-    summary.appendChild(warn);
-  }
-
-  // Footer
-  const footer = el('div', 'sk-powered');
-  footer.style.textAlign = 'center';
-  footer.innerHTML = 'Steam prices by <a href="https://skinkeeper.store" target="_blank">SkinKeeper</a>';
-  summary.appendChild(footer);
-
-  tradeArea.parentElement?.insertBefore(summary, tradeArea);
+  return panel;
 }
 
-// ─── Sort Controls ────────────────────────────────────────────────────
-
-function injectSortControls() {
-  // Inject sort dropdown above the trade inventory panels
-  const panels = document.querySelectorAll('.tradeoffer_items_header, .trade_box_header');
-  if (panels.length === 0) return;
-
-  panels.forEach((header) => {
-    if (header.querySelector('.sk-sort-select')) return;
-
-    const select = document.createElement('select');
-    select.className = 'sk-sort-select';
-    select.innerHTML = `
-      <option value="default">Sort: Default</option>
-      <option value="price-desc">Price: High to Low</option>
-      <option value="price-asc">Price: Low to High</option>
-      <option value="name-asc">Name: A-Z</option>
-      <option value="name-desc">Name: Z-A</option>
-    `;
-    select.addEventListener('change', () => sortItems(select.value));
-    header.appendChild(select);
-  });
+function actionBtn(text: string, cls: string, onClick: () => void): HTMLElement {
+  const btn = el('button', ['sk-sidebar-btn', cls]);
+  btn.textContent = text;
+  btn.addEventListener('click', onClick);
+  return btn;
 }
 
-function sortItems(sortBy: string) {
-  const sortFn = (a: TradeItem, b: TradeItem): number => {
-    switch (sortBy) {
-      case 'price-desc': return b.price - a.price;
-      case 'price-asc': return a.price - b.price;
-      case 'name-asc': return a.name.localeCompare(b.name);
-      case 'name-desc': return b.name.localeCompare(a.name);
-      default: return 0;
-    }
-  };
-
-  // Sort and reorder DOM for both sides
-  for (const items of [yourItems, theirItems]) {
-    if (items.length === 0) continue;
-    const sorted = [...items].sort(sortFn);
-    const parent = items[0].element.parentElement;
-    if (!parent) continue;
-    for (const item of sorted) {
-      parent.appendChild(item.element);
-    }
-  }
+function divider(): HTMLElement {
+  return el('div', 'sk-sidebar-divider');
 }
 
-// ─── Price Tags ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  UPDATE SIDEBAR — called on every trade change
+// ═══════════════════════════════════════════════════════════════════
 
-function addPriceTags() {
+function updateSidebar() {
+  const yourItems = collectTradeItems(
+    '#your_slots .item, .tradeoffer_items.primary .trade_item'
+  );
+  const theirItems = collectTradeItems(
+    '#their_slots .item, .tradeoffer_items.secondary .trade_item'
+  );
+
+  // Update item lists
+  renderItemList('sk-your-list', 'sk-your-total', yourItems);
+  renderItemList('sk-their-list', 'sk-their-total', theirItems);
+
+  // Price tags on trade items
   for (const items of [yourItems, theirItems]) {
     for (const item of items) {
-      if (item.element.querySelector('.sk-price-tag')) continue;
-      if (!item.price) continue;
-
+      if (item.element.querySelector('.sk-price-tag') || !item.price) continue;
       item.element.style.position = 'relative';
       const tag = el('div', 'sk-price-tag');
       tag.textContent = fmtPrice(item.price);
       item.element.appendChild(tag);
     }
+  }
+
+  // P/L
+  const yourTotal = yourItems.reduce((s, i) => s + i.price, 0);
+  const theirTotal = theirItems.reduce((s, i) => s + i.price, 0);
+  const diff = theirTotal - yourTotal;
+  const pct = yourTotal > 0 ? (diff / yourTotal) * 100 : 0;
+  const profit = diff >= 0;
+
+  const plEl = document.getElementById('sk-trade-pl');
+  if (plEl) {
+    plEl.innerHTML = '';
+
+    if (yourItems.length > 0 || theirItems.length > 0) {
+      const row = el('div', 'sk-pl-row');
+      const label = el('span', 'sk-pl-label');
+      label.textContent = 'P/L:';
+      const value = el('span', profit ? 'sk-pl-profit' : 'sk-pl-loss');
+      value.textContent = `${profit ? '+' : ''}${fmtPrice(diff)} (${profit ? '+' : ''}${pct.toFixed(1)}%)`;
+      row.append(label, value);
+      plEl.appendChild(row);
+    }
+
+    if (yourItems.length > 0 && theirItems.length === 0) {
+      const warn = el('div', 'sk-pl-warn');
+      warn.textContent = '\u26a0 One-sided trade \u2014 giving items for nothing!';
+      plEl.appendChild(warn);
+    } else if (!profit && Math.abs(pct) > 10) {
+      const warn = el('div', 'sk-pl-warn');
+      warn.textContent = `\u26a0 Losing ${Math.abs(pct).toFixed(1)}% value!`;
+      plEl.appendChild(warn);
+    }
+  }
+}
+
+function collectTradeItems(selector: string): TradeItem[] {
+  const items: TradeItem[] = [];
+  document.querySelectorAll(selector).forEach(item => {
+    const name = itemName(item as HTMLElement);
+    if (name) {
+      items.push({ name, price: itemPrice(name), element: item as HTMLElement });
+    }
+  });
+  return items;
+}
+
+function renderItemList(listId: string, totalId: string, items: TradeItem[]) {
+  const list = document.getElementById(listId);
+  const totalEl = document.getElementById(totalId);
+  if (!list) return;
+
+  list.innerHTML = '';
+  let total = 0;
+
+  for (const item of items) {
+    const row = el('div', 'sk-sidebar-item');
+    const nameEl = el('span', 'sk-sidebar-item-name');
+    nameEl.textContent = item.name;
+    nameEl.title = item.name;
+    const priceEl = el('span', 'sk-sidebar-item-price');
+    priceEl.textContent = item.price ? fmtPrice(item.price) : '\u2014';
+    row.append(nameEl, priceEl);
+    list.appendChild(row);
+    total += item.price;
+  }
+
+  if (totalEl) {
+    totalEl.textContent = items.length > 0
+      ? `${items.length} items \u00b7 ${fmtPrice(total)}`
+      : 'No items';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  INVENTORY PRICE TAGS
+// ═══════════════════════════════════════════════════════════════════
+
+function tagInventoryPrices() {
+  document.querySelectorAll('#inventories .item, .trade_area .item').forEach(item => {
+    const e = item as HTMLElement;
+    if (e.querySelector('.sk-price-tag')) return;
+
+    const name = itemName(e);
+    if (!name) return;
+    const price = itemPrice(name);
+    if (!price) return;
+
+    e.style.position = 'relative';
+    const tag = el('div', 'sk-price-tag');
+    tag.textContent = fmtPrice(price);
+    e.appendChild(tag);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  INVENTORY CONTROLS
+// ═══════════════════════════════════════════════════════════════════
+
+function addInventoryControls() {
+  const target = document.getElementById('inventory_displaycontrols')
+    || document.querySelector('.filter_ctn')
+    || document.querySelector('.trade_area');
+  if (!target || target.querySelector('.sk-inv-controls')) return;
+
+  const bar = el('div', 'sk-inv-controls');
+
+  // Search
+  const search = document.createElement('input');
+  search.type = 'text';
+  search.placeholder = 'Search items...';
+  search.className = 'sk-market-input sk-inv-search';
+  search.addEventListener('input', () => {
+    const q = search.value.toLowerCase();
+    document.querySelectorAll('#inventories .item').forEach(item => {
+      const e = item as HTMLElement;
+      const n = itemName(e).toLowerCase();
+      e.style.display = !q || n.includes(q) ? '' : 'none';
+    });
+  });
+
+  // Count
+  const count = el('span', 'sk-inv-count');
+  const updateCount = () => {
+    const n = document.querySelectorAll(
+      '#inventories .inventory_page:not([style*="display: none"]) .item'
+    ).length;
+    count.textContent = `${n} items`;
+  };
+  updateCount();
+  setInterval(updateCount, 3000);
+
+  bar.append(search, count);
+  target.insertAdjacentElement('afterbegin', bar);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  BULK ACTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+function clickAll(selector: string | null, elements?: HTMLElement[]) {
+  const items = elements || (selector
+    ? Array.from(document.querySelectorAll(selector)) as HTMLElement[]
+    : []);
+  items.forEach((item, i) => {
+    setTimeout(() => item.click(), i * 100);
+  });
+}
+
+function sortInventoryByPrice() {
+  document.querySelectorAll('#inventories .inventory_page').forEach(page => {
+    const items = Array.from(page.querySelectorAll('.item')) as HTMLElement[];
+    items.sort((a, b) => {
+      return itemPrice(itemName(b)) - itemPrice(itemName(a));
+    });
+    items.forEach(item => page.appendChild(item));
+  });
+}
+
+function addByPrice(threshold: number, dir: 'above' | 'below') {
+  const items = document.querySelectorAll(
+    '#inventories .inventory_page .item:not(.in_trade)'
+  );
+  let delay = 0;
+  items.forEach(item => {
+    const e = item as HTMLElement;
+    const p = itemPrice(itemName(e));
+    if (!p) return;
+    const match = dir === 'above' ? p >= threshold : p <= threshold;
+    if (match) {
+      setTimeout(() => e.click(), delay);
+      delay += 150;
+    }
+  });
+}
+
+function removeByPrice(threshold: number, dir: 'above' | 'below') {
+  const items = document.querySelectorAll('#your_slots .item');
+  let delay = 0;
+  items.forEach(item => {
+    const e = item as HTMLElement;
+    const p = itemPrice(itemName(e));
+    if (!p) return;
+    const match = dir === 'above' ? p >= threshold : p <= threshold;
+    if (match) {
+      setTimeout(() => e.click(), delay);
+      delay += 150;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  OBSERVE CHANGES
+// ═══════════════════════════════════════════════════════════════════
+
+function observeChanges() {
+  let timer: ReturnType<typeof setTimeout>;
+  const debounced = () => {
+    clearTimeout(timer);
+    timer = setTimeout(updateSidebar, 300);
+  };
+
+  // Watch trade slots
+  const slots = [
+    document.getElementById('your_slots'),
+    document.getElementById('their_slots'),
+    document.querySelector('.tradeoffer_items.primary'),
+    document.querySelector('.tradeoffer_items.secondary'),
+  ].filter(Boolean) as HTMLElement[];
+
+  for (const slot of slots) {
+    new MutationObserver(debounced).observe(slot, { childList: true, subtree: true });
+  }
+
+  // Watch inventory for new items loading
+  const inv = document.getElementById('inventories');
+  if (inv) {
+    new MutationObserver(() => tagInventoryPrices()).observe(inv, {
+      childList: true, subtree: true,
+    });
   }
 }
 

@@ -735,3 +735,52 @@ export function parseSteamPriceString(s: string): number {
   if (isNaN(num)) return 0;
   return Math.round(num * 100);
 }
+
+// ─── Market Management API ──────────────────────────────────────
+
+/** Remove a sell listing from the market */
+export async function removeListing(listingId: string): Promise<boolean> {
+  const sessionId = getSessionID();
+  if (!sessionId) return false;
+  try {
+    const res = await fetch(`https://steamcommunity.com/market/removelisting/${listingId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      credentials: 'include',
+      body: `sessionid=${sessionId}`,
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+/** Cancel an active buy order */
+export async function cancelBuyOrder(orderId: string): Promise<boolean> {
+  const sessionId = getSessionID();
+  if (!sessionId) return false;
+  try {
+    const res = await fetch('https://steamcommunity.com/market/cancelbuyorder/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      credentials: 'include',
+      body: `sessionid=${sessionId}&buy_orderid=${orderId}`,
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data?.success === 1;
+  } catch { return false; }
+}
+
+/** Fetch market history (transactions, listings, cancellations) */
+export async function getMarketHistory(start: number, count: number): Promise<{
+  success: boolean; results_html: string; hovers: string;
+  assets: any; total_count: number; pagesize: number;
+} | null> {
+  try {
+    const res = await fetch(
+      `https://steamcommunity.com/market/myhistory/?start=${start}&count=${count}`,
+      { credentials: 'include' },
+    );
+    if (!res.ok) return null;
+    return res.json();
+  } catch { return null; }
+}

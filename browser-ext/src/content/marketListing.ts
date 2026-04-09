@@ -36,7 +36,7 @@ async function init() {
   currencySign = s;
   exchangeRate = rates?.[cc] || 1;
 
-  const { listings } = readMarketListings();
+  const { listings, assets } = readMarketListings();
   const price = getItemPrice(itemName, exchangeRate);
   const priceEntry = getItemPriceEntry(itemName);
 
@@ -44,6 +44,10 @@ async function init() {
   const marketInfo = extractMarketInfo();
 
   injectPanel(itemName, listings.length, price, priceEntry, marketInfo);
+
+  // Stickers (clickable links) + price comparison on each listing row
+  addStickersToRows(listings, assets);
+  if (price) addPriceComparisonToRows(price, listings);
 
   trackEvent('market_listing_viewed', { item_name: itemName, listing_count: listings.length });
   console.log(`[SkinKeeper] Market: ${itemName}, ${listings.length} listings`);
@@ -313,6 +317,19 @@ function injectPanel(name: string, listingCount: number, price: number, priceEnt
   });
   ctrlRow.appendChild(sortFloatBtn);
 
+  // Sort by Sticker Price
+  const sortStickerBtn = el('button', 'sk-ext-link') as HTMLButtonElement;
+  sortStickerBtn.textContent = '\ud83d\udc8e By Sticker Price';
+  sortStickerBtn.style.cursor = 'pointer';
+  sortStickerBtn.addEventListener('click', () => {
+    const rows = Array.from(document.querySelectorAll('.market_listing_row.market_recent_listing_row')) as HTMLElement[];
+    rows.sort((a, b) => parseFloat(b.dataset.skStickerPrice || '0') - parseFloat(a.dataset.skStickerPrice || '0'));
+    const container = rows[0]?.parentElement;
+    if (container) rows.forEach(r => container.appendChild(r));
+    sortStickerBtn.textContent = '\u2705 Sorted by Sticker Price';
+  });
+  ctrlRow.appendChild(sortStickerBtn);
+
   panel.appendChild(ctrlRow);
 
   // ── Actions ──
@@ -419,11 +436,150 @@ function observeNewListings() {
     }
     if (hasNewRows) {
       // Debounce: wait a tick for all rows to be added
-      setTimeout(() => loadListingFloats(), 100);
+      setTimeout(() => {
+        loadListingFloats();
+        // Re-read listings for new rows and add stickers + price comparison
+        const { listings: nl, assets: na } = readMarketListings();
+        addStickersToRows(nl, na);
+        if (currentRefPrice) addPriceComparisonToRows(currentRefPrice, nl);
+      }, 100);
     }
   });
 
   observer.observe(container, { childList: true, subtree: true });
+}
+
+// ─── Sticker Display on Listing Rows (clickable → sticker market page) ─
+
+interface StickerData {
+  name: string;
+  imgUrl: string;
+  price: number; // user currency (dollars, not cents)
+}
+
+function parseStickersFromAsset(asset: any): StickerData[] {
+  if (!asset?.descriptions) return [];
+
+  for (const desc of asset.descriptions) {
+    if (!desc.value?.includes('sticker_info')) continue;
+
+    const stickers: StickerData[] = [];
+    const imgs: string[] = [];
+
+    const imgRe = /src="([^"]+)"/g;
+    let m;
+    while ((m = imgRe.exec(desc.value)) !== null) {
+      imgs.push(m[1]);
+    }
+
+    const nameMatch = desc.value.match(/Sticker:\s*(.+?)(?:<\/|$)/);
+    if (!nameMatch) continue;
+
+    const names = nameMatch[1].split(',').map((n: string) => n.trim()).filter(Boolean);
+    for (let i = 0; i < names.length; i++) {
+      stickers.push({
+        name: names[i],
+        imgUrl: imgs[i] || '',
+        price: getItemPrice(`Sticker | ${names[i]}`, exchangeRate),
+      });
+    }
+    return stickers;
+  }
+  return [];
+}
+
+function addStickersToRows(listings: any[], assets: any) {
+  // Build listing ID → asset map
+  const map = new Map<string, any>();
+  for (const l of listings) {
+    if (l.assetid && assets?.[730]?.[2]?.[l.assetid]) {
+      map.set(l.listingid, assets[730][2][l.assetid]);
+    }
+  }
+
+  document.querySelectorAll('.market_listing_row.market_recent_listing_row').forEach(row => {
+    const rowEl = row as HTMLElement;
+    if (rowEl.querySelector('.sk-sticker-row')) return;
+
+    const listingId = rowEl.id?.replace('listing_', '');
+    if (!listingId || !map.has(listingId)) return;
+
+    const stickers = parseStickersFromAsset(map.get(listingId));
+    if (!stickers.length) return;
+
+    const container = el('div', 'sk-sticker-row');
+    let totalPrice = 0;
+
+    for (const s of stickers) {
+      const link = document.createElement('a');
+      link.className = 'sk-sticker-link';
+      link.href = `/market/listings/730/${encodeURIComponent('Sticker | ' + s.name)}`;
+      link.title = `${s.name}${s.price > 0 ? '\n' + fmtPrice(s.price) : ''}`;
+
+      if (s.imgUrl) {
+        const img = document.createElement('img');
+        img.src = s.imgUrl;
+        img.width = 32;
+        img.height = 24;
+        link.appendChild(img);
+      } else {
+        link.textContent = s.name.substring(0, 10);
+      }
+
+      container.appendChild(link);
+      totalPrice += s.price;
+    }
+
+    if (totalPrice > 0) {
+      const badge = el('span', 'sk-sticker-total');
+      badge.textContent = fmtPrice(totalPrice);
+      container.appendChild(badge);
+      rowEl.dataset.skStickerPrice = String(totalPrice);
+    }
+
+    const nameBlock = rowEl.querySelector('.market_listing_item_name_block');
+    if (nameBlock) {
+      nameBlock.insertAdjacentElement('afterend', container);
+    }
+  });
+}
+
+// ─── Price Comparison (diff from reference) on Listing Rows ──────
+
+let currentRefPrice = 0;
+
+function addPriceComparisonToRows(refPrice: number, listings: any[]) {
+  currentRefPrice = refPrice;
+  const refCents = Math.round(refPrice * 100);
+  if (refCents <= 0) return;
+
+  // Build listing ID → price (cents, buyer pays) map
+  const priceMap = new Map<string, number>();
+  for (const l of listings) {
+    priceMap.set(l.listingid, l.price);
+  }
+
+  document.querySelectorAll('.market_listing_row.market_recent_listing_row').forEach(row => {
+    const rowEl = row as HTMLElement;
+    if (rowEl.querySelector('.sk-price-diff')) return;
+
+    const listingId = rowEl.id?.replace('listing_', '');
+    if (!listingId) return;
+
+    const listingCents = priceMap.get(listingId);
+    if (listingCents === undefined) return;
+
+    const diff = listingCents - refCents;
+    const pct = refCents > 0 ? (diff / refCents) * 100 : 0;
+
+    const priceEl = rowEl.querySelector('.market_listing_price_with_fee, .market_listing_price');
+    if (!priceEl) return;
+
+    const diffEl = document.createElement('div');
+    diffEl.className = 'sk-price-diff';
+    diffEl.textContent = `${diff >= 0 ? '+' : ''}${(diff / 100).toFixed(2)} (${diff >= 0 ? '+' : ''}${pct.toFixed(0)}%)`;
+    priceEl.appendChild(diffEl);
+  });
 }
 
 init();

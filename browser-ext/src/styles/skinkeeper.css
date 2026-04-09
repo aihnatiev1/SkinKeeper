@@ -1146,3 +1146,530 @@
   animation: sk-shimmer 1.5s ease infinite;
   border-radius: 4px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Market Page Enhancement — Listings, Buy Orders, History
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Market Toolbar ──────────────────────────────────────────────── */
+.sk-market-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: var(--sk-bg-glass);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-sm);
+  font-family: var(--sk-font);
+  font-size: 12px;
+  color: var(--sk-text);
+  flex-wrap: wrap;
+}
+
+.sk-market-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--sk-border);
+  border-radius: 4px;
+  color: var(--sk-text);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: var(--sk-font);
+  outline: none;
+  transition: border-color var(--sk-transition);
+}
+
+.sk-market-input:focus {
+  border-color: var(--sk-primary);
+}
+
+.sk-market-search {
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+}
+
+/* ─── Delay Group ─────────────────────────────────────────────────── */
+.sk-delay-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sk-text-dim);
+  white-space: nowrap;
+}
+
+.sk-delay-icon {
+  color: var(--sk-amber);
+}
+
+.sk-delay-num {
+  width: 60px;
+  text-align: center;
+}
+
+/* ─── Overpriced Badge ────────────────────────────────────────────── */
+.sk-overpriced-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: var(--sk-red);
+  cursor: pointer;
+  transition: all var(--sk-transition);
+  user-select: none;
+}
+
+.sk-overpriced-badge.sk-has-overpriced {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: var(--sk-red);
+}
+
+.sk-overpriced-badge.sk-filter-active {
+  background: var(--sk-red);
+  color: #fff;
+}
+
+/* ─── Select All ──────────────────────────────────────────────────── */
+.sk-select-all {
+  color: var(--sk-green);
+  font-size: 12px;
+  font-family: var(--sk-font);
+  cursor: pointer;
+  text-decoration: none;
+  margin-left: auto;
+}
+
+.sk-select-all:hover {
+  text-decoration: underline;
+}
+
+/* ─── Section Buttons (Request prices, Remove/Cancel) ─────────────── */
+.sk-section-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ─── Row Checkbox ────────────────────────────────────────────────── */
+.sk-row-cb {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--sk-primary);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ─── Overpriced Row Highlight ────────────────────────────────────── */
+.market_listing_row.sk-overpriced {
+  border-left: 3px solid var(--sk-red) !important;
+  background: var(--sk-red-dim) !important;
+}
+
+/* ─── Price Strikethrough (your overpriced listing) ───────────────── */
+.sk-price-strike {
+  text-decoration: line-through;
+  color: var(--sk-red) !important;
+  opacity: 0.8;
+}
+
+/* ─── Reference Price (min listing / highest order) ───────────────── */
+.sk-ref-price {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+  font-family: var(--sk-font);
+}
+
+.sk-ref-bad {
+  color: var(--sk-red);
+}
+
+.sk-ref-ok {
+  color: var(--sk-green);
+}
+
+/* ─── Total Badge in Section Header ───────────────────────────────── */
+.sk-total-badge {
+  color: var(--sk-text-dim);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+/* ─── History: Export Bar ─────────────────────────────────────────── */
+.sk-history-export {
+  gap: 8px;
+}
+
+.sk-history-filters {
+  gap: 12px;
+}
+
+.sk-toolbar-label {
+  color: var(--sk-text-dim);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sk-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sk-text);
+  font-family: var(--sk-font);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sk-check-label input[type="checkbox"] {
+  accent-color: var(--sk-primary);
+  width: 14px;
+  height: 14px;
+}
+
+.sk-export-csv {
+  background: linear-gradient(135deg, var(--sk-primary), var(--sk-accent)) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+}
+
+.sk-export-progress {
+  color: var(--sk-amber);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ─── History: Bottom Bar ─────────────────────────────────────────── */
+.sk-history-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: var(--sk-bg-glass);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-sm);
+  font-family: var(--sk-font);
+  flex-wrap: wrap;
+}
+
+.sk-history-counter {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sk-text);
+  margin-right: auto;
+}
+
+.sk-upload-btn {
+  font-size: 11px !important;
+  padding: 5px 12px !important;
+}
+
+/* ─── Check Price Link ────────────────────────────────────────────── */
+.sk-check-price {
+  display: block;
+  font-size: 10px;
+  color: var(--sk-green);
+  cursor: pointer;
+  text-decoration: none;
+  margin-top: 2px;
+  font-family: var(--sk-font);
+}
+
+.sk-check-price:hover {
+  text-decoration: underline;
+}
+
+.sk-check-loaded {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* ─── Collapsed History Rows ──────────────────────────────────────── */
+.sk-collapsed {
+  display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Trade Offer Sidebar
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sk-trade-sidebar {
+  position: fixed;
+  right: 8px;
+  top: 80px;
+  width: 260px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  background: var(--sk-bg);
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius);
+  padding: 12px;
+  font-family: var(--sk-font);
+  font-size: 12px;
+  color: var(--sk-text);
+  z-index: 1000;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.sk-trade-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sk-trade-sidebar::-webkit-scrollbar-thumb {
+  background: var(--sk-border);
+  border-radius: 2px;
+}
+
+/* ─── Sidebar Sections ────────────────────────────────────────────── */
+.sk-sidebar-section {
+  margin-bottom: 12px;
+}
+
+.sk-sidebar-header {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sk-text);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--sk-border-subtle);
+}
+
+.sk-sidebar-items {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.sk-sidebar-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  gap: 8px;
+}
+
+.sk-sidebar-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  color: var(--sk-text-dim);
+  font-size: 11px;
+}
+
+.sk-sidebar-item-price {
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--sk-amber);
+  font-size: 11px;
+}
+
+.sk-sidebar-total {
+  font-weight: 600;
+  color: var(--sk-text);
+  padding-top: 4px;
+  border-top: 1px solid var(--sk-border-subtle);
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+/* ─── P/L ─────────────────────────────────────────────────────────── */
+.sk-sidebar-pl {
+  margin: 8px 0;
+}
+
+.sk-pl-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.sk-pl-label {
+  font-weight: 500;
+  color: var(--sk-text-dim);
+}
+
+.sk-pl-profit {
+  font-weight: 700;
+  color: var(--sk-green);
+}
+
+.sk-pl-loss {
+  font-weight: 700;
+  color: var(--sk-red);
+}
+
+.sk-pl-warn {
+  color: var(--sk-red);
+  font-size: 11px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--sk-red-dim);
+  border-radius: var(--sk-radius-sm);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.sk-sidebar-divider {
+  height: 1px;
+  background: var(--sk-border-subtle);
+  margin: 8px 0;
+}
+
+/* ─── Action Buttons ──────────────────────────────────────────────── */
+.sk-sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sk-sidebar-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-sm);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--sk-text);
+  font-size: 11px;
+  font-family: var(--sk-font);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--sk-transition);
+}
+
+.sk-sidebar-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--sk-primary);
+}
+
+.sk-sidebar-btn:active {
+  transform: scale(0.98);
+}
+
+.sk-act-red {
+  color: var(--sk-red);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.sk-act-red:hover {
+  background: var(--sk-red-dim);
+  border-color: var(--sk-red);
+}
+
+.sk-act-green {
+  color: var(--sk-green);
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.sk-act-green:hover {
+  background: var(--sk-green-dim);
+  border-color: var(--sk-green);
+}
+
+.sk-act-primary {
+  color: var(--sk-primary-light);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.sk-act-primary:hover {
+  border-color: var(--sk-primary);
+}
+
+/* ─── Sidebar Footer ─────────────────────────────────────────────── */
+.sk-sidebar-footer {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sk-border-subtle);
+  text-align: center;
+  font-size: 10px;
+  color: var(--sk-text-dim);
+}
+
+.sk-sidebar-footer a {
+  color: var(--sk-primary-light);
+  text-decoration: none;
+}
+
+.sk-sidebar-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ─── Inventory Controls ──────────────────────────────────────────── */
+.sk-inv-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  margin-bottom: 4px;
+}
+
+.sk-inv-search {
+  flex: 1;
+  max-width: 200px;
+}
+
+.sk-inv-count {
+  font-size: 11px;
+  color: var(--sk-text-dim);
+  font-family: var(--sk-font);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Market Listing — Stickers + Price Comparison
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sk-sticker-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.sk-sticker-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  overflow: hidden;
+  transition: transform var(--sk-transition), box-shadow var(--sk-transition);
+  cursor: pointer;
+}
+
+.sk-sticker-link:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.sk-sticker-link img {
+  display: block;
+  border-radius: 2px;
+}
+
+.sk-sticker-total {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sk-amber);
+  font-family: var(--sk-font);
+  padding: 2px 6px;
+  background: var(--sk-amber-dim);
+  border-radius: 3px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* ─── Price Diff (comparison to reference) ────────────────────────── */
+.sk-price-diff {
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--sk-font);
+  margin-top: 2px;
+  line-height: 1.3;
+}
