@@ -10,6 +10,7 @@ import { useUIStore } from '@/lib/store';
 import { useMe } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { PageLoader } from '@/components/loading';
+import { GlobalTransferBar } from '@/components/global-transfer-bar';
 
 export default function DashboardLayout({
   children,
@@ -36,6 +37,7 @@ export default function DashboardLayout({
       <CurrencySelectModal />
       <InitialSync />
       <CommandPalette />
+      <GlobalTransferBar />
       <Sidebar />
       <main
         className="transition-all duration-300 min-h-screen pt-14 lg:pt-0"

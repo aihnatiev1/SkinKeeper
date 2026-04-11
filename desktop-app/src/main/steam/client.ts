@@ -41,6 +41,7 @@ export class SteamClient extends EventEmitter {
   private tradeManager: any;
   private csgo: any;
   private _isLoggedIn = false;
+  private _isConnecting = false;
   private _steamId: string | null = null;
   private _personaName: string | null = null;
   private _wallet: { currency: string; balance: number } | null = null;
@@ -48,6 +49,8 @@ export class SteamClient extends EventEmitter {
   private _gcInventory: any[] = []; // Raw GC items with def_index for storage unit ops
   private _descCache = new Map<string, any>(); // classid → Steam description (name, icon_url, etc.)
   private _apiKey: string | null = null;
+  private _webLoginSecure: string | null = null;
+  private _webSessionId: string | null = null;
   private _isMoving = false; // Suppress inventory-updated events during bulk move
   private _refreshToken: string | null = null;
   private gcReady = false;
@@ -73,6 +76,14 @@ export class SteamClient extends EventEmitter {
     return this._isLoggedIn;
   }
 
+  get refreshToken(): string | null {
+    return this._refreshToken;
+  }
+
+  get webSession(): { steamLoginSecure: string | null; sessionId: string | null } {
+    return { steamLoginSecure: this._webLoginSecure, sessionId: this._webSessionId };
+  }
+
   get status(): SteamStatus {
     return {
       loggedIn: this._isLoggedIn,
@@ -84,6 +95,7 @@ export class SteamClient extends EventEmitter {
 
   private setupListeners() {
     this.user.on('loggedOn', () => {
+      this._isConnecting = false;
       this._isLoggedIn = true;
       this._steamId = this.user.steamID?.getSteamID64() ?? null;
       this.emit('status-changed', this.status);
@@ -111,10 +123,22 @@ export class SteamClient extends EventEmitter {
     this.user.on('webSession', (_sessionId: string, cookies: string[]) => {
       this.community.setCookies(cookies);
       this.tradeManager.setCookies(cookies);
-      // Extract API key
       if ((this.user as any).webApiKey) {
         this._apiKey = (this.user as any).webApiKey;
       }
+      // Parse and store for desktop auth endpoint
+      const slsCookie = cookies.find(c => c.startsWith('steamLoginSecure='));
+      const sidCookie = cookies.find(c => c.startsWith('sessionid='));
+      if (slsCookie) {
+        this._webLoginSecure = decodeURIComponent(slsCookie.split('=').slice(1).join('='));
+      }
+      if (sidCookie) {
+        this._webSessionId = sidCookie.split('=')[1];
+      }
+      this.emit('web-session', {
+        steamLoginSecure: this._webLoginSecure,
+        sessionId: this._webSessionId,
+      });
     });
 
     // Trade offer events
@@ -129,6 +153,7 @@ export class SteamClient extends EventEmitter {
     });
 
     this.user.on('disconnected', (_eresult: number, msg: string) => {
+      this._isConnecting = false;
       this._isLoggedIn = false;
       this.gcReady = false;
       this.emit('status-changed', this.status);
@@ -136,6 +161,7 @@ export class SteamClient extends EventEmitter {
     });
 
     this.user.on('error', (err: Error) => {
+      this._isConnecting = false;
       this._isLoggedIn = false;
       this.gcReady = false;
       this.emit('error', err.message);
@@ -254,6 +280,42 @@ export class SteamClient extends EventEmitter {
     return this.gcReadyPromise;
   }
 
+  // --- Web Session (cookies from browser login) ---
+
+  /**
+   * Set Steam web session from captured browser cookies.
+   * This is sufficient for all trade/market operations via backend.
+   * Does NOT connect to Game Coordinator (storage unit moves need that separately).
+   */
+  setWebSession(steamLoginSecure: string, sessionId: string | null) {
+    const cookies = [
+      `steamLoginSecure=${steamLoginSecure}`,
+      ...(sessionId ? [`sessionid=${sessionId}`] : []),
+    ];
+    this.community.setCookies(cookies);
+    this.tradeManager.setCookies(cookies, (err: Error | null) => {
+      if (err) console.warn('[SteamClient] tradeManager.setCookies error:', err.message);
+    });
+    this._isLoggedIn = true;
+    // Extract steamId from the cookie (it's encoded in the JWT part)
+    if (!this._steamId) {
+      const steamId = this.extractSteamIdFromCookie(steamLoginSecure);
+      if (steamId) this._steamId = steamId;
+    }
+    this.emit('status-changed', this.status);
+    console.log('[SteamClient] Web session set — steam-user connected via cookies');
+  }
+
+  private extractSteamIdFromCookie(steamLoginSecure: string): string | null {
+    try {
+      const decoded = decodeURIComponent(steamLoginSecure);
+      const parts = decoded.split('||');
+      const steamId = parts[0];
+      if (steamId && /^\d{17}$/.test(steamId)) return steamId;
+    } catch {}
+    return null;
+  }
+
   // --- Authentication ---
 
   async login(username: string, password: string): Promise<{ success: boolean; error?: string; requiresGuard?: boolean; qrUrl?: string }> {
@@ -261,8 +323,18 @@ export class SteamClient extends EventEmitter {
       const session = new LoginSession(EAuthTokenPlatformType.SteamClient);
 
       session.on('authenticated', async () => {
+        if (this._isConnecting || this._isLoggedIn) {
+          try { this.user.logOff(); } catch {}
+          await new Promise(r => setTimeout(r, 800));
+        }
+        this._isConnecting = true;
         this._refreshToken = session.refreshToken;
-        this.user.logOn({ refreshToken: session.refreshToken });
+        try {
+          this.user.logOn({ refreshToken: session.refreshToken });
+        } catch (err: any) {
+          this._isConnecting = false;
+          this.emit('error', err.message);
+        }
       });
 
       const startResult = await session.startWithCredentials({
@@ -304,8 +376,18 @@ export class SteamClient extends EventEmitter {
       const session = new LoginSession(EAuthTokenPlatformType.SteamClient);
 
       session.on('authenticated', async () => {
+        if (this._isConnecting || this._isLoggedIn) {
+          try { this.user.logOff(); } catch {}
+          await new Promise(r => setTimeout(r, 800));
+        }
+        this._isConnecting = true;
         this._refreshToken = session.refreshToken;
-        this.user.logOn({ refreshToken: session.refreshToken });
+        try {
+          this.user.logOn({ refreshToken: session.refreshToken });
+        } catch (err: any) {
+          this._isConnecting = false;
+          this.emit('error', err.message);
+        }
       });
 
       const startResult = await session.startWithQR();
@@ -322,11 +404,16 @@ export class SteamClient extends EventEmitter {
   }
 
   async loginWithToken(refreshToken: string): Promise<{ success: boolean; error?: string }> {
+    if (this._isLoggedIn) return { success: true };
+    if (this._isConnecting) return { success: false, error: 'Already connecting' };
     try {
+      this._isConnecting = true;
       this._refreshToken = refreshToken;
       this.user.logOn({ refreshToken });
       return { success: true };
     } catch (err: any) {
+      this._isConnecting = false;
+      this._refreshToken = null;
       return { success: false, error: err.message };
     }
   }

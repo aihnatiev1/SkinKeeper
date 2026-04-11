@@ -161,6 +161,31 @@ router.get(
       console.log(`[Trade] Fetching partner inventory for ${steamId}`);
       const items = await fetchPartnerInventory(steamId);
       console.log(`[Trade] Partner inventory: ${items.length} tradable items for ${steamId}`);
+
+      // Enrich with prices from price_history (LATERAL JOIN — never DISTINCT ON for perf)
+      const uniqueNames = [...new Set(items.map((i) => i.marketHashName).filter(Boolean))] as string[];
+      if (uniqueNames.length > 0) {
+        const { rows: priceRows } = await pool.query(
+          `SELECT n.name, lp.price_usd
+           FROM unnest($1::text[]) AS n(name)
+           JOIN LATERAL (
+             SELECT price_usd FROM price_history ph
+             WHERE ph.market_hash_name = n.name AND ph.source = 'steam'
+             ORDER BY ph.recorded_at DESC LIMIT 1
+           ) lp ON true`,
+          [uniqueNames]
+        );
+        const priceMap = new Map<string, number>();
+        for (const row of priceRows) {
+          priceMap.set(row.name, Math.round(row.price_usd * 100));
+        }
+        for (const item of items) {
+          if (item.marketHashName && priceMap.has(item.marketHashName)) {
+            item.priceCents = priceMap.get(item.marketHashName)!;
+          }
+        }
+      }
+
       res.json({ items, count: items.length });
     } catch (err: any) {
       console.error("Partner inventory error:", err.message);

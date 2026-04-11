@@ -329,6 +329,90 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/auth/desktop
+ * Desktop app login via steamLoginSecure cookie (captured after QR steam-user connect).
+ * No existing JWT required — this IS the login endpoint for the desktop.
+ */
+router.post("/desktop", async (req: Request, res: Response) => {
+  try {
+    const { steamLoginSecure, sessionId } = req.body;
+    if (!steamLoginSecure) {
+      res.status(400).json({ error: "steamLoginSecure is required" });
+      return;
+    }
+
+    // Extract Steam ID from the cookie (it encodes the Steam ID)
+    const steamId = SteamSessionService.extractSteamIdFromCookie(steamLoginSecure);
+    if (!steamId) {
+      res.status(401).json({ error: "Could not extract Steam ID from session cookie" });
+      return;
+    }
+
+    // Fetch Steam profile
+    const profile = await getSteamProfile(steamId);
+
+    // Find or create user
+    const { rows: existingAcct } = await pool.query(
+      `SELECT sa.user_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      [steamId]
+    );
+
+    let userId: number;
+    if (existingAcct.length > 0) {
+      userId = existingAcct[0].user_id;
+    } else {
+      const { rows } = await pool.query(
+        `INSERT INTO users (steam_id, display_name, avatar_url)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (steam_id)
+         DO UPDATE SET display_name = $2, avatar_url = $3
+         RETURNING id`,
+        [steamId, profile.personaname, profile.avatarfull]
+      );
+      userId = rows[0].id;
+    }
+
+    // Upsert steam_account
+    await pool.query(
+      `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
+       VALUES ($1, $2, $3, $4, 'active')
+       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
+      [userId, steamId, profile.personaname, profile.avatarfull]
+    );
+
+    // Set active account
+    await pool.query(
+      `UPDATE users SET active_account_id = sa.id
+       FROM steam_accounts sa
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
+      [userId, steamId]
+    );
+
+    // Save Steam session so backend can use it for trades
+    if (sessionId) {
+      try {
+        const { rows: acctRows } = await pool.query(
+          `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`,
+          [userId, steamId]
+        );
+        if (acctRows[0]) {
+          await SteamSessionService.saveSession(acctRows[0].id, { steamLoginSecure, sessionId });
+        }
+      } catch (err) {
+        console.warn("[Desktop auth] Session save failed (non-fatal):", err);
+      }
+    }
+
+    const token = jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: "30d" });
+    console.log(`[Desktop auth] Login OK — steamId=${steamId}, userId=${userId}`);
+    res.json({ token });
+  } catch (err) {
+    console.error("[Desktop auth] Error:", err);
+    res.status(500).json({ error: "Desktop authentication failed" });
+  }
+});
+
 // GET /api/auth/me
 router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {

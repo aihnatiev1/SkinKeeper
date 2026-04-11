@@ -1,5 +1,6 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, session } from 'electron';
 import { SteamClient } from './client';
+import { storeSteamToken } from '../auth/ipc';
 
 export function registerSteamIPC(steam: SteamClient) {
   // Forward Steam events to all renderer windows
@@ -18,6 +19,7 @@ export function registerSteamIPC(steam: SteamClient) {
   steam.on('error', (error) => broadcast('steam:error', error));
   steam.on('transfer-progress', (data) => broadcast('steam:transfer-progress', data));
   steam.on('gc-ready', () => broadcast('steam:gc-ready'));
+  steam.on('web-session', (data) => broadcast('steam:web-session', data));
 
   // Keep reference to pending guard session
   let pendingGuardSession: any = null;
@@ -27,6 +29,88 @@ export function registerSteamIPC(steam: SteamClient) {
   });
 
   // --- Auth handlers ---
+
+  /**
+   * Open a Steam web login popup using the DEFAULT session (same as main window).
+   * Poll for steamLoginSecure cookie — works with Steam's SPA login flow.
+   */
+  ipcMain.handle('steam:web-login', async () => {
+    type WebLoginResult = { success: boolean; error?: string; steamLoginSecure?: string; sessionId?: string | null; steamRefreshToken?: string | null };
+
+    return new Promise<WebLoginResult>((resolve) => {
+      const ses = session.defaultSession;
+
+      const popup = new BrowserWindow({
+        width: 520,
+        height: 680,
+        title: 'Sign in to Steam',
+        backgroundColor: '#1b2838',
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          // No partition — uses defaultSession, same as main window
+        },
+      });
+
+      let resolved = false;
+      let pollTimer: NodeJS.Timeout | null = null;
+
+      const done = (result: WebLoginResult) => {
+        if (resolved) return;
+        resolved = true;
+        if (pollTimer) clearInterval(pollTimer);
+        try { popup.destroy(); } catch {}
+        resolve(result);
+      };
+
+      popup.on('closed', () => {
+        done({ success: false, error: 'Login cancelled' });
+      });
+
+      // Clear old Steam login cookies so user always gets a fresh login form
+      Promise.all([
+        ses.cookies.remove('https://steamcommunity.com', 'steamLoginSecure'),
+        ses.cookies.remove('https://steamcommunity.com', 'sessionid'),
+        ses.cookies.remove('https://login.steampowered.com', 'steamRefresh_steam'),
+      ]).then(() => {
+        popup.loadURL('https://steamcommunity.com/login/home/');
+      });
+
+      // Poll every 1.5s for steamLoginSecure — handles Steam SPA navigation reliably
+      const checkCookies = async () => {
+        if (resolved) return;
+        try {
+          const allCookies = await ses.cookies.get({});
+          const slsCookie = allCookies.find(c => c.name === 'steamLoginSecure' && c.domain?.includes('steamcommunity.com'));
+          if (!slsCookie?.value) return; // not logged in yet
+
+          const refreshCookie = allCookies.find(c => c.name === 'steamRefresh_steam' && c.domain?.includes('steampowered.com'));
+          const sessionCookie = allCookies.find(c => c.name === 'sessionid' && c.domain?.includes('steamcommunity.com'));
+
+          console.log(`[WebLogin] Cookies detected — sls: ${slsCookie.value.length}, sessionid: ${!!sessionCookie}, refresh: ${!!refreshCookie}`);
+
+          // steamRefresh_steam is WebBrowser-type — cannot be used with steam-user (needs SteamClient-type)
+          // We return cookies for backend sync; GC connect is separate (QR code flow)
+          console.log('[WebLogin] Web session captured — returning for backend sync');
+          done({
+            success: true,
+            steamLoginSecure: slsCookie.value,
+            sessionId: sessionCookie?.value || null,
+            steamRefreshToken: refreshCookie?.value || null,
+          });
+        } catch (err: any) {
+          console.error('[WebLogin] Poll error:', err.message);
+        }
+      };
+
+      // Start polling after 2s (give time for popup to load)
+      setTimeout(() => {
+        pollTimer = setInterval(checkCookies, 1500);
+        // Stop polling after 3 minutes (timeout)
+        setTimeout(() => done({ success: false, error: 'Login timed out' }), 3 * 60 * 1000);
+      }, 2000);
+    });
+  });
 
   ipcMain.handle('steam:login', async (_event, username: string, password: string) => {
     return steam.login(username, password);
@@ -57,6 +141,10 @@ export function registerSteamIPC(steam: SteamClient) {
 
   ipcMain.handle('steam:status', async () => {
     return steam.status;
+  });
+
+  ipcMain.handle('steam:get-web-session', async () => {
+    return steam.webSession;
   });
 
   ipcMain.handle('steam:guard-code', async (_event, sharedSecret: string) => {

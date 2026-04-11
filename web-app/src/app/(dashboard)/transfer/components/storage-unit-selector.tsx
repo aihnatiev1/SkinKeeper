@@ -64,25 +64,40 @@ export function StorageUnitSelector({ units, selected, onSelect, label = 'Storag
             transition={{ duration: 0.15 }}
             className="absolute z-30 top-full mt-1 left-0 right-0 glass-strong rounded-xl border border-border/50 shadow-2xl overflow-hidden max-h-60 overflow-y-auto"
           >
-            {units.map((unit) => (
-              <button
-                key={unit.id}
-                onClick={() => {
-                  onSelect(unit.id);
-                  setOpen(false);
-                }}
-                className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors text-sm',
-                  unit.id === selected
-                    ? 'bg-primary/10 text-primary'
-                    : 'hover:bg-surface-light text-foreground'
-                )}
-              >
-                <Package size={14} className="shrink-0 text-muted" />
-                <span className="flex-1 truncate">{unit.name}</span>
-                <span className="text-xs text-muted tabular-nums">{unit.item_count}</span>
-              </button>
-            ))}
+            {units.map((unit) => {
+              const fillPct = Math.min(100, ((unit.item_count || 0) / 1000) * 100);
+              const isSelected = unit.id === selected;
+              return (
+                <button
+                  key={unit.id}
+                  onClick={() => { onSelect(unit.id); setOpen(false); }}
+                  className={cn(
+                    'w-full flex flex-col gap-1 px-3 py-2 text-left transition-colors',
+                    isSelected ? 'bg-primary/10' : 'hover:bg-surface-light'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Package size={13} className="shrink-0 text-muted" />
+                    <span className={cn('flex-1 truncate text-sm font-medium', isSelected && 'text-primary')}>
+                      {unit.name}
+                    </span>
+                    <span className="text-xs text-muted tabular-nums shrink-0">
+                      {unit.item_count} / 1000
+                    </span>
+                  </div>
+                  {/* Fill bar */}
+                  <div className="h-1 rounded-full bg-white/8 overflow-hidden ml-5">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all',
+                        fillPct > 90 ? 'bg-loss' : fillPct > 70 ? 'bg-warning' : 'bg-primary/50'
+                      )}
+                      style={{ width: `${fillPct}%` }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>

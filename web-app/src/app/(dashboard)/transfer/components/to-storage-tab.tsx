@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Search, RefreshCw, Eye, EyeOff, Package, Loader2, ChevronDown, ArrowRightToLine, Sparkles, Pencil } from 'lucide-react';
+import { useFormatPrice } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDesktopInventory, useStorageUnits } from '@/lib/use-desktop';
 import { useTransferStore } from '@/lib/transfer-store';
@@ -12,11 +13,26 @@ import { toast } from 'sonner';
 const STEAM_CDN = 'https://community.akamai.steamstatic.com/economy/image/';
 const STORAGE_UNIT_ICON = 'https://community.akamai.steamstatic.com/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGJG51EejH_XV0MGkITXE5AB094KtuwG0Exv1yMfkqXcCtvT_MPw5JPTKV2bDk7Z3sudtHSjr2w0ptCMWPT2u';
 
-// Group identical items by market_hash_name
+function getWear(paintWear: number | null | undefined): string | null {
+  if (paintWear == null) return null;
+  if (paintWear < 0.07) return 'FN';
+  if (paintWear < 0.15) return 'MW';
+  if (paintWear < 0.38) return 'FT';
+  if (paintWear < 0.45) return 'WW';
+  return 'BS';
+}
+
+const WEAR_COLORS: Record<string, string> = {
+  FN: '#4ade80', MW: '#22d3ee', FT: '#a78bfa', WW: '#f97316', BS: '#ef4444',
+};
+
+// Group items by market_hash_name + wear (so same skin with different wear = separate rows)
 function groupItems(items: any[]) {
   const map = new Map<string, { item: any; ids: string[]; count: number }>();
   for (const item of items) {
-    const key = item.market_hash_name || item.name || item.id;
+    const wear = getWear(item.paint_wear);
+    // Use market_hash_name (includes wear), fallback to name+wear
+    const key = item.market_hash_name || `${item.name || item.id}__${wear || ''}`;
     const existing = map.get(key);
     if (existing) {
       existing.ids.push(item.id);
@@ -40,7 +56,32 @@ function getCategories(items: any[]): { name: string; count: number }[] {
     .sort((a, b) => b.count - a.count);
 }
 
+function useBatchPrices(names: string[]) {
+  const [prices, setPrices] = useState<Record<string, any>>({});
+  const fetchedRef = useRef<string>('');
+
+  useEffect(() => {
+    const unique = [...new Set(names.filter(Boolean))].slice(0, 500);
+    if (unique.length === 0) return;
+    const key = unique.slice(0, 20).join('|');
+    if (fetchedRef.current === key) return;
+    fetchedRef.current = key;
+
+    fetch('/api/proxy/prices/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names: unique }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data?.prices) setPrices(data.prices); })
+      .catch(() => {});
+  }, [names.length > 0 ? names[0] : '']); // re-fetch when inventory changes
+
+  return prices;
+}
+
 export function ToStorageTab() {
+  const formatPrice = useFormatPrice();
   const { items, loading: invLoading, error: invError, refresh } = useDesktopInventory();
   const { units, loading: unitsLoading, fetchUnits, moveToUnit, renameUnit } = useStorageUnits();
   const [editingUnit, setEditingUnit] = useState<string | null>(null);
@@ -92,6 +133,13 @@ export function ToStorageTab() {
 
   const grouped = useMemo(() => groupItems(filteredItems), [filteredItems]);
   const categories = useMemo(() => getCategories(items || []), [items]);
+
+  // Batch-fetch prices for all inventory items
+  const marketNames = useMemo(() =>
+    (items || []).map((i: any) => i.market_hash_name).filter(Boolean),
+    [items]
+  );
+  const prices = useBatchPrices(marketNames);
 
   const setQty = useCallback((key: string, qty: number) => {
     setQuantities((prev) => {
@@ -207,12 +255,17 @@ export function ToStorageTab() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {filteredUnits.map((unit: any) => (
+          {filteredUnits.map((unit: any) => {
+            const fillPct = Math.min(100, ((unit.item_count || 0) / 1000) * 100);
+            const isSelected = selectedUnitId === unit.id;
+            const liveCount = isSelected && isTransferring && progress
+              ? unit.item_count + progress.current
+              : unit.item_count;
+            return (
             <div
               key={unit.id}
               onClick={() => {
                 if (!unit.activated) {
-                  // Force activate: open rename input
                   setSelectedUnitId(unit.id);
                   setEditingUnit(unit.id);
                   setEditName('');
@@ -221,60 +274,62 @@ export function ToStorageTab() {
                 }
               }}
               className={cn(
-                'flex items-center gap-2 px-3 py-2 rounded-lg border shrink-0 transition-all min-w-[140px] max-w-[180px] group cursor-pointer',
+                'flex flex-col gap-1.5 px-3 pt-2.5 pb-2 rounded-xl border shrink-0 transition-all w-[160px] group cursor-pointer relative',
                 !unit.activated && 'border-warning/30 border-dashed',
-                selectedUnitId === unit.id
-                  ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/30'
-                  : unit.activated ? 'border-border/50 glass hover:border-border' : ''
+                isSelected
+                  ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/30 shadow-lg shadow-primary/10'
+                  : unit.activated ? 'border-border/40 glass hover:border-border hover:bg-surface-light/50' : ''
               )}
             >
-              <img src={STORAGE_UNIT_ICON} alt="" className="w-8 h-8 shrink-0 object-contain rounded" />
-              <div className="text-left min-w-0 flex-1">
-                {editingUnit === unit.id ? (
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onBlur={async () => {
-                      if (editName.trim() && editName !== unit.name) {
-                        await renameUnit(unit.id, editName.trim());
-                      }
-                      setEditingUnit(null);
-                    }}
-                    onKeyDown={async (e) => {
-                      if (e.key === 'Enter') {
-                        if (editName.trim() && editName !== unit.name) {
-                          await renameUnit(unit.id, editName.trim());
-                        }
+              <div className="flex items-center gap-2">
+                <img src={STORAGE_UNIT_ICON} alt="" className="w-7 h-7 shrink-0 object-contain" />
+                <div className="min-w-0 flex-1">
+                  {editingUnit === unit.id ? (
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={async () => {
+                        if (editName.trim() && editName !== unit.name) await renameUnit(unit.id, editName.trim());
                         setEditingUnit(null);
-                      }
-                      if (e.key === 'Escape') setEditingUnit(null);
-                    }}
-                    autoFocus
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full text-sm font-medium bg-transparent border-b border-primary/50 focus:outline-none py-0"
-                  />
-                ) : (
-                  <p className={cn('text-xs font-medium truncate', !unit.activated && 'text-warning')}>
-                    {unit.name || 'Activate'}
-                  </p>
+                      }}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter') {
+                          if (editName.trim() && editName !== unit.name) await renameUnit(unit.id, editName.trim());
+                          setEditingUnit(null);
+                        }
+                        if (e.key === 'Escape') setEditingUnit(null);
+                      }}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full text-xs font-semibold bg-transparent border-b border-primary/50 focus:outline-none"
+                    />
+                  ) : (
+                    <p className={cn('text-xs font-semibold truncate leading-tight', !unit.activated ? 'text-warning' : isSelected ? 'text-primary' : '')}>
+                      {unit.name || 'Tap to activate'}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted tabular-nums">{liveCount} / 1000</p>
+                </div>
+                {isSelected && editingUnit !== unit.id && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditingUnit(unit.id); setEditName(unit.name); }}
+                    className="p-0.5 rounded text-muted hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Pencil size={11} />
+                  </button>
                 )}
-                <p className="text-[10px] text-muted tabular-nums">
-                  {unit.id === selectedUnitId && isTransferring && progress
-                    ? `${unit.item_count + progress.current} (+${progress.current})`
-                    : `${unit.item_count} / 1000`}
-                </p>
               </div>
-              {selectedUnitId === unit.id && editingUnit !== unit.id && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setEditingUnit(unit.id); setEditName(unit.name); }}
-                  className="p-1 rounded text-muted hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  <Pencil size={12} />
-                </button>
-              )}
+              {/* Fill bar */}
+              <div className="h-1 rounded-full bg-white/8 overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', fillPct > 90 ? 'bg-loss' : fillPct > 70 ? 'bg-warning' : 'bg-primary/60')}
+                  style={{ width: `${fillPct}%` }}
+                />
+              </div>
             </div>
-          ))}
+            );
+          })}
           {filteredUnits.length === 0 && !unitsLoading && (
             <div className="text-sm text-muted py-3">No storage units found</div>
           )}
@@ -390,10 +445,12 @@ export function ToStorageTab() {
               <tr className="text-xs text-muted border-b border-border/30">
                 <th className="text-left py-2 px-2 font-medium w-12"></th>
                 <th className="text-left py-2 px-2 font-medium">Item</th>
-                <th className="text-left py-2 px-2 font-medium hidden sm:table-cell">Type</th>
-                <th className="text-center py-2 px-2 font-medium w-16">Total</th>
-                <th className="text-center py-2 px-2 font-medium w-24">Qty</th>
-                <th className="text-center py-2 px-2 font-medium w-16">Move</th>
+                <th className="text-left py-2 px-2 font-medium hidden lg:table-cell">Type</th>
+                <th className="text-left py-2 px-2 font-medium hidden md:table-cell w-16">Wear</th>
+                <th className="text-right py-2 px-2 font-medium hidden md:table-cell w-20">Price</th>
+                <th className="text-center py-2 px-2 font-medium w-14">Qty</th>
+                <th className="text-center py-2 px-2 font-medium w-24">Select</th>
+                <th className="text-center py-2 px-2 font-medium w-14">Move</th>
               </tr>
             </thead>
             <tbody>
@@ -433,21 +490,60 @@ export function ToStorageTab() {
 
                     {/* Name */}
                     <td className="py-1.5 px-2">
-                      <p className="text-sm font-medium truncate max-w-[300px]">{item.name || item.market_hash_name || 'Unknown'}</p>
-                      {item.rarity && <p className="text-[10px] text-muted">{item.rarity}</p>}
+                      <p className="text-sm font-medium truncate max-w-[220px] leading-tight">
+                        {item.name || item.market_hash_name || 'Unknown'}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {item.rarity && (
+                          <span className="text-[10px] text-muted">{item.rarity}</span>
+                        )}
+                        {count > 1 && (
+                          <span className="text-[10px] px-1.5 py-0 rounded-full bg-surface-light text-muted font-medium">×{count}</span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Type */}
-                    <td className="py-1.5 px-2 hidden sm:table-cell">
-                      <span className="text-xs text-muted">{item.type || '-'}</span>
+                    <td className="py-1.5 px-2 hidden lg:table-cell">
+                      <span className="text-xs text-muted truncate max-w-[120px] block">{item.type || '-'}</span>
                     </td>
 
-                    {/* Total */}
+                    {/* Wear */}
+                    <td className="py-1.5 px-2 hidden md:table-cell">
+                      {(() => {
+                        const wear = getWear(item.paint_wear);
+                        return wear ? (
+                          <span
+                            className="text-[11px] font-bold px-1.5 py-0.5 rounded"
+                            style={{ color: WEAR_COLORS[wear], background: `${WEAR_COLORS[wear]}18` }}
+                          >
+                            {wear}
+                          </span>
+                        ) : <span className="text-xs text-muted/40">—</span>;
+                      })()}
+                    </td>
+
+                    {/* Price */}
+                    <td className="py-1.5 px-2 hidden md:table-cell text-right">
+                      {(() => {
+                        const p = prices[item.market_hash_name];
+                        const priceUsd = p?.steam ?? p?.skinport ?? p?.buff ?? p?.dmarket;
+                        return priceUsd ? (
+                          <span className="text-xs font-medium text-foreground tabular-nums">
+                            {formatPrice(priceUsd)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted/40">—</span>
+                        );
+                      })()}
+                    </td>
+
+                    {/* Qty (total count, no selector needed — use Select col) */}
                     <td className="py-1.5 px-2 text-center">
-                      <span className="text-xs font-medium">{count}</span>
+                      <span className="text-xs font-semibold tabular-nums">{count}</span>
                     </td>
 
-                    {/* Qty selector */}
+                    {/* Select qty */}
                     <td className="py-1.5 px-2 text-center">
                       <div className="inline-flex items-center gap-1">
                         <button

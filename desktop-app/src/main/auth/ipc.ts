@@ -53,6 +53,36 @@ function getStore() {
   return store;
 }
 
+/** Clear saved Steam token (e.g. when it turns out to be invalid). */
+export function clearSteamToken() {
+  getStore().set('refreshToken', null);
+}
+
+/** Save Steam refresh token to persistent store (callable from main process). */
+export function storeSteamToken(token: string) {
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(token);
+    getStore().set('refreshToken', encrypted.toString('base64'));
+  } else {
+    getStore().set('refreshToken', token);
+  }
+}
+
+/** Read Steam refresh token from persistent store (callable from main process). */
+export function loadSteamToken(): string | null {
+  const stored = getStore().get('refreshToken');
+  if (!stored) return null;
+  if (safeStorage.isEncryptionAvailable()) {
+    try {
+      const buffer = Buffer.from(stored, 'base64');
+      return safeStorage.decryptString(buffer);
+    } catch {
+      return null;
+    }
+  }
+  return stored;
+}
+
 export function registerAuthIPC() {
   // Save SkinKeeper API token (for web-app auth)
   ipcMain.handle('auth:save-sk-token', async (_event, token: string) => {

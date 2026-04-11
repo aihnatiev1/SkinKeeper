@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search, ArrowRight, Check } from 'lucide-react';
+import { Search, ArrowRight, Check, Package } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStorageUnits } from '@/lib/use-desktop';
 import { useTransferStore } from '@/lib/transfer-store';
@@ -142,27 +142,37 @@ export function BetweenTab() {
                     whileTap={{ scale: 0.95 }}
                     onClick={() => toggleItem(item.id)}
                     disabled={isTransferring}
-                    className={`relative aspect-square rounded-lg border transition-all overflow-hidden group ${
+                    title={item.name || item.market_hash_name}
+                    className={`relative aspect-square rounded-lg border transition-all overflow-hidden group flex flex-col items-center justify-center ${
                       isSelected
                         ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/30'
                         : 'border-border/30 hover:border-border bg-surface-light/30 hover:bg-surface-light/50'
                     }`}
                   >
-                    {item.icon_url && (
+                    {(item.icon_url || item.icon_url_full) ? (
                       <img
-                        src={item.icon_url_full || (item.icon_url ? `${STEAM_CDN}${item.icon_url}/128x128` : '')}
+                        src={item.icon_url_full || `${STEAM_CDN}${item.icon_url}/128x128`}
                         alt={item.name}
                         className="w-full h-full object-contain p-1"
                         loading="lazy"
                       />
-                    )}
-                    {isSelected && (
-                      <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                        <Check size={12} className="text-white" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-1 px-1">
+                        <Package size={14} className="text-muted/50 shrink-0" />
+                        <p className="text-[8px] text-muted/70 text-center leading-tight line-clamp-2">
+                          {(item.name || item.market_hash_name || '').replace(/^.*\| /, '')}
+                        </p>
                       </div>
                     )}
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <p className="text-[9px] text-white truncate text-center">{item.name}</p>
+                    {isSelected && (
+                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                        <Check size={10} className="text-white" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1 pb-1 pt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <p className="text-[8px] text-white truncate text-center leading-tight">
+                        {(item.name || item.market_hash_name || '').replace(/^.*\| /, '')}
+                      </p>
                     </div>
                   </motion.button>
                 );

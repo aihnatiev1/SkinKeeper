@@ -4,8 +4,9 @@ import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Loader2, Shield, ArrowLeft } from 'lucide-react';
+import { Loader2, Shield, ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { authApi } from '@/lib/api';
+import { isDesktop, getDesktopAPI } from '@/lib/desktop';
 
 export default function LoginPage() {
   return (
@@ -19,13 +20,127 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/portfolio';
+  const isLogout = searchParams.get('logout') === '1';
 
   const [status, setStatus] = useState<'idle' | 'waiting' | 'error'>('idle');
   const [nonce, setNonce] = useState<string | null>(null);
 
-  const startLogin = useCallback(async () => {
+  // Desktop-only: Steam Guard QR for GC connection
+  const [desktop, setDesktop] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [gcConnected, setGcConnected] = useState(false);
+
+  // Desktop auth progress: null | 'connecting' | 'authenticating' | 'redirecting'
+  type DesktopStep = null | 'connecting' | 'authenticating' | 'redirecting';
+  const [desktopStep, setDesktopStep] = useState<DesktopStep>(null);
+
+  const STEPS: { key: DesktopStep; label: string }[] = [
+    { key: 'connecting',    label: 'Steam connected' },
+    { key: 'authenticating', label: 'Authenticating' },
+    { key: 'redirecting',   label: 'Entering SkinKeeper' },
+  ];
+
+  const startQR = useCallback(async () => {
+    const api = getDesktopAPI();
+    if (!api) return;
+    setQrLoading(true);
+    setQrUrl(null);
+    await api.steam.loginWithQR();
+  }, []);
+
+  useEffect(() => {
+    setDesktop(isDesktop());
+  }, []);
+
+  useEffect(() => {
+    if (!desktop) return;
+    const api = getDesktopAPI();
+    if (!api) return;
+
+    // Check if already connected — if web session exists, auth immediately
+    // Skip if user explicitly signed out (?logout=1)
+    api.steam.getStatus().then(async s => {
+      if (!s.loggedIn || isLogout) return;
+      setGcConnected(true);
+      setDesktopStep('connecting');
+
+      // Poll for web session — webSession event may fire slightly after loggedOn
+      const getSession = async () => {
+        for (let i = 0; i < 10; i++) {
+          const ws = await api.steam.getWebSession();
+          if (ws?.steamLoginSecure) return ws;
+          await new Promise(r => setTimeout(r, 500));
+        }
+        return null;
+      };
+
+      try {
+        const ws = await getSession();
+        if (!ws?.steamLoginSecure) return; // will be handled by steam:web-session event
+        setDesktopStep('authenticating');
+        const res = await fetch('/api/proxy/auth/desktop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ steamLoginSecure: ws.steamLoginSecure, sessionId: ws.sessionId }),
+        });
+        const json = await res.json();
+        if (json.token) {
+          setDesktopStep('redirecting');
+          await authApi.setSession(json.token);
+          router.push(redirect);
+        }
+      } catch (err) {
+        console.warn('[Login] Desktop auto-auth failed:', err);
+        setDesktopStep(null);
+      }
+    });
+
+    // Listen for QR code URL
+    const unsubQR = api.on('steam:qr-code', (url: string) => {
+      setQrUrl(url);
+      setQrLoading(false);
+    });
+
+    // Listen for successful GC connection
+    const unsubStatus = api.on('steam:status-changed', (s: { loggedIn: boolean }) => {
+      if (s.loggedIn) {
+        setGcConnected(true);
+        setDesktopStep('connecting');
+      }
+    });
+
+    // webSession fires after QR — use cookies to get JWT directly
+    const unsubWebSession = api.on('steam:web-session', async (data: { steamLoginSecure: string; sessionId: string | null }) => {
+      if (!data?.steamLoginSecure || isLogout) return;
+      setDesktopStep('authenticating');
+      try {
+        const res = await fetch('/api/proxy/auth/desktop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ steamLoginSecure: data.steamLoginSecure, sessionId: data.sessionId }),
+        });
+        const json = await res.json();
+        if (json.token) {
+          setDesktopStep('redirecting');
+          await authApi.setSession(json.token);
+          router.push(redirect);
+        }
+      } catch (err) {
+        console.error('[Login] Desktop auth failed:', err);
+        setDesktopStep(null);
+      }
+    });
+
+    // Auto-start QR
+    startQR();
+
+    return () => { unsubQR(); unsubStatus(); unsubWebSession(); };
+  }, [desktop, startQR]);
+
+  const startLogin = useCallback(async (existingPopup?: Window | null) => {
     // Open popup synchronously (in click handler) to avoid browser popup blockers
-    const popup = window.open('about:blank', 'steam_login', 'width=800,height=600');
+    const popup = existingPopup || window.open('about:blank', 'steam_login', 'width=800,height=600');
 
     try {
       // Use our proxy to avoid CORS/CloudFlare issues
@@ -141,7 +256,7 @@ function LoginContent() {
 
           {status === 'idle' && (
             <button
-              onClick={startLogin}
+              onClick={() => startLogin()}
               className="w-full flex items-center justify-center gap-3 px-6 py-3.5 bg-[#171A21] hover:bg-[#2A475E] text-white rounded-xl font-semibold transition-all hover:shadow-lg active:scale-[0.98]"
             >
               <svg width="20" height="20" viewBox="0 0 256 259" fill="currentColor">
@@ -187,10 +302,108 @@ function LoginContent() {
 
         <div className="flex items-center justify-center gap-1.5 mt-6 text-xs text-muted">
           <Shield size={12} />
-          <p>
-            Secure Steam OpenID — we never see your password.
-          </p>
+          <p>Secure Steam OpenID — we never see your password.</p>
         </div>
+
+        {/* Desktop-only: Steam Guard QR for GC connection */}
+        {desktop && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-4 glass-strong rounded-2xl p-6 text-center"
+          >
+            {desktopStep ? (
+              /* Progress steps */
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex items-center gap-2">
+                  {STEPS.map((step, i) => {
+                    const stepIndex = STEPS.findIndex(s => s.key === desktopStep);
+                    const done = i < stepIndex;
+                    const active = i === stepIndex;
+                    return (
+                      <div key={step.key} className="flex items-center gap-2">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <motion.div
+                            initial={{ scale: 0.8, opacity: 0.4 }}
+                            animate={active ? { scale: [1, 1.15, 1], opacity: 1 } : done ? { scale: 1, opacity: 1 } : { scale: 0.8, opacity: 0.3 }}
+                            transition={active ? { duration: 1, repeat: Infinity } : { duration: 0.3 }}
+                            className={`w-3 h-3 rounded-full ${done ? 'bg-profit' : active ? 'bg-profit' : 'bg-white/20'}`}
+                          />
+                          <span className={`text-[10px] font-medium whitespace-nowrap transition-colors ${active ? 'text-profit' : done ? 'text-profit/70' : 'text-white/30'}`}>
+                            {step.label}
+                          </span>
+                        </div>
+                        {i < STEPS.length - 1 && (
+                          <motion.div
+                            animate={{ opacity: done ? 1 : 0.2 }}
+                            className="w-8 h-px bg-profit mb-4"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {desktopStep === 'redirecting' && (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-xs text-profit/80 flex items-center gap-1.5"
+                  >
+                    <Loader2 size={11} className="animate-spin" />
+                    Opening SkinKeeper...
+                  </motion.p>
+                )}
+              </div>
+            ) : gcConnected ? (
+              <div className="flex flex-col items-center gap-2">
+                <CheckCircle2 size={28} className="text-profit" />
+                <p className="text-sm font-semibold text-profit">Steam connected!</p>
+                <p className="text-xs text-muted">Authenticating...</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm font-semibold mb-1">Connect Steam Guard</p>
+                <p className="text-xs text-muted mb-4">
+                  Scan with <strong className="text-foreground">Steam Mobile App → Steam Guard → QR</strong>
+                </p>
+
+                <div className="flex justify-center mb-3">
+                  {qrLoading ? (
+                    <div className="w-36 h-36 flex items-center justify-center glass rounded-xl">
+                      <Loader2 size={24} className="animate-spin text-muted" />
+                    </div>
+                  ) : qrUrl ? (
+                    <div className="p-2 bg-white rounded-xl shadow-md">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=144x144&data=${encodeURIComponent(qrUrl)}`}
+                        alt="Steam Guard QR"
+                        className="w-36 h-36"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-36 h-36 flex items-center justify-center glass rounded-xl">
+                      <span className="text-xs text-muted">—</span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={startQR}
+                  disabled={qrLoading}
+                  className="flex items-center gap-1.5 mx-auto text-xs text-muted hover:text-foreground transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw size={11} className={qrLoading ? 'animate-spin' : ''} />
+                  Refresh QR
+                </button>
+
+                <p className="text-[10px] text-muted/50 mt-3">
+                  Optional — enables storage unit transfers. Skip to sign in only.
+                </p>
+              </>
+            )}
+          </motion.div>
+        )}
       </motion.div>
       </div>
     </div>

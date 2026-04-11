@@ -23,12 +23,16 @@ import {
   Store,
   TrendingUp,
   Eye,
+  LogOut,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useEffect } from 'react';
-import { useIsDesktop } from '@/lib/use-desktop';
-import { useSteamStatus } from '@/lib/use-desktop';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useIsDesktop, useSteamStatus } from '@/lib/use-desktop';
+import { getDesktopAPI } from '@/lib/desktop';
+import { api, authApi } from '@/lib/api';
 
 const WEB_NAV_ITEMS = [
   { href: '/portfolio', label: 'Dashboard', icon: LayoutDashboard },
@@ -57,11 +61,29 @@ const DESKTOP_NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const accounts = useAuthStore((s) => s.accounts);
   const { sidebarOpen, mobileOpen, toggleSidebar, setMobileOpen } = useUIStore();
   const desktop = useIsDesktop();
   const { status: steamStatus } = useSteamStatus();
+  const [steamConnecting, setSteamConnecting] = useState(false);
+
+  const handleSteamConnect = () => {
+    // Navigate to Settings where QR code is shown
+    router.push('/settings');
+  };
+
+  const handleSteamDisconnect = async () => {
+    const api = getDesktopAPI();
+    if (!api) return;
+    await api.steam.logout();
+  };
+
+  const handleLogout = async () => {
+    await authApi.clearSession();
+    router.push('/login?logout=1');
+  };
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -132,16 +154,80 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Sign Out */}
+      {(sidebarOpen || mobileOpen) && (
+        <div className="px-2 pb-2">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 w-full rounded-xl text-muted hover:text-loss hover:bg-loss/5 transition-all"
+          >
+            <LogOut size={18} className="shrink-0" />
+            <span className="text-sm font-medium">Sign Out</span>
+          </button>
+        </div>
+      )}
+
       {/* Steam status — desktop only */}
-      {desktop && (sidebarOpen || mobileOpen) && (
-        <div className="px-4 pb-1">
-          <div className="flex items-center gap-2 text-xs text-muted">
-            <span className={cn(
-              'w-1.5 h-1.5 rounded-full',
-              steamStatus.loggedIn ? 'bg-green-500' : 'bg-red-500'
-            )} />
-            <span>{steamStatus.loggedIn ? `Steam: ${steamStatus.personaName || 'Connected'}` : 'Steam: Disconnected'}</span>
-          </div>
+      {desktop && (
+        <div className="px-2 pb-2">
+          {(sidebarOpen || mobileOpen) ? (
+            steamStatus.loggedIn ? (
+              /* Connected — show name + disconnect */
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass">
+                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                <span className="text-xs text-muted truncate flex-1">{steamStatus.personaName || 'Steam Connected'}</span>
+                <button
+                  onClick={handleSteamDisconnect}
+                  className="text-[10px] text-muted/60 hover:text-loss transition-colors shrink-0"
+                  title="Disconnect Steam"
+                >
+                  <LogOut size={12} />
+                </button>
+              </div>
+            ) : (
+              /* Disconnected — clickable connect button */
+              <button
+                onClick={handleSteamConnect}
+                disabled={steamConnecting}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all group"
+              >
+                {steamConnecting ? (
+                  <Loader2 size={14} className="animate-spin text-primary shrink-0" />
+                ) : (
+                  <Gamepad2 size={14} className="text-primary shrink-0" />
+                )}
+                <span className="text-xs font-medium text-primary truncate">
+                  {steamConnecting ? 'Opening Steam...' : 'Connect Steam'}
+                </span>
+              </button>
+            )
+          ) : (
+            /* Collapsed sidebar — icon only */
+            steamStatus.loggedIn ? (
+              <div className="flex justify-center py-1">
+                <span className="relative">
+                  <Gamepad2 size={20} className="text-muted" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 border border-surface" />
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={handleSteamConnect}
+                disabled={steamConnecting}
+                className="flex justify-center w-full py-1 group"
+                title="Connect Steam"
+              >
+                <span className="relative">
+                  {steamConnecting ? (
+                    <Loader2 size={20} className="animate-spin text-primary" />
+                  ) : (
+                    <Gamepad2 size={20} className="text-muted group-hover:text-primary transition-colors" />
+                  )}
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 border border-surface" />
+                </span>
+              </button>
+            )
+          )}
         </div>
       )}
 

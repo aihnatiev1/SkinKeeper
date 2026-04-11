@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { isDesktop, getDesktopAPI, type SteamDesktopStatus } from './desktop';
 import { useTransferStore } from './transfer-store';
+import { api } from './api';
 
 /**
  * Hook to check if running in desktop mode.
@@ -19,29 +20,47 @@ export function useIsDesktop(): boolean | null {
 export function useSteamStatus() {
   const [status, setStatus] = useState<SteamDesktopStatus>({ loggedIn: false });
   const [loading, setLoading] = useState(true);
-  const api = getDesktopAPI();
+  const desktopApi = getDesktopAPI();
 
   useEffect(() => {
-    if (!api) {
+    if (!desktopApi) {
       setLoading(false);
       return;
     }
 
     // Get initial status
-    api.steam.getStatus().then((s) => {
+    desktopApi.steam.getStatus().then((s) => {
       setStatus(s);
       setLoading(false);
     });
 
     // Listen for status changes
-    const unsub = api.on('steam:status-changed', (newStatus: SteamDesktopStatus) => {
+    const unsubStatus = desktopApi.on('steam:status-changed', (newStatus: SteamDesktopStatus) => {
       setStatus(newStatus);
     });
 
-    return unsub;
+    // After login, main process sends web session cookies — sync to backend
+    const unsubSession = desktopApi.on('steam:web-session-ready', (data: { steamLoginSecure: string; sessionId: string | null }) => {
+      if (data?.steamLoginSecure) {
+        fetch('/api/proxy/session/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            steamLoginSecure: data.steamLoginSecure,
+            sessionId: data.sessionId,
+          }),
+        }).then(() => {
+          console.log('[Desktop] Steam session synced to backend');
+        }).catch(err => {
+          console.warn('[Desktop] Backend session sync failed:', err);
+        });
+      }
+    });
+
+    return () => { unsubStatus(); unsubSession(); };
   }, []);
 
-  return { status, loading, isDesktop: !!api };
+  return { status, loading, isDesktop: !!desktopApi };
 }
 
 /**

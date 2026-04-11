@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Zap, Plus, Trash2, Play, Eye, ToggleLeft, ToggleRight, ChevronRight, X } from 'lucide-react';
+import { Zap, Plus, Trash2, Play, Eye, ToggleLeft, ToggleRight, ChevronRight, X, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getDesktopAPI } from '@/lib/desktop';
 import { useStorageUnits } from '@/lib/use-desktop';
@@ -43,12 +43,15 @@ const OPERATORS: { value: RuleCondition['operator']; label: string }[] = [
 
 export function AutomaticTab() {
   const api = getDesktopAPI();
-  const { units, loading: unitsLoading } = useStorageUnits();
+  const { units, loading: unitsLoading, fetchUnits } = useStorageUnits();
+
+  useEffect(() => { fetchUnits(); }, [fetchUnits]);
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRule, setSelectedRule] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState<{ matched: number; moved: number } | null>(null);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
 
   // Editor state
@@ -122,20 +125,27 @@ export function AutomaticTab() {
   const handleRunRule = async (ruleId: string) => {
     if (!api) return;
     setRunning(true);
+    setRunResult(null);
     const result = await api.automation.runRule(ruleId);
     setRunning(false);
+    setRunResult(result);
     fetchRules();
-    toast.success(`Matched ${result.matched}, moved ${result.moved} items`);
+    if (result.moved > 0) toast.success(`Moved ${result.moved} items`);
+    else toast.info(`Matched ${result.matched} items — already in storage or nothing to move`);
   };
 
   const handleRunAll = async () => {
     if (!api) return;
     setRunning(true);
+    setRunResult(null);
     const results = await api.automation.runAll();
     setRunning(false);
-    fetchRules();
     const total = results.reduce((sum, r) => sum + r.moved, 0);
-    toast.success(`Automation complete: ${total} items moved across ${results.length} rules`);
+    const matched = results.reduce((sum, r) => sum + r.matched, 0);
+    setRunResult({ matched, moved: total });
+    fetchRules();
+    if (total > 0) toast.success(`Moved ${total} items across ${results.length} rules`);
+    else toast.info(`Checked ${results.length} rules — nothing to move`);
   };
 
   const handlePreview = async () => {
@@ -166,9 +176,9 @@ export function AutomaticTab() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
       {/* Left: Rules list */}
-      <div className="lg:col-span-2 flex flex-col gap-3">
+      <div className="lg:col-span-3 flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <button
             onClick={handleRunAll}
@@ -186,6 +196,51 @@ export function AutomaticTab() {
             Create new rule
           </button>
         </div>
+
+        {/* Run status */}
+        {(running || runResult) && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cn(
+              'flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm',
+              running
+                ? 'glass border-primary/20 text-muted'
+                : runResult && runResult.moved > 0
+                  ? 'bg-profit/8 border-profit/20 text-profit'
+                  : 'bg-surface-light border-border/50 text-muted'
+            )}
+          >
+            {running ? (
+              <>
+                <Zap size={14} className="animate-pulse text-primary shrink-0" />
+                <span className="text-xs font-medium">Running automation rules...</span>
+                <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden ml-2">
+                  <motion.div
+                    className="h-full bg-primary rounded-full"
+                    animate={{ x: ['-100%', '200%'] }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                </div>
+              </>
+            ) : runResult ? (
+              <>
+                <CheckCircle2 size={14} className={runResult.moved > 0 ? 'text-profit' : 'text-muted'} />
+                <span className="text-xs font-medium">
+                  {runResult.moved > 0
+                    ? `Done — ${runResult.moved} item${runResult.moved > 1 ? 's' : ''} moved`
+                    : `Done — ${runResult.matched} matched, nothing to move`}
+                </span>
+                <button
+                  onClick={() => setRunResult(null)}
+                  className="ml-auto text-muted hover:text-foreground transition-colors"
+                >
+                  <X size={12} />
+                </button>
+              </>
+            ) : null}
+          </motion.div>
+        )}
 
         {loading ? (
           <div className="space-y-2">
@@ -252,7 +307,7 @@ export function AutomaticTab() {
       </div>
 
       {/* Right: Detail / Editor */}
-      <div className="flex flex-col gap-4">
+      <div className="lg:col-span-2 flex flex-col gap-4">
         <AnimatePresence mode="wait">
           {editing ? (
             <motion.div
@@ -282,37 +337,39 @@ export function AutomaticTab() {
               <div className="space-y-2">
                 <span className="text-xs text-muted font-medium">Conditions</span>
                 {editConditions.map((cond, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <select
-                      value={cond.field}
-                      onChange={(e) => updateCondition(i, { field: e.target.value as RuleCondition['field'] })}
-                      className="px-2 py-1.5 rounded-lg bg-surface-light border border-border/50 text-xs"
-                    >
-                      {FIELDS.map((f) => (
-                        <option key={f.value} value={f.value}>{f.label}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={cond.operator}
-                      onChange={(e) => updateCondition(i, { operator: e.target.value as RuleCondition['operator'] })}
-                      className="px-2 py-1.5 rounded-lg bg-surface-light border border-border/50 text-xs"
-                    >
-                      {OPERATORS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
+                  <div key={i} className="rounded-lg bg-surface-light/50 border border-border/30 p-2 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={cond.field}
+                        onChange={(e) => updateCondition(i, { field: e.target.value as RuleCondition['field'] })}
+                        className="flex-1 px-2 py-1 rounded-md bg-surface-light border border-border/50 text-xs"
+                      >
+                        {FIELDS.map((f) => (
+                          <option key={f.value} value={f.value}>{f.label}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={cond.operator}
+                        onChange={(e) => updateCondition(i, { operator: e.target.value as RuleCondition['operator'] })}
+                        className="flex-1 px-2 py-1 rounded-md bg-surface-light border border-border/50 text-xs"
+                      >
+                        {OPERATORS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      {editConditions.length > 1 && (
+                        <button onClick={() => removeCondition(i)} className="text-muted hover:text-loss shrink-0">
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="text"
                       placeholder="Value..."
                       value={cond.value}
                       onChange={(e) => updateCondition(i, { value: e.target.value })}
-                      className="flex-1 px-2 py-1.5 rounded-lg bg-surface-light border border-border/50 text-xs focus:border-primary/30 focus:outline-none"
+                      className="w-full px-2 py-1 rounded-md bg-surface-light border border-border/50 text-xs focus:border-primary/30 focus:outline-none"
                     />
-                    {editConditions.length > 1 && (
-                      <button onClick={() => removeCondition(i)} className="text-muted hover:text-loss">
-                        <Trash2 size={12} />
-                      </button>
-                    )}
                   </div>
                 ))}
                 <button

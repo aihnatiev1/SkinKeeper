@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('skinkeeper', {
   // Steam client operations
   steam: {
     // Auth
+    webLogin: () => ipcRenderer.invoke('steam:web-login'),
     login: (username: string, password: string) =>
       ipcRenderer.invoke('steam:login', username, password),
     loginWithQR: () => ipcRenderer.invoke('steam:login-qr'),
@@ -19,6 +20,7 @@ contextBridge.exposeInMainWorld('skinkeeper', {
       ipcRenderer.invoke('steam:login-token', refreshToken),
     logout: () => ipcRenderer.invoke('steam:logout'),
     getStatus: () => ipcRenderer.invoke('steam:status'),
+    getWebSession: () => ipcRenderer.invoke('steam:get-web-session'),
     getSteamGuardCode: (sharedSecret: string) =>
       ipcRenderer.invoke('steam:guard-code', sharedSecret),
     submitGuard: (code: string) =>
@@ -89,6 +91,8 @@ contextBridge.exposeInMainWorld('skinkeeper', {
       'steam:error',
       'steam:transfer-progress',
       'steam:gc-ready',
+      'steam:web-session-ready',
+      'steam:web-session',
       'updater:update-available',
       'updater:update-downloaded',
       'updater:error',
@@ -111,6 +115,7 @@ export interface SkinKeeperAPI {
     platform: () => Promise<string>;
   };
   steam: {
+    webLogin: () => Promise<{ success: boolean; error?: string; steamLoginSecure?: string; sessionId?: string | null; steamRefreshToken?: string | null }>;
     login: (username: string, password: string) => Promise<{ success: boolean; error?: string; requiresGuard?: boolean }>;
     loginWithQR: () => Promise<{ success: boolean; error?: string }>;
     loginWithToken: (refreshToken: string) => Promise<{ success: boolean; error?: string }>;

@@ -17,11 +17,13 @@ export function getDesktopAPI() {
       platform: () => Promise<string>;
     };
     steam: {
+      webLogin: () => Promise<{ success: boolean; error?: string; steamLoginSecure?: string; sessionId?: string | null; steamRefreshToken?: string | null }>;
       login: (username: string, password: string) => Promise<{ success: boolean; error?: string; requiresGuard?: boolean }>;
       loginWithQR: () => Promise<{ success: boolean; error?: string }>;
       loginWithToken: (refreshToken: string) => Promise<{ success: boolean; error?: string }>;
       logout: () => Promise<void>;
       getStatus: () => Promise<SteamDesktopStatus>;
+      getWebSession: () => Promise<{ steamLoginSecure: string | null; sessionId: string | null }>;
       getSteamGuardCode: (sharedSecret: string) => Promise<string>;
       getInventory: () => Promise<any[]>;
       refreshInventory: () => Promise<any[]>;
