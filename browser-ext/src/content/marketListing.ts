@@ -5,7 +5,10 @@ import { trackEvent } from '../shared/analytics';
 import { initCollector } from '../shared/collector';
 import { getFloatColor, fetchFloat, formatFloat } from '../shared/float';
 
+import { injectMiniCard } from '../shared/miniCard';
+
 initCollector();
+injectMiniCard();
 
 let exchangeRate = 1;
 let currencySign = '$';
@@ -25,7 +28,7 @@ function fmtPrice(v: number): string {
 }
 
 async function init() {
-  await waitForElement('#searchResultsRows, .market_listing_table');
+  await waitForElement('#searchResultsRows, .market_listing_table, .market_commodity_orders_block, #largeiteminfo_item_name');
 
   const itemName = extractName();
   if (!itemName) return;
@@ -164,20 +167,17 @@ function buildExteriorLinks(itemName: string): HTMLElement {
 // ─── Panel ────────────────────────────────────────────────────────────
 
 function injectPanel(name: string, listingCount: number, price: number, priceEntry: any, marketInfo: MarketInfo) {
-  const nav = document.querySelector('.market_listing_nav');
-  if (!nav || document.querySelector('.sk-detail')) return;
+  if (document.querySelector('.sk-detail')) return;
+
+  // Insert near the buy/sell section — just above listing/order tables
+  const anchor = document.querySelector('.market_commodity_orders_block')      // commodity items (cases, keys)
+    || document.querySelector('#searchResultsTable')                           // regular items with listings
+    || document.querySelector('.market_listing_table_header')                  // listing table header
+    || document.querySelector('#largeiteminfo_item_actions');                   // item actions area (last resort)
+  if (!anchor) return;
 
   const panel = el('div', 'sk-detail');
   panel.style.margin = '10px 0';
-
-  // Header
-  const header = el('div', 'sk-detail-header');
-  const logo = el('div', 'sk-detail-logo');
-  logo.textContent = 'SK';
-  const title = el('span', 'sk-detail-title');
-  title.textContent = 'SKINKEEPER';
-  header.append(logo, title);
-  panel.appendChild(header);
 
   // Price
   if (price) {
@@ -344,7 +344,13 @@ function injectPanel(name: string, listingCount: number, price: number, priceEnt
     alertBtn.textContent = 'Set Alert';
     alertBtn.addEventListener('click', () => {
       try {
-        sendMessage({ type: 'CREATE_ALERT', market_hash_name: name, condition: 'below', threshold: Math.round(price * 100 * 0.9) });
+        // price is in user currency — convert back to USD cents for the API
+        const priceUsd = exchangeRate > 0 ? price / exchangeRate : price;
+        const thresholdCents = Math.round(priceUsd * 100 * 0.9); // 90% of USD price in cents
+        // Get item icon from page
+        const iconImg = document.querySelector('.market_listing_largeimage img, .economy_item_hoverable img') as HTMLImageElement;
+        const iconUrl = iconImg?.src || '';
+        sendMessage({ type: 'CREATE_ALERT', market_hash_name: name, condition: 'below', threshold: thresholdCents, icon_url: iconUrl });
         alertBtn.textContent = 'Alert Set!';
         alertBtn.style.color = '#4ade80';
       } catch { window.open('https://app.skinkeeper.store/alerts', '_blank'); }
@@ -357,7 +363,7 @@ function injectPanel(name: string, listingCount: number, price: number, priceEnt
   powered.innerHTML = 'by <a href="https://skinkeeper.store" target="_blank">SkinKeeper</a>';
   panel.appendChild(powered);
 
-  nav.parentElement?.insertBefore(panel, nav.nextSibling);
+  anchor.parentElement?.insertBefore(panel, anchor);
 }
 
 // ─── Float Values on Listings (CSFloat-style) ───────────────────────

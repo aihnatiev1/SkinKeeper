@@ -2,12 +2,15 @@ import '../styles/skinkeeper.css';
 import { initCollector } from '../shared/collector';
 import {
   getWalletCurrency, formatCentsViaSteam, parseSteamPriceString,
-  getLowestListingPrice, getHighestBuyOrder,
+  getLowestListingPrice, getHighestBuyOrder, getMarketPriceOverview,
   removeListing, cancelBuyOrder, getMarketHistory,
 } from '../shared/steam';
 
+import { injectMiniCard } from '../shared/miniCard';
+
 // Market home — collect prices passively from Steam API responses
 initCollector();
+injectMiniCard();
 
 /* ═══════════════════════════════════════════════════════════════════
    SkinKeeper — Market Page Enhancement
@@ -401,16 +404,25 @@ function updateTotal(section: HTMLElement, container: HTMLElement) {
 // ═══════════════════════════════════════════════════════════════════
 
 function enhanceHistory() {
-  const el = document.getElementById('tabContentsMyMarketHistory');
-  if (el) { setupHistory(el); return; }
+  const trySetup = () => {
+    const el = document.getElementById('tabContentsMyMarketHistory');
+    if (!el) return false;
+    // Wait for actual rows to load, not just the empty container
+    const rows = el.querySelectorAll('.market_listing_row');
+    if (rows.length === 0 && !el.querySelector('.market_listing_table_header')) return false;
+    // Re-setup if Steam replaced the DOM (our attribute is gone)
+    if (!el.hasAttribute(SK)) setupHistory(el);
+    return true;
+  };
 
-  // Watch for lazy-loaded tab content
-  const obs = new MutationObserver((_m, o) => {
-    const found = document.getElementById('tabContentsMyMarketHistory');
-    if (found) { o.disconnect(); setupHistory(found); }
+  if (trySetup()) return;
+
+  // Watch for lazy-loaded tab content AND re-renders
+  const obs = new MutationObserver(() => {
+    trySetup();
   });
   obs.observe(document.body, { childList: true, subtree: true });
-  setTimeout(() => obs.disconnect(), 30000);
+  setTimeout(() => obs.disconnect(), 60000);
 }
 
 function setupHistory(histSection: HTMLElement) {
@@ -572,9 +584,10 @@ function tagHistoryRows(container: HTMLElement) {
         if (!name) { link.textContent = 'N/A'; return; }
         link.textContent = '...';
         try {
-          const price = await getLowestListingPrice(name, getWalletCurrency());
-          if (price !== null) {
-            link.textContent = formatCentsViaSteam(price) || `${(price / 100).toFixed(2)}`;
+          // Use priceoverview (lightweight, less rate-limited) instead of render endpoint
+          const overview = await getMarketPriceOverview(name, getWalletCurrency());
+          if (overview?.lowestPrice) {
+            link.textContent = overview.lowestPrice;
             link.classList.add('sk-check-loaded');
           } else {
             link.textContent = 'N/A';

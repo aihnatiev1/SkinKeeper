@@ -16,7 +16,7 @@
       justify-content: center;
     }
     .container {
-      max-width: 520px;
+      max-width: 560px;
       padding: 40px;
       text-align: center;
     }
@@ -45,12 +45,23 @@
       background: rgba(30,41,59,0.5);
       border: 1px solid rgba(99,102,241,0.15);
       border-radius: 16px;
-      padding: 24px;
-      margin-bottom: 16px;
+      padding: 20px;
+      margin-bottom: 12px;
       text-align: left;
     }
-    .feature-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-    .feature-card p { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+    .feature-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .feature-card p { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+    .feature-card .tag {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .tag-new { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .tag-security { background: rgba(239,68,68,0.15); color: #f87171; }
 
     .highlight {
       background: rgba(99,102,241,0.1);
@@ -84,6 +95,11 @@
 
     .footer { margin-top: 24px; font-size: 11px; color: #64748b; }
     .footer a { color: #6366F1; text-decoration: none; }
+
+    .eco-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .eco-grid .feature-card { margin: 0; padding: 16px; text-align: center; }
+    .eco-grid .feature-card h3 { justify-content: center; font-size: 13px; }
+    .eco-grid .feature-card p { font-size: 11px; text-align: center; }
   </style>
 </head>
 <body>
@@ -93,24 +109,64 @@
     <p class="subtitle">Your CS2 inventory just got superpowers</p>
 
     <div class="slides">
-      <!-- Slide 1: Features overview -->
+      <!-- Slide 1: Core Features -->
       <div class="slide active" data-slide="0">
         <div class="feature-card">
-          <h3>&#x1f4b0; Real-Time Prices</h3>
-          <p>See Steam, Buff, CSFloat, and Skinport prices on every item. Directly on Steam pages.</p>
+          <h3>&#x1f4b0; Real-Time Prices Everywhere</h3>
+          <p>Steam, Buff, CSFloat, Skinport prices on every item — inventory, market, and trade offers. Multi-currency support included.</p>
         </div>
         <div class="feature-card">
-          <h3>&#x1f52c; Float & Phase Detection</h3>
-          <p>Float values, Doppler phases (Ruby, Sapphire), Fade %, Blue Gem — all visible at a glance.</p>
+          <h3>&#x1f52c; Float, Phase & Pattern Detection</h3>
+          <p>Float values, Doppler phases (Ruby, Sapphire, Black Pearl), Fade %, Marble Fade Fire & Ice, Blue Gem analysis — all visible at a glance.</p>
         </div>
         <div class="feature-card">
-          <h3>&#x1f4ca; Trade P&L Analysis</h3>
-          <p>See profit/loss on every trade offer before you accept. Never make a bad trade again.</p>
+          <h3>&#x1f4c8; Trade P&L Calculator</h3>
+          <p>See exact profit/loss on every trade offer before you accept. Sort offers by profitability. Never make a bad trade again.</p>
         </div>
       </div>
 
-      <!-- Slide 2: Collect Prices explanation -->
+      <!-- Slide 2: Market & Inventory Power Tools -->
       <div class="slide" data-slide="1">
+        <div class="feature-card">
+          <h3>&#x1f6d2; Market Superpowers <span class="tag tag-new">New</span></h3>
+          <p>Overpriced listing detection, bulk remove listings, sort by float & sticker value, load 100 listings at once, CSV history export.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f3af; Inventory Intelligence</h3>
+          <p>Sticker value aggregation, duplicate counter, bulk operations, paint seed info, trade lock countdowns. Sort by price instantly.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f6e1;&#xfe0f; Security & Safety <span class="tag tag-security">Important</span></h3>
+          <p>API Key Guard warns if your key is compromised. SteamRep scammer detection on profiles. Spam comment flagging. Stay safe.</p>
+        </div>
+      </div>
+
+      <!-- Slide 3: Trade & Sell Power Tools (NEW in 1.2) -->
+      <div class="slide" data-slide="2">
+        <div class="highlight" style="margin-bottom:12px">
+          <h4>&#x2728; New in v1.2</h4>
+          <p>Major update — full trade enhancement suite, ported from the best community tools and improved.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f91d; Smart Trade Offers <span class="tag tag-new">New</span></h3>
+          <p>Full item overlays on trade items (float, phase, exterior, stickers). Click to move items. Ctrl+Click to move all same. P/L summary, partner info, auto-switch to partner inventory.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f4b8; Bulk Sell System <span class="tag tag-new">New</span></h3>
+          <p>Select items → GO TO SALE → progress bar → completion summary. Custom price, auto-undercut, or Buff-match strategies. Confirms in Steam app notification.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f514; Trade Monitor & Alerts <span class="tag tag-new">New</span></h3>
+          <p>Background monitoring of incoming offers. Rule engine: auto-accept/decline/notify based on profit thresholds. Discord webhook notifications. Chrome badge with pending count.</p>
+        </div>
+        <div class="feature-card">
+          <h3>&#x1f527; Trade-Up Calculator <span class="tag tag-new">New</span></h3>
+          <p>Select 10 items of same rarity → see possible outputs with probabilities, expected value, and profit. Smart filtering highlights only compatible items.</p>
+        </div>
+      </div>
+
+      <!-- Slide 4: Collect Prices -->
+      <div class="slide" data-slide="3">
         <div class="highlight">
           <h4>&#x1f91d; Community Price Network</h4>
           <p>
@@ -130,25 +186,47 @@
         </div>
       </div>
 
-      <!-- Slide 3: Ecosystem -->
-      <div class="slide" data-slide="2">
-        <div class="feature-card">
-          <h3>&#x1f4f1; Part of the Ecosystem</h3>
-          <p>SkinKeeper works across all your devices. Your data syncs automatically.</p>
+      <!-- Slide 5: Ecosystem -->
+      <div class="slide" data-slide="4">
+        <div class="highlight" style="margin-bottom:12px">
+          <h4>&#x1f30d; The SkinKeeper Ecosystem</h4>
+          <p>One platform, every device. Your inventory, prices, portfolios, alerts, and trades — synced everywhere, always up to date.</p>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
-          <a href="https://skinkeeper.store/portfolio" target="_blank" class="feature-card" style="text-decoration: none; color: inherit; margin: 0;">
-            <h3 style="font-size: 13px;">&#x1f310; Web App</h3>
-            <p style="font-size: 11px;">Full dashboard</p>
+        <div class="eco-grid">
+          <a href="https://app.skinkeeper.store" target="_blank" class="feature-card" style="text-decoration:none;color:inherit;">
+            <h3>&#x1f310; Web App</h3>
+            <p>Portfolio analytics, P/L tracking, price history, multi-account management</p>
           </a>
-          <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" class="feature-card" style="text-decoration: none; color: inherit; margin: 0;">
-            <h3 style="font-size: 13px;">&#x1f4f1; Mobile App</h3>
-            <p style="font-size: 11px;">iOS & Android</p>
+          <a href="https://skinkeeper.store/download" target="_blank" class="feature-card" style="text-decoration:none;color:inherit;">
+            <h3>&#x1f5a5;&#xfe0f; Desktop</h3>
+            <p>Storage Unit transfers, automation rules, bulk operations</p>
+          </a>
+          <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" class="feature-card" style="text-decoration:none;color:inherit;">
+            <h3>&#x1f4f1; Mobile</h3>
+            <p>iOS &amp; Android — portfolio on the go, push alerts</p>
           </a>
         </div>
-        <div style="margin-top: 16px;">
-          <a href="https://skinkeeper.store/login?source=extension" target="_blank" class="btn btn-primary" style="display: inline-block; text-decoration: none; width: 100%;">
-            Sign in to sync your data
+        <div style="margin-top:12px">
+          <div class="feature-card" style="border-color:rgba(99,102,241,0.3)">
+            <h3>&#x1f3af; What you can do</h3>
+            <p style="line-height:1.8">
+              &#x2705; Track portfolio value &amp; P/L across accounts<br>
+              &#x2705; Set price alerts — get notified when items drop<br>
+              &#x2705; Analyze trades before accepting<br>
+              &#x2705; Bulk sell with smart pricing strategies<br>
+              &#x2705; Auto-monitor incoming trade offers<br>
+              &#x2705; Discord notifications for new offers<br>
+              &#x2705; Storage Unit management (Desktop)<br>
+              &#x2705; Multi-account support
+            </p>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <a href="https://skinkeeper.store/login?source=extension" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;flex:1;text-align:center">
+            Sign in to sync
+          </a>
+          <a href="https://skinkeeper.store?source=extension-onboarding" target="_blank" class="btn btn-secondary" style="display:inline-block;text-decoration:none;flex:1;text-align:center">
+            Learn more
           </a>
         </div>
       </div>
@@ -158,6 +236,8 @@
       <div class="dot active" data-dot="0"></div>
       <div class="dot" data-dot="1"></div>
       <div class="dot" data-dot="2"></div>
+      <div class="dot" data-dot="3"></div>
+      <div class="dot" data-dot="4"></div>
     </div>
 
     <div class="btn-row">
@@ -167,7 +247,7 @@
 
     <p class="footer">
       <a href="https://skinkeeper.store/privacy-extension" target="_blank">Privacy Policy</a>
-      &nbsp;·&nbsp;
+      &nbsp;&middot;&nbsp;
       <a href="https://skinkeeper.store" target="_blank">skinkeeper.store</a>
     </p>
   </div>

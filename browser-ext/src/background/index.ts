@@ -1,6 +1,8 @@
 import { apiRequest, isLoggedIn } from '../shared/api';
 import { CollectedPrice, PriceBatch, DEFAULT_SETTINGS, type ExtSettings, type MessageType } from '../shared/types';
 import { postToPostHog } from '../shared/analytics';
+import { evaluateOffer, parseApiOffer, type TradeRule, type ParsedOffer } from '../shared/tradeRules';
+import { sendDiscordWebhook } from '../shared/discord';
 
 // ─── Price Data Pipeline ──────────────────────────────────────────────
 // Batch collected prices and send to SkinKeeper API every 30 seconds
@@ -170,6 +172,7 @@ async function handleMessage(msg: any): Promise<any> {
           market_hash_name: msg.market_hash_name,
           condition: msg.condition,
           threshold: msg.threshold,
+          icon_url: msg.icon_url || null,
         },
       });
 
@@ -279,6 +282,22 @@ async function handleMessage(msg: any): Promise<any> {
       postToPostHog(msg.event, msg.properties || {});
       return { ok: true };
 
+    // ── Trade Monitor ──
+    case 'SET_TRADE_RULES': {
+      await chrome.storage.local.set({
+        sk_trade_rules: msg.rules,
+        sk_trade_monitor: msg.enabled ?? true,
+        sk_steam_api_key: msg.apiKey || undefined,
+        sk_discord_webhook: msg.webhookUrl || undefined,
+      });
+      return { ok: true };
+    }
+    case 'GET_TRADE_RULES': {
+      const { sk_trade_rules: tr, sk_trade_monitor: tm, sk_steam_api_key: ak, sk_discord_webhook: dw } =
+        await chrome.storage.local.get(['sk_trade_rules', 'sk_trade_monitor', 'sk_steam_api_key', 'sk_discord_webhook']);
+      return { rules: tr || [], enabled: tm ?? false, apiKey: ak || '', webhookUrl: dw || '' };
+    }
+
     default:
       return null;
   }
@@ -288,6 +307,7 @@ async function handleMessage(msg: any): Promise<any> {
 
 chrome.alarms.create('flushPrices', { periodInMinutes: 0.5 });
 chrome.alarms.create('friendRequestMonitor', { periodInMinutes: 5 });
+chrome.alarms.create('tradeOfferMonitor', { periodInMinutes: 2 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'flushPrices') {
@@ -298,6 +318,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   // ── Friend request monitoring (ported from CSGO Trader) ──
   if (alarm.name === 'friendRequestMonitor') {
     monitorFriendRequests();
+    return;
+  }
+
+  // ── Trade offer monitoring (ported from CSGO Trader) ──
+  if (alarm.name === 'tradeOfferMonitor') {
+    monitorTradeOffers();
     return;
   }
 
@@ -332,6 +358,115 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     });
   });
 });
+
+// ─── Trade Offer Monitor (ported from CSGO Trader) ──────────────────
+
+async function monitorTradeOffers() {
+  const { sk_trade_monitor: enabled, sk_trade_rules: rules, sk_steam_api_key: apiKey,
+          sk_discord_webhook: webhookUrl, sk_seen_offers: seenRaw } = await chrome.storage.local.get([
+    'sk_trade_monitor', 'sk_trade_rules', 'sk_steam_api_key', 'sk_discord_webhook', 'sk_seen_offers',
+  ]);
+  if (!enabled || !apiKey) return;
+
+  const activeRules: TradeRule[] = (rules || []).filter((r: TradeRule) => r.active);
+  const seenOffers: Set<string> = new Set(seenRaw || []);
+
+  try {
+    // Fetch incoming active trade offers via Steam Web API
+    const url = `https://api.steampowered.com/IEconService/GetTradeOffers/v1/?key=${apiKey}&get_received_offers=1&active_only=1&get_descriptions=1`;
+    const resp = await fetch(url);
+    if (!resp.ok) return;
+    const data = await resp.json();
+
+    const offers = data?.response?.trade_offers_received || [];
+    if (offers.length === 0) return;
+
+    // Build description map
+    const descriptions: Record<string, any> = {};
+    for (const desc of (data?.response?.descriptions || [])) {
+      descriptions[`${desc.classid}_${desc.instanceid}`] = desc;
+    }
+
+    // Load bulk prices for evaluation
+    const priceData = await loadPricesForMonitor();
+    const getPrice = (name: string): number => {
+      const entry = priceData[name];
+      if (!entry) return 0;
+      if (typeof entry === 'number') return entry;
+      return entry.last_24h ?? entry.last_7d ?? entry.last_30d ?? 0;
+    };
+
+    // Update badge with offer count
+    chrome.action.setBadgeText({ text: offers.length > 0 ? String(offers.length) : '' });
+    chrome.action.setBadgeBackgroundColor({ color: '#6366f1' });
+
+    // Process new offers
+    const newSeenIds: string[] = [...seenOffers];
+    for (const offer of offers) {
+      if (seenOffers.has(offer.tradeofferid)) continue;
+      newSeenIds.push(offer.tradeofferid);
+
+      const parsed = parseApiOffer(offer, descriptions, getPrice);
+
+      // Notify about new offer
+      chrome.notifications.create(`sk_offer_${offer.tradeofferid}`, {
+        type: 'basic',
+        iconUrl: 'icons/icon128.png',
+        title: 'New Trade Offer',
+        message: `Giving: $${parsed.givingTotal.toFixed(2)} | Receiving: $${parsed.receivingTotal.toFixed(2)} | P/L: ${parsed.profit >= 0 ? '+' : ''}$${parsed.profit.toFixed(2)}`,
+      });
+
+      // Evaluate rules
+      if (activeRules.length > 0) {
+        const verdict = evaluateOffer(parsed, activeRules);
+        if (verdict) {
+          await executeVerdict(verdict, offer.tradeofferid, apiKey, parsed, webhookUrl);
+        }
+      }
+    }
+
+    // Keep only last 500 seen offer IDs
+    const trimmed = newSeenIds.slice(-500);
+    chrome.storage.local.set({ sk_seen_offers: trimmed });
+  } catch (err) {
+    console.error('[SkinKeeper] Trade monitor error:', err);
+  }
+}
+
+async function loadPricesForMonitor(): Promise<Record<string, any>> {
+  try {
+    const resp = await fetch('https://prices.csgotrader.app/latest/steam.json');
+    if (!resp.ok) return {};
+    return await resp.json();
+  } catch { return {}; }
+}
+
+async function executeVerdict(verdict: string, offerId: string, apiKey: string, parsed: ParsedOffer, webhookUrl?: string) {
+  const sessionId = ''; // Can't get sessionid from background — accept/decline requires content script
+
+  switch (verdict) {
+    case 'notify':
+      // Already notified above
+      break;
+    case 'notify_discord':
+      if (webhookUrl) await sendDiscordWebhook(webhookUrl, parsed);
+      break;
+    case 'decline':
+      // Open offer page and decline via content script
+      chrome.tabs.create({
+        url: `https://steamcommunity.com/tradeoffer/${offerId}/`,
+        active: false,
+      });
+      break;
+    case 'accept':
+      // Open offer page with auto-accept param
+      chrome.tabs.create({
+        url: `https://steamcommunity.com/tradeoffer/${offerId}/?sk_accept=true`,
+        active: false,
+      });
+      break;
+  }
+}
 
 // ─── Friend Request Rules (ported from CSGO Trader) ──────────────────
 // Scrapes /my/friends/pending, evaluates rules, executes accept/ignore/block
@@ -436,8 +571,13 @@ async function monitorFriendRequests() {
 
 // ─── Notification click → open inventory ──────────────────────────────
 
-chrome.notifications.onClicked.addListener(() => {
+chrome.notifications.onClicked.addListener((notificationId) => {
   chrome.action.setBadgeText({ text: '' });
+  // Open trade offer if notification was from trade monitor
+  const match = notificationId.match(/^sk_offer_(\d+)$/);
+  if (match) {
+    chrome.tabs.create({ url: `https://steamcommunity.com/tradeoffer/${match[1]}/` });
+  }
 });
 
 // ─── Install / Update ─────────────────────────────────────────────────

@@ -443,6 +443,46 @@ export async function loadExchangeRates(): Promise<Record<string, number>> {
   return exchangeRates;
 }
 
+// ─── Steam Price Overview (lightweight, reliable) ────────────────────
+
+export interface PriceOverview {
+  lowestPrice: string | null;  // formatted string e.g. "42₴"
+  medianPrice: string | null;
+  volume: string | null;       // e.g. "415,955"
+}
+
+export async function getMarketPriceOverview(marketHashName: string, currencyId: number): Promise<PriceOverview | null> {
+  const url = `https://steamcommunity.com/market/priceoverview/?appid=730&currency=${currencyId}&market_hash_name=${encodeURIComponent(marketHashName)}`;
+  try {
+    // Try direct fetch first (works on Steam pages, same-origin)
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success) {
+        return {
+          lowestPrice: data.lowest_price || null,
+          medianPrice: data.median_price || null,
+          volume: data.volume || null,
+        };
+      }
+    }
+  } catch { /* fall through to background fetch */ }
+
+  // Fallback: fetch via background worker (bypasses CORS)
+  try {
+    const data = await bgFetch<any>(url);
+    if (data?.success) {
+      return {
+        lowestPrice: data.lowest_price || null,
+        medianPrice: data.median_price || null,
+        volume: data.volume || null,
+      };
+    }
+  } catch { /* ignore */ }
+
+  return null;
+}
+
 // ─── Steam Market Sell API ────────────────────────────────────────────
 
 /**
@@ -651,14 +691,10 @@ export function calcSellerReceives(buyerPriceCents: number): number {
  * Used for "Quick Sell" = undercut by 1¢
  */
 export async function getLowestListingPrice(marketHashName: string, currencyId: number): Promise<number | null> {
-  // Direct fetch from content script (same-origin, like CSGO Trader)
-  try {
-    const url = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}/render/?query=&start=0&count=10&country=US&language=english&currency=${currencyId}`;
-    const res = await fetch(url);
-    if (!res.ok) { console.warn(`[SkinKeeper] Quick Sell fetch failed: ${res.status}`); return null; }
-    const data = await res.json();
-    if (!data?.success || !data?.listinginfo) return null;
+  const url = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}/render/?query=&start=0&count=10&country=US&language=english&currency=${currencyId}`;
 
+  const extractPrice = (data: any): number | null => {
+    if (!data?.success || !data?.listinginfo) return null;
     const listings = Object.values(data.listinginfo) as any[];
     for (const listing of listings) {
       if (listing.converted_price !== undefined && listing.converted_fee !== undefined) {
@@ -666,8 +702,23 @@ export async function getLowestListingPrice(marketHashName: string, currencyId: 
       }
     }
     return null;
-  } catch (e) {
-    console.warn('[SkinKeeper] Quick Sell error:', e);
+  };
+
+  // Try direct fetch first (same-origin on Steam pages)
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      const price = extractPrice(data);
+      if (price !== null) return price;
+    }
+  } catch { /* fall through */ }
+
+  // Fallback: fetch via background worker
+  try {
+    const data = await bgFetch<any>(url);
+    return extractPrice(data);
+  } catch {
     return null;
   }
 }
@@ -678,26 +729,101 @@ export async function getLowestListingPrice(marketHashName: string, currencyId: 
  */
 export async function getHighestBuyOrder(marketHashName: string, currencyId: number): Promise<number | null> {
   try {
-    // Step 1: Get item_nameid from market listing page
-    const pageUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}`;
-    const pageRes = await fetch(pageUrl);
-    if (!pageRes.ok) return null;
-    const pageHtml = await pageRes.text();
+    let itemNameId = itemNameIdCache.get(marketHashName);
 
-    const match = pageHtml.match(/Market_LoadOrderSpread\(\s*(\d+)/);
-    if (!match) return null;
-    const itemNameId = match[1];
+    if (!itemNameId) {
+      // Step 1: Get item_nameid from market listing page
+      const pageUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}`;
+      let pageHtml: string | null = null;
+
+      // Try direct fetch first, fallback to background
+      try {
+        const pageRes = await fetch(pageUrl);
+        if (pageRes.ok) pageHtml = await pageRes.text();
+      } catch { /* fall through */ }
+      if (!pageHtml) {
+        pageHtml = await bgFetch<string>(pageUrl) as string | null;
+      }
+      if (!pageHtml) return null;
+
+      const match = pageHtml.match(/Market_LoadOrderSpread\(\s*(\d+)/);
+      if (!match) return null;
+      itemNameId = match[1];
+      itemNameIdCache.set(marketHashName, itemNameId);
+    }
 
     // Step 2: Fetch histogram
     const histUrl = `https://steamcommunity.com/market/itemordershistogram?country=US&language=english&currency=${currencyId}&item_nameid=${itemNameId}`;
-    const histRes = await fetch(histUrl);
-    if (!histRes.ok) return null;
-    const hist = await histRes.json();
+    let hist: any = null;
+
+    try {
+      const histRes = await fetch(histUrl);
+      if (histRes.ok) hist = await histRes.json();
+    } catch { /* fall through */ }
+    if (!hist) {
+      hist = await bgFetch<any>(histUrl);
+    }
     if (!hist?.highest_buy_order) return null;
 
     return parseInt(hist.highest_buy_order);
   } catch (e) {
     console.warn('[SkinKeeper] Instant Sell error:', e);
+    return null;
+  }
+}
+
+/**
+ * Get full market overview: lowest listing, highest buy order, sell/buy order tables.
+ * Combines listings/render + itemordershistogram in 2 requests.
+ */
+export interface MarketOverview {
+  lowestSellOrder: number | null;   // cents, buyer pays
+  highestBuyOrder: number | null;   // cents
+  sellOrderCount: string;           // e.g. "415955"
+  buyOrderCount: string;            // e.g. "1120058"
+  sellOrderTable: string;           // HTML table rows
+  buyOrderTable: string;            // HTML table rows
+}
+
+const itemNameIdCache = new Map<string, string>();
+
+export async function getMarketOverview(marketHashName: string, currencyId: number): Promise<MarketOverview | null> {
+  try {
+    let itemNameId = itemNameIdCache.get(marketHashName);
+
+    if (!itemNameId) {
+      // Step 1: Get item_nameid from listing page
+      const pageUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(marketHashName)}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const pageRes = await fetch(pageUrl, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!pageRes.ok) return null;
+      const pageHtml = await pageRes.text();
+
+      const match = pageHtml.match(/Market_LoadOrderSpread\(\s*(\d+)/);
+      if (!match) return null;
+      itemNameId = match[1];
+      itemNameIdCache.set(marketHashName, itemNameId);
+    }
+
+    // Step 2: Fetch histogram
+    const histUrl = `https://steamcommunity.com/market/itemordershistogram?country=US&language=english&currency=${currencyId}&item_nameid=${itemNameId}&two_factor=0`;
+    const histRes = await fetch(histUrl);
+    if (!histRes.ok) return null;
+    const hist = await histRes.json();
+    if (!hist?.success) return null;
+
+    return {
+      lowestSellOrder: hist.lowest_sell_order ? parseInt(hist.lowest_sell_order) : null,
+      highestBuyOrder: hist.highest_buy_order ? parseInt(hist.highest_buy_order) : null,
+      sellOrderCount: hist.sell_order_count || '0',
+      buyOrderCount: hist.buy_order_count || '0',
+      sellOrderTable: hist.sell_order_table || '',
+      buyOrderTable: hist.buy_order_table || '',
+    };
+  } catch (e) {
+    console.warn('[SkinKeeper] Market overview error:', e);
     return null;
   }
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SkinKeeper — CS2 Inventory Tracker",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Track CS2 skin prices, portfolio P/L, and set alerts — directly on Steam. Part of the SkinKeeper ecosystem.",
   "homepage_url": "https://skinkeeper.store",
   "privacy_policy": "https://skinkeeper.store/privacy-extension",
@@ -119,7 +119,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["data/bluegem.json.gz", "data/dopplerIconMap.json", "inject.js"],
+      "resources": ["data/bluegem.json.gz", "data/dopplerIconMap.json", "inject.js", "icons/icon16.png"],
       "matches": ["https://steamcommunity.com/*"]
     }
   ],

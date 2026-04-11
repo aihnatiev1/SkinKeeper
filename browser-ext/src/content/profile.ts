@@ -1,5 +1,6 @@
 import '../styles/skinkeeper.css';
 import { el, waitForElement, sendMessage } from '../shared/dom';
+import { injectMiniCard } from '../shared/miniCard';
 
 async function init() {
   const header = document.querySelector('.profile_header_actions');
@@ -265,3 +266,4 @@ function flagSpamComments() {
 setTimeout(flagSpamComments, 2000);
 
 init();
+injectMiniCard();
