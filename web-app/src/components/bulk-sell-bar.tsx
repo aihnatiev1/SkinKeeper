@@ -32,8 +32,8 @@ export function BulkSellBar({ selectedItems, onClear, onSell, onRemoveItem }: Bu
   const emptySlots = Math.max(0, 8 - selectedItems.length);
 
   return (
-    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#141519' }}>
-      <div className="px-4 py-3">
+    <div style={{ background: 'linear-gradient(to bottom, rgba(11,12,16,0.85), rgba(11,12,16,0.98) 30%)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+      <div className="px-4 lg:px-5 py-3">
         {/* Header row: Remove All + total */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
@@ -51,8 +51,8 @@ export function BulkSellBar({ selectedItems, onClear, onSell, onRemoveItem }: Bu
 
           <div className="flex items-center gap-4">
             {hasItems && (
-              <span style={{ color: '#9ca3af', fontSize: '13px' }}>
-                Sell now and get: <span style={{ color: '#e5e7eb', fontWeight: 600 }}>({selectedItems.length})</span>
+              <span style={{ color: '#cbd5e1', fontSize: '13px' }}>
+                Sell now and get: <span style={{ color: '#f1f5f9', fontWeight: 700 }}>({selectedItems.length})</span>
               </span>
             )}
             <span className="text-xl font-bold" style={{ color: '#4ade80' }}>
@@ -62,7 +62,7 @@ export function BulkSellBar({ selectedItems, onClear, onSell, onRemoveItem }: Bu
                   {formatPrice(sellerReceives)}
                 </span>
               ) : (
-                <span style={{ color: '#374151', fontSize: '13px', fontWeight: 400 }}>Select items</span>
+                <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 400 }}>Select items</span>
               )}
             </span>
           </div>
@@ -95,8 +95,8 @@ export function BulkSellBar({ selectedItems, onClear, onSell, onRemoveItem }: Bu
                 style={{
                   width: 'min(100px, 22vw)',
                   borderRadius: '6px',
-                  border: '1.5px solid rgba(59,130,246,0.4)',
-                  backgroundColor: '#1a1d25',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  backgroundColor: 'rgba(255,255,255,0.03)',
                   overflow: 'hidden',
                 }}
               >
@@ -164,7 +164,7 @@ export function BulkSellBar({ selectedItems, onClear, onSell, onRemoveItem }: Bu
             );
           })}
 
-          {/* Empty slots — hide on mobile to save space */}
+          {/* Empty slots — ghost outline only */}
           {Array.from({ length: emptySlots }).map((_, i) => (
             <div
               key={`e-${i}`}
@@ -173,8 +173,7 @@ export function BulkSellBar({ selectedItems, onClear, onSell, onRemoveItem }: Bu
                 width: 'min(100px, 22vw)',
                 aspectRatio: '1',
                 borderRadius: '6px',
-                border: '1.5px solid #1e2028',
-                backgroundColor: '#1a1c22',
+                background: 'rgba(255,255,255,0.015)',
               }}
             />
           ))}
@@ -183,8 +182,8 @@ export function BulkSellBar({ selectedItems, onClear, onSell, onRemoveItem }: Bu
         {/* Buttons row */}
         <div className="flex flex-wrap items-center mt-1 gap-2">
           {hasItems && (
-            <span className="w-full sm:w-auto" style={{ color: '#6b7280', fontSize: '12px' }}>
-              <span className="font-semibold" style={{ color: '#e5e7eb' }}>{selectedItems.length}</span>
+            <span className="w-full sm:w-auto" style={{ color: '#94a3b8', fontSize: '12px' }}>
+              <span className="font-bold" style={{ color: '#f1f5f9' }}>{selectedItems.length}</span>
               {' '}selected
               {tradableCount < selectedItems.length && (
                 <span style={{ color: '#eab308' }}> ({tradableCount} tradable)</span>

@@ -6,13 +6,17 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect } from 'react';
 
 if (typeof window !== 'undefined') {
+  const isDesktopApp = !!(window as any).skinkeeper;
   posthog.init('phc_Aq5w2n4aGfQELBG7sj8gxb45jPkdofXBPWouAUJzZNy6', {
     api_host: '/ingest',
     ui_host: 'https://us.posthog.com',
     capture_pageview: false, // We capture manually below for SPA navigation
     capture_pageleave: true,
   });
-  posthog.register({ sk_platform: 'web' });
+  posthog.register({
+    platform: isDesktopApp ? 'desktop' : 'web',
+    app_type: isDesktopApp ? 'electron' : 'browser',
+  });
 }
 
 function PostHogPageView() {

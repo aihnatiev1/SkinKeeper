@@ -80,6 +80,19 @@ export default function InventoryPage() {
   const MAX_SELL_ITEMS = 100;
 
   const toggleSelect = (assetId: string) => {
+    // Check if item is tradable before allowing selection
+    const item = items.find((i) => i.asset_id === assetId);
+    if (item && !item.tradable) {
+      toast.error('Trade-locked items cannot be sold', { duration: 2000 });
+      // Shake animation on the card
+      const el = document.getElementById(`card-${assetId}`);
+      if (el) {
+        el.classList.add('animate-shake');
+        setTimeout(() => el.classList.remove('animate-shake'), 500);
+      }
+      return;
+    }
+
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(assetId)) {
@@ -99,8 +112,21 @@ export default function InventoryPage() {
     if (group.count === 1) {
       toggleSelect(group.items[0].asset_id);
     } else {
-      const selCount = group.items.filter((i) => selectedIds.has(i.asset_id)).length;
-      setPickerGroup({ ...group, selectedCount: selCount });
+      // Filter group to only tradable items for selling
+      const tradableItems = group.items.filter((i) => i.tradable);
+      if (tradableItems.length === 0) {
+        toast.error('All items in this group are trade-locked', { duration: 2000 });
+        const el = document.getElementById(`card-${group.representative.asset_id}`);
+        if (el) { el.classList.add('animate-shake'); setTimeout(() => el.classList.remove('animate-shake'), 500); }
+        return;
+      }
+      const selCount = tradableItems.filter((i) => selectedIds.has(i.asset_id)).length;
+      setPickerGroup({
+        ...group,
+        items: tradableItems,
+        count: tradableItems.length,
+        selectedCount: selCount,
+      });
     }
   };
 
@@ -612,6 +638,7 @@ export default function InventoryPage() {
                   return (
                     <div
                       key={group.marketHashName}
+                      id={`card-${item.asset_id}`}
                       ref={isLast ? lastItemRef : undefined}
                       onClick={() => handleGroupClick(group)}
                       onDoubleClick={() => setSelectedItem(item)}
@@ -683,15 +710,17 @@ export default function InventoryPage() {
                           </div>
                         )}
 
-                        {/* Quantity badge — above lock, outside bottom overlay */}
+                        {/* Quantity badge — bottom right, above lock row */}
                         {group.count > 1 && (
-                          <div className="absolute right-1 z-10" style={{ bottom: 24 }}>
+                          <div className="absolute right-1 z-20" style={{ bottom: 26 }}>
                             <span
-                              className="text-[9px] font-bold px-[4px] py-[0.5px] rounded"
+                              className="text-[10px] font-extrabold px-[5px] py-[1px] rounded"
                               style={{
-                                background: groupSelCount > 0 ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.08)',
-                                color: groupSelCount > 0 ? '#60a5fa' : 'rgba(255,255,255,0.5)',
-                                border: groupSelCount > 0 ? '1px solid rgba(59,130,246,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                                background: groupSelCount > 0 ? '#6366f1' : '#6366f1',
+                                color: '#fff',
+                                minWidth: 18,
+                                textAlign: 'center',
+                                display: 'inline-block',
                               }}
                             >
                               {groupSelCount > 0 ? `${groupSelCount}/${group.count}` : `x${group.count}`}
@@ -900,7 +929,7 @@ export default function InventoryPage() {
       </div>
 
       {/* Fixed bottom sell tray */}
-      <div className="fixed bottom-0 right-0 z-40 px-4 lg:px-6 pb-4 left-0 transition-[left] duration-300" style={{ backgroundColor: '#0b0c10', left: undefined }} data-sell-tray>
+      <div className="fixed bottom-0 right-0 z-40 left-0 transition-[left] duration-300" style={{ left: undefined }} data-sell-tray>
         <style>{`@media (min-width: 1024px) { [data-sell-tray] { left: ${(sidebarOpen ? 240 : 72) + 220 + 16 + 24}px !important; } }`}</style>
         <BulkSellBar
           selectedItems={selectedItems}

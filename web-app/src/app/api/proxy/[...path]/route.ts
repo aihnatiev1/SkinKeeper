@@ -27,6 +27,7 @@ async function proxyRequest(req: NextRequest, context: { params: Promise<{ path:
   const fetchOptions: RequestInit = {
     method: req.method,
     headers,
+    redirect: 'manual', // Don't follow redirects — pass them through to the client
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -35,6 +36,14 @@ async function proxyRequest(req: NextRequest, context: { params: Promise<{ path:
   }
 
   const backendRes = await fetch(url.toString(), fetchOptions);
+
+  // Forward redirects (e.g. Steam callback → /login/success)
+  if (backendRes.status >= 300 && backendRes.status < 400) {
+    const location = backendRes.headers.get('location');
+    if (location) {
+      return NextResponse.redirect(location, backendRes.status as 301 | 302 | 303 | 307 | 308);
+    }
+  }
 
   const contentType = backendRes.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {

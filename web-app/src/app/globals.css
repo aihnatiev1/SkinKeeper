@@ -22,6 +22,28 @@ body {
   color: var(--color-foreground);
 }
 
+/* ─── Shake animation (trade-locked items) ───────────────────── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+/* ─── Hide number input spinners ──────────────────────────────── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* ─── Custom Scrollbar ─────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

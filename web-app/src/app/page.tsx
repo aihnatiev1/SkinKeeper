@@ -19,6 +19,7 @@ import {
   Sparkles,
   Monitor,
   Puzzle,
+  Layers,
 } from 'lucide-react';
 
 export default async function LandingPage() {
@@ -134,7 +135,7 @@ export default async function LandingPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass text-sm font-medium mb-8 animate-slide-up">
             <Sparkles size={14} className="text-primary" />
-            <span className="text-muted">The #1 CS2 Inventory Manager</span>
+            <span className="text-muted">The #1 CS2 Ecosystem</span>
             <ChevronRight size={14} className="text-muted" />
           </div>
 
@@ -147,8 +148,8 @@ export default async function LandingPage() {
 
           {/* Subtitle */}
           <p className="text-lg lg:text-xl text-muted max-w-2xl mx-auto mb-10 leading-relaxed">
-            Real-time portfolio tracking, P&L analytics, instant trades between accounts,
-            price alerts, and Steam Market selling — on mobile, desktop, web, and as a browser extension.
+            The complete ecosystem for your CS2 skins — enhanced inventory management, live market data,
+            and powerful automation. On mobile, web, desktop, and right inside Steam.
           </p>
 
           {/* CTA */}
@@ -168,66 +169,197 @@ export default async function LandingPage() {
             </a>
           </div>
 
-          {/* Social proof stats */}
-          <div className="flex flex-wrap justify-center gap-8 lg:gap-16">
-            <div className="text-center">
-              <p className="text-3xl lg:text-4xl font-bold text-gradient">50K+</p>
-              <p className="text-sm text-muted mt-1">Active Users</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl lg:text-4xl font-bold text-gradient">$2M+</p>
-              <p className="text-sm text-muted mt-1">Portfolios Tracked</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl lg:text-4xl font-bold text-gradient">100K+</p>
-              <p className="text-sm text-muted mt-1">Trades Completed</p>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-3xl lg:text-4xl font-bold text-gradient">
-                4.8 <Star size={20} className="text-warning fill-warning" />
-              </div>
-              <p className="text-sm text-muted mt-1">App Store Rating</p>
-            </div>
+          {/* Platform ecosystem pills */}
+          <div className="flex flex-wrap justify-center gap-3">
+            {[
+              { icon: <Monitor size={16} />, name: 'Desktop', accent: 'text-accent', ring: 'bg-accent/10 border-accent/20 hover:border-accent/50 hover:bg-accent/15', href: 'https://skinkeeper.store/download', external: true },
+              { icon: <Smartphone size={16} />, name: 'iOS & Android', accent: 'text-profit', ring: 'bg-profit/10 border-profit/20 hover:border-profit/50 hover:bg-profit/15', href: 'https://apps.apple.com/us/app/skinkeeper/id6760600231', external: true },
+              { icon: <Puzzle size={16} />, name: 'Chrome Extension', accent: 'text-warning', ring: 'bg-warning/10 border-warning/20 hover:border-warning/50 hover:bg-warning/15', href: 'https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd', external: true },
+              { icon: <Globe size={16} />, name: 'Web App', accent: 'text-primary', ring: 'bg-primary/10 border-primary/20 hover:border-primary/50 hover:bg-primary/15', href: '/login', external: false },
+            ].map((p) => (
+              p.external
+                ? <a key={p.name} href={p.href} target="_blank" rel="noopener" className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${p.ring} text-sm font-medium transition-all cursor-pointer`}>
+                    <span className={p.accent}>{p.icon}</span>
+                    <span>{p.name}</span>
+                  </a>
+                : <Link key={p.name} href={p.href} className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${p.ring} text-sm font-medium transition-all cursor-pointer`}>
+                    <span className={p.accent}>{p.icon}</span>
+                    <span>{p.name}</span>
+                  </Link>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ─── Dashboard Preview ─────────────────────────────────────── */}
-      <section className="relative px-6 lg:px-16 -mt-8 mb-20">
+      {/* ─── Ecosystem ─────────────────────────────────────────────── */}
+      <section className="relative px-6 lg:px-16 py-16 mb-4">
         <div className="max-w-6xl mx-auto">
-          <div className="relative rounded-2xl border border-border/50 overflow-hidden glow-primary">
-            <div className="absolute inset-0 bg-gradient-to-b from-surface/80 to-surface" />
-            <div className="relative p-6 lg:p-8">
-              {/* Mock dashboard */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                {[
-                  { label: 'Portfolio Value', value: '$4,832.50', change: '+$127.30 (2.7%)', positive: true },
-                  { label: '24h Change', value: '+$89.12', change: '+1.8%', positive: true },
-                  { label: '7d Change', value: '+$234.50', change: '+5.1%', positive: true },
-                  { label: 'Total Items', value: '156', change: '3 accounts', positive: undefined },
-                ].map((stat) => (
-                  <div key={stat.label} className="glass rounded-xl p-4">
-                    <p className="text-xs text-muted mb-1">{stat.label}</p>
-                    <p className="text-xl font-bold">{stat.value}</p>
-                    {stat.change && (
-                      <p className={`text-xs mt-1 ${stat.positive ? 'text-profit' : stat.positive === false ? 'text-loss' : 'text-muted'}`}>
-                        {stat.change}
-                      </p>
-                    )}
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass text-sm font-medium mb-4">
+              <Layers size={14} className="text-primary" />
+              <span className="text-muted">Complete Ecosystem</span>
+            </div>
+            <h2 className="text-3xl lg:text-5xl font-extrabold mb-4">
+              One account. <span className="text-gradient">Every platform.</span>
+            </h2>
+            <p className="text-lg text-muted max-w-xl mx-auto">
+              Your inventory, trades, and P&L stay in sync across every surface. Use what fits the moment.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+            {/* Desktop */}
+            <div className="group glass rounded-2xl p-6 hover:border-accent/30 transition-all duration-300 relative overflow-hidden card-shine">
+              <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-accent/6 group-hover:bg-accent/12 transition-colors pointer-events-none" />
+              <div className="relative">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-xl bg-accent/15 flex items-center justify-center shrink-0">
+                    <Monitor size={22} className="text-accent" />
                   </div>
-                ))}
-              </div>
-              {/* Mock chart area */}
-              <div className="glass rounded-xl p-6 h-48 flex items-end gap-1">
-                {[40, 45, 38, 52, 48, 65, 58, 72, 68, 75, 82, 78, 85, 90, 88, 95, 92, 98, 94, 100].map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t-sm bg-gradient-to-t from-primary/60 to-primary/20"
-                    style={{ height: `${h}%` }}
-                  />
-                ))}
+                  <div>
+                    <h3 className="font-bold text-lg leading-tight">Desktop App</h3>
+                    <p className="text-xs text-accent font-semibold tracking-wide uppercase">Windows & macOS</p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted mb-4 leading-relaxed">
+                  Automate your collection. Set rules to fill storage units, run bulk transfers, and manage multiple accounts from one window.
+                </p>
+                <ul className="space-y-1.5 mb-5">
+                  {[
+                    'Storage unit automation rules',
+                    'Bulk transfers between accounts',
+                    'Multi-account overview in one window',
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-sm text-muted">
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <a href="https://skinkeeper.store/download" target="_blank" rel="noopener"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
+                  <Monitor size={12} />
+                  Download Free
+                </a>
               </div>
             </div>
+
+            {/* Mobile */}
+            <div className="group glass rounded-2xl p-6 hover:border-profit/30 transition-all duration-300 relative overflow-hidden card-shine">
+              <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-profit/6 group-hover:bg-profit/12 transition-colors pointer-events-none" />
+              <div className="relative">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-xl bg-profit/15 flex items-center justify-center shrink-0">
+                    <Smartphone size={22} className="text-profit" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg leading-tight">Mobile App</h3>
+                    <p className="text-xs text-profit font-semibold tracking-wide uppercase">iOS & Android</p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted mb-4 leading-relaxed">
+                  Your skins in your pocket. Track portfolio value, get price-drop alerts, and send trades from anywhere.
+                </p>
+                <ul className="space-y-1.5 mb-5">
+                  {[
+                    'Real-time portfolio value & daily P&L',
+                    'Push notifications for price alerts',
+                    'Trade management on the go',
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-sm text-muted">
+                      <div className="w-1.5 h-1.5 rounded-full bg-profit shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2">
+                  <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" rel="noopener"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" /></svg>
+                    App Store
+                  </a>
+                  <a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3.18 23.72c-.36-.18-.64-.46-.82-.82l-.02-.04C2.12 22.42 2 21.88 2 21.28V2.72c0-.6.12-1.14.34-1.58l9.92 9.92-9.08 12.66zm.74-22.38c.24-.22.56-.34.92-.34h.04c.24 0 .52.08.82.24L17.6 7.7 14.06 11.24 3.92 1.34zM21.54 10.88c.56.32.88.8.88 1.36 0 .56-.36 1.08-.88 1.36l-2.74 1.56-3.84-3.84 3.84-3.84 2.74 1.4zM17.6 16.3L5.7 22.76c-.3.16-.58.24-.82.24-.36 0-.68-.12-.92-.34L14.06 12.76 17.6 16.3z" /></svg>
+                    Google Play
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Extension */}
+            <div className="group glass rounded-2xl p-6 hover:border-warning/30 transition-all duration-300 relative overflow-hidden card-shine">
+              <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-warning/6 group-hover:bg-warning/12 transition-colors pointer-events-none" />
+              <div className="relative">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-xl bg-warning/15 flex items-center justify-center shrink-0">
+                    <Puzzle size={22} className="text-warning" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg leading-tight">Chrome Extension</h3>
+                    <p className="text-xs text-warning font-semibold tracking-wide uppercase">Lives inside Steam</p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted mb-4 leading-relaxed">
+                  Enhanced right inside Steam. Real prices, float values, and overpriced warnings appear on every inventory and market page — no tab switching.
+                </p>
+                <ul className="space-y-1.5 mb-5">
+                  {[
+                    'Real market prices on every Steam page',
+                    'Float values & overpriced item warnings',
+                    'Quick sell & price check without leaving Steam',
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-sm text-muted">
+                      <div className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <a href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd" target="_blank" rel="noopener"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
+                  <Puzzle size={12} />
+                  Add to Chrome
+                </a>
+              </div>
+            </div>
+
+            {/* Web */}
+            <div className="group glass rounded-2xl p-6 hover:border-primary/30 transition-all duration-300 relative overflow-hidden card-shine">
+              <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/6 group-hover:bg-primary/12 transition-colors pointer-events-none" />
+              <div className="relative">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                    <Globe size={22} className="text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg leading-tight">Web App</h3>
+                    <p className="text-xs text-primary font-semibold tracking-wide uppercase">skinkeeper.store</p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted mb-4 leading-relaxed">
+                  Full dashboard power. Deep analytics, bulk market selling, and complete inventory control from any browser.
+                </p>
+                <ul className="space-y-1.5 mb-5">
+                  {[
+                    'P&L analytics with full trade history',
+                    'Bulk sell items to Steam Market',
+                    'Multi-source price comparison',
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-sm text-muted">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/login"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
+                  Open Web App
+                  <ArrowRight size={12} />
+                </Link>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
