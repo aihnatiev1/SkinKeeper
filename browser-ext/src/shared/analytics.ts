@@ -33,6 +33,7 @@ export async function postToPostHog(event: string, properties: Record<string, an
         event,
         properties: {
           distinct_id: distinctId,
+          sk_platform: 'extension',
           ...properties,
         },
         timestamp: new Date().toISOString(),

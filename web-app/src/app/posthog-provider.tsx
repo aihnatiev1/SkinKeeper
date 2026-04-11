@@ -12,6 +12,7 @@ if (typeof window !== 'undefined') {
     capture_pageview: false, // We capture manually below for SPA navigation
     capture_pageleave: true,
   });
+  posthog.register({ sk_platform: 'web' });
 }
 
 function PostHogPageView() {

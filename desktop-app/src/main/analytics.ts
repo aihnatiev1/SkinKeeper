@@ -44,6 +44,7 @@ export function trackEvent(event: string, properties?: Record<string, unknown>):
     distinctId,
     event,
     properties: {
+      sk_platform: 'desktop',
       app_version: app.getVersion(),
       platform: process.platform,
       arch: process.arch,
