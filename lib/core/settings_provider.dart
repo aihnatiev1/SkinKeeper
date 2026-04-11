@@ -7,6 +7,12 @@ import 'constants.dart';
 
 // ─── Currency ────────────────────────────────────────────────────────
 
+/// Currencies where Steam uses whole numbers (no fractional cents/kopecks)
+const _noDecimalCurrencies = {
+  'UAH', 'RUB', 'TRY', 'KZT', 'CLP', 'PEN', 'COP', 'PHP',
+  'CRC', 'UYU', 'NOK', 'JPY', 'KRW', 'VND', 'IDR', 'HUF',
+};
+
 class CurrencyInfo {
   final String code;
   final String symbol;
@@ -18,27 +24,37 @@ class CurrencyInfo {
     required this.rate,
   });
 
-  String format(double usd, {int decimals = 2}) {
+  /// Whether this currency uses whole numbers (no decimals)
+  bool get noDecimals => _noDecimalCurrencies.contains(code);
+
+  /// Default decimal places for this currency
+  int get defaultDecimals => noDecimals ? 0 : 2;
+
+  String format(double usd, {int? decimals}) {
+    final d = decimals ?? defaultDecimals;
     final converted = usd * rate;
-    return '$symbol${groupThousands(converted.toStringAsFixed(decimals))}';
+    return '$symbol${groupThousands(converted.toStringAsFixed(d))}';
   }
 
-  String formatWithSign(double usd, {int decimals = 2}) {
+  String formatWithSign(double usd, {int? decimals}) {
+    final d = decimals ?? defaultDecimals;
     final converted = usd * rate;
     final prefix = converted >= 0 ? '+' : '-';
-    return '$prefix$symbol${groupThousands(converted.abs().toStringAsFixed(decimals))}';
+    return '$prefix$symbol${groupThousands(converted.abs().toStringAsFixed(d))}';
   }
 
   /// Format a value that is ALREADY in user's currency (e.g. from Steam wallet).
   /// Does NOT multiply by rate — use this for sell prices, quickprice, fee breakdowns.
-  String formatRaw(double value, {int decimals = 2}) {
-    return '$symbol${groupThousands(value.toStringAsFixed(decimals))}';
+  String formatRaw(double value, {int? decimals}) {
+    final d = decimals ?? defaultDecimals;
+    return '$symbol${groupThousands(value.toStringAsFixed(d))}';
   }
 
   /// Same as formatRaw but with +/- sign prefix.
-  String formatRawWithSign(double value, {int decimals = 2}) {
+  String formatRawWithSign(double value, {int? decimals}) {
+    final d = decimals ?? defaultDecimals;
     final prefix = value >= 0 ? '+' : '-';
-    return '$prefix$symbol${groupThousands(value.abs().toStringAsFixed(decimals))}';
+    return '$prefix$symbol${groupThousands(value.abs().toStringAsFixed(d))}';
   }
 
   /// Insert comma as thousands separator: 15860.47 → 15,860.47

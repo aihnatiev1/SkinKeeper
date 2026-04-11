@@ -113,6 +113,10 @@ class TradeOffer {
   int get valueDiffCents => valueRecvCents - valueGiveCents;
   double get valueDiffUsd => valueDiffCents / 100;
 
+  /// Profit/loss percentage relative to what you're giving.
+  double get valueDiffPct =>
+      valueGiveCents > 0 ? (valueDiffCents / valueGiveCents) * 100 : 0;
+
   factory TradeOffer.fromJson(Map<String, dynamic> json) {
     return TradeOffer(
       id: json['id'].toString(),

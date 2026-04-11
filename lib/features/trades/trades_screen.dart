@@ -592,9 +592,9 @@ class _TradeOfferTile extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(AppTheme.r8),
                       ),
                       child: Text(
-                        currency.formatWithSign(offer.valueDiffUsd),
+                        '${currency.formatWithSign(offer.valueDiffUsd)} (${offer.valueDiffPct >= 0 ? '+' : ''}${offer.valueDiffPct.toStringAsFixed(1)}%)',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: offer.valueDiffCents >= 0
                               ? AppTheme.profit

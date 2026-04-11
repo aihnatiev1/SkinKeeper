@@ -148,8 +148,30 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             ),
         ],
       ),
-          // Floating Bulk Sale button
-          if (!isSelecting)
+          // Floating action buttons
+          if (!isSelecting) ...[
+            // Trade-Up Calculator
+            Positioned(
+              right: 16,
+              bottom: MediaQuery.of(context).padding.bottom + 116,
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  context.push('/tradeup');
+                },
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [BoxShadow(color: AppTheme.accent.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))],
+                  ),
+                  child: const Icon(Icons.swap_vert_rounded, color: Colors.black, size: 22),
+                ),
+              ),
+            ),
+            // Bulk Sale
             Positioned(
               right: 16,
               bottom: MediaQuery.of(context).padding.bottom + 60,
@@ -166,10 +188,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [BoxShadow(color: AppTheme.warning.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))],
                   ),
-                  child: Icon(Icons.sell_rounded, color: Colors.black, size: 22),
+                  child: const Icon(Icons.sell_rounded, color: Colors.black, size: 22),
                 ),
               ),
             ),
+          ],
         ],
       ),
     );
