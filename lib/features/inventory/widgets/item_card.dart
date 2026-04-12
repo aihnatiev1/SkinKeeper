@@ -291,45 +291,32 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // Phase badge — top-right of image (visually below the (i) button)
-                      if (item.isRareDoppler && item.dopplerPhase != null && item.dopplerColor != null)
-                        Positioned(
-                          top: 4,
-                          right: compact ? 4 : 6,
-                          child: DopplerPhaseGem(
-                            phase: item.dopplerPhase!,
-                            color: item.dopplerColor!,
-                            size: compact ? 10 : 13,
+                      // Phase badge — top-right of image (below the (i) button), full mode only
+                      // In compact mode there's no space — phase stays in footer
+                      if (!compact) ...[
+                        if (item.isRareDoppler && item.dopplerPhase != null && item.dopplerColor != null)
+                          Positioned(
+                            top: 4,
+                            right: 6,
+                            child: DopplerPhaseGem(
+                              phase: item.dopplerPhase!,
+                              color: item.dopplerColor!,
+                              size: 13,
+                            ),
+                          )
+                        else if (item.isDoppler && item.dopplerPhase != null)
+                          Positioned(
+                            top: 4,
+                            right: 6,
+                            child: _DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor),
+                          )
+                        else if (item.isRareItem && item.rareReason != null)
+                          Positioned(
+                            top: 4,
+                            right: 6,
+                            child: _RareBadge(reason: item.rareReason!),
                           ),
-                        )
-                      else if (item.isDoppler && item.dopplerPhase != null)
-                        Positioned(
-                          top: 4,
-                          right: compact ? 4 : 6,
-                          child: _DopplerPhasePill(
-                            phase: item.dopplerPhase!,
-                            color: item.dopplerColor,
-                            compact: compact,
-                          ),
-                        )
-                      else if (item.isRareItem && item.rareReason != null)
-                        Positioned(
-                          top: 4,
-                          right: compact ? 4 : 6,
-                          child: _RareBadge(reason: item.rareReason!, compact: compact),
-                        ),
-
-                      // Trade ban lock — bottom-right corner of image
-                      if (!item.tradable)
-                        Positioned(
-                          bottom: compact ? 2 : 4,
-                          right: compact ? 4 : 6,
-                          child: Icon(
-                            Icons.lock_clock,
-                            size: compact ? 11 : 14,
-                            color: AppTheme.warning.withValues(alpha: 0.85),
-                          ),
-                        ),
+                      ],
 
                       // Group count badge (top-right of image area)
                       if (groupCount != null)
@@ -561,6 +548,17 @@ class _FooterSection extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.max,
           children: [
+            // Phase (compact) — before ST/wear
+            if (item.isDoppler && item.dopplerPhase != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 3),
+                child: _DopplerPhasePill(phase: item.dopplerPhase!.replaceAll('Phase ', 'P').replaceAll('Gamma ', 'G'), color: item.dopplerColor, compact: true),
+              )
+            else if (item.isRareItem && item.rareReason != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 3),
+                child: _RareBadge(reason: item.rareReason!, compact: true),
+              ),
             // ST/SV prefix (fixed small width)
             if (hasWear) ...[
               if (item.isSouvenir)
@@ -570,9 +568,13 @@ class _FooterSection extends StatelessWidget {
               // Wear pill — flexible so it can shrink
               Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
             ],
-            // Trade ban moved to image Stack (bottom-right corner)
-            // Push account dot to right
+            // Push to right
             const Spacer(),
+            // Trade ban — small lock icon on the RIGHT
+            if (hasBan) ...[
+              Icon(Icons.lock_clock, size: 11, color: AppTheme.warning.withValues(alpha: 0.8)),
+              const SizedBox(width: 3),
+            ],
             if (hasAccount)
               _AccountLetterDot(name: item.accountName),
           ],
@@ -614,8 +616,13 @@ class _FooterSection extends StatelessWidget {
                 ],
               ),
             ),
+            // Trade ban badge — right side of footer (original design restored)
+            if (hasBan) ...[
+              const SizedBox(width: 6),
+              _TradeBanBadge(item: item, compact: false),
+            ],
             if (hasAccount) ...[
-              const SizedBox(width: 2),
+              const SizedBox(width: 4),
               _AccountNameBadge(accountName: item.accountName, compact: true),
             ],
           ],
@@ -937,33 +944,46 @@ class _StickerThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 17,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.06),
-          width: 0.5,
+    return Tooltip(
+      message: sticker.name.isNotEmpty ? sticker.name : 'Sticker',
+      child: Container(
+        width: 30,
+        height: 22,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+            color: const Color(0xFFFBBF24).withValues(alpha: 0.25),
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFBBF24).withValues(alpha: 0.12),
+              blurRadius: 4,
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: sticker.fullImageUrl.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: sticker.fullImageUrl,
+                  fit: BoxFit.contain,
+                  placeholder: (_, _) => const SizedBox.shrink(),
+                  errorWidget: (_, _, _) => const Icon(
+                    Icons.sticky_note_2_rounded,
+                    size: 12,
+                    color: AppTheme.warningLight,
+                  ),
+                )
+              : const Icon(
+                  Icons.sticky_note_2_rounded,
+                  size: 12,
+                  color: AppTheme.warningLight,
+                ),
         ),
       ),
-      child: sticker.fullImageUrl.isNotEmpty
-          ? CachedNetworkImage(
-              imageUrl: sticker.fullImageUrl,
-              fit: BoxFit.contain,
-              placeholder: (_, _) => const SizedBox.shrink(),
-              errorWidget: (_, _, _) => const Icon(
-                Icons.sticky_note_2_rounded,
-                size: 10,
-                color: AppTheme.warningLight,
-              ),
-            )
-          : const Icon(
-              Icons.sticky_note_2_rounded,
-              size: 10,
-              color: AppTheme.warningLight,
-            ),
     );
   }
 }
