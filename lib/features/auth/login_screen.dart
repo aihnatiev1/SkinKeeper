@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -521,7 +522,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             'Free to use \u2022 No ads',
             style: TextStyle(fontSize: 11, color: AppTheme.textDisabled),
           ).animate().fadeIn(duration: 400.ms, delay: 900.ms),
+          const SizedBox(height: 16),
+          // Ecosystem row
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _platformBadge(Icons.language_rounded, 'Web', 'https://app.skinkeeper.store'),
+              _platformBadge(Icons.desktop_windows_rounded, 'Desktop', 'https://skinkeeper.store/download'),
+              _platformBadge(Icons.extension_rounded, 'Extension', 'https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd'),
+            ],
+          ).animate().fadeIn(duration: 400.ms, delay: 1000.ms),
         ],
+      ),
+    );
+  }
+
+  Widget _platformBadge(IconData icon, String label, String url) {
+    return GestureDetector(
+      onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: AppTheme.primaryLight),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryLight),
+            ),
+          ],
+        ),
       ),
     );
   }
