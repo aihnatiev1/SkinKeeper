@@ -133,33 +133,31 @@ class ItemCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             // Primary: Steam price (always)
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    item.steamPrice != null
-                                        ? (currency?.format(item.steamPrice!) ??
-                                            '\$${item.steamPrice!.toStringAsFixed(2)}')
-                                        : (item.bestPrice != null
-                                            ? (currency?.format(item.bestPrice!) ??
-                                                '\$${item.bestPrice!.toStringAsFixed(2)}')
-                                            : '—'),
-                                    style: TextStyle(
-                                      fontSize: compact ? 10 : 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: item.steamPrice != null
-                                          ? Colors.white.withValues(alpha: 0.85)
-                                          : AppTheme.textMuted,
-                                      letterSpacing: -0.3,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures()
-                                      ],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                            // FittedBox auto-scales long prices (e.g. ₴59,564) without overflow
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                item.steamPrice != null
+                                    ? (currency?.format(item.steamPrice!) ??
+                                        '\$${item.steamPrice!.toStringAsFixed(2)}')
+                                    : (item.bestPrice != null
+                                        ? (currency?.format(item.bestPrice!) ??
+                                            '\$${item.bestPrice!.toStringAsFixed(2)}')
+                                        : '—'),
+                                style: TextStyle(
+                                  fontSize: compact ? 10 : 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: item.steamPrice != null
+                                      ? Colors.white.withValues(alpha: 0.85)
+                                      : AppTheme.textMuted,
+                                  letterSpacing: -0.3,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
                                 ),
-                              ],
+                                maxLines: 1,
+                              ),
                             ),
                             // BUFF arbitrage badge — below price
                             if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
@@ -514,39 +512,36 @@ class _FooterSection extends StatelessWidget {
   }
 
   Widget _buildCompactFooter(bool hasBan, bool hasAccount) {
+    final hasWear = !item.isNonWeapon && item.wearShort != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Use Row with Spacer — no inner Row(min) to avoid overflow
         Row(
+          mainAxisSize: MainAxisSize.max,
           children: [
-            Flexible(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!item.isNonWeapon && item.wearShort != null) ...[
-                    if (item.isSouvenir)
-                      const Text('SV ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning))
-                    else if (item.isStatTrak)
-                      const Text('ST ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning)),
-                    _WearPill(wear: item.wearShort!, compact: true),
-                    if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
-                      const Padding(padding: EdgeInsets.only(left: 3), child: Text('🔥', style: TextStyle(fontSize: 9))),
-                  ],
-                  if (hasBan) ...[
-                    const SizedBox(width: 4),
-                    _TradeBanBadge(item: item, compact: true),
-                  ],
-                ],
-              ),
-            ),
-            if (hasAccount) ...[
-              const SizedBox(width: 2),
-              _AccountLetterDot(name: item.accountName),
+            // ST/SV prefix (fixed small width)
+            if (hasWear) ...[
+              if (item.isSouvenir)
+                const Text('SV ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning))
+              else if (item.isStatTrak)
+                const Text('ST ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning)),
+              // Wear pill — flexible so it can shrink
+              Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
             ],
+            // Trade ban icon — small, only if banned (no text in compact)
+            if (hasBan) ...[
+              const SizedBox(width: 3),
+              Icon(Icons.lock_clock, size: 10, color: AppTheme.warning.withValues(alpha: 0.7)),
+            ],
+            // Push account dot to right
+            const Spacer(),
+            if (hasAccount)
+              _AccountLetterDot(name: item.accountName),
           ],
         ),
-        if (!item.isNonWeapon && item.wearShort != null)
+        if (hasWear)
           Padding(
             padding: const EdgeInsets.only(top: 3, right: 4),
             child: _MiniFloatBar(floatValue: item.floatValue, wearShort: item.wearShort!),
