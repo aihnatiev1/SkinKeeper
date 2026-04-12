@@ -971,12 +971,36 @@ function updateSummary() {
 
   // Warnings
   if (warnEl) {
+    const warnings: string[] = [];
+
+    // Trade ban check — scan items in slots for non-tradable
+    const checkTradeBanned = (slots: HTMLElement | null, side: 'your' | 'their') => {
+      if (!slots) return;
+      slots.querySelectorAll('.item').forEach(itemEl => {
+        const assetid = (itemEl as HTMLElement).dataset.id;
+        if (!assetid) return;
+        const info = allItems.find(i => i.assetid === assetid);
+        if (info && info.tradable === false) {
+          const label = side === 'your' ? 'Your item' : "Partner's item";
+          warnings.push(`\uD83D\uDD12 ${label} "${info.name}" is trade locked`);
+        }
+      });
+    };
+    checkTradeBanned(yourSlots, 'your');
+    checkTradeBanned(theirSlots, 'their');
+
+    // Value warnings
     if (yourCount > 0 && theirCount === 0) {
-      warnEl.style.display = '';
-      warnEl.innerHTML = '<div style="color:#fbbf24;font-size:11px;padding:4px 0">\u26a0 One-sided trade \u2014 giving items for nothing!</div>';
+      warnings.push('\u26a0 One-sided trade \u2014 giving items for nothing!');
     } else if (!profit && Math.abs(pct) > 10) {
+      warnings.push(`\u26a0 Losing ${Math.abs(pct).toFixed(1)}% value!`);
+    }
+
+    if (warnings.length > 0) {
       warnEl.style.display = '';
-      warnEl.innerHTML = `<div style="color:#f87171;font-size:11px;padding:4px 0">\u26a0 Losing ${Math.abs(pct).toFixed(1)}% value!</div>`;
+      warnEl.innerHTML = warnings.map(w =>
+        `<div style="color:${w.startsWith('\uD83D\uDD12') ? '#ef4444' : '#fbbf24'};font-size:11px;padding:2px 0">${w}</div>`
+      ).join('');
     } else {
       warnEl.style.display = 'none';
     }
