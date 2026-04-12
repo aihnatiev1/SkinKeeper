@@ -460,3 +460,46 @@ export async function checkAssetListed(
     return "unknown";
   }
 }
+
+/**
+ * Cancel (remove) a single Steam Market listing.
+ * Steam API: POST /market/removelisting/{listingid}
+ */
+export async function cancelListing(
+  session: SteamSession,
+  listingId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const freshSessionId = await getFreshSessionId(session.steamLoginSecure);
+    const sessionId = freshSessionId ?? session.sessionId;
+
+    const resp = await axios.post(
+      `https://steamcommunity.com/market/removelisting/${listingId}`,
+      `sessionid=${sessionId}`,
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${sessionId}`,
+          Referer: "https://steamcommunity.com/my/market/",
+          Origin: "https://steamcommunity.com",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+
+    // Steam returns 200 on success (body may be empty or "{}")
+    if (resp.status === 200) {
+      log.info("cancel_listing_ok", { listingId });
+      return { success: true };
+    }
+
+    log.warn("cancel_listing_failed", { listingId, status: resp.status, data: resp.data });
+    return { success: false, error: `Steam returned ${resp.status}` };
+  } catch (err: any) {
+    log.error("cancel_listing_error", { listingId }, err);
+    return { success: false, error: err.message };
+  }
+}

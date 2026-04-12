@@ -8,6 +8,7 @@ import { sellOperationSchema, refreshPricesSchema } from "../middleware/schemas.
 import {
   quickSellPrice,
   getMarketPrice,
+  cancelListing,
 } from "../services/market.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import {
@@ -687,6 +688,81 @@ router.get(
     } catch (err) {
       console.error("Market deals error:", err);
       res.status(500).json({ error: "Failed to load deals" });
+    }
+  }
+);
+
+/**
+ * DELETE /api/market/listings/:listingId
+ * Cancel a single Steam Market listing.
+ */
+router.delete(
+  "/listings/:listingId",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { listingId } = req.params;
+      const accountId = await SteamSessionService.getActiveAccountId(req.userId!);
+      if (!accountId) {
+        res.status(400).json({ error: "No active Steam account" });
+        return;
+      }
+      const session = await SteamSessionService.getSession(accountId);
+      if (!session) {
+        res.status(401).json({ code: "SESSION_EXPIRED", error: "Steam session expired" });
+        return;
+      }
+      const result = await cancelListing(session, listingId);
+      if (result.success) {
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ success: false, error: result.error });
+      }
+    } catch (err) {
+      console.error("Cancel listing error:", err);
+      res.status(500).json({ error: "Failed to cancel listing" });
+    }
+  }
+);
+
+/**
+ * DELETE /api/market/listings (bulk)
+ * Body: { listingIds: string[] }
+ */
+router.post(
+  "/listings/cancel-bulk",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { listingIds } = req.body as { listingIds: string[] };
+      if (!Array.isArray(listingIds) || listingIds.length === 0) {
+        res.status(400).json({ error: "listingIds required" });
+        return;
+      }
+      const accountId = await SteamSessionService.getActiveAccountId(req.userId!);
+      if (!accountId) {
+        res.status(400).json({ error: "No active Steam account" });
+        return;
+      }
+      const session = await SteamSessionService.getSession(accountId);
+      if (!session) {
+        res.status(401).json({ code: "SESSION_EXPIRED", error: "Steam session expired" });
+        return;
+      }
+
+      let cancelled = 0;
+      const errors: string[] = [];
+      for (const id of listingIds.slice(0, 100)) { // cap at 100
+        const r = await cancelListing(session, id);
+        if (r.success) cancelled++;
+        else errors.push(id);
+        await new Promise(resolve => setTimeout(resolve, 300)); // rate limit
+      }
+
+      res.json({ success: true, cancelled, failed: errors.length });
+    } catch (err) {
+      console.error("Bulk cancel error:", err);
+      res.status(500).json({ error: "Failed to bulk cancel" });
     }
   }
 );

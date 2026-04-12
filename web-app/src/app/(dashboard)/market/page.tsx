@@ -5,8 +5,10 @@ import { PageLoader } from '@/components/loading';
 import { useMarketListings, useSellVolume } from '@/lib/hooks';
 import { useFormatPrice, getItemIconUrl, cn } from '@/lib/utils';
 import type { MarketListing } from '@/lib/types';
-import { Store, Package, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { Store, Package, AlertTriangle, RefreshCw, ExternalLink, Trash2, CheckSquare, Square } from 'lucide-react';
 import { useState } from 'react';
+import { api } from '@/lib/api';
+import { toast } from 'sonner';
 import { EcosystemTip } from '@/components/ecosystem-tip';
 import { FeeCalculator } from '@/components/fee-calculator';
 
@@ -21,6 +23,39 @@ export default function MarketPage() {
   const { data, isLoading, refetch, isFetching } = useMarketListings();
   const { data: volume } = useSellVolume();
   const [stateFilter, setStateFilter] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [cancelling, setCancelling] = useState(false);
+
+  const toggleSelect = (id: string) =>
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll = () =>
+    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(l => l.listingId)));
+
+  const handleCancelSelected = async () => {
+    if (selected.size === 0) return;
+    setCancelling(true);
+    try {
+      const res = await api.post<{ cancelled: number; failed: number }>('/market/listings/cancel-bulk', {
+        listingIds: Array.from(selected),
+      });
+      toast.success(`Cancelled ${res.cancelled} listing${res.cancelled !== 1 ? 's' : ''}${res.failed > 0 ? `, ${res.failed} failed` : ''}`);
+      setSelected(new Set());
+      refetch();
+    } catch {
+      toast.error('Failed to cancel listings');
+    }
+    setCancelling(false);
+  };
+
+  const handleCancelOne = async (listingId: string) => {
+    try {
+      await api.delete(`/market/listings/${listingId}`);
+      toast.success('Listing cancelled');
+      refetch();
+    } catch {
+      toast.error('Failed to cancel listing');
+    }
+  };
 
   const listings = data?.listings ?? [];
   const filtered = stateFilter ? listings.filter((l) => l.state === stateFilter) : listings;
@@ -122,26 +157,57 @@ export default function MarketPage() {
           </div>
         ) : (
           <div className="glass rounded-2xl border border-border/50 overflow-hidden">
+            {/* Bulk action toolbar */}
+            {selected.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border-b border-primary/10">
+                <span className="text-sm font-medium">{selected.size} selected</span>
+                <button
+                  onClick={handleCancelSelected}
+                  disabled={cancelling}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-loss/10 text-loss hover:bg-loss/20 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Trash2 size={13} />
+                  {cancelling ? 'Cancelling...' : 'Cancel selected'}
+                </button>
+                <button onClick={() => setSelected(new Set())} className="text-xs text-muted hover:text-foreground ml-auto">
+                  Clear
+                </button>
+              </div>
+            )}
+
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-muted text-left border-b border-border/30">
+                  <th className="px-3 py-3 w-8">
+                    <button onClick={toggleAll} className="text-muted hover:text-foreground transition-colors">
+                      {selected.size === filtered.length && filtered.length > 0
+                        ? <CheckSquare size={15} className="text-primary" />
+                        : <Square size={15} />}
+                    </button>
+                  </th>
                   <th className="px-4 py-3 font-medium">Item</th>
                   <th className="px-4 py-3 font-medium hidden sm:table-cell">Account</th>
                   <th className="px-4 py-3 font-medium text-center">Status</th>
                   <th className="px-4 py-3 font-medium text-right">Seller Gets</th>
                   <th className="px-4 py-3 font-medium text-right">Buyer Pays</th>
                   <th className="px-4 py-3 font-medium text-right hidden sm:table-cell">Listed</th>
-                  <th className="px-4 py-3 font-medium w-10"></th>
+                  <th className="px-4 py-3 font-medium w-16"></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((listing) => {
                   const stateInfo = STATE_LABELS[listing.state] || { label: listing.state, color: 'text-muted' };
+                  const isSel = selected.has(listing.listingId);
                   return (
                     <tr
                       key={listing.listingId}
-                      className="border-b border-border/20 hover:bg-surface-light/30 transition-colors"
+                      className={cn('border-b border-border/20 hover:bg-surface-light/30 transition-colors', isSel && 'bg-primary/5')}
                     >
+                      <td className="px-3 py-2.5">
+                        <button onClick={() => toggleSelect(listing.listingId)} className="text-muted hover:text-primary transition-colors">
+                          {isSel ? <CheckSquare size={15} className="text-primary" /> : <Square size={15} />}
+                        </button>
+                      </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
                           {listing.iconUrl && (
@@ -176,14 +242,23 @@ export default function MarketPage() {
                           : '—'}
                       </td>
                       <td className="px-4 py-2.5">
-                        <a
-                          href={`https://steamcommunity.com/market/listings/730/${encodeURIComponent(listing.marketHashName || '')}`}
-                          target="_blank"
-                          rel="noopener"
-                          className="text-muted hover:text-foreground transition-colors"
-                        >
-                          <ExternalLink size={14} />
-                        </a>
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => handleCancelOne(listing.listingId)}
+                            className="text-muted hover:text-loss transition-colors"
+                            title="Cancel listing"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                          <a
+                            href={`https://steamcommunity.com/market/listings/730/${encodeURIComponent(listing.marketHashName || '')}`}
+                            target="_blank"
+                            rel="noopener"
+                            className="text-muted hover:text-foreground transition-colors"
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   );
