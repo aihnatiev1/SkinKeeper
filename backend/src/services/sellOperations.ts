@@ -1,7 +1,7 @@
 import { pool } from "../db/pool.js";
 import { log } from "../utils/logger.js";
 import { SteamSessionService } from "./steamSession.js";
-import { sellItem, quickSellPrice, checkAssetListed } from "./market.js";
+import { sellItem, quickSellPrice, checkAssetListed, getListedAssetIds } from "./market.js";
 import { getWalletCurrency } from "./currency.js";
 import { recalculateCostBasis } from "./profitLoss.js";
 import { refreshPricesOnDemand } from "./steamHistogram.js";
@@ -55,6 +55,7 @@ const ERROR_DELAY_MS = 5000;
 const CONSECUTIVE_ERROR_DELAY_MS = 10000;
 const DAILY_SELL_LIMIT = 100;
 const DAILY_SELL_WARNING = 80;
+const MAX_PRICE_MULTIPLIER = 5; // fail if client price > 5x market price
 
 // Track running operations to prevent duplicate processing
 const activeOperations = new Set<string>();
@@ -197,6 +198,19 @@ async function processOperation(
       return sessionCache.get(accountId)!;
     };
 
+    // Pre-fetch asset IDs already listed/pending on Steam to skip duplicates
+    let alreadyListedIds: Set<string> | null = null;
+    try {
+      const session = await getSession(fallbackAccountId);
+      alreadyListedIds = await getListedAssetIds(session);
+      if (alreadyListedIds && alreadyListedIds.size > 0) {
+        log.info("sell_pending_listings_found", { operationId, count: alreadyListedIds.size });
+      }
+    } catch (err) {
+      log.warn("sell_pending_listings_check_failed", { operationId }, err);
+      // Non-fatal: continue without the check — Steam will reject duplicates anyway
+    }
+
     // Load queued items WITH per-item account_id and currency
     const { rows: items } = await pool.query(
       `SELECT id, asset_id, market_hash_name, price_cents, account_id, price_currency_id
@@ -274,13 +288,48 @@ async function processOperation(
         );
       }
 
+      // Fix: skip items already listed or pending confirmation on Steam
+      if (alreadyListedIds?.has(item.asset_id)) {
+        await pool.query(
+          `UPDATE sell_operation_items
+           SET status = 'failed', error_message = 'Item already has a pending listing on Steam. Confirm or cancel it first.', updated_at = NOW()
+           WHERE id = $1`,
+          [item.id]
+        );
+        await pool.query(
+          `UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`,
+          [operationId]
+        );
+        log.warn("sell_item_already_listed", { operationId, assetId: item.asset_id });
+        continue;
+      }
+
+      // Fix: price sanity check — reject if price is absurdly above market
+      if (priceCents > 0 && item.market_hash_name) {
+        const marketPrice = await quickSellPrice(item.market_hash_name, priceCurrencyId);
+        if (marketPrice && marketPrice.sellerReceivesCents > 0) {
+          const ratio = priceCents / marketPrice.sellerReceivesCents;
+          if (ratio > MAX_PRICE_MULTIPLIER) {
+            const msg = `Price is ${ratio.toFixed(1)}x above market. Check your price and retry.`;
+            await pool.query(
+              `UPDATE sell_operation_items
+               SET status = 'failed', error_message = $1, updated_at = NOW()
+               WHERE id = $2`,
+              [msg, item.id]
+            );
+            await pool.query(
+              `UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`,
+              [operationId]
+            );
+            log.warn("sell_price_too_high", { operationId, assetId: item.asset_id, ratio: ratio.toFixed(1) });
+            consecutiveErrors++;
+            continue;
+          }
+        }
+      }
+
       try {
         const session = await getSession(itemAccountId);
-
-        // Sanity check skipped for client-provided prices — no fresh histogram fetch per item.
-        // Fetching histogram per-item causes price drift between duplicates as market changes
-        // between sequential listings. The client already fetched fresh prices via refresh-prices.
-        // Extreme cases (wrong price) will simply fail at the Steam API level with a clear error.
 
         const result = await sellItem(session, item.asset_id, priceCents, itemAccountId, priceCurrencyId);
 

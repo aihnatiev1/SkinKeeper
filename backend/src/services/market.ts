@@ -503,3 +503,46 @@ export async function cancelListing(
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Fetch all asset IDs currently listed or pending confirmation on Steam Market.
+ * Returns a Set of asset IDs, or null if the check failed.
+ */
+export async function getListedAssetIds(
+  session: SteamSession
+): Promise<Set<string> | null> {
+  try {
+    const { data } = await axios.get(
+      "https://steamcommunity.com/market/mylistings",
+      {
+        params: { norender: 1, start: 0, count: 100 },
+        headers: {
+          Cookie: `steamLoginSecure=${session.steamLoginSecure}; sessionid=${session.sessionId}`,
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+        timeout: 15000,
+      }
+    );
+
+    if (!data?.success) return null;
+
+    const ids = new Set<string>();
+    const allListings = [
+      ...((data.listings as unknown[]) ?? []),
+      ...((data.listings_to_confirm as unknown[]) ?? []),
+      ...((data.listings_on_hold as unknown[]) ?? []),
+    ];
+
+    for (const listing of allListings) {
+      const l = listing as Record<string, unknown>;
+      const asset = l.asset as Record<string, unknown> | undefined;
+      const id = (asset?.id ?? asset?.assetid) as string | undefined;
+      if (id) ids.add(id);
+    }
+
+    return ids;
+  } catch {
+    return null;
+  }
+}

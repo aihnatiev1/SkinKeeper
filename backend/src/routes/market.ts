@@ -701,7 +701,7 @@ router.delete(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { listingId } = req.params;
+      const listingId = req.params.listingId as string;
       const accountId = await SteamSessionService.getActiveAccountId(req.userId!);
       if (!accountId) {
         res.status(400).json({ error: "No active Steam account" });
