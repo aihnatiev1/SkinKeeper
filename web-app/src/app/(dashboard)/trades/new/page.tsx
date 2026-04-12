@@ -443,6 +443,20 @@ export default function NewTradePage() {
               <p className="text-[10px]" style={{ color: '#475569' }}>{selectedGive.size} items</p>
             </div>
 
+            {/* Fee breakdown — shown when both sides have items with known price */}
+            {selectedReceive.size > 0 && receiveValue > 0 && (
+              <div className="hidden md:flex flex-col items-center gap-0.5 px-2 shrink-0">
+                <p className="text-[9px] uppercase tracking-wider" style={{ color: '#334155' }}>Listed at</p>
+                <p className="text-xs font-bold tabular-nums" style={{ color: '#e2e8f0' }}>
+                  {formatPrice(receiveValue / 0.8696)}
+                </p>
+                <p className="text-[9px]" style={{ color: '#475569' }}>−15% fee</p>
+                <p className="text-[9px] font-semibold" style={{ color: '#4ade80' }}>
+                  → {formatPrice(receiveValue)}
+                </p>
+              </div>
+            )}
+
             {/* P&L badge */}
             {totalItems > 0 && receiveValue > 0 && giveValue > 0 && (
               <div className="shrink-0 text-center px-3 py-1.5 rounded-lg" style={{

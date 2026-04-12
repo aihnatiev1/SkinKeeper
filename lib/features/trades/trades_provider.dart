@@ -380,4 +380,22 @@ class ListingsNotifier extends AutoDisposeAsyncNotifier<ListingsState> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(_fetch);
   }
+
+  Future<bool> cancelListing(String listingId) async {
+    final api = ref.read(apiClientProvider);
+    try {
+      await api.delete('/market/listings/$listingId');
+      // Optimistically remove from list
+      final current = state.valueOrNull;
+      if (current != null) {
+        state = AsyncData(ListingsState(
+          listings: current.listings.where((l) => l.listingId != listingId).toList(),
+          totalCount: current.totalCount - 1,
+        ));
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }

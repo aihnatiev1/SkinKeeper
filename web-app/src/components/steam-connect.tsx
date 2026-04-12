@@ -5,10 +5,12 @@ import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, LogOut, Wallet, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useSteamStatus } from '@/lib/use-desktop';
 import { getDesktopAPI } from '@/lib/desktop';
+import { useAuthStore } from '@/lib/store';
 import { toast } from 'sonner';
 
 export function SteamConnect() {
   const { status, loading: statusLoading } = useSteamStatus();
+  const user = useAuthStore((s) => s.user);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
 
@@ -73,7 +75,7 @@ export function SteamConnect() {
             </div>
             <div>
               <p className="font-bold flex items-center gap-2">
-                {status.personaName || 'Steam Connected'}
+                {status.personaName || user?.display_name || 'Steam Connected'}
                 <span className="text-xs bg-profit/10 text-profit px-2 py-0.5 rounded-full font-semibold">Online</span>
               </p>
               <p className="text-xs text-muted font-mono">{status.steamId}</p>

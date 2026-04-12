@@ -1023,13 +1023,40 @@ class _ListingsTab extends ConsumerWidget {
 // Single listing tile
 // ---------------------------------------------------------------------------
 
-class _ListingTile extends StatelessWidget {
+class _ListingTile extends ConsumerWidget {
   final MarketListing listing;
   final CurrencyInfo currency;
   const _ListingTile({required this.listing, required this.currency});
 
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Cancel listing?'),
+        content: Text('Remove "${listing.displayName}" from Steam Market?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel listing', style: TextStyle(color: AppTheme.loss)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final ok = await ref.read(listingsProvider.notifier).cancelListing(listing.listingId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? 'Listing cancelled' : 'Failed to cancel — try again'),
+        backgroundColor: ok ? AppTheme.profit : AppTheme.loss,
+        duration: const Duration(seconds: 2),
+      ));
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final createdStr = _formatDate(listing.createdAt);
     final accentColor = listing.needsConfirmation
         ? AppTheme.warning
@@ -1037,7 +1064,38 @@ class _ListingTile extends StatelessWidget {
             ? AppTheme.textMuted
             : null;
 
-    return Container(
+    return Dismissible(
+      key: Key(listing.listingId),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        final ok = await ref.read(listingsProvider.notifier).cancelListing(listing.listingId);
+        if (!ok && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to cancel — try again'),
+            backgroundColor: AppTheme.loss,
+          ));
+        }
+        return ok;
+      },
+      background: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.loss.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(AppTheme.r12),
+          border: Border.all(color: AppTheme.loss.withValues(alpha: 0.3)),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_outline_rounded, color: AppTheme.loss, size: 22),
+            SizedBox(height: 4),
+            Text('Cancel', style: TextStyle(color: AppTheme.loss, fontSize: 11, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+      child: Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: accentColor != null
           ? AppTheme.glassAccent(accentColor: accentColor)
@@ -1155,7 +1213,7 @@ class _ListingTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Prices
+            // Prices + cancel button
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1177,12 +1235,29 @@ class _ListingTile extends StatelessWidget {
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: () => _cancel(context, ref),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.loss.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.loss.withValues(alpha: 0.25)),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.loss),
+                    ),
+                  ),
+                ),
               ],
             ),
           ],
         ),
       ),
-    );
+      ), // Dismissible child
+    ); // Dismissible
   }
 
   String _formatDate(DateTime dt) {

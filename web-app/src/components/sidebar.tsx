@@ -175,7 +175,9 @@ export function Sidebar() {
               /* Connected — show name + disconnect */
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass">
                 <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                <span className="text-xs text-muted truncate flex-1">{steamStatus.personaName || 'Steam Connected'}</span>
+                <span className="text-xs text-muted truncate flex-1">
+                  {steamStatus.personaName || user?.display_name || 'Steam Connected'}
+                </span>
                 <button
                   onClick={handleSteamDisconnect}
                   className="text-[10px] text-muted/60 hover:text-loss transition-colors shrink-0"
