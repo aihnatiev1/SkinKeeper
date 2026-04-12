@@ -20,6 +20,8 @@ const _wearPillColors = <String, Color>{
 class ItemCard extends StatelessWidget {
   final InventoryItem item;
   final bool compact;
+  /// Ultra-compact mode for 5-column grids: hides non-essential elements
+  final bool ultraCompact;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onInfoTap;
@@ -35,6 +37,7 @@ class ItemCard extends StatelessWidget {
     super.key,
     required this.item,
     this.compact = false,
+    this.ultraCompact = false,
     this.onTap,
     this.onLongPress,
     this.onInfoTap,
@@ -159,8 +162,8 @@ class ItemCard extends StatelessWidget {
                                 maxLines: 1,
                               ),
                             ),
-                            // BUFF arbitrage badge — below price
-                            if (!compact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
+                            // BUFF arbitrage badge — below price (hidden in compact/ultraCompact)
+                            if (!compact && !ultraCompact && item.prices.containsKey('buff') && item.steamPrice != null) ...[
                               const SizedBox(height: 2),
                               Row(
                                 children: [
@@ -171,13 +174,13 @@ class ItemCard extends StatelessWidget {
                                 ],
                               ),
                             ],
-                            // Secondary: best external (only when Steam price exists)
-                            if (!compact && item.steamPrice != null) _BestExternalPrice(item: item, currency: currency),
+                            // Secondary: best external (hidden in compact/ultraCompact)
+                            if (!compact && !ultraCompact && item.steamPrice != null) _BestExternalPrice(item: item, currency: currency),
                           ],
                         ),
                       ),
-                      // P/L badge
-                      if (!compact &&
+                      // P/L badge (hidden in ultraCompact)
+                      if (!compact && !ultraCompact &&
                           itemPL != null &&
                           itemPL!.totalProfitCents != 0 &&
                           itemPL!.profitPct.abs() >= 0.5)
@@ -199,7 +202,8 @@ class ItemCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      // Info button — padded for touch target, aligned top
+                      // Info button — hidden in ultraCompact (long-press still works)
+                      if (!ultraCompact)
                       GestureDetector(
                         onTap: onInfoTap,
                         behavior: HitTestBehavior.opaque,
@@ -353,8 +357,8 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       // Account badge removed from image Stack — now in footer
-                      // Stickers + charm row (only for weapons)
-                      if (!compact && !item.isNonWeapon &&
+                      // Stickers + charm row (only for weapons, hidden in ultraCompact)
+                      if (!compact && !ultraCompact && !item.isNonWeapon &&
                           (item.stickers.isNotEmpty || item.charms.isNotEmpty))
                         Positioned(
                           left: 6,
@@ -405,7 +409,7 @@ class ItemCard extends StatelessWidget {
                 ),
 
                 // ── Footer ──
-                _FooterSection(item: item, compact: compact),
+                _FooterSection(item: item, compact: compact, ultraCompact: ultraCompact),
               ],
             ),
 
@@ -517,8 +521,9 @@ class _AccountLetterDot extends StatelessWidget {
 class _FooterSection extends StatelessWidget {
   final InventoryItem item;
   final bool compact;
+  final bool ultraCompact;
 
-  const _FooterSection({required this.item, required this.compact});
+  const _FooterSection({required this.item, required this.compact, this.ultraCompact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -534,7 +539,38 @@ class _FooterSection extends StatelessWidget {
         compact ? 5 : 8,
         compact ? 5 : 7,
       ),
-      child: compact ? _buildCompactFooter(hasBan, hasAccount) : _buildFullFooter(hasBan, hasAccount),
+      child: ultraCompact
+          ? _buildUltraCompactFooter()
+          : compact
+              ? _buildCompactFooter(hasBan, hasAccount)
+              : _buildFullFooter(hasBan, hasAccount),
+    );
+  }
+
+  // Ultra-compact: just wear pill + float bar (5 columns)
+  Widget _buildUltraCompactFooter() {
+    final hasWear = !item.isNonWeapon && item.wearShort != null;
+    if (!hasWear) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            if (item.isStatTrak)
+              const Text('ST ', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppTheme.warning)),
+            Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
+            const Spacer(),
+            if (!item.tradable)
+              Icon(Icons.lock_clock, size: 9, color: AppTheme.warning.withValues(alpha: 0.8)),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: _MiniFloatBar(floatValue: item.floatValue, wearShort: item.wearShort!),
+        ),
+      ],
     );
   }
 

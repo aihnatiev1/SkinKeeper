@@ -260,6 +260,7 @@ class _GridItemState extends ConsumerState<_GridItem>
       child: ItemCard(
         item: item,
         compact: widget.columns >= 3,
+        ultraCompact: widget.columns >= 5,
         itemPL: itemPL,
         currency: widget.currency,
         groupCount: group.isGroup ? group.count : null,
