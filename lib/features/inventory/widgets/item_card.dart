@@ -291,6 +291,46 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // Phase badge — top-right of image (visually below the (i) button)
+                      if (item.isRareDoppler && item.dopplerPhase != null && item.dopplerColor != null)
+                        Positioned(
+                          top: 4,
+                          right: compact ? 4 : 6,
+                          child: DopplerPhaseGem(
+                            phase: item.dopplerPhase!,
+                            color: item.dopplerColor!,
+                            size: compact ? 10 : 13,
+                          ),
+                        )
+                      else if (item.isDoppler && item.dopplerPhase != null)
+                        Positioned(
+                          top: 4,
+                          right: compact ? 4 : 6,
+                          child: _DopplerPhasePill(
+                            phase: item.dopplerPhase!,
+                            color: item.dopplerColor,
+                            compact: compact,
+                          ),
+                        )
+                      else if (item.isRareItem && item.rareReason != null)
+                        Positioned(
+                          top: 4,
+                          right: compact ? 4 : 6,
+                          child: _RareBadge(reason: item.rareReason!, compact: compact),
+                        ),
+
+                      // Trade ban lock — bottom-right corner of image
+                      if (!item.tradable)
+                        Positioned(
+                          bottom: compact ? 2 : 4,
+                          right: compact ? 4 : 6,
+                          child: Icon(
+                            Icons.lock_clock,
+                            size: compact ? 11 : 14,
+                            color: AppTheme.warning.withValues(alpha: 0.85),
+                          ),
+                        ),
+
                       // Group count badge (top-right of image area)
                       if (groupCount != null)
                         Positioned(
@@ -530,11 +570,7 @@ class _FooterSection extends StatelessWidget {
               // Wear pill — flexible so it can shrink
               Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
             ],
-            // Trade ban icon — small, only if banned (no text in compact)
-            if (hasBan) ...[
-              const SizedBox(width: 3),
-              Icon(Icons.lock_clock, size: 10, color: AppTheme.warning.withValues(alpha: 0.7)),
-            ],
+            // Trade ban moved to image Stack (bottom-right corner)
             // Push account dot to right
             const Spacer(),
             if (hasAccount)
@@ -564,17 +600,6 @@ class _FooterSection extends StatelessWidget {
                 runSpacing: 3,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  // Doppler / Rare badge
-                  if (item.isRareDoppler)
-                    DopplerPhaseGem(
-                      phase: item.dopplerPhase!,
-                      color: item.dopplerColor!,
-                      size: 12,
-                    )
-                  else if (item.isDoppler && item.dopplerPhase != null)
-                    _DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor)
-                  else if (item.isRareItem)
-                    _RareBadge(reason: item.rareReason!),
                   // StatTrak / Souvenir
                   if (!item.isNonWeapon && item.wearShort != null) ...[
                     if (item.isSouvenir)
@@ -585,7 +610,7 @@ class _FooterSection extends StatelessWidget {
                   ],
                   if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
                     const Text('🔥', style: TextStyle(fontSize: 10)),
-                  if (hasBan) _TradeBanBadge(item: item, compact: false),
+                  // Phase + lock moved to image Stack (top-right and bottom-right)
                 ],
               ),
             ),
@@ -981,8 +1006,9 @@ class _CharmThumb extends StatelessWidget {
 // ─── Rare Badge ─────────────────────────────────────────────────────
 class _RareBadge extends StatelessWidget {
   final String reason;
+  final bool compact;
 
-  const _RareBadge({required this.reason});
+  const _RareBadge({required this.reason, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1074,7 +1100,8 @@ class _TradeBanBadge extends StatelessWidget {
 class _DopplerPhasePill extends StatelessWidget {
   final String phase;
   final Color? color;
-  const _DopplerPhasePill({required this.phase, this.color});
+  final bool compact;
+  const _DopplerPhasePill({required this.phase, this.color, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1089,7 +1116,7 @@ class _DopplerPhasePill extends StatelessWidget {
       child: Text(
         phase,
         style: TextStyle(
-          fontSize: 9,
+          fontSize: compact ? 8 : 9,
           fontWeight: FontWeight.w800,
           color: c,
           letterSpacing: 0.3,
