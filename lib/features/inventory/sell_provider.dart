@@ -358,9 +358,9 @@ class SellVolume {
   factory SellVolume.fromJson(Map<String, dynamic> json) {
     return SellVolume(
       today: json['today'] as int? ?? 0,
-      limit: json['limit'] as int? ?? 200,
-      warningAt: json['warningAt'] as int? ?? 180,
-      remaining: json['remaining'] as int? ?? 200,
+      limit: json['limit'] as int? ?? 100,
+      warningAt: json['warningAt'] as int? ?? 80,
+      remaining: json['remaining'] as int? ?? 100,
     );
   }
 }

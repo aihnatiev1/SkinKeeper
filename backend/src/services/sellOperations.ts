@@ -53,8 +53,8 @@ interface DailyVolumeInfo {
 const BASE_DELAY_MS = 3000;
 const ERROR_DELAY_MS = 5000;
 const CONSECUTIVE_ERROR_DELAY_MS = 10000;
-const DAILY_SELL_LIMIT = 200;
-const DAILY_SELL_WARNING = 150;
+const DAILY_SELL_LIMIT = 100;
+const DAILY_SELL_WARNING = 80;
 
 // Track running operations to prevent duplicate processing
 const activeOperations = new Set<string>();
