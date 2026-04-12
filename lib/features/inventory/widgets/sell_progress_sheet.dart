@@ -334,12 +334,29 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                ref.read(currencyProvider).formatRaw(item.priceCents / 100),
-                style: AppTheme.mono.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.profit,
-                ),
+              // Show listing price (buyer pays) — matches what appears on Steam market
+              // sellerReceives is shown smaller below so user isn't confused
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    ref.read(currencyProvider).formatRaw(
+                      ((item.priceCents / 0.8696).ceil()) / 100,
+                    ),
+                    style: AppTheme.mono.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.profit,
+                    ),
+                  ),
+                  Text(
+                    '→ ${ref.read(currencyProvider).formatRaw(item.priceCents / 100)}',
+                    style: AppTheme.captionSmall.copyWith(
+                      fontSize: 10,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                ],
               ),
               if (item.requiresConfirmation) ...[
                 const SizedBox(width: 6),
