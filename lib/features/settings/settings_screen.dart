@@ -228,11 +228,12 @@ class SettingsScreen extends ConsumerWidget {
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: Text(
-                    'Get More From Your Skins',
+                    'One Ecosystem. Every Skin.',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: AppTheme.textMuted,
+                      letterSpacing: 0.2,
                     ),
                   ),
                 ),
@@ -240,7 +241,7 @@ class SettingsScreen extends ConsumerWidget {
                   leading: const Icon(Icons.extension, color: AppTheme.accent),
                   title: const Text('Browser Extension'),
                   subtitle: const Text(
-                    'Prices, float values & deals overlaid right on Steam. One click install.',
+                    'Live prices, floats & arbitrage deals right inside Steam. No tab switching.',
                     style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                   trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
@@ -251,7 +252,7 @@ class SettingsScreen extends ConsumerWidget {
                   leading: const Icon(Icons.language, color: AppTheme.accent),
                   title: const Text('Web Dashboard'),
                   subtitle: const Text(
-                    'Big screen. Full charts. Deep analytics. Your portfolio deserves it.',
+                    'Full portfolio analytics, deep charts & market data on any screen.',
                     style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                   trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
@@ -262,7 +263,7 @@ class SettingsScreen extends ConsumerWidget {
                   leading: const Icon(Icons.desktop_windows, color: AppTheme.accent),
                   title: const Text('Desktop App'),
                   subtitle: const Text(
-                    'Storage units. Bulk trades. Mass operations. Desktop power.',
+                    'Storage units, automation rules & GC operations — power user control.',
                     style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                   trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
