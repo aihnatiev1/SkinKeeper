@@ -106,8 +106,8 @@ class InventoryGrid extends ConsumerWidget {
   }
 }
 
-/// Individual grid item — uses `.select()` for granular rebuilds.
-class _GridItem extends ConsumerWidget {
+/// Individual grid item — stateful for shake animation on trade-ban tap.
+class _GridItem extends ConsumerStatefulWidget {
   final ItemGroup group;
   final int columns;
   final CurrencyInfo? currency;
@@ -121,14 +121,117 @@ class _GridItem extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_GridItem> createState() => _GridItemState();
+}
+
+class _GridItemState extends ConsumerState<_GridItem>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shakeController;
+  late final Animation<double> _shakeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    // Sine-wave shake: 0 → +8 → -8 → +8 → -8 → 0
+    _shakeAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 8.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 8.0, end: -8.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -8.0, end: 8.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 8.0, end: -8.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -8.0, end: 0.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _shakeController.dispose();
+    super.dispose();
+  }
+
+  void _shake() {
+    _shakeController.forward(from: 0);
+  }
+
+  void _showTradeBanToast(BuildContext context, DateTime? banUntil) {
+    HapticFeedback.heavyImpact();
+    _shake();
+
+    final banText = banUntil != null
+        ? 'Unlocks ${_formatBanDate(banUntil)}'
+        : 'Item is trade locked';
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF1E1228),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: AppTheme.loss.withValues(alpha: 0.3)),
+          ),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          duration: const Duration(seconds: 3),
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.loss.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.lock_rounded, size: 16, color: AppTheme.loss),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Trade Locked',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    banText,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+  }
+
+  String _formatBanDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = date.difference(now);
+    if (diff.inDays > 0) return 'in ${diff.inDays}d ${diff.inHours % 24}h';
+    if (diff.inHours > 0) return 'in ${diff.inHours}h ${diff.inMinutes % 60}m';
+    return 'soon';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final group = widget.group;
     final item = group.representative;
+
     final isSelected = ref.watch(
       selectionProvider.select((s) => s.contains(item.assetId)),
     );
     final itemPL = ref.watch(itemPLFamilyProvider(item.marketHashName));
 
-    // Count how many items from this group are selected
     final selectedCount = group.isGroup
         ? ref.watch(selectionProvider.select(
             (s) => group.items.where((i) => s.contains(i.assetId)).length,
@@ -143,68 +246,83 @@ class _GridItem extends ConsumerWidget {
     );
     final showBadge = accountCount > 1;
 
-    return ItemCard(
-      item: item,
-      compact: columns >= 3,
-      itemPL: itemPL,
-      currency: currency,
-      groupCount: group.isGroup ? group.count : null,
-      selectedCount: group.isGroup && selectedCount > 0 ? selectedCount : null,
-      isSelected: isSelected || selectedCount > 0,
-      showAccountBadge: showBadge,
-      onAccountBadgeTap: showBadge && group.representative.accountId != null
-        ? () async {
-            final accountId = group.representative.accountId!;
-            if (accountId != activeAccountId) {
-              await ref.read(accountsProvider.notifier).setActive(accountId);
-            }
+    // Check if item (or any in group) is trade banned
+    final isTradeBanned = !item.tradable &&
+        (item.tradeBanUntil == null ||
+            item.tradeBanUntil!.isAfter(DateTime.now()));
+
+    return AnimatedBuilder(
+      animation: _shakeAnim,
+      builder: (context, child) => Transform.translate(
+        offset: Offset(_shakeAnim.value, 0),
+        child: child,
+      ),
+      child: ItemCard(
+        item: item,
+        compact: widget.columns >= 3,
+        itemPL: itemPL,
+        currency: widget.currency,
+        groupCount: group.isGroup ? group.count : null,
+        selectedCount: group.isGroup && selectedCount > 0 ? selectedCount : null,
+        isSelected: isSelected || selectedCount > 0,
+        showAccountBadge: showBadge,
+        onAccountBadgeTap: showBadge && item.accountId != null
+            ? () async {
+                final accountId = item.accountId!;
+                if (accountId != activeAccountId) {
+                  await ref.read(accountsProvider.notifier).setActive(accountId);
+                }
+              }
+            : null,
+        onTap: () {
+          if (isTradeBanned) {
+            _showTradeBanToast(context, item.tradeBanUntil);
+            return;
           }
-        : null,
-      onTap: () {
-        HapticFeedback.selectionClick();
-        if (group.isGroup) {
-          _showQuantityPicker(context, ref, group);
-        } else {
-          ref.read(selectionProvider.notifier).toggle(item.assetId);
-        }
-      },
-      onLongPress: () {
-        HapticFeedback.mediumImpact();
-        if (group.isGroup) {
-          _showGroupSheet(context, ref, group);
-        } else {
-          context.push('/inventory/item-detail', extra: item);
-        }
-      },
-      onInfoTap: () {
-        HapticFeedback.lightImpact();
-        if (group.isGroup) {
-          _showGroupSheet(context, ref, group);
-        } else {
-          context.push('/inventory/item-detail', extra: item);
-        }
-      },
-    )
-        .animate()
-        .fadeIn(
-          duration: 300.ms,
-          delay: Duration(milliseconds: (index % 12) * 30),
-        )
-        .slideY(
-          begin: 0.05,
-          duration: 300.ms,
-          delay: Duration(milliseconds: (index % 12) * 30),
-          curve: Curves.easeOutCubic,
-        );
+          HapticFeedback.selectionClick();
+          if (group.isGroup) {
+            _showQuantityPicker(context, group);
+          } else {
+            ref.read(selectionProvider.notifier).toggle(item.assetId);
+          }
+        },
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          if (group.isGroup) {
+            _showGroupSheet(context, group);
+          } else {
+            context.push('/inventory/item-detail', extra: item);
+          }
+        },
+        onInfoTap: () {
+          HapticFeedback.lightImpact();
+          if (group.isGroup) {
+            _showGroupSheet(context, group);
+          } else {
+            context.push('/inventory/item-detail', extra: item);
+          }
+        },
+      )
+          .animate()
+          .fadeIn(
+            duration: 300.ms,
+            delay: Duration(milliseconds: (widget.index % 12) * 30),
+          )
+          .slideY(
+            begin: 0.05,
+            duration: 300.ms,
+            delay: Duration(milliseconds: (widget.index % 12) * 30),
+            curve: Curves.easeOutCubic,
+          ),
+    );
   }
 
-  void _showGroupSheet(BuildContext context, WidgetRef ref, ItemGroup group) {
+  void _showGroupSheet(BuildContext context, ItemGroup group) {
     final currency = ref.read(currencyProvider);
     showGlassSheet(context, GroupExpandSheet(group: group, currency: currency));
   }
 
-  void _showQuantityPicker(
-      BuildContext context, WidgetRef ref, ItemGroup group) {
+  void _showQuantityPicker(BuildContext context, ItemGroup group) {
     final currency = ref.read(currencyProvider);
     final selected = ref.read(selectionProvider);
     final currentCount =

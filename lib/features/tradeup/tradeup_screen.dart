@@ -252,6 +252,12 @@ class _TradeUpScreenState extends ConsumerState<TradeUpScreen> {
                   ),
               ],
             ),
+
+            // Results panel — shown when 10 items selected
+            if (_selected.length == 10) ...[
+              const SizedBox(height: 10),
+              _buildResultsPanel(avgFloat, inputCost, currency),
+            ],
           ] else
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
@@ -260,6 +266,186 @@ class _TradeUpScreenState extends ConsumerState<TradeUpScreen> {
                 style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  // Output float formula: avgInputFloat × (maxFloat − minFloat) + minFloat
+  // For most CS2 skins: minFloat=0.00, maxFloat=1.00 → output = avgInputFloat
+  // We approximate with standard float ranges per wear tier
+  String _floatToWear(double f) {
+    if (f < 0.07) return 'Factory New';
+    if (f < 0.15) return 'Minimal Wear';
+    if (f < 0.38) return 'Field-Tested';
+    if (f < 0.45) return 'Well-Worn';
+    return 'Battle-Scarred';
+  }
+
+  Color _wearColor(String wear) => switch (wear) {
+    'Factory New' => const Color(0xFF4ade80),
+    'Minimal Wear' => const Color(0xFF22d3ee),
+    'Field-Tested' => const Color(0xFFa78bfa),
+    'Well-Worn' => const Color(0xFFf97316),
+    _ => const Color(0xFFef4444),
+  };
+
+  // Group selected items by collection → derive output probabilities
+  Map<String, double> _collectionProbabilities() {
+    final counts = <String, int>{};
+    for (final item in _selected) {
+      final col = item.collection?.name ?? item.marketHashName.split(' | ').first;
+      counts[col] = (counts[col] ?? 0) + 1;
+    }
+    return counts.map((k, v) => MapEntry(k, v / _selected.length));
+  }
+
+  Widget _buildResultsPanel(double avgFloat, double inputCost, CurrencyInfo currency) {
+    final outputWear = _floatToWear(avgFloat);
+    final wearColor = _wearColor(outputWear);
+    final outputRarityIdx = _rarityOrder.indexOf(_requiredRarity ?? '') + 1;
+    final outputRarity = outputRarityIdx < _rarityOrder.length
+        ? _rarityOrder[outputRarityIdx]
+        : 'Covert';
+    final outputRarityColor = _rarityColors[outputRarity] ?? AppTheme.primary;
+
+    // Estimate EV from average price of same-rarity output items in inventory
+    // (we don't have full collection data, so show the output details only)
+    final probs = _collectionProbabilities();
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, size: 14, color: AppTheme.primary),
+              const SizedBox(width: 6),
+              const Text('Trade-Up Outcome', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Output tier + float
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: outputRarityColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: outputRarityColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  outputRarity,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: outputRarityColor),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: wearColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: wearColor.withValues(alpha: 0.35)),
+                ),
+                child: Text(
+                  outputWear,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: wearColor),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Float ~${avgFloat.toStringAsFixed(4)}',
+                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+              ),
+            ],
+          ),
+
+          // Collection probabilities
+          if (probs.length > 1) ...[
+            const SizedBox(height: 8),
+            const Text('Output chances by collection:', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+            const SizedBox(height: 4),
+            ...probs.entries.map((e) => Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      e.key,
+                      style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${(e.value * 100).round()}%',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                  ),
+                ],
+              ),
+            )),
+          ],
+
+          const SizedBox(height: 8),
+          const Divider(color: AppTheme.divider, height: 1),
+          const SizedBox(height: 8),
+
+          // Cost summary
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Input Cost', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                    Text(currency.format(inputCost), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.loss)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward, size: 16, color: AppTheme.textMuted),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        const Text('1× ', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                        Text(outputRarity, style: TextStyle(fontSize: 10, color: outputRarityColor, fontWeight: FontWeight.w700)),
+                        Text(' · $outputWear', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                      ],
+                    ),
+                    const Text('Check market for price', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+          // CTA
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: null, // Execute via desktop (GC required)
+              icon: const Icon(Icons.open_in_new, size: 14),
+              label: const Text('Execute on Desktop (GC required)'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4)),
+                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
         ],
       ),
     );

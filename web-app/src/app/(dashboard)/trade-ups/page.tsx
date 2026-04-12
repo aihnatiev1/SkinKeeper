@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Shuffle, Plus, Trash2, Zap, Info, RotateCcw } from 'lucide-react';
+import { Shuffle, Plus, Trash2, Zap, Info, RotateCcw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { useFormatPrice } from '@/lib/utils';
 import { useIsDesktop, useSteamStatus } from '@/lib/use-desktop';
 import { getDesktopAPI } from '@/lib/desktop';
 import { useRouter } from 'next/navigation';
@@ -13,10 +14,27 @@ interface TradeUpSlot {
   item?: any;
 }
 
+const RARITY_ORDER = ['Consumer Grade','Industrial Grade','Mil-Spec Grade','Restricted','Classified','Covert'];
+const RARITY_COLORS: Record<string, string> = {
+  'Consumer Grade': '#B0C3D9', 'Industrial Grade': '#5E98D9', 'Mil-Spec Grade': '#4B69FF',
+  'Restricted': '#8847FF', 'Classified': '#D32CE6', 'Covert': '#EB4B4B',
+};
+const WEAR_LABELS: Record<string, string> = { FN: 'Factory New', MW: 'Minimal Wear', FT: 'Field-Tested', WW: 'Well-Worn', BS: 'Battle-Scarred' };
+const WEAR_COLORS: Record<string, string> = { FN: '#4ade80', MW: '#22d3ee', FT: '#a78bfa', WW: '#f97316', BS: '#ef4444' };
+
+function floatToWear(f: number): string {
+  if (f < 0.07) return 'FN';
+  if (f < 0.15) return 'MW';
+  if (f < 0.38) return 'FT';
+  if (f < 0.45) return 'WW';
+  return 'BS';
+}
+
 export default function TradeUpsPage() {
   const router = useRouter();
   const desktop = useIsDesktop();
   const { status } = useSteamStatus();
+  const formatPrice = useFormatPrice();
   const [slots, setSlots] = useState<TradeUpSlot[]>(
     Array.from({ length: 10 }, (_, i) => ({ index: i }))
   );
@@ -36,6 +54,41 @@ export default function TradeUpsPage() {
 
   // Determine locked rarity: once first item is added, all must match
   const lockedRarity = filledSlots.length > 0 ? filledSlots[0].item?.rarity : undefined;
+
+  // Output predictions (shown when all 10 slots filled)
+  const prediction = useMemo(() => {
+    if (filledSlots.length !== 10) return null;
+    const items = filledSlots.map(s => s.item);
+
+    // Avg float
+    const floats = items.map(i => i.paint_wear ?? i.float_value ?? 0.5);
+    const avgFloat = floats.reduce((a, b) => a + b, 0) / 10;
+
+    // Output wear (using standard float ranges: min=0, max=1)
+    const outputFloat = avgFloat; // simplified: most skins min=0, max=1
+    const outputWear = floatToWear(outputFloat);
+
+    // Output rarity (next tier)
+    const rarityIdx = RARITY_ORDER.indexOf(lockedRarity ?? '');
+    const outputRarity = rarityIdx >= 0 && rarityIdx < RARITY_ORDER.length - 1
+      ? RARITY_ORDER[rarityIdx + 1]
+      : 'Covert';
+
+    // Collection probabilities
+    const colCounts: Record<string, number> = {};
+    for (const item of items) {
+      const col = item.collection || item.market_hash_name?.split(' | ')[0] || 'Unknown';
+      colCounts[col] = (colCounts[col] ?? 0) + 1;
+    }
+    const collections = Object.entries(colCounts)
+      .map(([name, count]) => ({ name, count, pct: Math.round(count * 10) }))
+      .sort((a, b) => b.count - a.count);
+
+    // Input cost
+    const inputCost = items.reduce((s, i) => s + (i.prices?.steam ?? i.prices?.skinport ?? 0), 0);
+
+    return { avgFloat, outputFloat, outputWear, outputRarity, collections, inputCost };
+  }, [filledSlots, lockedRarity]);
   const excludeIds = useMemo(
     () => filledSlots.map((s) => s.item.id),
     [filledSlots]
@@ -195,6 +248,92 @@ export default function TradeUpsPage() {
           ))}
         </div>
       </div>
+
+      {/* Output Prediction Panel */}
+      {prediction && !result && (
+        <div className="glass rounded-2xl p-6 border border-primary/20 space-y-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={16} className="text-primary" />
+            <h3 className="text-sm font-semibold">Predicted Outcome</h3>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {/* Output rarity */}
+            <div className="glass rounded-xl p-3 text-center">
+              <p className="text-xs text-muted mb-1.5">Output Rarity</p>
+              <span
+                className="text-sm font-bold px-2 py-1 rounded-lg"
+                style={{
+                  color: RARITY_COLORS[prediction.outputRarity] ?? '#8847FF',
+                  background: `${RARITY_COLORS[prediction.outputRarity] ?? '#8847FF'}18`,
+                }}
+              >
+                {prediction.outputRarity}
+              </span>
+            </div>
+
+            {/* Output wear */}
+            <div className="glass rounded-xl p-3 text-center">
+              <p className="text-xs text-muted mb-1.5">Expected Wear</p>
+              <span
+                className="text-sm font-bold px-2 py-1 rounded-lg"
+                style={{
+                  color: WEAR_COLORS[prediction.outputWear],
+                  background: `${WEAR_COLORS[prediction.outputWear]}18`,
+                }}
+              >
+                {WEAR_LABELS[prediction.outputWear]}
+              </span>
+            </div>
+
+            {/* Avg float */}
+            <div className="glass rounded-xl p-3 text-center">
+              <p className="text-xs text-muted mb-1.5">Avg Float</p>
+              <span className="text-sm font-mono font-bold">
+                {prediction.avgFloat.toFixed(4)}
+              </span>
+            </div>
+          </div>
+
+          {/* Collection breakdown */}
+          {prediction.collections.length > 1 && (
+            <div>
+              <p className="text-xs text-muted mb-2">Output chances by collection</p>
+              <div className="space-y-1.5">
+                {prediction.collections.map(col => (
+                  <div key={col.name} className="flex items-center gap-3">
+                    <div className="flex-1 h-1.5 bg-surface-light rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full"
+                        style={{ width: `${col.pct * 10}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-muted truncate max-w-[160px]">{col.name}</span>
+                    <span className="text-xs font-bold w-10 text-right">{col.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cost */}
+          <div className="flex items-center justify-between pt-2 border-t border-border/30">
+            <div>
+              <p className="text-xs text-muted">Input Cost</p>
+              <p className="text-lg font-bold text-loss">
+                {prediction.inputCost > 0 ? formatPrice(prediction.inputCost) : '—'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-muted">
+              <Minus size={14} />
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted">1× {prediction.outputRarity}</p>
+              <p className="text-xs text-muted">{WEAR_LABELS[prediction.outputWear]}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Result */}
       {result && (

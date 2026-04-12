@@ -387,10 +387,11 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
         ),
     };
 
-    // Shorten the display name
+    // Show full name for packages/capsules (no ' | ' separator) so duplicates are distinguishable.
+    // For skins like "AK-47 | Redline (FT)", show just "Redline" to save space.
     final parts = item.marketHashName.split(' | ');
     final displayName = parts.length > 1
-        ? parts[1].split(' (').first
+        ? '${parts[0].split(' ').last} | ${parts[1].split(' (').first}'
         : item.marketHashName;
 
     return Container(

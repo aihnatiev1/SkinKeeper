@@ -277,33 +277,10 @@ async function processOperation(
       try {
         const session = await getSession(itemAccountId);
 
-        // Fix 4: Price sanity check — reject prices wildly off from market
-        if (priceCents > 0 && item.market_hash_name) {
-          try {
-            const qp = await quickSellPrice(item.market_hash_name, walletCurrencyId);
-            if (qp && qp.sellerReceivesCents > 0) {
-              const ratio = priceCents / qp.sellerReceivesCents;
-              if (ratio > 5) {
-                await pool.query(
-                  `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2`,
-                  [`Price is ${ratio.toFixed(1)}x above market. Check your price and retry.`, item.id]
-                );
-                await pool.query(`UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`, [operationId]);
-                consecutiveErrors++;
-                continue;
-              }
-              if (ratio < 0.2) {
-                await pool.query(
-                  `UPDATE sell_operation_items SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2`,
-                  [`Price is ${(ratio * 100).toFixed(0)}% of market value. Check your price and retry.`, item.id]
-                );
-                await pool.query(`UPDATE sell_operations SET failed = failed + 1 WHERE id = $1`, [operationId]);
-                consecutiveErrors++;
-                continue;
-              }
-            }
-          } catch { /* price check failed — proceed with sell anyway */ }
-        }
+        // Sanity check skipped for client-provided prices — no fresh histogram fetch per item.
+        // Fetching histogram per-item causes price drift between duplicates as market changes
+        // between sequential listings. The client already fetched fresh prices via refresh-prices.
+        // Extreme cases (wrong price) will simply fail at the Steam API level with a clear error.
 
         const result = await sellItem(session, item.asset_id, priceCents, itemAccountId, priceCurrencyId);
 
