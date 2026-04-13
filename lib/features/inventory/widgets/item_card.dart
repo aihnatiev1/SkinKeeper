@@ -295,6 +295,14 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // Trade ban lock — bottom-right of image (all modes)
+                      if (!item.tradable)
+                        Positioned(
+                          bottom: 4,
+                          right: compact ? 4 : 6,
+                          child: _TradeBanBadge(item: item, compact: compact),
+                        ),
+
                       // Phase badge — top-right of image (below the (i) button), full mode only
                       // In compact mode there's no space — phase stays in footer
                       if (!compact) ...[
@@ -485,6 +493,52 @@ class _AccountNameBadge extends StatelessWidget {
 }
 
 // ─── Account Letter Dot (compact mode) ───────────────────────────────
+/// Circular account avatar — shows Steam avatar image or letter fallback
+class _AccountAvatar extends StatelessWidget {
+  final String? avatarUrl;
+  final String? name;
+  final double size;
+
+  const _AccountAvatar({this.avatarUrl, this.name, this.size = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    final letter = (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4), width: 0.8),
+      ),
+      child: ClipOval(
+        child: avatarUrl != null && avatarUrl!.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: avatarUrl!,
+                fit: BoxFit.cover,
+                placeholder: (_, _) => _letterFallback(letter),
+                errorWidget: (_, _, _) => _letterFallback(letter),
+              )
+            : _letterFallback(letter),
+      ),
+    );
+  }
+
+  Widget _letterFallback(String letter) => Container(
+        color: AppTheme.primary.withValues(alpha: 0.2),
+        alignment: Alignment.center,
+        child: Text(
+          letter,
+          style: TextStyle(
+            fontSize: size * 0.5,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.primaryLight,
+            height: 1,
+          ),
+        ),
+      );
+}
+
 class _AccountLetterDot extends StatelessWidget {
   final String? name;
   const _AccountLetterDot({this.name});
@@ -604,15 +658,10 @@ class _FooterSection extends StatelessWidget {
               // Wear pill — flexible so it can shrink
               Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
             ],
-            // Push to right
+            // Push to right (lock is in image Stack)
             const Spacer(),
-            // Trade ban — small lock icon on the RIGHT
-            if (hasBan) ...[
-              Icon(Icons.lock_clock, size: 11, color: AppTheme.warning.withValues(alpha: 0.8)),
-              const SizedBox(width: 3),
-            ],
             if (hasAccount)
-              _AccountLetterDot(name: item.accountName),
+              _AccountAvatar(avatarUrl: item.accountAvatarUrl, name: item.accountName, size: 14),
           ],
         ),
         if (hasWear)
@@ -652,14 +701,10 @@ class _FooterSection extends StatelessWidget {
                 ],
               ),
             ),
-            // Trade ban badge — right side of footer (original design restored)
-            if (hasBan) ...[
-              const SizedBox(width: 6),
-              _TradeBanBadge(item: item, compact: false),
-            ],
+            // Lock moved to image Stack (bottom-right Positioned)
             if (hasAccount) ...[
               const SizedBox(width: 4),
-              _AccountNameBadge(accountName: item.accountName, compact: true),
+              _AccountAvatar(avatarUrl: item.accountAvatarUrl, name: item.accountName, size: 18),
             ],
           ],
         ),
