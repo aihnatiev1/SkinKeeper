@@ -721,29 +721,14 @@ class _WearPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _wearPillColors[wear] ?? AppTheme.textMuted;
-    final label = wear; // Always show short code (FT, WW, etc.) — CS users know these
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 4 : 6,
-        vertical: compact ? 1 : 2,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: color.withValues(alpha: 0.5),
-          width: 0.8,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: compact ? 9 : 11,
-          fontWeight: FontWeight.w800,
-          color: color,
-          letterSpacing: 0.5,
-        ),
+    // Web style: plain muted text, no border/background
+    return Text(
+      wear,
+      style: TextStyle(
+        fontSize: compact ? 9 : 10,
+        fontWeight: FontWeight.w300,
+        color: const Color(0xFF64748B),
+        letterSpacing: 0.5,
       ),
     );
   }
@@ -1116,38 +1101,32 @@ class _TradeBanBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = item.tradeBanText;
-    if (compact) {
-      return Icon(Icons.lock_clock,
-          size: 11, color: AppTheme.warning.withValues(alpha: 0.7));
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: AppTheme.warning.withValues(alpha: 0.3),
-          width: 1,
+    // Days remaining until trade unlock
+    final daysLeft = item.tradeBanUntil != null
+        ? item.tradeBanUntil!.difference(DateTime.now()).inDays
+        : null;
+
+    // Web style: icon + Xd in red, no border/box
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.lock_rounded,
+          size: compact ? 9 : 10,
+          color: const Color(0xFFEF4444),
         ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.lock_outline_rounded,
-              size: 9, color: AppTheme.warning.withValues(alpha: 0.5)),
-          if (text != null) ...[
-            const SizedBox(width: 3),
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.warning.withValues(alpha: 0.5),
-              ),
+        if (daysLeft != null && daysLeft > 0) ...[
+          const SizedBox(width: 2),
+          Text(
+            '${daysLeft}d',
+            style: TextStyle(
+              fontSize: compact ? 8 : 9,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFFEF4444),
             ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }
