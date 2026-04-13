@@ -599,9 +599,7 @@ class _FooterSection extends StatelessWidget {
             if (item.isStatTrak)
               const Text('ST ', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppTheme.warning)),
             Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
-            const Spacer(),
-            if (!item.tradable)
-              Icon(Icons.lock_clock, size: 9, color: AppTheme.warning.withValues(alpha: 0.8)),
+            // No lock in ultraCompact — 5-col cards too small, lock shows in compact/full
           ],
         ),
         Padding(
