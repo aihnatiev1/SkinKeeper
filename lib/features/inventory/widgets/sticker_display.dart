@@ -57,51 +57,72 @@ class _StickerChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasWear = sticker.wear != null && sticker.wear! > 0;
     final wearPct = hasWear ? (sticker.wear! * 100).toStringAsFixed(0) : null;
+    final url = sticker.fullImageUrl;
 
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: AppTheme.glass(radius: AppTheme.r12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Sticker image
+          // Sticker image — larger for legibility
           SizedBox(
-            width: 64,
-            height: 48,
-            child: sticker.fullImageUrl.isNotEmpty
+            width: 80,
+            height: 60,
+            child: url.isNotEmpty
                 ? CachedNetworkImage(
-                    imageUrl: sticker.fullImageUrl,
+                    imageUrl: url,
                     fit: BoxFit.contain,
-                    placeholder: (_, _) => const SizedBox.shrink(),
-                    errorWidget: (_, _, _) => const Icon(
-                      Icons.broken_image_outlined,
-                      size: 24,
-                      color: AppTheme.textDisabled,
+                    placeholder: (_, _) => const Center(
+                      child: SizedBox(width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.primary)),
+                    ),
+                    errorWidget: (_, _, _) => Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.sticky_note_2_rounded, size: 28, color: AppTheme.warning.withValues(alpha: 0.5)),
+                        const SizedBox(height: 2),
+                        Text('Sticker', style: TextStyle(fontSize: 8, color: AppTheme.textDisabled)),
+                      ],
                     ),
                   )
-                : const Icon(Icons.image_not_supported, size: 24, color: AppTheme.textDisabled),
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.sticky_note_2_rounded, size: 28, color: AppTheme.warning.withValues(alpha: 0.5)),
+                    ],
+                  ),
           ),
-          const SizedBox(height: 4),
-          // Name
+          const SizedBox(height: 6),
           SizedBox(
-            width: 72,
+            width: 84,
             child: Text(
               sticker.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: AppTheme.captionSmall.copyWith(fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
+              style: AppTheme.captionSmall.copyWith(fontWeight: FontWeight.w600, color: AppTheme.textPrimary, fontSize: 10),
             ),
           ),
-          // Wear %
           if (wearPct != null) ...[
             const SizedBox(height: 2),
-            Text(
-              '$wearPct% wear',
-              style: AppTheme.captionSmall.copyWith(
-                fontSize: 9,
-                color: AppTheme.textMuted,
+            // Wear bar
+            SizedBox(
+              width: 80,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: 1 - (sticker.wear! ),
+                  backgroundColor: AppTheme.textDisabled.withValues(alpha: 0.2),
+                  color: sticker.wear! < 0.2 ? AppTheme.profit
+                      : sticker.wear! < 0.5 ? AppTheme.warning
+                      : AppTheme.loss,
+                  minHeight: 3,
+                ),
               ),
             ),
+            const SizedBox(height: 2),
+            Text('$wearPct% worn', style: AppTheme.captionSmall.copyWith(fontSize: 9, color: AppTheme.textMuted)),
           ],
         ],
       ),
@@ -173,25 +194,38 @@ class _CompactStickerSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final url = sticker.fullImageUrl;
     return Tooltip(
-      message: sticker.name,
+      message: sticker.wear != null && sticker.wear! > 0
+          ? '${sticker.name} (${(sticker.wear! * 100).toStringAsFixed(0)}% worn)'
+          : sticker.name,
       child: Container(
-        width: 44,
-        height: 44,
+        width: 52,
+        height: 40,
         padding: const EdgeInsets.all(4),
-        decoration: AppTheme.glass(radius: AppTheme.r8),
-        child: sticker.fullImageUrl.isNotEmpty
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+            width: 0.8,
+          ),
+        ),
+        child: url.isNotEmpty
             ? CachedNetworkImage(
-                imageUrl: sticker.fullImageUrl,
+                imageUrl: url,
                 fit: BoxFit.contain,
-                placeholder: (_, _) => const SizedBox.shrink(),
-                errorWidget: (_, _, _) => const Icon(
-                  Icons.broken_image_outlined,
-                  size: 18,
-                  color: AppTheme.textDisabled,
+                placeholder: (_, _) => const Center(
+                  child: SizedBox(width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 1.2, color: AppTheme.warning)),
+                ),
+                errorWidget: (_, _, _) => Center(
+                  child: Icon(Icons.sticky_note_2_rounded, size: 20, color: AppTheme.warning.withValues(alpha: 0.6)),
                 ),
               )
-            : const Icon(Icons.image_not_supported, size: 18, color: AppTheme.textDisabled),
+            : Center(
+                child: Icon(Icons.sticky_note_2_rounded, size: 20, color: AppTheme.warning.withValues(alpha: 0.6)),
+              ),
       ),
     );
   }

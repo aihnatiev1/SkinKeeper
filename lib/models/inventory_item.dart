@@ -56,7 +56,14 @@ class StickerInfo {
     );
   }
 
-  String get fullImageUrl => SteamImage.url(image);
+  String get fullImageUrl {
+    if (image.isNotEmpty) return SteamImage.url(image);
+    // Fallback: Steam economy class API by sticker_id
+    if (stickerId > 0) {
+      return 'https://community.akamai.steamstatic.com/economy/image/class/730/$stickerId/icon.png';
+    }
+    return '';
+  }
 }
 
 class CharmInfo {

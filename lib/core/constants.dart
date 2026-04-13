@@ -10,7 +10,7 @@ class AppConstants {
 
   // Steam CDN — swap this to your Cloudflare proxy when ready
   // e.g. 'https://img.skinkeeper.app'
-  static const String steamCdnBase = 'https://community.steamstatic.com';
+  static const String steamCdnBase = 'https://community.akamai.steamstatic.com';
 
   // Deep link scheme for Steam auth callback
   static const String deepLinkScheme = 'skinkeeper';
