@@ -295,9 +295,8 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // RIGHT COLUMN (top to bottom):
-                      // 1. Phase badge at top-right (full mode only)
-                      if (!compact && (item.isDoppler || item.isRareItem)) ...[
+                      // Phase badge — top-right of image (full mode only)
+                      if (!compact) ...[
                         if (item.isRareDoppler && item.dopplerPhase != null && item.dopplerColor != null)
                           Positioned(
                             top: 4, right: 6,
@@ -314,26 +313,6 @@ class ItemCard extends StatelessWidget {
                             child: _RareBadge(reason: item.rareReason!),
                           ),
                       ],
-
-                      // 2. Account avatar — right side, below phase (or at top if no phase)
-                      if (item.accountName != null && item.accountName!.isNotEmpty)
-                        Positioned(
-                          top: (!compact && (item.isDoppler || item.isRareItem)) ? 26 : 4,
-                          right: compact ? 3 : 5,
-                          child: _AccountAvatar(
-                            avatarUrl: item.accountAvatarUrl,
-                            name: item.accountName,
-                            size: compact ? 13 : 18,
-                          ),
-                        ),
-
-                      // 3. Trade ban — bottom-right, above float bar
-                      if (!item.tradable)
-                        Positioned(
-                          bottom: 6,
-                          right: compact ? 3 : 5,
-                          child: _TradeBanBadge(item: item, compact: compact),
-                        ),
 
                       // Group count badge (top-right of image area)
                       if (groupCount != null)
@@ -639,11 +618,10 @@ class _FooterSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Use Row with Spacer — no inner Row(min) to avoid overflow
         Row(
-          mainAxisSize: MainAxisSize.max,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            // ST/SV + wear — left side, Flexible to prevent overflow
+            // Left: ST/wear
             if (hasWear) ...[
               if (item.isStatTrak)
                 const Text('ST ', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppTheme.warning))
@@ -652,7 +630,19 @@ class _FooterSection extends StatelessWidget {
               Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
             ],
             const Spacer(),
-            // Account + lock moved to image Stack right column
+            // Right: account avatar (top) + lock (bottom)
+            if (hasAccount || hasBan)
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (hasAccount)
+                    _AccountAvatar(avatarUrl: item.accountAvatarUrl, name: item.accountName, size: 13),
+                  if (hasAccount && hasBan) const SizedBox(height: 2),
+                  if (hasBan)
+                    _TradeBanBadge(item: item, compact: true),
+                ],
+              ),
           ],
         ),
         if (hasWear)
@@ -669,16 +659,17 @@ class _FooterSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Row 1: special badges + wear + trade ban + account
+        // Full footer: [left: ST/wear/fire] [right: account avatar (top) + lock (bottom)]
         Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Flexible(
+            // Left: wear + fire
+            Expanded(
               child: Wrap(
                 spacing: 4,
-                runSpacing: 3,
+                runSpacing: 2,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  // StatTrak / Souvenir
                   if (!item.isNonWeapon && item.wearShort != null) ...[
                     if (item.isSouvenir)
                       const Text('SV', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.warning))
@@ -688,11 +679,22 @@ class _FooterSection extends StatelessWidget {
                   ],
                   if (item.floatValue != null && item.floatValue! < 0.01 && item.wear == 'Factory New')
                     const Text('🔥', style: TextStyle(fontSize: 10)),
-                  // Phase + lock moved to image Stack (top-right and bottom-right)
                 ],
               ),
             ),
-            // Account + lock moved to image Stack right column
+            // Right column: account avatar (top) then lock (bottom)
+            if (hasAccount || hasBan)
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (hasAccount)
+                    _AccountAvatar(avatarUrl: item.accountAvatarUrl, name: item.accountName, size: 18),
+                  if (hasAccount && hasBan) const SizedBox(height: 4),
+                  if (hasBan)
+                    _TradeBanBadge(item: item, compact: false),
+                ],
+              ),
           ],
         ),
         // Row 2: float text
