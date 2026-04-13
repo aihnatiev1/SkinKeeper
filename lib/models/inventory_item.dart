@@ -88,7 +88,10 @@ class CharmInfo {
     );
   }
 
-  String get fullImageUrl => SteamImage.url(image);
+  String get fullImageUrl {
+    if (image.isNotEmpty) return SteamImage.url(image);
+    return ''; // No reliable fallback for charms without class ID
+  }
 }
 
 class ItemCollection {

@@ -160,26 +160,21 @@ class StickersAndCharmsDisplay extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        Row(
+        // Wrap handles 4+ stickers without overflow
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            ...stickers.asMap().entries.expand((e) => [
-              if (e.key > 0) const SizedBox(width: 6),
+            ...stickers.asMap().entries.map((e) =>
               _CompactStickerSlot(sticker: e.value)
                   .animate()
                   .fadeIn(duration: 300.ms, delay: (e.key * 50).ms),
-            ]),
-            if (stickers.isNotEmpty && charms.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6),
-                child: Text('+', style: TextStyle(fontSize: 16, color: AppTheme.textMuted)),
-              ),
-            ],
-            ...charms.asMap().entries.expand((e) => [
-              if (e.key > 0) const SizedBox(width: 6),
+            ),
+            ...charms.asMap().entries.map((e) =>
               _CompactCharmSlot(charm: e.value)
                   .animate()
                   .fadeIn(duration: 300.ms, delay: ((stickers.length + e.key) * 50).ms),
-            ]),
+            ),
           ],
         ),
       ],
@@ -238,25 +233,42 @@ class _CompactCharmSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final url = charm.fullImageUrl;
     return Tooltip(
       message: charm.name,
       child: Container(
-        width: 44,
-        height: 44,
+        width: 52,
+        height: 52,
         padding: const EdgeInsets.all(4),
-        decoration: AppTheme.glass(radius: AppTheme.r8),
-        child: charm.fullImageUrl.isNotEmpty
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: url.isNotEmpty
             ? CachedNetworkImage(
-                imageUrl: charm.fullImageUrl,
+                imageUrl: url,
                 fit: BoxFit.contain,
-                placeholder: (_, _) => const SizedBox.shrink(),
-                errorWidget: (_, _, _) => const Icon(
-                  Icons.broken_image_outlined,
-                  size: 18,
-                  color: AppTheme.textDisabled,
+                placeholder: (_, _) => const Center(
+                  child: SizedBox(width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 1.2, color: Color(0xFF8B5CF6))),
+                ),
+                errorWidget: (_, _, _) => const Center(
+                  child: Icon(Icons.auto_awesome, size: 22, color: Color(0xFF8B5CF6)),
                 ),
               )
-            : const Icon(Icons.auto_awesome, size: 18, color: AppTheme.textDisabled),
+            : const Center(
+                child: Icon(Icons.auto_awesome, size: 22, color: Color(0xFF8B5CF6)),
+              ),
       ),
     );
   }
