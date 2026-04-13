@@ -638,28 +638,16 @@ class _FooterSection extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.max,
           children: [
-            // Phase (compact) — before ST/wear
-            if (item.isDoppler && item.dopplerPhase != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 3),
-                child: _DopplerPhasePill(phase: item.dopplerPhase!.replaceAll('Phase ', 'P').replaceAll('Gamma ', 'G'), color: item.dopplerColor, compact: true),
-              )
-            else if (item.isRareItem && item.rareReason != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 3),
-                child: _RareBadge(reason: item.rareReason!, compact: true),
-              ),
-            // ST/SV prefix (fixed small width)
+            // ST/SV + wear — left side, Flexible to prevent overflow
             if (hasWear) ...[
-              if (item.isSouvenir)
-                const Text('SV ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning))
-              else if (item.isStatTrak)
-                const Text('ST ', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.warning)),
-              // Wear pill — flexible so it can shrink
+              if (item.isStatTrak)
+                const Text('ST ', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppTheme.warning))
+              else if (item.isSouvenir)
+                const Text('SV ', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: AppTheme.warning)),
               Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
             ],
-            // Push to right (lock is in image Stack)
             const Spacer(),
+            // Account avatar — right side
             if (hasAccount)
               _AccountAvatar(avatarUrl: item.accountAvatarUrl, name: item.accountName, size: 14),
           ],
