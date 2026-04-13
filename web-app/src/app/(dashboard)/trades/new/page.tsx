@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
 import { ExtensionRequiredModal } from '@/components/extension-required-modal';
@@ -268,6 +269,13 @@ export default function NewTradePage() {
     return (
       <div>
         <Header title="New Trade" />
+        <div className="px-4 lg:px-6 pt-3">
+          <nav className="flex items-center gap-1.5 text-xs text-muted" aria-label="Breadcrumb">
+            <Link href="/trades" className="hover:text-foreground transition-colors">Trades</Link>
+            <span>/</span>
+            <span className="text-foreground">New Trade</span>
+          </nav>
+        </div>
         <div className="p-6 max-w-3xl mx-auto space-y-4">
           <h2 className="text-lg font-semibold">Choose trade partner</h2>
           <div className="relative">

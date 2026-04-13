@@ -266,7 +266,8 @@ input[type="number"] {
 [data-tooltip] {
   position: relative;
 }
-[data-tooltip]:hover::after {
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
   content: attr(data-tooltip);
   position: absolute;
   bottom: calc(100% + 6px);
@@ -280,10 +281,21 @@ input[type="number"] {
   white-space: nowrap;
   z-index: 50;
   animation: slide-up 0.15s ease-out;
+  pointer-events: none;
+  role: tooltip;
 }
 
 /* ─── Selection ────────────────────────────────────────────────── */
 ::selection {
   background: rgba(139, 92, 246, 0.3);
   color: white;
+}
+
+/* ─── Reduced Motion ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

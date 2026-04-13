@@ -179,7 +179,7 @@ export default function DownloadPage() {
               key={p.name}
               href={p.url}
               target="_blank"
-              rel="noopener"
+              rel="noopener noreferrer"
               className="glass rounded-2xl p-6 hover:bg-surface-light transition-all group"
             >
               <div className="flex items-center gap-3">

@@ -364,28 +364,28 @@ export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps)
             <div className="flex flex-wrap gap-2 pt-2 border-t border-border/30">
               <a
                 href={`https://steamcommunity.com/market/listings/730/${encodedName}`}
-                target="_blank" rel="noopener"
+                target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors"
               >
                 Steam Market <ExternalLink size={10} />
               </a>
               <a
                 href={`https://skinport.com/market?search=${encodedName}`}
-                target="_blank" rel="noopener"
+                target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors"
               >
                 Skinport <ExternalLink size={10} />
               </a>
               <a
                 href={`https://csfloat.com/search?market_hash_name=${encodedName}`}
-                target="_blank" rel="noopener"
+                target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors"
               >
                 CSFloat <ExternalLink size={10} />
               </a>
               <a
                 href={`https://buff.163.com/market/csgo#tab=selling&page_num=1&search=${encodedName}`}
-                target="_blank" rel="noopener"
+                target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors"
               >
                 Buff <ExternalLink size={10} />

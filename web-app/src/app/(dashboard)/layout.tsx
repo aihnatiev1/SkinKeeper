@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { Sidebar } from '@/components/sidebar';
 import { Onboarding } from '@/components/onboarding';
 import { CurrencySelectModal } from '@/components/currency-select-modal';
@@ -29,7 +30,20 @@ export default function DashboardLayout({
   }, [setExchangeRates]);
 
   if (isLoading) return <PageLoader />;
-  if (error) return null;
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center px-4 gradient-mesh">
+      <div className="text-center max-w-sm">
+        <h2 className="text-xl font-bold mb-2">Session expired</h2>
+        <p className="text-sm text-muted mb-6">Please sign in again to continue.</p>
+        <Link
+          href="/login"
+          className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all"
+        >
+          Sign In
+        </Link>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen gradient-mesh">
@@ -41,26 +55,12 @@ export default function DashboardLayout({
       <Sidebar />
       <main
         className="transition-all duration-300 min-h-screen pt-14 lg:pt-0"
-        style={{ marginLeft: 0 }}
       >
-        <div className="hidden lg:block" />
         <div
-          className="transition-[margin-left] duration-300"
-          style={{}}
+          className="transition-[margin-left] duration-300 lg:ml-[var(--sidebar-w)]"
+          style={{ '--sidebar-w': sidebarOpen ? '240px' : '72px' } as React.CSSProperties}
         >
-          {/* Responsive margin: 0 on mobile, sidebar width on desktop */}
-          <div
-            className="hidden lg:contents"
-          >
-            <style>{`
-              @media (min-width: 1024px) {
-                [data-dashboard-content] { margin-left: ${sidebarOpen ? 240 : 72}px; }
-              }
-            `}</style>
-          </div>
-          <div data-dashboard-content="">
-            {children}
-          </div>
+          {children}
         </div>
       </main>
     </div>

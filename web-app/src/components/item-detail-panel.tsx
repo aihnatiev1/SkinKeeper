@@ -6,7 +6,7 @@ import type { InventoryItem } from '@/lib/types';
 import { useFormatPrice, getItemIconUrl, getWearShort, getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
 import { usePriceHistory, useItemPrices, useAddToWatchlist, useWatchlist, useRemoveFromWatchlist } from '@/lib/hooks';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { toast } from 'sonner';
 
@@ -51,6 +51,14 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
     return histData.history.map((p) => ({ date: new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), price: p.price }));
   }, [histData]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   if (!item) return null;
 
   const ws = getWearShort(item.wear);
@@ -88,6 +96,9 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
           onClick={(e) => e.stopPropagation()}
           className="absolute right-0 top-0 bottom-0 w-full sm:max-w-lg overflow-y-auto"
           style={{ background: '#14161e' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="item-detail-title"
         >
           {/* Close */}
           <button onClick={onClose} className="absolute top-4 right-4 z-10 p-2 rounded-lg hover:bg-white/5 transition-colors">
@@ -117,7 +128,7 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
           <div className="px-5 py-4 space-y-4">
             {/* Name + rarity */}
             <div>
-              <h2 className="text-lg font-bold text-white">{item.market_hash_name}</h2>
+              <h2 id="item-detail-title" className="text-lg font-bold text-white">{item.market_hash_name}</h2>
               <p className="text-xs mt-0.5" style={{ color: rc }}>{item.rarity || 'Unknown'}</p>
             </div>
 
@@ -131,7 +142,7 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
                 <div className="relative h-[6px] rounded-full overflow-hidden" style={{ background: 'linear-gradient(to right, #4ade80 0%, #86efac 7%, #facc15 15%, #f97316 38%, #ef4444 60%, #991b1b 100%)' }}>
                   <div className="absolute top-[-2px] w-[4px] h-[10px] bg-white rounded-sm shadow-lg" style={{ left: `${fv * 100}%`, transform: 'translateX(-50%)' }} />
                 </div>
-                <div className="flex justify-between text-[9px] text-white/25">
+                <div className="flex justify-between text-[9px] text-white/50">
                   <span>0.00</span><span>0.07</span><span>0.15</span><span>0.38</span><span>0.45</span><span>1.00</span>
                 </div>
               </div>
@@ -142,13 +153,13 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
               {dp && <span className="text-[10px] px-2 py-0.5 rounded font-bold text-white" style={{ background: dp.color }}>{dp.phase}</span>}
               {fi && <span className="text-[10px] px-2 py-0.5 rounded font-bold text-black" style={{ background: 'linear-gradient(135deg,#ff6b35,#f7c948,#6dd5ed)' }}>Fade {fi.percentage}%</span>}
               {mf && <span className="text-[10px] px-2 py-0.5 rounded font-bold text-white" style={{ background: mf.color }}>{mf.pattern}</span>}
-              {ps != null && <span className="text-[10px] text-white/30">Seed: {ps}</span>}
-              {pi != null && <span className="text-[10px] text-white/30">Index: {pi}</span>}
+              {ps != null && <span className="text-[10px] text-white/55">Seed: {ps}</span>}
+              {pi != null && <span className="text-[10px] text-white/55">Index: {pi}</span>}
             </div>
 
             {/* Prices table */}
             <div>
-              <h3 className="text-xs font-bold text-white/60 mb-2">PRICES</h3>
+              <h3 className="text-xs font-semibold text-white/70 mb-2 tracking-wide">Prices</h3>
               <div className="space-y-1">
                 {SOURCES.map((src) => {
                   const p = prices[src.key] || 0;
@@ -162,11 +173,11 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
                     >
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: src.color }} />
                       <span className="text-xs text-white/60 flex-1">{src.label}</span>
-                      <span className={`text-xs font-bold ${p > 0 ? 'text-white' : 'text-white/20'}`}>
+                      <span className={`text-xs font-bold ${p > 0 ? 'text-white' : 'text-white/40'}`}>
                         {p > 0 ? formatPrice(p) : '—'}
                       </span>
                       {diff !== null && src.key !== 'steam' && (
-                        <span className={`text-[10px] font-medium w-12 text-right ${diff < 0 ? 'text-green-400' : diff > 0 ? 'text-red-400' : 'text-white/30'}`}>
+                        <span className={`text-[10px] font-medium w-12 text-right ${diff < 0 ? 'text-green-400' : diff > 0 ? 'text-red-400' : 'text-white/50'}`}>
                           {diff > 0 ? '+' : ''}{diff.toFixed(1)}%
                         </span>
                       )}
@@ -180,10 +191,10 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
             {chart.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-bold text-white/60">PRICE HISTORY</h3>
+                  <h3 className="text-xs font-semibold text-white/70 tracking-wide">Price History</h3>
                   <div className="flex gap-1">
                     {[7, 30, 90].map((d) => (
-                      <button key={d} onClick={() => setHistDays(d)} className={`px-2 py-0.5 text-[10px] rounded ${histDays === d ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/50'}`}>{d}d</button>
+                      <button key={d} onClick={() => setHistDays(d)} className={`px-2 py-0.5 text-[10px] rounded ${histDays === d ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/70'}`}>{d}d</button>
                     ))}
                   </div>
                 </div>
@@ -259,7 +270,7 @@ export function ItemDetailPanel({ item, onClose, onSell }: Props) {
                   { label: 'CSFloat', url: `https://csfloat.com/search?market_hash_name=${encodedName}` },
                   { label: 'Buff', url: `https://buff.163.com/market/csgo#tab=selling&page_num=1&search=${encodedName}` },
                 ].map((l) => (
-                  <a key={l.label} href={l.url} target="_blank" rel="noopener" className="text-[10px] text-white/30 hover:text-white/60 transition-colors flex items-center gap-0.5">
+                  <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white/50 hover:text-white/80 transition-colors flex items-center gap-0.5">
                     {l.label} <ExternalLink size={8} />
                   </a>
                 ))}

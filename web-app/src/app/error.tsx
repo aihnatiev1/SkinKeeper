@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 
 export default function Error({
   error,
@@ -23,14 +24,25 @@ export default function Error({
         </div>
         <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
         <p className="text-sm text-muted mb-6">
-          An unexpected error occurred. Please try again.
+          An unexpected error occurred. You can try again or return to the dashboard.
+          {error.digest && (
+            <span className="block mt-2 text-xs text-muted/60">Error ID: {error.digest}</span>
+          )}
         </p>
-        <button
-          onClick={reset}
-          className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25"
-        >
-          Try again
-        </button>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={reset}
+            className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-primary/25"
+          >
+            Try again
+          </button>
+          <Link
+            href="/portfolio"
+            className="px-6 py-2.5 glass rounded-xl text-sm font-semibold hover:bg-surface-light transition-colors"
+          >
+            Go to Dashboard
+          </Link>
+        </div>
       </div>
     </div>
   );

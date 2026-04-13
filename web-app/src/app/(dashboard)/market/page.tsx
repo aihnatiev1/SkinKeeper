@@ -25,6 +25,7 @@ export default function MarketPage() {
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [cancelling, setCancelling] = useState(false);
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   const toggleSelect = (id: string) =>
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -48,12 +49,18 @@ export default function MarketPage() {
   };
 
   const handleCancelOne = async (listingId: string) => {
-    try {
-      await api.delete(`/market/listings/${listingId}`);
-      toast.success('Listing cancelled');
-      refetch();
-    } catch {
-      toast.error('Failed to cancel listing');
+    if (confirmCancelId === listingId) {
+      setConfirmCancelId(null);
+      try {
+        await api.delete(`/market/listings/${listingId}`);
+        toast.success('Listing cancelled');
+        refetch();
+      } catch {
+        toast.error('Failed to cancel listing');
+      }
+    } else {
+      setConfirmCancelId(listingId);
+      setTimeout(() => setConfirmCancelId(null), 3000);
     }
   };
 
@@ -243,17 +250,34 @@ export default function MarketPage() {
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2 justify-end">
-                          <button
-                            onClick={() => handleCancelOne(listing.listingId)}
-                            className="text-muted hover:text-loss transition-colors"
-                            title="Cancel listing"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {confirmCancelId === listing.listingId ? (
+                            <>
+                              <button
+                                onClick={() => handleCancelOne(listing.listingId)}
+                                className="px-2 py-0.5 text-[11px] font-semibold text-white bg-loss rounded-lg hover:bg-loss/80 transition-colors"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => setConfirmCancelId(null)}
+                                className="text-[11px] text-muted hover:text-foreground transition-colors"
+                              >
+                                No
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleCancelOne(listing.listingId)}
+                              className="text-muted hover:text-loss transition-colors"
+                              title="Cancel listing"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                           <a
                             href={`https://steamcommunity.com/market/listings/730/${encodeURIComponent(listing.marketHashName || '')}`}
                             target="_blank"
-                            rel="noopener"
+                            rel="noopener noreferrer"
                             className="text-muted hover:text-foreground transition-colors"
                           >
                             <ExternalLink size={14} />

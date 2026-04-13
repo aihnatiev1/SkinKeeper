@@ -127,13 +127,7 @@ export function SellModal({ items, initialMode = 'sell', onClose, onOperationSta
 
   const volWarn = volume && volume.remaining < 50;
 
-  // Auto-open correct mode
-  useEffect(() => {
-    if (!loading && initialMode === 'instant' && hasInstantPrice) {
-      handleInstant();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  // Note: instant mode no longer auto-fires — user must click the Instant button deliberately
 
   return (
     <>
@@ -150,6 +144,9 @@ export function SellModal({ items, initialMode = 'sell', onClose, onOperationSta
           onClick={(e) => e.stopPropagation()}
           className="relative w-full sm:max-w-[420px] sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
           style={{ background: 'linear-gradient(180deg, #1e2130 0%, #151722 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sell-modal-title"
         >
           {/* Handle bar */}
           <div className="flex justify-center pt-3 sm:hidden">
@@ -162,7 +159,7 @@ export function SellModal({ items, initialMode = 'sell', onClose, onOperationSta
               <img src={getItemIconUrl(item?.icon_url || '')} alt="" className="w-12 h-10 object-contain" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-bold text-white truncate">
+              <p id="sell-modal-title" className="text-[15px] font-bold text-white truncate">
                 {count > 1 && `${count}x `}
                 {item?.market_hash_name.replace(/^(StatTrak™ |Souvenir |★ )/, '').replace(/^[^|]+\| /, '').trim()}
               </p>
@@ -305,9 +302,9 @@ export function SellModal({ items, initialMode = 'sell', onClose, onOperationSta
                 {hasInstantPrice && iFees && iFees.sr > 0 && (
                   <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: 'rgba(217,119,6,0.06)', border: '1px solid rgba(217,119,6,0.15)' }}>
                     <div>
-                      <p className="text-[10px] font-medium text-white/40 uppercase tracking-wide">Highest buy order</p>
+                      <p className="text-[10px] font-medium text-white/50 uppercase tracking-wide">Instant — sells immediately to highest buyer</p>
                       <p className="text-sm font-bold" style={{ color: '#fbbf24' }}>{fmt(price!.highestBuyOrder, $)}</p>
-                      <p className="text-[10px] text-white/30">You receive: {fmt(iFees.sr, $)}</p>
+                      <p className="text-[10px] text-white/50">You receive: {fmt(iFees.sr, $)}</p>
                     </div>
                     <button
                       onClick={handleInstant}
@@ -324,30 +321,33 @@ export function SellModal({ items, initialMode = 'sell', onClose, onOperationSta
 
                 {/* Quick Sell + Sell buttons */}
                 {hasQuickPrice ? (
-                  <div className="flex gap-2.5">
-                    <button
-                      onClick={handleQuick}
-                      disabled={selling}
-                      className="flex-[3] py-3.5 rounded-xl text-[13px] font-bold transition-all hover:brightness-110 disabled:opacity-40"
-                      style={{ background: 'linear-gradient(135deg, #d97706, #b45309)', color: '#000' }}
-                    >
-                      {selling ? (
-                        <span className="flex items-center justify-center gap-2"><Loader2 size={14} className="animate-spin" />Selling...</span>
-                      ) : (
-                        <>Quick Sell <span style={{ opacity: 0.6 }}>{fmt(qFees ? (count === 1 ? qFees.bp : qFees.bp * count) : 0, $)}</span></>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setShowCustom(!showCustom)}
-                      className="flex-[1.5] py-3.5 rounded-xl text-[13px] font-semibold transition-all"
-                      style={{
-                        border: showCustom ? '1.5px solid #3b82f6' : '1.5px solid rgba(255,255,255,0.12)',
-                        color: showCustom ? '#60a5fa' : 'rgba(255,255,255,0.5)',
-                        background: showCustom ? 'rgba(59,130,246,0.08)' : 'transparent',
-                      }}
-                    >
-                      Sell
-                    </button>
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2.5">
+                      <button
+                        onClick={handleQuick}
+                        disabled={selling}
+                        className="flex-[3] py-3.5 rounded-xl text-[13px] font-bold transition-all hover:brightness-110 disabled:opacity-40"
+                        style={{ background: 'linear-gradient(135deg, #d97706, #b45309)', color: '#000' }}
+                      >
+                        {selling ? (
+                          <span className="flex items-center justify-center gap-2"><Loader2 size={14} className="animate-spin" />Selling...</span>
+                        ) : (
+                          <>Quick Sell <span style={{ opacity: 0.6 }}>{fmt(qFees ? (count === 1 ? qFees.bp : qFees.bp * count) : 0, $)}</span></>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setShowCustom(!showCustom)}
+                        className="flex-[1.5] py-3.5 rounded-xl text-[13px] font-semibold transition-all"
+                        style={{
+                          border: showCustom ? '1.5px solid #3b82f6' : '1.5px solid rgba(255,255,255,0.12)',
+                          color: showCustom ? '#60a5fa' : 'rgba(255,255,255,0.5)',
+                          background: showCustom ? 'rgba(59,130,246,0.08)' : 'transparent',
+                        }}
+                      >
+                        Custom
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-white/40 text-center">Quick Sell lists at the current lowest ask price · Custom lets you set your own</p>
                   </div>
                 ) : (
                   <>
@@ -424,7 +424,7 @@ export function SellModal({ items, initialMode = 'sell', onClose, onOperationSta
                   </div>
                 )}
 
-                <p className="text-[10px] text-center text-white/20 pt-1">Confirm in Steam Guard mobile app</p>
+                <p className="text-[10px] text-center text-white/50 pt-1">Confirm in Steam Guard mobile app</p>
               </>
             )}
           </div>

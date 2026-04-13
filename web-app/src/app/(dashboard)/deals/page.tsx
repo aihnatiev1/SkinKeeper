@@ -156,7 +156,7 @@ export default function DealsPage() {
                     <a
                       href={deal.buyUrl}
                       target="_blank"
-                      rel="noopener"
+                      rel="noopener noreferrer"
                       className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium transition-colors"
                     >
                       Buy on {deal.buySource} <ExternalLink size={10} />
@@ -165,7 +165,7 @@ export default function DealsPage() {
                   <a
                     href={`https://steamcommunity.com/market/listings/730/${encodeURIComponent(deal.marketHashName)}`}
                     target="_blank"
-                    rel="noopener"
+                    rel="noopener noreferrer"
                     className="flex items-center justify-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors"
                   >
                     Steam <ExternalLink size={10} />

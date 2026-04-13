@@ -55,6 +55,14 @@ export function Onboarding() {
     localStorage.setItem(STORAGE_KEY, '1');
   };
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') dismiss();
+    };
+    if (visible) document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [visible]);
+
   const next = () => {
     if (page < SLIDES.length - 1) setPage(page + 1);
     else dismiss();
@@ -83,6 +91,9 @@ export function Onboarding() {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           className="relative w-full max-w-md glass-strong rounded-2xl overflow-hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="onboarding-title"
         >
           {/* Skip button */}
           <button
@@ -97,7 +108,7 @@ export function Onboarding() {
             <div className="flex justify-center mb-6">
               {slide.icon}
             </div>
-            <h2 className="text-xl font-bold mb-3">{slide.title}</h2>
+            <h2 id="onboarding-title" className="text-xl font-bold mb-3">{slide.title}</h2>
             <p className="text-sm text-muted leading-relaxed">{slide.description}</p>
           </div>
 
@@ -105,10 +116,12 @@ export function Onboarding() {
           <div className="p-6 pt-4">
             {/* Dots */}
             <div className="flex justify-center gap-1.5 mb-5">
-              {SLIDES.map((_, i) => (
+              {SLIDES.map((s, i) => (
                 <button
                   key={i}
                   onClick={() => setPage(i)}
+                  aria-label={`Go to slide ${i + 1}: ${s.title}`}
+                  aria-current={i === page ? 'true' : undefined}
                   className={`w-2 h-2 rounded-full transition-all ${
                     i === page ? 'bg-primary w-6' : 'bg-muted/30 hover:bg-muted/50'
                   }`}

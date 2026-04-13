@@ -110,6 +110,9 @@ export function CommandPalette() {
               transition={{ type: 'spring', damping: 25, stiffness: 400 }}
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-lg mx-auto mt-[20vh] glass-strong rounded-2xl border border-border/50 overflow-hidden shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Command palette"
             >
               {/* Search input */}
               <div className="flex items-center gap-3 px-4 py-3 border-b border-border/30">

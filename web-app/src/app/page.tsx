@@ -178,7 +178,7 @@ export default async function LandingPage() {
               { icon: <Globe size={16} />, name: 'Web App', accent: 'text-primary', ring: 'bg-primary/10 border-primary/20 hover:border-primary/50 hover:bg-primary/15', href: '/login', external: false },
             ].map((p) => (
               p.external
-                ? <a key={p.name} href={p.href} target="_blank" rel="noopener" className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${p.ring} text-sm font-medium transition-all cursor-pointer`}>
+                ? <a key={p.name} href={p.href} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${p.ring} text-sm font-medium transition-all cursor-pointer`}>
                     <span className={p.accent}>{p.icon}</span>
                     <span>{p.name}</span>
                   </a>
@@ -237,7 +237,7 @@ export default async function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <a href="https://skinkeeper.store/download" target="_blank" rel="noopener"
+                <a href="https://skinkeeper.store/download" target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
                   <Monitor size={12} />
                   Download Free
@@ -274,12 +274,12 @@ export default async function LandingPage() {
                   ))}
                 </ul>
                 <div className="flex gap-2">
-                  <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" rel="noopener"
+                  <a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" /></svg>
                     App Store
                   </a>
-                  <a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener"
+                  <a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3.18 23.72c-.36-.18-.64-.46-.82-.82l-.02-.04C2.12 22.42 2 21.88 2 21.28V2.72c0-.6.12-1.14.34-1.58l9.92 9.92-9.08 12.66zm.74-22.38c.24-.22.56-.34.92-.34h.04c.24 0 .52.08.82.24L17.6 7.7 14.06 11.24 3.92 1.34zM21.54 10.88c.56.32.88.8.88 1.36 0 .56-.36 1.08-.88 1.36l-2.74 1.56-3.84-3.84 3.84-3.84 2.74 1.4zM17.6 16.3L5.7 22.76c-.3.16-.58.24-.82.24-.36 0-.68-.12-.92-.34L14.06 12.76 17.6 16.3z" /></svg>
                     Google Play
@@ -316,7 +316,7 @@ export default async function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <a href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd" target="_blank" rel="noopener"
+                <a href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd" target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium hover:bg-surface-light transition-colors">
                   <Puzzle size={12} />
                   Add to Chrome
@@ -651,7 +651,7 @@ export default async function LandingPage() {
             <a
               href="https://apps.apple.com/us/app/skinkeeper/id6760600231"
               target="_blank"
-              rel="noopener"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-sm font-medium hover:bg-surface-light transition-colors"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" /></svg>
@@ -660,7 +660,7 @@ export default async function LandingPage() {
             <a
               href="https://play.google.com/store/apps/details?id=store.skinkeeper.app"
               target="_blank"
-              rel="noopener"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-sm font-medium hover:bg-surface-light transition-colors"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.18 23.72c-.36-.18-.64-.46-.82-.82l-.02-.04C2.12 22.42 2 21.88 2 21.28V2.72c0-.6.12-1.14.34-1.58l9.92 9.92-9.08 12.66zm.74-22.38c.24-.22.56-.34.92-.34h.04c.24 0 .52.08.82.24L17.6 7.7 14.06 11.24 3.92 1.34zM21.54 10.88c.56.32.88.8.88 1.36 0 .56-.36 1.08-.88 1.36l-2.74 1.56-3.84-3.84 3.84-3.84 2.74 1.4zM17.6 16.3L5.7 22.76c-.3.16-.58.24-.82.24-.36 0-.68-.12-.92-.34L14.06 12.76 17.6 16.3z" /></svg>
@@ -669,7 +669,7 @@ export default async function LandingPage() {
             <a
               href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd"
               target="_blank"
-              rel="noopener"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-sm font-medium hover:bg-surface-light transition-colors"
             >
               <Puzzle size={20} />
@@ -713,9 +713,9 @@ export default async function LandingPage() {
             <div>
               <h4 className="font-semibold mb-3 text-sm">Download</h4>
               <ul className="space-y-2 text-sm text-muted">
-                <li><a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">iOS App</a></li>
-                <li><a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Android App</a></li>
-                <li><a href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd" target="_blank" rel="noopener" className="hover:text-foreground transition-colors">Chrome Extension</a></li>
+                <li><a href="https://apps.apple.com/us/app/skinkeeper/id6760600231" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">iOS App</a></li>
+                <li><a href="https://play.google.com/store/apps/details?id=store.skinkeeper.app" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Android App</a></li>
+                <li><a href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Chrome Extension</a></li>
                 <li><a href="https://skinkeeper.store/download" className="hover:text-foreground transition-colors">Desktop App</a></li>
               </ul>
             </div>

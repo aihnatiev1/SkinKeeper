@@ -43,12 +43,20 @@ const RARITY_OPTIONS = [
   'Restricted', 'Classified', 'Covert', 'Contraband',
 ];
 
+const INVENTORY_PREFS_KEY = 'sk_inventory_prefs';
+
+function getStoredPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(INVENTORY_PREFS_KEY) || '{}');
+  } catch { return {}; }
+}
+
 export default function InventoryPage() {
   const formatPrice = useFormatPrice();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sort, setSort] = useState<SortOption>('price-desc');
-  const [view, setView] = useState<ViewMode>('grid');
+  const [sort, setSort] = useState<SortOption>(() => getStoredPrefs().sort ?? 'price-desc');
+  const [view, setView] = useState<ViewMode>(() => getStoredPrefs().view ?? 'grid');
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sellItems, setSellItems] = useState<InventoryItem[] | null>(null);
@@ -469,7 +477,7 @@ export default function InventoryPage() {
 
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value as SortOption)}
+                onChange={(e) => { const v = e.target.value as SortOption; setSort(v); localStorage.setItem(INVENTORY_PREFS_KEY, JSON.stringify({ ...getStoredPrefs(), sort: v })); }}
                 className="px-3 py-2.5 glass rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
               >
                 <option value="price-desc">Price: High → Low</option>
@@ -480,13 +488,13 @@ export default function InventoryPage() {
 
               <div className="flex glass rounded-xl overflow-hidden">
                 <button
-                  onClick={() => setView('grid')}
+                  onClick={() => { setView('grid'); localStorage.setItem(INVENTORY_PREFS_KEY, JSON.stringify({ ...getStoredPrefs(), view: 'grid' })); }}
                   className={cn('p-2.5 transition-colors', view === 'grid' ? 'bg-primary/10 text-primary' : 'text-muted hover:text-foreground')}
                 >
                   <Grid3X3 size={18} />
                 </button>
                 <button
-                  onClick={() => setView('list')}
+                  onClick={() => { setView('list'); localStorage.setItem(INVENTORY_PREFS_KEY, JSON.stringify({ ...getStoredPrefs(), view: 'list' })); }}
                   className={cn('p-2.5 transition-colors', view === 'list' ? 'bg-primary/10 text-primary' : 'text-muted hover:text-foreground')}
                 >
                   <List size={18} />

@@ -18,15 +18,21 @@ export default function AlertsPage() {
   const deleteAlert = useDeleteAlert();
   const toggleAlert = useToggleAlert();
   const [showCreate, setShowCreate] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const limit = user?.is_premium ? 20 : 5;
   const count = alerts?.length ?? 0;
 
   const handleDelete = (id: number) => {
-    deleteAlert.mutate(id, {
-      onSuccess: () => toast.success('Alert deleted'),
-      onError: () => toast.error('Failed to delete alert'),
-    });
+    if (confirmDeleteId === id) {
+      deleteAlert.mutate(id, {
+        onSuccess: () => { toast.success('Alert deleted'); setConfirmDeleteId(null); },
+        onError: () => toast.error('Failed to delete alert'),
+      });
+    } else {
+      setConfirmDeleteId(id);
+      setTimeout(() => setConfirmDeleteId(null), 3000);
+    }
   };
 
   const handleToggle = (id: number, currentlyActive: boolean) => {
@@ -126,12 +132,29 @@ export default function AlertsPage() {
                     alert.is_active ? 'left-[22px]' : 'left-0.5'
                   )} />
                 </button>
-                <button
-                  onClick={() => handleDelete(alert.id)}
-                  className="text-muted hover:text-loss transition-colors p-2 rounded-lg hover:bg-loss/10 shrink-0"
-                >
-                  <Trash2 size={16} />
-                </button>
+                {confirmDeleteId === alert.id ? (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleDelete(alert.id)}
+                      className="px-2 py-1 text-xs font-semibold text-white bg-loss rounded-lg hover:bg-loss/80 transition-colors"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="px-2 py-1 text-xs text-muted hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleDelete(alert.id)}
+                    className="text-muted hover:text-loss transition-colors p-2 rounded-lg hover:bg-loss/10 shrink-0"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </motion.div>
             ))}
           </div>
