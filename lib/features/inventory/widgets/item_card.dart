@@ -295,40 +295,45 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // Trade ban lock — bottom-right of image (all modes)
-                      if (!item.tradable)
-                        Positioned(
-                          bottom: 4,
-                          right: compact ? 4 : 6,
-                          child: _TradeBanBadge(item: item, compact: compact),
-                        ),
-
-                      // Phase badge — top-right of image (below the (i) button), full mode only
-                      // In compact mode there's no space — phase stays in footer
-                      if (!compact) ...[
+                      // RIGHT COLUMN (top to bottom):
+                      // 1. Phase badge at top-right (full mode only)
+                      if (!compact && (item.isDoppler || item.isRareItem)) ...[
                         if (item.isRareDoppler && item.dopplerPhase != null && item.dopplerColor != null)
                           Positioned(
-                            top: 4,
-                            right: 6,
-                            child: DopplerPhaseGem(
-                              phase: item.dopplerPhase!,
-                              color: item.dopplerColor!,
-                              size: 13,
-                            ),
+                            top: 4, right: 6,
+                            child: DopplerPhaseGem(phase: item.dopplerPhase!, color: item.dopplerColor!, size: 13),
                           )
                         else if (item.isDoppler && item.dopplerPhase != null)
                           Positioned(
-                            top: 4,
-                            right: 6,
+                            top: 4, right: 6,
                             child: _DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor),
                           )
                         else if (item.isRareItem && item.rareReason != null)
                           Positioned(
-                            top: 4,
-                            right: 6,
+                            top: 4, right: 6,
                             child: _RareBadge(reason: item.rareReason!),
                           ),
                       ],
+
+                      // 2. Account avatar — right side, below phase (or at top if no phase)
+                      if (item.accountName != null && item.accountName!.isNotEmpty)
+                        Positioned(
+                          top: (!compact && (item.isDoppler || item.isRareItem)) ? 26 : 4,
+                          right: compact ? 3 : 5,
+                          child: _AccountAvatar(
+                            avatarUrl: item.accountAvatarUrl,
+                            name: item.accountName,
+                            size: compact ? 13 : 18,
+                          ),
+                        ),
+
+                      // 3. Trade ban — bottom-right, above float bar
+                      if (!item.tradable)
+                        Positioned(
+                          bottom: 6,
+                          right: compact ? 3 : 5,
+                          child: _TradeBanBadge(item: item, compact: compact),
+                        ),
 
                       // Group count badge (top-right of image area)
                       if (groupCount != null)
@@ -647,9 +652,7 @@ class _FooterSection extends StatelessWidget {
               Flexible(child: _WearPill(wear: item.wearShort!, compact: true)),
             ],
             const Spacer(),
-            // Account avatar — right side
-            if (hasAccount)
-              _AccountAvatar(avatarUrl: item.accountAvatarUrl, name: item.accountName, size: 14),
+            // Account + lock moved to image Stack right column
           ],
         ),
         if (hasWear)
@@ -689,11 +692,7 @@ class _FooterSection extends StatelessWidget {
                 ],
               ),
             ),
-            // Lock moved to image Stack (bottom-right Positioned)
-            if (hasAccount) ...[
-              const SizedBox(width: 4),
-              _AccountAvatar(avatarUrl: item.accountAvatarUrl, name: item.accountName, size: 18),
-            ],
+            // Account + lock moved to image Stack right column
           ],
         ),
         // Row 2: float text
