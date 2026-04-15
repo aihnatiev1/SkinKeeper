@@ -119,24 +119,43 @@ async function loadMiniCardData() {
   const statsEl = document.getElementById('sk-mini-stats');
   if (!statsEl) return;
 
-  // Detect user's Steam currency
+  // Read saved currency from storage (set by inventory.ts when it detects Steam wallet currency)
   try {
-    const rates = await loadExchangeRates();
-    const wc = getWalletCurrency();
-    const steamCC = getWalletCurrencyCode();
-    let cc = 'USD';
-    if (steamCC && rates?.[steamCC]) {
-      cc = steamCC;
-      for (const key of Object.keys(MC_CURRENCY_MAP)) {
-        const [c, s] = MC_CURRENCY_MAP[Number(key)];
-        if (c === steamCC) { mcCurrencySign = s; break; }
-      }
-      mcExchangeRate = rates[steamCC] || 1;
-    } else {
-      const entry = MC_CURRENCY_MAP[wc];
-      if (entry) { cc = entry[0]; mcCurrencySign = entry[1]; }
-      mcExchangeRate = rates?.[cc] || 1;
+    const stored = await chrome.storage.local.get(['sk_user_currency', 'sk_exchange_rate']);
+    let cc = stored.sk_user_currency || 'USD';
+    mcExchangeRate = stored.sk_exchange_rate || 1;
+
+    // If no saved currency, try detecting from page
+    if (!stored.sk_user_currency) {
+      try {
+        const rates = await loadExchangeRates();
+        const wc = getWalletCurrency();
+        const steamCC = getWalletCurrencyCode();
+        if (steamCC && rates?.[steamCC]) {
+          cc = steamCC;
+          mcExchangeRate = rates[steamCC] || 1;
+          chrome.storage.local.set({ sk_user_currency: cc, sk_exchange_rate: mcExchangeRate });
+        } else if (wc > 1) {
+          const entry = MC_CURRENCY_MAP[wc];
+          if (entry) cc = entry[0];
+          mcExchangeRate = rates?.[cc] || 1;
+          chrome.storage.local.set({ sk_user_currency: cc, sk_exchange_rate: mcExchangeRate });
+        }
+      } catch { /* use defaults */ }
     }
+
+    // Set symbol from code
+    for (const key of Object.keys(MC_CURRENCY_MAP)) {
+      const [c, s] = MC_CURRENCY_MAP[Number(key)];
+      if (c === cc) { mcCurrencySign = s; break; }
+    }
+    // Also check _currencySymbols-style lookup
+    const symbolMap: Record<string, string> = {
+      'USD': '$', 'EUR': '\u20ac', 'GBP': '\u00a3', 'UAH': '\u20b4',
+      'RUB': '\u20bd', 'TRY': '\u20ba', 'CNY': '\u00a5', 'BRL': 'R$',
+      'CAD': 'C$', 'AUD': 'A$', 'KZT': '\u20b8', 'PLN': 'z\u0142',
+    };
+    if (symbolMap[cc]) mcCurrencySign = symbolMap[cc];
     mcNoDecimals = MC_NO_DECIMALS.has(cc);
   } catch { /* use defaults */ }
 

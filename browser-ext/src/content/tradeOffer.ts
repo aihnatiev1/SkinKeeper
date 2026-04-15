@@ -252,9 +252,6 @@ async function init() {
     setupCtrlRightClickSelection();
     addSummaryPanel();
 
-    // Auto-switch to partner's inventory (like CSGO Trader)
-    autoSwitchToPartnerInventory();
-
     // Detect items in other active offers
     detectItemsInOtherOffers();
   }
@@ -340,41 +337,69 @@ function addPartnerInfo(partnerSteamID: string) {
 
 // ─── Load inventories & add overlays ─────────────────────────────
 
+let yourItemsLoaded = false;
+let theirItemsLoaded = false;
+let partnerRetries = 0;
+
 function loadInventories() {
-  const yourRaw = extractInventory('You');
-  const theirRaw = extractInventory('Them');
-
-  let yourTotal = 0;
-  let theirTotal = 0;
-
-  if (yourRaw) {
-    for (const raw of yourRaw) {
-      const price = getItemPrice(raw.market_hash_name, exchangeRate);
-      yourTotal += price;
-      allItems.push({ ...raw, price, marketable: !!raw.marketable });
-    }
-  }
-  if (theirRaw) {
-    for (const raw of theirRaw) {
-      const price = getItemPrice(raw.market_hash_name, exchangeRate);
-      theirTotal += price;
-      allItems.push({ ...raw, price, marketable: !!raw.marketable });
+  // Load YOUR inventory (only once)
+  if (!yourItemsLoaded) {
+    const yourRaw = extractInventory('You');
+    if (yourRaw && yourRaw.length > 0) {
+      let yourTotal = 0;
+      for (const raw of yourRaw) {
+        if (allItems.some(i => i.assetid === raw.assetid)) continue;
+        const price = getItemPrice(raw.market_hash_name, exchangeRate);
+        yourTotal += price;
+        allItems.push({ ...raw, price, marketable: !!raw.marketable });
+      }
+      yourItemsLoaded = true;
+      addInventoryTotals(yourTotal, 0);
+      console.log(`[SkinKeeper] Your inventory: ${yourRaw.length} items, ${fmtPrice(yourTotal)}`);
     }
   }
 
-  console.log(`[SkinKeeper] Loaded ${allItems.length} items (yours: ${yourRaw?.length || 0}, theirs: ${theirRaw?.length || 0})`);
+  // Load PARTNER inventory (retry until available)
+  if (!theirItemsLoaded) {
+    const theirRaw = extractInventory('Them');
+    if (theirRaw && theirRaw.length > 0) {
+      let theirTotal = 0;
+      for (const raw of theirRaw) {
+        if (allItems.some(i => i.assetid === raw.assetid)) continue;
+        const price = getItemPrice(raw.market_hash_name, exchangeRate);
+        theirTotal += price;
+        allItems.push({ ...raw, price, marketable: !!raw.marketable });
+      }
+      theirItemsLoaded = true;
+      // Recalculate both totals
+      const yTotal = allItems.filter(i => i.owner === userSteamID).reduce((s, i) => s + i.price, 0);
+      addInventoryTotals(yTotal, theirTotal);
+      console.log(`[SkinKeeper] Partner inventory: ${theirRaw.length} items, ${fmtPrice(theirTotal)}`);
+    } else if (partnerRetries < 10) {
+      partnerRetries++;
+      setTimeout(() => loadInventories(), 2000);
+    }
+  }
 
-  // Add inventory totals to tab headers (like CSGO Trader)
-  addInventoryTotals(yourTotal, theirTotal);
-
-  // Add price tags to all visible items
   addOverlaysToAll();
 
-  // Re-tag when inventory pages load
+  // Observer for new items (once)
   const inv = document.getElementById('inventories');
-  if (inv) {
+  if (inv && !(inv as any)._skObserving) {
+    (inv as any)._skObserving = true;
     new MutationObserver(() => addOverlaysToAll()).observe(inv, { childList: true, subtree: true });
   }
+
+  // Tab switch handler (once)
+  document.querySelectorAll('.inventory_user_tab').forEach(tab => {
+    if ((tab as any)._skBound) return;
+    (tab as any)._skBound = true;
+    tab.addEventListener('click', () => {
+      setTimeout(() => {
+        loadInventories();
+      }, 1000);
+    });
+  });
 }
 
 function addInventoryTotals(yourTotal: number, theirTotal: number) {
@@ -890,24 +915,18 @@ function addSummaryPanel() {
   panel.className = 'sk-trade-summary';
 
   panel.innerHTML = `
-    <div class="sk-summary-header">Trade Summary</div>
-    <div class="sk-summary-row">
-      <span class="sk-summary-label">Your items:</span>
-      <span class="sk-summary-value" id="sk-your-total">0 items \u00b7 ${currencySign}0</span>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-weight:700;font-size:11px;color:#6366f1;text-transform:uppercase;letter-spacing:0.5px">TRADE</span>
+      <span class="sk-summary-label">Your:</span>
+      <span class="sk-summary-value" id="sk-your-total" style="font-weight:700">0</span>
+      <span class="sk-summary-label">Their:</span>
+      <span class="sk-summary-value" id="sk-their-total" style="font-weight:700">0</span>
+      <span id="sk-pl-value" style="font-weight:800;margin-left:4px"></span>
+      <span id="sk-trade-warn" style="display:none"></span>
     </div>
-    <div class="sk-summary-row">
-      <span class="sk-summary-label">Their items:</span>
-      <span class="sk-summary-value" id="sk-their-total">0 items \u00b7 ${currencySign}0</span>
-    </div>
-    <div class="sk-summary-divider"></div>
-    <div class="sk-summary-row" id="sk-pl-row">
-      <span class="sk-summary-label">P/L:</span>
-      <span class="sk-summary-value" id="sk-pl-value">${currencySign}0</span>
-    </div>
-    <div id="sk-trade-warn" style="display:none"></div>
   `;
 
-  // Insert above "Make Offer" / "Click here to confirm" area
+  // Insert above "Click here to confirm" button
   const tradeConfirm = document.querySelector('.trade_confirm_button_area, .tutorial_arrow_ctn')
     || document.querySelector('.tradeoffer_footer');
   if (tradeConfirm) {
@@ -959,9 +978,13 @@ function updateSummary() {
   if (theirEl) theirEl.textContent = `${theirCount} items \u00b7 ${fmtPrice(theirTotal)}`;
 
   if (plEl) {
-    const sign = profit ? '+' : '';
-    plEl.textContent = `${sign}${fmtPrice(diff)} (${sign}${pct.toFixed(1)}%)`;
-    plEl.style.color = profit ? '#4ade80' : '#f87171';
+    if (yourCount > 0 || theirCount > 0) {
+      const sign = profit ? '+' : '';
+      plEl.textContent = `P/L: ${sign}${fmtPrice(diff)} (${sign}${pct.toFixed(1)}%)`;
+      plEl.style.color = profit ? '#4ade80' : '#f87171';
+    } else {
+      plEl.textContent = '';
+    }
     plEl.style.fontWeight = '800';
   }
 
@@ -1164,30 +1187,17 @@ function injectStyles() {
   style.id = 'sk-trade-styles';
   style.textContent = `
     .sk-trade-summary {
-      background: rgba(13,17,23,0.92);
-      border: 1px solid rgba(99,102,241,0.25);
-      border-radius: 8px;
-      padding: 12px 14px;
-      margin: 8px 0;
+      background: rgba(13,17,23,0.85);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 6px 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
       color: #e2e8f0;
-    }
-    .sk-summary-header {
-      font-weight: 700;
-      font-size: 13px;
-      color: #6366f1;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-    }
-    .sk-summary-row {
-      display: flex;
-      justify-content: space-between;
       font-size: 12px;
-      margin-bottom: 4px;
     }
-    .sk-summary-label { color: #8b949e; }
-    .sk-summary-value { font-weight: 700; }
+    .sk-summary-label { color: #8b949e; font-size: 11px; }
+    .sk-summary-value { color: #e2e8f0; font-size: 12px; }
     .sk-summary-divider {
       height: 1px;
       background: rgba(255,255,255,0.06);

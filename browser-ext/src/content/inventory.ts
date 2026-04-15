@@ -136,6 +136,9 @@ async function init() {
     exchangeRate = rates?.[currencyCode] || 1;
   }
 
+  // Persist detected currency for miniCard and other pages
+  chrome.storage.local.set({ sk_user_currency: currencyCode, sk_exchange_rate: exchangeRate });
+
   console.log(`[SkinKeeper v0.9.2] Wallet currency ID: ${walletCurrency}, Steam code: ${steamCurrencyCode}, using: ${currencyCode} ${currencySign}, rate: ${exchangeRate}`);
 
   loadFullInventory(() => {
@@ -457,6 +460,24 @@ function injectControlBar() {
   lockCb.id = 'sk-select-locked';
   lockCb.style.cssText = 'accent-color:var(--sk-primary)';
   lockLabel.append(lockCb, document.createTextNode('Select locked'));
+  lockCb.addEventListener('change', () => {
+    // Re-apply cursor to all items when checkbox toggled
+    if (selectMode) {
+      document.querySelectorAll('.item.app730.context2').forEach(elem => {
+        const htmlEl = elem as HTMLElement;
+        const id = htmlEl.id?.split('_')[2];
+        if (!id) return;
+        const it = assetMap.get(id);
+        if (!it) return;
+        if (lockCb.checked || (it.marketable && it.tradable)) {
+          htmlEl.style.cursor = 'pointer';
+          htmlEl.style.opacity = '';
+        } else {
+          htmlEl.style.cursor = '';
+        }
+      });
+    }
+  });
   bar.appendChild(lockLabel);
 
   // Selected counter (hidden initially)
@@ -897,11 +918,13 @@ function setupItemSelection() {
     if (selectMode) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (!item.marketable) return;
       // Skip items already listed for sale (faded out)
       if (target.style.opacity === '0.3') return;
       const includeLocked = (document.getElementById('sk-select-locked') as HTMLInputElement)?.checked;
-      if (!item.tradable && !includeLocked) return;
+      // When "Select locked" is ON, allow non-tradable items (even non-marketable ones with trade ban)
+      if (!includeLocked) {
+        if (!item.marketable || !item.tradable) return;
+      }
 
       if (e.ctrlKey || e.metaKey) {
         // Ctrl+click: select/deselect ALL items with same name
@@ -1825,20 +1848,33 @@ const TRADE_UP_EXCLUDED_TYPES = [
 ];
 
 function isTradeUpEligible(item: SteamItem): boolean {
-  if (!item.marketable) return false;
   if (item.type === 'Storage Unit') return false;
   const typeLower = (item.type || '').toLowerCase();
-  // Exclude non-weapon items by type
   for (const excluded of TRADE_UP_EXCLUDED_TYPES) {
     if (typeLower.includes(excluded)) return false;
   }
-  // Must have a rarity (weapon skins always do)
   if (!item.rarity) return false;
-  // Base Grade items (cases, etc.) can't be traded up
-  if (item.rarity === 'Base Grade' || item.rarity === 'Consumer Grade') return false;
-  // Covert (highest tradeable rarity) — can't trade up further
-  if (item.rarity === 'Contraband') return false;
+  const rarity = normalizeRarity(item.rarity);
+  // Only Industrial through Classified can be traded up
+  const eligible = ['Industrial Grade', 'Mil-Spec Grade', 'Restricted', 'Classified'];
+  if (!eligible.includes(rarity)) return false;
   return true;
+}
+
+/** Normalize rarity string — handles ★, spaces, partial matches */
+function normalizeRarityLocal(rarity: string): string {
+  // Strip ★ and extra whitespace
+  const clean = rarity.replace(/[★]/g, '').trim();
+  const lower = clean.toLowerCase();
+  if (lower.includes('consumer')) return 'Consumer Grade';
+  if (lower.includes('industrial')) return 'Industrial Grade';
+  if (lower.includes('mil-spec') || lower.includes('mil spec') || lower === 'rare') return 'Mil-Spec Grade';
+  if (lower.includes('restricted') || lower === 'mythical') return 'Restricted';
+  if (lower.includes('classified') || lower === 'legendary') return 'Classified';
+  if (lower.includes('covert') || lower === 'ancient') return 'Covert';
+  if (lower.includes('contraband')) return 'Contraband';
+  if (lower.includes('base grade')) return 'Base Grade';
+  return clean;
 }
 
 function highlightTradeUpCompatible() {
@@ -1862,7 +1898,7 @@ function highlightTradeUpCompatible() {
   const firstId = tuSelected.values().next().value;
   const firstItem = firstId ? assetMap.get(firstId) : null;
   if (!firstItem) return;
-  const reqRarity = normalizeRarity(firstItem.rarity || '');
+  const reqRarity = normalizeRarityLocal(firstItem.rarity || '');
   const reqStatTrak = firstItem.market_hash_name.includes('StatTrak');
 
   document.querySelectorAll('.item.app730.context2').forEach(elem => {
@@ -1879,7 +1915,7 @@ function highlightTradeUpCompatible() {
       return;
     }
 
-    const itemRarity = normalizeRarity(it.rarity || '');
+    const itemRarity = normalizeRarityLocal(it.rarity || '');
     const itemStatTrak = it.market_hash_name.includes('StatTrak');
     const compatible = itemRarity === reqRarity && itemStatTrak === reqStatTrak;
 

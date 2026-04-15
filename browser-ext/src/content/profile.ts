@@ -267,3 +267,27 @@ setTimeout(flagSpamComments, 2000);
 
 init();
 injectMiniCard();
+
+// Override trade offer links to open in new tab instead of popup window
+// Steam uses window.open with dimensions for /tradeoffer/ URLs
+document.addEventListener('click', (e) => {
+  const link = (e.target as HTMLElement).closest('a[href*="tradeoffer"]') as HTMLAnchorElement;
+  if (link?.href?.includes('/tradeoffer/')) {
+    e.preventDefault();
+    e.stopPropagation();
+    window.open(link.href, '_blank');
+  }
+}, true);
+
+// Override Steam's ShowTradeOffer function
+const overrideDiv = document.createElement('div');
+overrideDiv.setAttribute('onreset', `
+  try {
+    if (typeof ShowTradeOffer !== 'undefined') {
+      ShowTradeOffer = function(id) { window.open('https://steamcommunity.com/tradeoffer/' + id + '/', '_blank'); };
+    }
+  } catch(e) {}
+`);
+overrideDiv.dispatchEvent(new CustomEvent('reset'));
+overrideDiv.removeAttribute('onreset');
+overrideDiv.remove();

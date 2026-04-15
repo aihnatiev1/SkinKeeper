@@ -416,6 +416,15 @@ function SettingsContent() {
           <LogOut size={16} />
           Sign Out
         </button>
+
+        {/* Delete Account */}
+        <div className="pt-6 mt-6" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <h3 className="text-xs font-semibold text-loss uppercase tracking-wider mb-2">Danger Zone</h3>
+          <p className="text-xs text-muted mb-3">
+            Permanently delete your account and all associated data. This action cannot be undone.
+          </p>
+          <DeleteAccountButton />
+        </div>
       </div>
 
       <SteamSessionModal
@@ -427,6 +436,62 @@ function SettingsContent() {
           window.location.reload();
         }}
       />
+    </div>
+  );
+}
+
+function DeleteAccountButton() {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const router = useRouter();
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete('/auth/user');
+      await authApi.clearSession();
+      toast.success('Account deleted');
+      router.push('/login');
+    } catch {
+      toast.error('Failed to delete account');
+      setDeleting(false);
+      setConfirming(false);
+    }
+  };
+
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all hover:bg-loss/10"
+        style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}
+      >
+        <Trash2 size={14} />
+        Delete Account
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+      <p className="text-sm font-semibold text-loss mb-1">Are you sure?</p>
+      <p className="text-xs text-muted mb-3">This will permanently delete your account, all linked Steam accounts, inventory data, portfolios, transactions, and alerts.</p>
+      <div className="flex gap-2">
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="px-4 py-2 text-xs font-bold rounded-lg transition-all disabled:opacity-50"
+          style={{ background: '#ef4444', color: '#fff' }}
+        >
+          {deleting ? 'Deleting...' : 'Yes, delete everything'}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          className="px-4 py-2 text-xs font-medium rounded-lg transition-all glass hover:bg-surface-light"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
