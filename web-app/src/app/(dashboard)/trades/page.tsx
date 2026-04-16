@@ -2,6 +2,7 @@
 
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
+import { ExtensionGate } from '@/components/extension-gate';
 import { useTrades, useSyncTrades } from '@/lib/hooks';
 import { useFormatPrice, formatRelativeTime, getItemIconUrl, cn } from '@/lib/utils';
 import { RefreshCw, ArrowRight, ArrowDown, ArrowUp, Clock, CheckCircle2, XCircle, Ban, Plus, ArrowLeftRight } from 'lucide-react';
@@ -47,6 +48,7 @@ export default function TradesPage() {
   };
 
   return (
+    <ExtensionGate>
     <div>
       <Header title="Trades" />
       <div className="p-4 lg:p-6 space-y-4">
@@ -215,5 +217,6 @@ export default function TradesPage() {
         )}
       </div>
     </div>
+    </ExtensionGate>
   );
 }

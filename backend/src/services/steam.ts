@@ -311,12 +311,23 @@ async function fetchInventoryViaAPI(
           }
         }
       }
+      // Build per-asset property map for resolving %propid:N% templates
+      const propMap = new Map<number, string>();
+      if (asset.item_properties) {
+        for (const prop of asset.item_properties) {
+          if (prop.property_defid != null && prop.property_value != null) {
+            propMap.set(prop.property_defid, prop.property_value);
+          }
+        }
+      }
+
       if (desc.actions) {
         for (const action of desc.actions) {
           if (action.link?.includes("csgo_econ_action_preview")) {
             inspectLink = action.link
               .replace("%owner_steamid%", steamId)
-              .replace("%assetid%", asset.assetid);
+              .replace("%assetid%", asset.assetid)
+              .replace(/%propid:(\d+)%/g, (_: string, id: string) => propMap.get(Number(id)) ?? "");
           }
         }
       }
@@ -341,16 +352,8 @@ async function fetchInventoryViaAPI(
     if (!lastAssetId) break;
   }
 
-  // Detect partial inventory: compare fetched count vs reported total
-  // (total_inventory_count is available in IEconService responses)
-  if (items.length > 0) {
-    // IEconService doesn't always return total_inventory_count, but when it does, check
-    // We log a warning — the caller can decide how to handle
-    const fetchedCount = items.length;
-    if (fetchedCount < 10 && fetchedCount > 0) {
-      // Suspicious: very few items might indicate partial fetch
-      console.warn(`[Steam] API inventory returned only ${fetchedCount} items — possible partial fetch`);
-    }
+  if (items.length > 0 && items.length < 10) {
+    console.warn(`[Steam] API inventory returned only ${items.length} items — possible partial fetch`);
   }
 
   return items;

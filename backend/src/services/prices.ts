@@ -955,9 +955,9 @@ export async function pruneOldPrices(): Promise<void> {
 // The batch crawler (/market/search/render/) is demoted to COLD background —
 // used for analytics, charts, non-inventory items.
 
-const HOT_LOOP_GAP_MS = 3_000;       // 3s between requests per slot
-const HOT_LOOP_PAUSE_MS = 30_000;    // 30s pause when hot set is empty
-const HOT_LOOP_429_PAUSE_MS = 60_000; // 1 min pause per slot on 429
+const HOT_LOOP_GAP_MS = 5_000;       // 5s between requests per slot
+const HOT_LOOP_PAUSE_MS = 60_000;    // 1 min pause when hot set is empty
+const HOT_LOOP_429_PAUSE_MS = 120_000; // 2 min pause per slot on 429
 let hotLoopRunning = false;
 let hotLoopStopped = false;
 
@@ -993,6 +993,8 @@ async function getHotSet(): Promise<string[]> {
      LEFT JOIN current_prices cp
        ON cp.market_hash_name = ii.market_hash_name
        AND cp.source = 'steam'
+     WHERE cp.updated_at IS NULL
+        OR cp.updated_at < NOW() - INTERVAL '1 hour'
      ORDER BY cp.updated_at ASC NULLS FIRST`
   );
   return rows.map((r: any) => r.market_hash_name);
@@ -1094,12 +1096,13 @@ async function hotWorker(
         consecutive429s++;
         record429("steam");
         recordSlot429(slotIdx, "steamcommunity.com");
-        if (consecutive429s >= 3) {
-          console.warn(`[HotSteam:${slotName}] 3× 429 — pausing ${HOT_LOOP_429_PAUSE_MS / 1000}s`);
-          await new Promise((r) => setTimeout(r, HOT_LOOP_429_PAUSE_MS));
-          consecutive429s = 0;
-        } else {
-          await new Promise((r) => setTimeout(r, 30_000));
+        // Exponential backoff: 30s, 60s, 120s, then cap at 120s
+        const backoffMs = Math.min(HOT_LOOP_429_PAUSE_MS, 30_000 * Math.pow(2, consecutive429s - 1));
+        console.warn(`[HotSteam:${slotName}] ${consecutive429s}× 429 — pausing ${backoffMs / 1000}s`);
+        await new Promise((r) => setTimeout(r, backoffMs));
+        if (consecutive429s >= 5) {
+          // Too many 429s — bail out of this cycle
+          break;
         }
         continue; // retry — nextItem already advanced
       }

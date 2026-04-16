@@ -8,11 +8,12 @@ import { BulkSellBar } from '@/components/bulk-sell-bar';
 import { SellModal } from '@/components/sell-modal';
 import { SellProgressModal } from '@/components/sell-progress-modal';
 import { ExtensionRequiredModal } from '@/components/extension-required-modal';
+import { ExtensionGate } from '@/components/extension-gate';
 import { useInventory, useRefreshInventory, useMarketListings, useHasSession } from '@/lib/hooks';
 import { useFormatPrice, getItemIconUrl, getWearShort, cn, getDopplerPhase, isDoppler, isFade, isMarbleFade, calculateFadePercent, analyzeMarbleFade } from '@/lib/utils';
 import { RARITY_COLORS } from '@/lib/constants';
 import type { InventoryItem } from '@/lib/types';
-import { Search, RefreshCw, Grid3X3, List, Loader2, Package, Lock, Unlock, X, Tag, Info, SlidersHorizontal } from 'lucide-react';
+import { Search, RefreshCw, Grid3X3, List, Loader2, Package, Lock, Unlock, X, Tag, Info, SlidersHorizontal, Puzzle, ExternalLink } from 'lucide-react';
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -307,9 +308,33 @@ export default function InventoryPage() {
   };
 
   return (
+    <ExtensionGate>
     <div>
       <Header title="Inventory" />
       <CurrencyBanner />
+      {/* Extension upsell — shown when items exist but no float data */}
+      {!hasSession && items.length > 0 && (
+        <div className="mx-4 lg:mx-6 mt-4">
+          <div className="flex items-center gap-3 glass rounded-xl border border-primary/20 p-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Puzzle size={16} className="text-primary" />
+            </div>
+            <p className="text-xs text-muted flex-1">
+              Install the <span className="text-foreground font-medium">SkinKeeper Extension</span> to see float values, paint seeds and sticker details for your skins.
+            </p>
+            <a
+              href="https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors shrink-0"
+            >
+              <Puzzle size={12} />
+              Install
+              <ExternalLink size={10} className="opacity-60" />
+            </a>
+          </div>
+        </div>
+      )}
       <div className="p-4 lg:p-6">
         {/* Main layout: sidebar + content */}
         <div className="flex gap-4 mt-4">
@@ -1006,5 +1031,6 @@ export default function InventoryPage() {
         action="sell"
       />
     </div>
+    </ExtensionGate>
   );
 }

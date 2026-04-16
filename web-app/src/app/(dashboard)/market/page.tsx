@@ -2,6 +2,7 @@
 
 import { Header } from '@/components/header';
 import { PageLoader } from '@/components/loading';
+import { ExtensionGate } from '@/components/extension-gate';
 import { useMarketListings, useSellVolume } from '@/lib/hooks';
 import { useFormatPrice, getItemIconUrl, cn } from '@/lib/utils';
 import type { MarketListing } from '@/lib/types';
@@ -77,6 +78,7 @@ export default function MarketPage() {
   );
 
   return (
+    <ExtensionGate>
     <div>
       <Header title="Market" />
       <div className="p-4 lg:p-6 space-y-4">
@@ -293,5 +295,6 @@ export default function MarketPage() {
         )}
       </div>
     </div>
+    </ExtensionGate>
   );
 }

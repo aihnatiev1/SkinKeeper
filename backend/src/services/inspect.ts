@@ -1,13 +1,5 @@
-import axios from "axios";
+import { decodeLink } from "@csfloat/cs2-inspect-serializer";
 import { pool } from "../db/pool.js";
-import {
-  initProxyPool,
-  getAvailableSlot,
-  getSlotConfig,
-  recordSlot429,
-  recordSlotSuccess,
-  getSlotCount,
-} from "./proxyPool.js";
 
 export interface StickerInfo {
   slot: number;
@@ -34,136 +26,59 @@ export interface InspectResult {
 
 export interface InspectFailure {
   failed: true;
-  reason: "no_link" | "rate_limited" | "api_error" | "circuit_open";
-}
-
-// ─── Circuit Breaker (per-slot aware) ────────────────────────────────────
-// Now tracks per-slot state. Circuit opens only when ALL slots are exhausted.
-
-const CIRCUIT_BREAKER = {
-  globalConsecutive429s: 0,
-  /** Total 429s across all slots before global circuit opens */
-  threshold: 3 * Math.max(1, 3), // 3 per slot * 3 slots = 9
-  cooldownMs: 15 * 60_000,  // 15 min (reduced from 1h — proxy pool handles rotation)
-  openUntil: 0,
-};
-
-function isCircuitOpen(): boolean {
-  if (CIRCUIT_BREAKER.openUntil > Date.now()) return true;
-  if (CIRCUIT_BREAKER.openUntil > 0 && Date.now() >= CIRCUIT_BREAKER.openUntil) {
-    console.log("[Inspect] Circuit breaker closed, resuming requests");
-    CIRCUIT_BREAKER.openUntil = 0;
-    CIRCUIT_BREAKER.globalConsecutive429s = 0;
-  }
-  return false;
-}
-
-function recordInspect429(): void {
-  CIRCUIT_BREAKER.globalConsecutive429s++;
-  if (CIRCUIT_BREAKER.globalConsecutive429s >= CIRCUIT_BREAKER.threshold) {
-    CIRCUIT_BREAKER.openUntil = Date.now() + CIRCUIT_BREAKER.cooldownMs;
-    console.warn(`[Inspect] Circuit breaker OPEN — ${CIRCUIT_BREAKER.globalConsecutive429s} total 429s across all slots. Pausing ${CIRCUIT_BREAKER.cooldownMs / 60_000}min`);
-  }
-}
-
-function recordInspectSuccess(): void {
-  CIRCUIT_BREAKER.globalConsecutive429s = 0;
+  reason: "no_link" | "rate_limited" | "api_error" | "unresolved_template";
 }
 
 export function getInspectCircuitState() {
   return {
-    consecutive429s: CIRCUIT_BREAKER.globalConsecutive429s,
-    isOpen: isCircuitOpen(),
-    openUntil: CIRCUIT_BREAKER.openUntil > 0 ? new Date(CIRCUIT_BREAKER.openUntil).toISOString() : null,
+    consecutive429s: 0,
+    isOpen: false,
+    openUntil: null,
   };
 }
 
-const INSPECT_DOMAIN = "api.csfloat.com";
-
 /**
- * Fetch item details (float, stickers, charms) via CSFloat inspect API.
- * Routes through proxy pool — tries all available slots on 429.
+ * Decode item details (float, stickers, charms) directly from the inspect link.
+ * Since March 2026, CS2 inspect links self-encode all item data as protobuf hex.
+ * No external API needed — decoding is instant and local.
  */
 export async function fetchInspectData(
   inspectLink: string
 ): Promise<InspectResult | InspectFailure> {
-  if (isCircuitOpen()) {
-    return { failed: true, reason: "circuit_open" };
+  // Links with %propid:6% are unresolved templates — can't decode locally
+  if (inspectLink.includes("%propid")) {
+    return { failed: true, reason: "unresolved_template" };
   }
 
-  initProxyPool();
-  const triedSlots = new Set<number>();
+  try {
+    const decoded = decodeLink(inspectLink);
 
-  // Try all available slots
-  for (let attempt = 0; attempt < getSlotCount(); attempt++) {
-    const slot = getAvailableSlot(INSPECT_DOMAIN);
-    if (!slot || triedSlots.has(slot.index)) {
-      break;
-    }
-    triedSlots.add(slot.index);
+    const stickers: StickerInfo[] = (decoded.stickers ?? []).map((s) => ({
+      slot: s.slot ?? 0,
+      sticker_id: s.stickerId ?? 0,
+      name: "",
+      wear: s.wear ?? null,
+      image: "",
+    }));
 
-    try {
-      const apiKey = process.env.CSFLOAT_API_KEY;
-      const config: any = {
-        params: { url: inspectLink },
-        headers: {
-          Accept: "application/json",
-          ...(apiKey ? { Authorization: apiKey } : {}),
-        },
-        timeout: 15000,
-        ...getSlotConfig(slot.index),
-      };
+    const charms: CharmInfo[] = (decoded.keychains ?? []).map((k) => ({
+      slot: k.slot ?? 0,
+      pattern: k.pattern ?? 0,
+      name: "",
+      image: "",
+    }));
 
-      const { data } = await axios.get("https://api.csfloat.com/", config);
-
-      const info = data.iteminfo;
-      if (!info) {
-        console.warn("[Inspect] CSFloat returned no iteminfo:", JSON.stringify(data).slice(0, 200));
-        return { failed: true, reason: "api_error" };
-      }
-
-      const stickers: StickerInfo[] = (info.stickers ?? []).map((s: any) => ({
-        slot: s.slot,
-        sticker_id: s.stickerId ?? s.sticker_id,
-        name: s.name ?? "",
-        wear: s.wear ?? null,
-        image: s.icon_url ?? s.image ?? "",
-      }));
-
-      const charms: CharmInfo[] = (info.keychains ?? []).map((k: any) => ({
-        slot: k.slot ?? 0,
-        pattern: k.pattern ?? 0,
-        name: k.name ?? "",
-        image: k.icon_url ?? k.image ?? "",
-      }));
-
-      recordInspectSuccess();
-      recordSlotSuccess(slot.index, INSPECT_DOMAIN);
-
-      return {
-        floatValue: info.floatvalue,
-        paintSeed: info.paintseed,
-        paintIndex: info.paintindex,
-        stickers,
-        charms,
-      };
-    } catch (err: any) {
-      const status = err.response?.status;
-      if (status === 429) {
-        const retryAfter = parseInt(err.response?.headers?.["retry-after"] || "0", 10);
-        recordSlot429(slot.index, INSPECT_DOMAIN, retryAfter);
-        recordInspect429();
-        console.warn(`[Inspect] CSFloat 429 via ${slot.name} (${CIRCUIT_BREAKER.globalConsecutive429s}/${CIRCUIT_BREAKER.threshold})`);
-        continue; // Try next slot
-      }
-      const body = JSON.stringify(err.response?.data ?? {}).slice(0, 200);
-      console.warn(`[Inspect] CSFloat failed via ${slot.name}: status=${status ?? "no-response"} body=${body}`);
-      return { failed: true, reason: "api_error" };
-    }
+    return {
+      floatValue: decoded.paintwear ?? 0,
+      paintSeed: decoded.paintseed ?? 0,
+      paintIndex: decoded.paintindex ?? 0,
+      stickers,
+      charms,
+    };
+  } catch (err: any) {
+    console.warn(`[Inspect] Failed to decode inspect link locally: ${err.message}`);
+    return { failed: true, reason: "api_error" };
   }
-
-  // All slots exhausted
-  return { failed: true, reason: "rate_limited" };
 }
 
 /**
@@ -177,10 +92,6 @@ export async function inspectItem(
   assetId: string,
   force = false
 ): Promise<InspectResult | InspectFailure> {
-  if (isCircuitOpen() && !force) {
-    return { failed: true, reason: "circuit_open" };
-  }
-
   const { rows } = await pool.query(
     `SELECT i.id, i.inspect_link, i.float_value, i.paint_seed, i.paint_index, i.stickers, i.charms, i.inspected_at
      FROM inventory_items i
@@ -214,18 +125,11 @@ export async function inspectItem(
         charms: parseJSON(item.charms),
       };
     }
-    if (age < INSPECT_FAIL_CACHE_MS && item.float_value == null) {
-      return { failed: true, reason: "rate_limited" };
-    }
   }
 
   const result = await fetchInspectData(item.inspect_link);
 
   if ("failed" in result) {
-    await pool.query(
-      `UPDATE inventory_items SET inspected_at = NOW() WHERE id = $1`,
-      [item.id]
-    );
     return result;
   }
 
@@ -248,37 +152,24 @@ export async function inspectItem(
 }
 
 /**
- * Batch inspect items. Uses proxy pool for rotation, increased concurrency.
+ * Batch inspect items. Decoding is local (no API), so we can process all at once.
  */
 export async function batchInspect(
   userId: number,
   assetIds: string[],
-  concurrency = 1
+  concurrency = 10
 ): Promise<Map<string, InspectResult>> {
   const results = new Map<string, InspectResult>();
-  let rateLimited = 0;
   let errors = 0;
   let success = 0;
-
-  if (isCircuitOpen()) {
-    console.log(`[BatchInspect] Skipped: circuit breaker open`);
-    return results;
-  }
-
-  // With proxy pool we can handle more rate limits before stopping
-  const maxRateLimits = getSlotCount() * 2;
+  let unresolved = 0;
 
   for (let i = 0; i < assetIds.length; i += concurrency) {
-    if (isCircuitOpen()) {
-      console.warn(`[BatchInspect] Circuit opened mid-batch. ${success} ok, ${rateLimited} rate-limited.`);
-      break;
-    }
-
     const batch = assetIds.slice(i, i + concurrency);
     const promises = batch.map(async (assetId) => {
       const result = await inspectItem(userId, assetId);
       if ("failed" in result) {
-        if (result.reason === "rate_limited" || result.reason === "circuit_open") rateLimited++;
+        if (result.reason === "unresolved_template") unresolved++;
         else errors++;
       } else {
         success++;
@@ -286,17 +177,8 @@ export async function batchInspect(
       }
     });
     await Promise.all(promises);
-
-    if (rateLimited > maxRateLimits) {
-      console.warn(`[BatchInspect] Stopping early: ${rateLimited} rate limits. ${success} ok, ${errors} errors.`);
-      break;
-    }
-
-    if (i + concurrency < assetIds.length) {
-      await new Promise((r) => setTimeout(r, 2000)); // 2s between batches (was 3s)
-    }
   }
 
-  console.log(`[BatchInspect] Done for user ${userId}: ${success} ok, ${rateLimited} rate-limited, ${errors} errors (of ${assetIds.length} total)`);
+  console.log(`[BatchInspect] Done for user ${userId}: ${success} ok, ${unresolved} unresolved, ${errors} errors (of ${assetIds.length} total)`);
   return results;
 }

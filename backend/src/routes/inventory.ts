@@ -390,6 +390,7 @@ inventoryQueue.process(async (job, updateProgress) => {
      JOIN active_steam_accounts sa ON i.steam_account_id = sa.id
      WHERE sa.user_id = $1 AND i.float_value IS NULL
        AND i.inspect_link IS NOT NULL AND i.wear IS NOT NULL
+       AND i.inspect_link NOT LIKE '%propid%'
      ORDER BY i.updated_at DESC
      LIMIT 100`,
     [userId]

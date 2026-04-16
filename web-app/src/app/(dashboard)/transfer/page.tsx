@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowDown, ArrowUp, Wand2, ArrowLeftRight } from 'lucide-react';
 import { Header } from '@/components/header';
+import { ExtensionGate } from '@/components/extension-gate';
 import { useIsDesktop, useSteamStatus } from '@/lib/use-desktop';
 import { useTransferStore, type TransferTab } from '@/lib/transfer-store';
 import { Loader2 } from 'lucide-react';
@@ -22,33 +21,47 @@ const TABS: { id: TransferTab; label: string; icon: typeof ArrowDown; soon?: boo
 ];
 
 export default function TransferPage() {
-  const router = useRouter();
   const desktop = useIsDesktop();
   const { status } = useSteamStatus();
   const { activeTab, setActiveTab, isTransferring, progress } = useTransferStore();
 
-  useEffect(() => {
-    if (desktop === false) {
-      router.replace('/portfolio');
-    }
-  }, [desktop, router]);
-
-  if (!desktop) return null;
+  // On web (non-desktop): show the gate with extension/desktop CTA
+  if (!desktop) {
+    return (
+      <ExtensionGate>
+        <div>
+          <Header title="Transfer" />
+          <div className="p-4 lg:p-6 space-y-4">
+            <div className="flex items-center gap-1 p-1 glass rounded-xl border border-border/50 w-fit">
+              {TABS.map(({ id, label, icon: Icon }) => (
+                <div key={id} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted">
+                  <Icon size={16} />{label}
+                </div>
+              ))}
+            </div>
+            <div className="glass rounded-xl border border-border/50 p-12" />
+          </div>
+        </div>
+      </ExtensionGate>
+    );
+  }
 
   if (!status.loggedIn) {
     return (
-      <div>
-        <Header title="Transfer" />
-        <div className="p-4 lg:p-6">
-          <div className="glass rounded-xl p-12 border border-border/50 text-center">
-            <ArrowLeftRight size={40} className="mx-auto mb-4 text-muted" />
-            <h3 className="text-lg font-semibold mb-2">Steam not connected</h3>
-            <p className="text-sm text-muted">
-              Connect to Steam via the desktop client to manage storage units.
-            </p>
+      <ExtensionGate>
+        <div>
+          <Header title="Transfer" />
+          <div className="p-4 lg:p-6">
+            <div className="glass rounded-xl p-12 border border-border/50 text-center">
+              <ArrowLeftRight size={40} className="mx-auto mb-4 text-muted" />
+              <h3 className="text-lg font-semibold mb-2">Steam not connected</h3>
+              <p className="text-sm text-muted">
+                Connect to Steam via the desktop client to manage storage units.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </ExtensionGate>
     );
   }
 
