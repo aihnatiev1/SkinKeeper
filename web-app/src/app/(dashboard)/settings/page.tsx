@@ -5,7 +5,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useAccounts, useSwitchAccount } from '@/lib/hooks';
 import { api, authApi } from '@/lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Crown, LogOut, Globe, CreditCard, Link2, Check, Sparkles, Shield, Zap, ExternalLink, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { Crown, LogOut, Globe, Link2, Check, Sparkles, ExternalLink, Loader2, Trash2, Smartphone } from 'lucide-react';
 import { CURRENCY_SYMBOLS } from '@/lib/constants';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -35,23 +35,9 @@ function SettingsContent() {
   const { data: accounts } = useAccounts();
   const switchAccount = useSwitchAccount();
   const isDesktopApp = useIsDesktop();
-  const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
   const [refreshingSession, setRefreshingSession] = useState<number | null>(null);
   const [unlinkingAccount, setUnlinkingAccount] = useState<number | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
-
-  // Handle Stripe redirect results
-  useEffect(() => {
-    const stripeResult = searchParams.get('stripe');
-    if (stripeResult === 'success') {
-      toast.success('Subscription activated! Welcome to PRO.');
-      router.replace('/settings');
-    } else if (stripeResult === 'cancelled') {
-      toast('Checkout cancelled');
-      router.replace('/settings');
-    }
-  }, [searchParams, router]);
 
   // Handle extension connection — send JWT token to browser extension
   useEffect(() => {
@@ -150,31 +136,7 @@ function SettingsContent() {
     }
   };
 
-  const handleStripeCheckout = async (plan: 'monthly' | 'yearly') => {
-    setCheckoutLoading(plan);
-    try {
-      const { url } = await api.post<{ url: string; sessionId: string }>('/stripe/checkout', { plan });
-      if (url) {
-        window.location.href = url;
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to start checkout');
-      setCheckoutLoading(null);
-    }
-  };
-
-  const handleManageSubscription = async () => {
-    setPortalLoading(true);
-    try {
-      const { url } = await api.post<{ url: string }>('/stripe/portal');
-      if (url) {
-        window.location.href = url;
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to open portal');
-    }
-    setPortalLoading(false);
-  };
+  const APP_STORE_URL = 'https://apps.apple.com/ua/app/skinkeeper/id6760600231?l=uk';
 
   return (
     <div>
@@ -333,16 +295,16 @@ function SettingsContent() {
                 <h3 className="font-bold text-lg">Upgrade to PRO</h3>
               </div>
               <p className="text-sm text-muted mb-4">
-                Unlock P&L analytics, bulk sell, 20 alerts, CSV export, push notifications, and more.
+                Unlock P&L analytics, 20 alerts, CSV export, push notifications, and more.
               </p>
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-6">
                 {[
                   'P&L Analytics',
-                  'Real Market Prices',
-                  'Push Notifications',
+                  'Per-Item Profit & Loss',
+                  'P&L History Charts',
                   'CSV Export',
                   '20 Price Alerts',
-                  'Advanced Charts',
+                  'Unlimited Accounts',
                 ].map((feature) => (
                   <li key={feature} className="flex items-center gap-1.5">
                     <Check size={14} className="text-primary shrink-0" />
@@ -350,27 +312,19 @@ function SettingsContent() {
                   </li>
                 ))}
               </ul>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleStripeCheckout('monthly')}
-                  disabled={!!checkoutLoading}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-bold transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] disabled:opacity-60"
-                >
-                  {checkoutLoading === 'monthly' && <Loader2 size={14} className="animate-spin" />}
-                  $4.99/month
-                </button>
-                <button
-                  onClick={() => handleStripeCheckout('yearly')}
-                  disabled={!!checkoutLoading}
-                  className="flex items-center gap-2 px-6 py-2.5 glass border border-primary/20 hover:border-primary text-foreground rounded-xl text-sm font-bold transition-all disabled:opacity-60"
-                >
-                  {checkoutLoading === 'yearly' && <Loader2 size={14} className="animate-spin" />}
-                  $29.99/year <span className="text-profit">(-50%)</span>
-                </button>
-              </div>
-              <p className="text-xs text-muted mt-3 flex items-center gap-1">
-                <Shield size={12} />
-                Secure payment via Stripe. Cancel anytime.
+              <a
+                href={APP_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2.5 px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-bold transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
+              >
+                <Smartphone size={16} />
+                Subscribe via iOS App
+                <ExternalLink size={12} className="opacity-60" />
+              </a>
+              <p className="text-xs text-muted mt-3 flex items-center gap-1.5">
+                <Smartphone size={12} />
+                PRO is available through the SkinKeeper iOS app. Your subscription works across all platforms.
               </p>
             </div>
           </motion.div>
@@ -382,7 +336,7 @@ function SettingsContent() {
             initial="hidden" animate="show" variants={fadeUp}
             className="glass rounded-2xl border border-warning/20 p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-warning/10">
                   <Crown size={18} className="text-warning" />
@@ -396,14 +350,15 @@ function SettingsContent() {
                   )}
                 </div>
               </div>
-              <button
-                onClick={handleManageSubscription}
-                disabled={portalLoading}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl glass hover:bg-surface-light transition-colors disabled:opacity-60"
+              <a
+                href={APP_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl glass hover:bg-surface-light transition-colors"
               >
-                {portalLoading ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                Manage Subscription
-              </button>
+                <ExternalLink size={14} />
+                Manage in App Store
+              </a>
             </div>
           </motion.div>
         )}

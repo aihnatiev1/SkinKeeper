@@ -1149,7 +1149,7 @@ router.post("/demo", async (req: Request, res: Response) => {
         await pool.query(
           `INSERT INTO daily_pl_snapshots (user_id, snapshot_date, total_invested_cents, total_current_value_cents, realized_profit_cents, unrealized_profit_cents, cumulative_profit_cents)
            VALUES ($1, CURRENT_DATE - $2::int, $3, $4, $5, $6, $7)
-           ON CONFLICT (user_id, snapshot_date) DO NOTHING`,
+           ON CONFLICT DO NOTHING`,
           [userId, d, totalInvested, dayValue, realized, unrealized, realized + unrealized]
         );
       }

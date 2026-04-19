@@ -1,8 +1,10 @@
 'use client';
 
 import { useAuthStore } from '@/lib/store';
-import { Crown } from 'lucide-react';
+import { Crown, Smartphone, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+
+const APP_STORE_URL = 'https://apps.apple.com/ua/app/skinkeeper/id6760600231?l=uk';
 
 interface PremiumGateProps {
   children: React.ReactNode;
@@ -39,15 +41,18 @@ export function PremiumGate({ children, feature, inline }: PremiumGateProps) {
         {feature ? `${feature} is a PRO feature` : 'PRO feature'}
       </h3>
       <p className="text-xs text-muted mb-4">
-        Upgrade to SkinKeeper PRO to unlock this and more.
+        Subscribe to SkinKeeper PRO via the iOS app. Works across all platforms.
       </p>
-      <Link
-        href="/settings#premium"
+      <a
+        href={APP_STORE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
         className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-warning to-orange-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-warning/25 transition-all"
       >
-        <Crown size={14} />
-        Upgrade to PRO
-      </Link>
+        <Smartphone size={14} />
+        Get PRO on iOS
+        <ExternalLink size={10} className="opacity-60" />
+      </a>
     </div>
   );
 }

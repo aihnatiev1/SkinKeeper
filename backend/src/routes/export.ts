@@ -11,7 +11,7 @@ const router = Router();
 router.get(
   "/csv",
   authMiddleware,
-  /* requirePremium — disabled for testing */
+  requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const type = req.query.type as string | undefined;

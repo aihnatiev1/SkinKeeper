@@ -22,6 +22,14 @@ function LoginContent() {
   const redirect = searchParams.get('redirect') || '/portfolio';
   const isLogout = searchParams.get('logout') === '1';
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (isLogout) return;
+    authApi.getSession().then((s) => {
+      if (s.authenticated) router.replace(redirect);
+    });
+  }, [isLogout, redirect, router]);
+
   const [status, setStatus] = useState<'idle' | 'waiting' | 'error'>('idle');
   const [nonce, setNonce] = useState<string | null>(null);
 
