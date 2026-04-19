@@ -22,6 +22,10 @@ export interface ProxySlot {
   consecutive429s: Map<string, number>;
   /** domain -> last request timestamp (for rate limiting) */
   lastRequestAt: Map<string, number>;
+  /** domain -> current adaptive gap (ms). Undefined = use base rate limit. AIMD: ×2 on 429, −500ms per 20 successes down to base. */
+  adaptiveGap: Map<string, number>;
+  /** domain -> consecutive success count since last 429 (for additive decrease). */
+  successStreak: Map<string, number>;
   totalRequests: number;
   total429s: number;
   totalSuccesses: number;
@@ -34,6 +38,7 @@ export interface PoolStats {
     total429s: number;
     totalSuccesses: number;
     cooldowns: Record<string, string>;
+    adaptiveGaps: Record<string, string>;
   }>;
 }
 
@@ -72,11 +77,21 @@ function makeSlot(index: number, name: string, agent: HttpsProxyAgent<string> | 
     cooldowns: new Map(),
     consecutive429s: new Map(),
     lastRequestAt: new Map(),
+    adaptiveGap: new Map(),
+    successStreak: new Map(),
     totalRequests: 0,
     total429s: 0,
     totalSuccesses: 0,
   };
 }
+
+// ─── AIMD tuning ────────────────────────────────────────────────────────
+// Per-slot, per-domain gap auto-adjusts between base rate limit and cap.
+//   429 → multiplicative increase: gap × 2
+//   N successes in a row → additive decrease: gap − ADDITIVE_DECREASE_MS
+const ADAPTIVE_GAP_CAP_MS = 60_000;
+const ADAPTIVE_SUCCESS_STREAK_FOR_DECREASE = 20;
+const ADAPTIVE_DECREASE_MS = 500;
 
 // ─── Per-Domain Rate Limits (play rate) ─────────────────────────────────
 //
@@ -101,6 +116,15 @@ export function setDomainRateLimit(domain: string, minIntervalMs: number): void 
 }
 
 /**
+ * Effective gap for a slot+domain: adaptive gap if set, otherwise base rate limit.
+ */
+function effectiveGap(slot: ProxySlot, domain: string): number {
+  const base = domainRateLimits.get(domain) ?? 0;
+  const adapted = slot.adaptiveGap.get(domain);
+  return adapted !== undefined ? adapted : base;
+}
+
+/**
  * Wait until it's safe to send a request to `domain` from `slot`.
  * Returns immediately if enough time has passed; otherwise sleeps.
  */
@@ -108,7 +132,7 @@ export async function waitForRate(slotIndex: number, domain: string): Promise<vo
   const slot = slots[slotIndex];
   if (!slot) return;
 
-  const minGap = domainRateLimits.get(domain);
+  const minGap = effectiveGap(slot, domain);
   if (!minGap) return; // no rate limit configured for this domain
 
   const lastReq = slot.lastRequestAt.get(domain) ?? 0;
@@ -126,7 +150,7 @@ export async function waitForRate(slotIndex: number, domain: string): Promise<vo
 export function isSlotReady(slotIndex: number, domain: string): boolean {
   const slot = slots[slotIndex];
   if (!slot) return false;
-  const minGap = domainRateLimits.get(domain);
+  const minGap = effectiveGap(slot, domain);
   if (!minGap) return true;
   const lastReq = slot.lastRequestAt.get(domain) ?? 0;
   return (Date.now() - lastReq) >= minGap;
@@ -180,6 +204,23 @@ export function isSlotAvailable(slotIndex: number, domain: string): boolean {
   return (slot.cooldowns.get(domain) ?? 0) <= Date.now();
 }
 
+/**
+ * Returns the earliest timestamp at which *some* slot will be available for this domain.
+ * If any slot is available now (or no slots are configured), returns Date.now().
+ * Used by schedulers to park the whole loop instead of busy-looping on 429s.
+ */
+export function getSoonestAvailableTime(domain: string): number {
+  const now = Date.now();
+  if (slots.length === 0) return now;
+  let earliest = Infinity;
+  for (const s of slots) {
+    const cd = s.cooldowns.get(domain) ?? 0;
+    if (cd <= now) return now;
+    if (cd < earliest) earliest = cd;
+  }
+  return Number.isFinite(earliest) ? earliest : now;
+}
+
 // ─── 429 / Success Tracking ─────────────────────────────────────────────
 
 /**
@@ -210,13 +251,27 @@ export function recordSlot429(
   }
 
   slot.cooldowns.set(domain, Date.now() + cooldownMs);
+
+  // AIMD multiplicative-increase: double the adaptive gap. Cap at max(60s, base × 10)
+  // so domains with a large base gap (e.g. skinport at 120s) can still escalate further
+  // on repeated 429s instead of being clamped below their own base.
+  const base = domainRateLimits.get(domain) ?? 0;
+  if (base > 0) {
+    const cap = Math.max(ADAPTIVE_GAP_CAP_MS, base * 10);
+    const cur = slot.adaptiveGap.get(domain) ?? base;
+    const next = Math.min(cap, Math.max(base, cur * 2));
+    slot.adaptiveGap.set(domain, next);
+  }
+  slot.successStreak.set(domain, 0);
+
   console.log(
-    `[ProxyPool] ${slot.name} got 429 for ${domain} (${count}x) — cooldown ${Math.ceil(cooldownMs / 1000)}s`
+    `[ProxyPool] ${slot.name} got 429 for ${domain} (${count}x) — cooldown ${Math.ceil(cooldownMs / 1000)}s, gap→${Math.ceil((slot.adaptiveGap.get(domain) ?? 0) / 1000)}s`
   );
 }
 
 /**
  * Record success for a slot + domain. Resets consecutive 429 counter.
+ * After a streak of successes, additively decrease the adaptive gap (AIMD).
  */
 export function recordSlotSuccess(slotIndex: number, domain: string): void {
   const slot = slots[slotIndex];
@@ -224,6 +279,24 @@ export function recordSlotSuccess(slotIndex: number, domain: string): void {
   slot.totalSuccesses++;
   slot.totalRequests++;
   slot.consecutive429s.set(domain, 0);
+
+  const base = domainRateLimits.get(domain) ?? 0;
+  if (base <= 0) return;
+
+  const streak = (slot.successStreak.get(domain) ?? 0) + 1;
+  slot.successStreak.set(domain, streak);
+
+  if (streak >= ADAPTIVE_SUCCESS_STREAK_FOR_DECREASE) {
+    const cur = slot.adaptiveGap.get(domain) ?? base;
+    const next = Math.max(base, cur - ADAPTIVE_DECREASE_MS);
+    if (next !== cur) {
+      slot.adaptiveGap.set(domain, next);
+      console.log(
+        `[ProxyPool] ${slot.name} ${domain} gap→${Math.ceil(next / 1000)}s after ${streak} successes`
+      );
+    }
+    slot.successStreak.set(domain, 0);
+  }
 }
 
 // ─── High-Level Request Helper ───────────────────────────────────────────
@@ -315,12 +388,18 @@ export function getPoolStats(): PoolStats {
           cooldowns[domain] = `${Math.ceil((until - now) / 1000)}s remaining`;
         }
       }
+      const adaptiveGaps: Record<string, string> = {};
+      for (const [domain, gap] of s.adaptiveGap) {
+        const base = domainRateLimits.get(domain) ?? 0;
+        adaptiveGaps[domain] = `${Math.ceil(gap / 1000)}s (base ${Math.ceil(base / 1000)}s)`;
+      }
       return {
         name: s.name,
         totalRequests: s.totalRequests,
         total429s: s.total429s,
         totalSuccesses: s.totalSuccesses,
         cooldowns,
+        adaptiveGaps,
       };
     }),
   };

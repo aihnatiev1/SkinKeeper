@@ -14,6 +14,7 @@ import {
   recordSlot429,
   recordSlotSuccess,
   waitForRate,
+  getSoonestAvailableTime,
 } from "./proxyPool.js";
 
 interface SkinportItem {
@@ -955,54 +956,165 @@ export async function pruneOldPrices(): Promise<void> {
 // The batch crawler (/market/search/render/) is demoted to COLD background —
 // used for analytics, charts, non-inventory items.
 
-const HOT_LOOP_GAP_MS = 5_000;       // 5s between requests per slot
-const HOT_LOOP_PAUSE_MS = 60_000;    // 1 min pause when hot set is empty
-const HOT_LOOP_429_PAUSE_MS = 120_000; // 2 min pause per slot on 429
+const HOT_LOOP_GAP_MS = 5_000;          // 5s between requests per slot
+const HOT_LOOP_PAUSE_MS = 60_000;       // 1 min pause when hot set is empty
+const HOT_LOOP_COOLING_MAX_MS = 60_000; // re-check every ≤60s while all slots are cooling
+const HOT_STEAM_DOMAIN = "steamcommunity.com";
+const HOT_MAX_REQUEUES = 3;             // drop an item after N 429 re-queues within one cycle
+const HOT_COLD_TIER_CAP = 300;          // max cold items per cycle — hot (alert-linked) always in full
+const HOT_FRESH_AFTER_MIN = 30;         // hot-tier items refetched if older than 30 min
+const HOT_COLD_FRESH_AFTER_MIN = 60;    // cold-tier items refetched if older than 60 min
 let hotLoopRunning = false;
 let hotLoopStopped = false;
 
+/** What the main loop is currently doing — for metrics. */
+type HotLoopState = "idle" | "running" | "cooling";
+let hotLoopCurrentState: HotLoopState = "idle";
+
 interface HotLoopStats {
   running: boolean;
+  state: HotLoopState;
   cycleCount: number;
   totalUpdated: number;
   lastCycleItems: number;
+  lastCycleHotItems: number;
+  lastCycleColdItems: number;
   lastCycleDurationMs: number;
+  soonestSlotAvailableAt: string | null;
 }
 
 const hotStats: HotLoopStats = {
   running: false,
+  state: "idle",
   cycleCount: 0,
   totalUpdated: 0,
   lastCycleItems: 0,
+  lastCycleHotItems: 0,
+  lastCycleColdItems: 0,
   lastCycleDurationMs: 0,
+  soonestSlotAvailableAt: null,
 };
 
 export function getHotLoopStats(): HotLoopStats {
-  return { ...hotStats };
+  const now = Date.now();
+  const soonest = getSoonestAvailableTime(HOT_STEAM_DOMAIN);
+  return {
+    ...hotStats,
+    state: hotLoopCurrentState,
+    soonestSlotAvailableAt: soonest > now ? new Date(soonest).toISOString() : null,
+  };
+}
+
+interface HotSet {
+  items: string[];        // alert-linked items first, then cold, capped
+  hotCount: number;       // how many of `items` are alert-linked
+  coldCount: number;      // how many are non-alert
 }
 
 /**
- * Get the next batch of inventory items sorted by oldest steam price.
- * Returns items that need a refresh — oldest first, NULLs first.
+ * Build the refresh set for one cycle.
+ *
+ * Tier-split for rate-limit resilience:
+ *   HOT  = items with an active price_alert. Always included in full, rerefreshed
+ *          after 30 min so alerts see recent prices.
+ *   COLD = inventory items without alerts. Capped at HOT_COLD_TIER_CAP per cycle,
+ *          and only when older than 60 min. Under 429 pressure these drop first.
+ *
+ * Items are ordered alert-first, oldest-first, so even a partial cycle keeps
+ * alert-backed prices current.
  */
-async function getHotSet(): Promise<string[]> {
+async function getHotSet(): Promise<HotSet> {
   const { rows } = await pool.query(
-    `SELECT ii.market_hash_name,
-            cp.updated_at
-     FROM (SELECT DISTINCT market_hash_name FROM inventory_items) ii
-     LEFT JOIN current_prices cp
-       ON cp.market_hash_name = ii.market_hash_name
-       AND cp.source = 'steam'
-     WHERE cp.updated_at IS NULL
-        OR cp.updated_at < NOW() - INTERVAL '1 hour'
-     ORDER BY cp.updated_at ASC NULLS FIRST`
+    `WITH alert_items AS (
+        SELECT DISTINCT market_hash_name
+        FROM price_alerts
+        WHERE is_active = TRUE
+          AND (source = 'steam' OR source = 'any')
+     ),
+     candidates AS (
+        SELECT ii.market_hash_name,
+               cp.updated_at,
+               (ai.market_hash_name IS NOT NULL) AS has_alert
+        FROM (SELECT DISTINCT market_hash_name FROM inventory_items) ii
+        LEFT JOIN current_prices cp
+          ON cp.market_hash_name = ii.market_hash_name AND cp.source = 'steam'
+        LEFT JOIN alert_items ai
+          ON ai.market_hash_name = ii.market_hash_name
+        WHERE cp.updated_at IS NULL
+           OR (ai.market_hash_name IS NOT NULL AND cp.updated_at < NOW() - INTERVAL '${HOT_FRESH_AFTER_MIN} minutes')
+           OR (ai.market_hash_name IS NULL     AND cp.updated_at < NOW() - INTERVAL '${HOT_COLD_FRESH_AFTER_MIN} minutes')
+     ),
+     ranked AS (
+        SELECT market_hash_name,
+               updated_at,
+               has_alert,
+               ROW_NUMBER() OVER (
+                 PARTITION BY has_alert
+                 ORDER BY updated_at ASC NULLS FIRST
+               ) AS rn
+        FROM candidates
+     )
+     SELECT market_hash_name, has_alert
+     FROM ranked
+     WHERE has_alert = TRUE OR rn <= $1
+     ORDER BY has_alert DESC, updated_at ASC NULLS FIRST`,
+    [HOT_COLD_TIER_CAP]
   );
-  return rows.map((r: any) => r.market_hash_name);
+
+  const items: string[] = [];
+  let hotCount = 0;
+  let coldCount = 0;
+  for (const r of rows) {
+    items.push(r.market_hash_name);
+    if (r.has_alert) hotCount++;
+    else coldCount++;
+  }
+  return { items, hotCount, coldCount };
+}
+
+/**
+ * Shared queue used by all HotSteam workers during one cycle.
+ * Supports re-queueing items that hit 429, with a per-item cap to prevent loops.
+ */
+interface HotQueue {
+  take(): string | null;
+  requeue(name: string): void;
+  remaining(): number;
+}
+
+function makeHotQueue(initial: string[]): HotQueue {
+  let cursor = 0;
+  const backlog: string[] = [];
+  const requeueCount = new Map<string, number>();
+  return {
+    take(): string | null {
+      if (cursor < initial.length) return initial[cursor++];
+      return backlog.shift() ?? null;
+    },
+    requeue(name: string): void {
+      const n = (requeueCount.get(name) ?? 0) + 1;
+      if (n > HOT_MAX_REQUEUES) return; // drop: next cycle picks it up oldest-first
+      requeueCount.set(name, n);
+      backlog.push(name);
+    },
+    remaining(): number {
+      return (initial.length - cursor) + backlog.length;
+    },
+  };
 }
 
 /**
  * Start the hot steam price loop. Runs forever until stopHotSteamLoop().
  * Parallel workers — one per proxy slot — pull from a shared queue.
+ *
+ * Rate-limit architecture:
+ *   - ProxyPool owns all cooldown state (per-slot, per-domain).
+ *   - Workers honor the pool: if their slot is in cooldown they exit the cycle.
+ *   - Main loop acts as a global circuit breaker: if no slot is available for
+ *     steamcommunity.com, it parks until the soonest cooldown expires instead
+ *     of spawning workers that would immediately hit the same 429 wall.
+ *   - On 429 the failed item is re-queued for a different slot; the pool
+ *     decides the actual cooldown using the server's Retry-After header.
  */
 export function startHotSteamLoop(): void {
   if (hotLoopRunning) return;
@@ -1018,41 +1130,55 @@ export function startHotSteamLoop(): void {
   // Main loop — runs in background
   (async () => {
     while (!hotLoopStopped) {
+      // Circuit breaker: park the whole loop if every slot is cooling down.
+      const soonest = getSoonestAvailableTime(HOT_STEAM_DOMAIN);
+      if (soonest > Date.now()) {
+        hotLoopCurrentState = "cooling";
+        const waitMs = Math.min(
+          HOT_LOOP_COOLING_MAX_MS,
+          soonest - Date.now() + Math.floor(Math.random() * 3_000),
+        );
+        console.warn(
+          `[HotSteam] All slots cooling — parking ${Math.ceil(waitMs / 1000)}s`
+        );
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+
       const cycleStart = Date.now();
 
       try {
         const hotSet = await getHotSet();
 
-        if (hotSet.length === 0) {
+        if (hotSet.items.length === 0) {
+          hotLoopCurrentState = "idle";
           await new Promise((r) => setTimeout(r, HOT_LOOP_PAUSE_MS));
           continue;
         }
 
-        // Shared queue — workers pull from it concurrently
-        let cursor = 0;
-        const nextItem = (): string | null => {
-          if (cursor >= hotSet.length) return null;
-          return hotSet[cursor++];
-        };
-
+        hotLoopCurrentState = "running";
+        const queue = makeHotQueue(hotSet.items);
         let cycleUpdated = 0;
 
-        // Launch parallel workers
         const workers = Array.from({ length: slotCount }, (_, slotIdx) =>
-          hotWorker(slotIdx, nextItem).then((n) => { cycleUpdated += n; })
+          hotWorker(slotIdx, queue).then((n) => { cycleUpdated += n; })
         );
 
         await Promise.allSettled(workers);
 
-        // Update stats
         hotStats.cycleCount++;
         hotStats.totalUpdated += cycleUpdated;
-        hotStats.lastCycleItems = hotSet.length;
+        hotStats.lastCycleItems = hotSet.items.length;
+        hotStats.lastCycleHotItems = hotSet.hotCount;
+        hotStats.lastCycleColdItems = hotSet.coldCount;
         hotStats.lastCycleDurationMs = Date.now() - cycleStart;
 
         const durationSec = (hotStats.lastCycleDurationMs / 1000).toFixed(0);
+        const skipped = queue.remaining();
         console.log(
-          `[HotSteam] Cycle #${hotStats.cycleCount}: ${cycleUpdated}/${hotSet.length} updated in ${durationSec}s`
+          `[HotSteam] Cycle #${hotStats.cycleCount}: ${cycleUpdated}/${hotSet.items.length} updated ` +
+          `(hot=${hotSet.hotCount} cold=${hotSet.coldCount}) in ${durationSec}s` +
+          (skipped > 0 ? ` — ${skipped} deferred (slots cooling)` : "")
         );
       } catch (err) {
         console.error("[HotSteam] Cycle error:", err);
@@ -1062,25 +1188,36 @@ export function startHotSteamLoop(): void {
 
     hotLoopRunning = false;
     hotStats.running = false;
+    hotLoopCurrentState = "idle";
     console.log("[HotSteam] Loop stopped");
   })();
 }
 
-/** Single worker — pulls items from shared queue, fetches prices via its slot */
+/**
+ * Single worker — one per proxy slot. Pulls items from the shared queue,
+ * fetches prices, and yields back to the main loop if its slot goes into
+ * cooldown. The pool is the single source of truth for backoff timing.
+ */
 async function hotWorker(
   slotIdx: number,
-  nextItem: () => string | null
+  queue: HotQueue,
 ): Promise<number> {
   const { getMarketPrice } = await import("./market.js");
   const slotName = getSlot(slotIdx)?.name ?? `slot${slotIdx}`;
   let updated = 0;
-  let consecutive429s = 0;
 
   while (!hotLoopStopped) {
-    const name = nextItem();
-    if (name === null) break; // queue exhausted
+    // If the pool put my slot on cooldown, exit the cycle — don't bang the wall.
+    // Main loop's circuit breaker will park until we're welcome back.
+    if (!isSlotAvailable(slotIdx, HOT_STEAM_DOMAIN)) {
+      console.warn(`[HotSteam:${slotName}] slot cooling — yielding to main loop`);
+      return updated;
+    }
 
-    await waitForRate(slotIdx, "steamcommunity.com");
+    const name = queue.take();
+    if (name === null) return updated; // queue drained
+
+    await waitForRate(slotIdx, HOT_STEAM_DOMAIN);
 
     try {
       const info = await getMarketPrice(name, 1, slotIdx);
@@ -1088,25 +1225,17 @@ async function hotWorker(
         await savePrices(new Map([[name, info.lowestPrice / 100]]), "steam");
         updated++;
       }
-      recordSlotSuccess(slotIdx, "steamcommunity.com");
-      consecutive429s = 0;
+      recordSlotSuccess(slotIdx, HOT_STEAM_DOMAIN);
     } catch (err: any) {
       const status = err?.response?.status;
       if (status === 429) {
-        consecutive429s++;
+        const retryAfter = parseInt(err?.response?.headers?.["retry-after"] || "0", 10);
         record429("steam");
-        recordSlot429(slotIdx, "steamcommunity.com");
-        // Exponential backoff: 30s, 60s, 120s, then cap at 120s
-        const backoffMs = Math.min(HOT_LOOP_429_PAUSE_MS, 30_000 * Math.pow(2, consecutive429s - 1));
-        console.warn(`[HotSteam:${slotName}] ${consecutive429s}× 429 — pausing ${backoffMs / 1000}s`);
-        await new Promise((r) => setTimeout(r, backoffMs));
-        if (consecutive429s >= 5) {
-          // Too many 429s — bail out of this cycle
-          break;
-        }
-        continue; // retry — nextItem already advanced
+        recordSlot429(slotIdx, HOT_STEAM_DOMAIN, retryAfter > 0 ? retryAfter : undefined);
+        queue.requeue(name); // give another slot a chance
+        // Loop head will see the cooldown on next iteration and exit cleanly.
       }
-      // Non-429 — skip item
+      // Non-429 errors (timeouts, parse failures) — drop this item for the cycle.
     }
 
     await new Promise((r) => setTimeout(r, HOT_LOOP_GAP_MS));
