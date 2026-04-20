@@ -75,8 +75,7 @@ export async function fetchInspectData(
       stickers,
       charms,
     };
-  } catch (err: any) {
-    console.warn(`[Inspect] Failed to decode inspect link locally: ${err.message}`);
+  } catch {
     return { failed: true, reason: "api_error" };
   }
 }
@@ -125,11 +124,21 @@ export async function inspectItem(
         charms: parseJSON(item.charms),
       };
     }
+
+    if (age < INSPECT_FAIL_CACHE_MS && item.float_value == null) {
+      return { failed: true, reason: "api_error" };
+    }
   }
 
   const result = await fetchInspectData(item.inspect_link);
 
   if ("failed" in result) {
+    if (result.reason === "api_error") {
+      await pool.query(
+        `UPDATE inventory_items SET inspected_at = NOW() WHERE id = $1`,
+        [item.id]
+      );
+    }
     return result;
   }
 
