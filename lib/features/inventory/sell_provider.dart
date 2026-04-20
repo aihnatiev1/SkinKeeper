@@ -248,7 +248,7 @@ class SellOperationNotifier extends AsyncNotifier<SellOperation?> {
       final api = ref.read(apiClientProvider);
       final refreshResponse = await api.post('/market/refresh-prices', data: {
         'names': uniqueNames,
-        if (accountId != null) 'accountId': accountId,
+        'accountId': ?accountId,
       }).timeout(
         Duration(seconds: 10 + uniqueNames.length * 2),
         onTimeout: () => throw TimeoutException('refresh-prices timeout'),

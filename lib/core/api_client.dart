@@ -34,10 +34,26 @@ bool isTokenExpired(dynamic e) {
 }
 
 /// Extract a user-friendly message from any error (Dio or otherwise).
+/// Messages include actionable next steps — users should know what to try
+/// next, not just that something failed.
 String friendlyError(dynamic e) {
   if (e is DioException) {
     final data = e.response?.data;
     if (data is Map) {
+      final code = data['code'] as String?;
+      // Known backend codes → actionable guidance
+      switch (code) {
+        case 'TOKEN_EXPIRED':
+          return 'Session expired — please log in again';
+        case 'STEAM_UNAVAILABLE':
+          return 'Steam is down — try again in a few minutes';
+        case 'RATE_LIMITED':
+          return 'Too many requests — wait a minute and retry';
+        case 'INVENTORY_PRIVATE':
+          return 'Inventory is private — change it to public in Steam settings';
+        case 'ACCOUNT_LIMITED':
+          return 'Steam account limited — enable mobile authenticator in Steam';
+      }
       final msg = data['error'] ?? data['message'];
       if (msg is String && msg.isNotEmpty) return msg;
     }
@@ -45,16 +61,22 @@ String friendlyError(dynamic e) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return 'Connection timed out';
+        return 'Connection timed out — check your internet and retry';
       case DioExceptionType.connectionError:
-        return 'No internet connection';
+        return 'No internet connection — check Wi-Fi or mobile data';
       default:
         final code = e.response?.statusCode;
-        if (code != null) return 'Request failed ($code)';
-        return 'Connection error';
+        if (code == 401 || code == 403) {
+          return 'Access denied — try logging in again';
+        }
+        if (code == 500 || code == 502 || code == 503) {
+          return 'Our server is having a moment — retry in a bit';
+        }
+        if (code != null) return 'Request failed ($code) — please retry';
+        return 'Connection error — check your internet';
     }
   }
-  return 'Something went wrong';
+  return 'Something went wrong — try again or restart the app';
 }
 
 class ApiClient {

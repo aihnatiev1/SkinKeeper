@@ -50,7 +50,10 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new_rounded,
                         size: 20, color: AppTheme.textSecondary),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      Analytics.paywallDismissed(reason: 'close_button');
+                      Navigator.of(context).pop();
+                    },
                   ),
                   const Expanded(
                     child: Text(

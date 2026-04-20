@@ -480,7 +480,7 @@ class SectionHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(title, style: AppTheme.title),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );
@@ -732,7 +732,7 @@ class AppListTile extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) trailing!,
+            ?trailing,
             if (onTap != null && trailing == null)
               const Icon(
                 Icons.chevron_right,

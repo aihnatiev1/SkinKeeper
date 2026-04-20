@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../widgets/account_scope_chip.dart';
-import '../../../widgets/sync_indicator.dart';
 import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
 import 'filter_sheet.dart';

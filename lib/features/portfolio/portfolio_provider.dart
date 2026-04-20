@@ -1,6 +1,5 @@
 import 'dart:developer' as dev;
 
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';

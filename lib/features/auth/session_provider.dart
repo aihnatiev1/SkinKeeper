@@ -367,8 +367,8 @@ class ClientTokenAuthNotifier extends StateNotifier<ClientTokenAuthState> {
 
       final response = await api.post(endpoint, data: {
         'steamLoginSecure': steamLoginSecure,
-        if (sessionId != null) 'sessionId': sessionId,
-        if (steamRefreshToken != null) 'steamRefreshToken': steamRefreshToken,
+        'sessionId': ?sessionId,
+        'steamRefreshToken': ?steamRefreshToken,
       });
 
       final data = response.data as Map<String, dynamic>;

@@ -266,7 +266,7 @@ class TransactionsScreen extends ConsumerWidget {
                     return Center(
                       child: Text(
                         activeFilter != null
-                            ? 'No ${activeFilter} transactions found.'
+                            ? 'No $activeFilter transactions found.'
                             : 'No transactions.\nTap sync to fetch from Steam.',
                         textAlign: TextAlign.center,
                         style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),

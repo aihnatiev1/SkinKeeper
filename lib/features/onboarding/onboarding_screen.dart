@@ -283,7 +283,7 @@ class _OnboardingPage extends StatelessWidget {
                     child: Image.asset(
                       data.image!,
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         decoration: BoxDecoration(
                           color: AppTheme.surface,
                           borderRadius: BorderRadius.circular(20),

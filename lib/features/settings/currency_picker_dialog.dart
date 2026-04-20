@@ -110,7 +110,7 @@ class _CurrencyPickerSheet extends StatefulWidget {
 }
 
 class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
-  String _search = '';
+  final String _search = '';
 
   List<_SteamCurrency> get _filtered {
     if (_search.isEmpty) return widget.currencies;

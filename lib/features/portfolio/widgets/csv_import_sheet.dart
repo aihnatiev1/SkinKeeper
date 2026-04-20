@@ -137,7 +137,7 @@ class _CsvImportSheetState extends ConsumerState<CsvImportSheet> {
           'qty': r.qty,
           'price_usd': r.priceUsd,
           if (r.date != null) 'date': r.date,
-          if (portfolioId != null) 'portfolio_id': portfolioId,
+          'portfolio_id': ?portfolioId,
         }).toList(),
       });
       final imported = res.data['imported'] as int;

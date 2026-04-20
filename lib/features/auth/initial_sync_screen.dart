@@ -11,7 +11,6 @@ import '../../features/portfolio/portfolio_provider.dart';
 import '../../features/portfolio/portfolio_pl_provider.dart';
 import '../../features/trades/trades_provider.dart';
 import '../../features/transactions/transactions_provider.dart';
-import '../../features/settings/accounts_provider.dart';
 
 enum _StepStatus { waiting, syncing, done, error }
 

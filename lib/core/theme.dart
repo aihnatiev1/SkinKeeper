@@ -631,9 +631,12 @@ class AppTheme {
   /// Profit/loss color
   static Color plColor(num value) => value >= 0 ? profit : loss;
 
-  /// Percentage text with sign
+  /// Percentage text with sign and directional arrow.
+  /// The arrow is essential for colorblind accessibility — ~8% of male users
+  /// cannot reliably distinguish profit-green from loss-red.
   static String pctText(double value, {int decimals = 1}) {
     final prefix = value >= 0 ? '+' : '';
-    return '$prefix${value.toStringAsFixed(decimals)}%';
+    final arrow = value >= 0 ? '↑' : '↓';
+    return '$arrow $prefix${value.toStringAsFixed(decimals)}%';
   }
 }

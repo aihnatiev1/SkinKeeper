@@ -1,12 +1,10 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../models/inventory_item.dart';
 import '../auth/session_provider.dart';
-import '../purchases/iap_service.dart';
 
 /// Whether the active account has a valid Steam session.
 /// Used to gate sell/trade UI elements without blocking inventory display.

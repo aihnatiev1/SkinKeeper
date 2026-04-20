@@ -1750,7 +1750,7 @@ class _StickerValueRow extends StatelessWidget {
               ),
             ),
             child: Text(
-              'Sticker Overpay: ${overpayPct!.round()}%',
+              'Sticker Overpay: ${overpayPct.round()}%',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

@@ -42,10 +42,25 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   @override
   bool get wantKeepAlive => true;
 
+  bool _inventoryViewedLogged = false;
+
   @override
   void initState() {
     super.initState();
     Analytics.screen('inventory');
+    // Richer funnel event — captures item_count + totalValue so we can
+    // segment "empty inventory" drop-off from "loaded inventory" retention.
+    ref.listenManual(inventoryProvider, (prev, next) {
+      if (_inventoryViewedLogged) return;
+      next.whenData((items) {
+        if (_inventoryViewedLogged) return;
+        _inventoryViewedLogged = true;
+        final totalValue = items.fold<double>(
+            0, (sum, it) => sum + (it.currentPriceCents / 100));
+        Analytics.inventoryViewed(
+            itemCount: items.length, totalValue: totalValue);
+      });
+    });
   }
 
   Future<void> _showSellSheet(List<InventoryItem> items) async {

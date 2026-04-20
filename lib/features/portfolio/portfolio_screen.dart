@@ -21,7 +21,6 @@ import '../../widgets/premium_gate.dart';
 import '../../widgets/shared_ui.dart';
 import '../../widgets/sync_indicator.dart';
 import '../auth/session_gate.dart';
-import '../auth/widgets/session_status_widget.dart';
 import '../inventory/inventory_provider.dart';
 import '../trades/trades_provider.dart';
 import '../transactions/transactions_provider.dart';
@@ -50,10 +49,22 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
   @override
   bool get wantKeepAlive => true;
 
+  bool _portfolioViewedLogged = false;
+
   @override
   void initState() {
     super.initState();
     Analytics.screen('portfolio');
+    // Richer funnel event: fires once when P/L data resolves so we capture
+    // actual totalValue for segmentation (empty vs $10 vs $1000 portfolios).
+    ref.listenManual(portfolioPLProvider, (prev, next) {
+      if (_portfolioViewedLogged) return;
+      next.whenData((data) {
+        if (_portfolioViewedLogged) return;
+        _portfolioViewedLogged = true;
+        Analytics.portfolioViewed(totalValue: data.totalCurrentValue);
+      });
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initSequence();
       _backgroundRefresh();
@@ -198,7 +209,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
 
             // ── Thin progress bar during background sync ──
             SliverToBoxAdapter(
-              child: Consumer(builder: (_, ref, __) {
+              child: Consumer(builder: (_, ref, _) {
                 final syncing = ref.watch(syncStateProvider.select((s) => s.isSyncing));
                 if (!syncing) return const SizedBox.shrink();
                 return const LinearProgressIndicator(
@@ -212,14 +223,17 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
             // ── Sync banner (shows during background sync after login) ──
             SliverToBoxAdapter(child: _SyncBanner()),
 
-            // ── Stale data warning (when portfolio cache is old) ──
+            // ── Stale data warning — trader-grade threshold ──
+            // Banner appears at 15 min. Below that, the persistent
+            // "Updated Nm ago" timestamp near the value is enough signal.
             if (portfolio.hasValue) SliverToBoxAdapter(
               child: Builder(builder: (_) {
                 final lastSync = CacheService.lastSync;
                 final isStale = lastSync != null &&
-                    DateTime.now().difference(lastSync).inHours >= 2;
+                    DateTime.now().difference(lastSync).inMinutes >= 15;
                 if (!isStale) return const SizedBox.shrink();
                 return StaleDataBanner(
+                  lastSync: lastSync,
                   onRefresh: () {
                     ref.invalidate(portfolioProvider);
                     ref.read(portfolioPLProvider.notifier).refresh();
@@ -395,6 +409,25 @@ class _SessionNudgeBanner extends ConsumerWidget {
 }
 
 // ── P/L Quick Summary (always visible) ─────────────────────
+/// Compact "Updated Nm ago" label. Returns "·" placeholder when no sync yet.
+String _formatAgeLabel(DateTime? lastSync) {
+  if (lastSync == null) return '';
+  final diff = DateTime.now().difference(lastSync);
+  if (diff.inMinutes < 1) return '· JUST NOW';
+  if (diff.inMinutes < 60) return '· ${diff.inMinutes}M AGO';
+  if (diff.inHours < 24) return '· ${diff.inHours}H AGO';
+  return '· ${diff.inDays}D AGO';
+}
+
+/// Age-based colour: muted under 15m, amber 15-60m, red beyond.
+Color _ageLabelColor(DateTime? lastSync) {
+  if (lastSync == null) return AppTheme.textDisabled;
+  final mins = DateTime.now().difference(lastSync).inMinutes;
+  if (mins < 15) return AppTheme.textDisabled;
+  if (mins < 60) return Colors.amber;
+  return Colors.red;
+}
+
 class _PLQuickSummary extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -462,14 +495,29 @@ class _PLQuickSummary extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'TOTAL PROFIT',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: AppTheme.textDisabled,
-                      ),
+                    Row(
+                      children: [
+                        const Text(
+                          'TOTAL PROFIT',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                            color: AppTheme.textDisabled,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Price age disclosure — critical for trader trust.
+                        Text(
+                          _formatAgeLabel(CacheService.lastSync),
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.4,
+                            color: _ageLabelColor(CacheService.lastSync),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     FittedBox(
@@ -2358,7 +2406,7 @@ class _AnalyticsTab extends ConsumerWidget {
 // ── Rarity Breakdown ─────────────────────────────────────────────
 class _RarityBreakdown extends StatelessWidget {
   final List<_RarityEntry> entries;
-  const _RarityBreakdown({super.key, required this.entries});
+  const _RarityBreakdown({required this.entries});
 
   @override
   Widget build(BuildContext context) {
@@ -2428,7 +2476,7 @@ class _RarityBreakdown extends StatelessWidget {
 // ── Type Breakdown ───────────────────────────────────────────────
 class _TypeBreakdown extends StatelessWidget {
   final List<_TypeEntry> entries;
-  const _TypeBreakdown({super.key, required this.entries});
+  const _TypeBreakdown({required this.entries});
 
   static const _typeIcons = <String, IconData>{
     'Knives': Icons.content_cut_rounded,
@@ -2511,7 +2559,7 @@ class _TypeBreakdown extends StatelessWidget {
 class _TopStickers extends StatelessWidget {
   final List<_StickerEntry> entries;
   final CurrencyInfo currency;
-  const _TopStickers({super.key, required this.entries, required this.currency});
+  const _TopStickers({required this.entries, required this.currency});
 
   @override
   Widget build(BuildContext context) {

@@ -198,7 +198,7 @@ class _TxListState extends ConsumerState<_TxList> {
       child: ListView.separated(
         shrinkWrap: true,
         itemCount: _txs.length,
-        separatorBuilder: (_, _x) => Divider(height: 1, color: AppTheme.divider),
+        separatorBuilder: (_, x) => Divider(height: 1, color: AppTheme.divider),
         itemBuilder: (_, i) {
           final tx = _txs[i];
           final isBuy = tx.type == 'buy';

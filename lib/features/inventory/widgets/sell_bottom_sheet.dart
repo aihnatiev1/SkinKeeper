@@ -140,7 +140,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               'marketHashName': item.marketHashName,
               'priceCents': priceCentsPerItem,
               if (item.accountId != null) 'accountId': item.accountId,
-              if (priceCurrencyId != null) 'priceCurrencyId': priceCurrencyId,
+              'priceCurrencyId': ?priceCurrencyId,
             })
         .toList();
 

@@ -108,7 +108,7 @@ class Analytics {
   static Future<void> portfolioViewed({required double totalValue, int? portfolioId}) async {
     await _event('portfolio_viewed', {
       'total_value': totalValue,
-      if (portfolioId != null) 'portfolio_id': portfolioId,
+      'portfolio_id': ?portfolioId,
     });
   }
 
@@ -172,6 +172,12 @@ class Analytics {
 
   static Future<void> paywallViewed() async {
     await _event('paywall_viewed');
+  }
+
+  /// Tracks paywall exits — critical for conversion diagnosis.
+  /// [reason]: 'close_button', 'back_gesture', 'continue_free', 'purchase_failed'.
+  static Future<void> paywallDismissed({required String reason}) async {
+    await _event('paywall_dismissed', {'reason': reason});
   }
 
   static Future<void> premiumPurchased({required String plan}) async {

@@ -443,21 +443,17 @@ class ItemCard extends StatelessWidget {
 // ─── Account Name Badge (3D square style) ────────────────────────────
 class _AccountNameBadge extends StatelessWidget {
   final String? accountName;
-  final bool compact;
-  const _AccountNameBadge({required this.accountName, this.compact = false});
+  const _AccountNameBadge({required this.accountName});
 
   @override
   Widget build(BuildContext context) {
     final name = accountName ?? '?';
-    final maxLen = compact ? 8 : 14;
+    const maxLen = 14;
     final display = name.length > maxLen ? '${name.substring(0, maxLen)}…' : name;
     const color = AppTheme.primary;
     return Container(
       margin: const EdgeInsets.only(right: 4),
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 4 : 5,
-        vertical: compact ? 1 : 2,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(3),
@@ -465,8 +461,8 @@ class _AccountNameBadge extends StatelessWidget {
       ),
       child: Text(
         display,
-        style: TextStyle(
-          fontSize: compact ? 8 : 9,
+        style: const TextStyle(
+          fontSize: 9,
           fontWeight: FontWeight.w700,
           color: AppTheme.primaryLight,
           letterSpacing: 0.2,
@@ -524,12 +520,11 @@ class _AccountAvatar extends StatelessWidget {
 }
 
 class _AccountLetterDot extends StatelessWidget {
-  final String? name;
-  const _AccountLetterDot({this.name});
+  const _AccountLetterDot();
 
   @override
   Widget build(BuildContext context) {
-    final letter = (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
+    const letter = '?';
     return Container(
       width: 14,
       height: 14,
@@ -753,14 +748,20 @@ class _WearPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Web style: plain muted text, no border/background
-    return Text(
-      wear,
-      style: TextStyle(
-        fontSize: compact ? 9 : 10,
-        fontWeight: FontWeight.w300,
-        color: const Color(0xFF64748B),
-        letterSpacing: 0.5,
+    // Wrap in Tooltip so new CS2 players learn what FN/MW/FT/WW/BS mean
+    // (long-press on mobile, hover on desktop/web). Veteran traders keep
+    // the compact glyph — no terminology changes for them.
+    return Tooltip(
+      message: _wearFullNames[wear] ?? wear,
+      waitDuration: const Duration(milliseconds: 400),
+      child: Text(
+        wear,
+        style: TextStyle(
+          fontSize: compact ? 9 : 10,
+          fontWeight: FontWeight.w300,
+          color: const Color(0xFF64748B),
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -1079,9 +1080,8 @@ class _CharmThumb extends StatelessWidget {
 // ─── Rare Badge ─────────────────────────────────────────────────────
 class _RareBadge extends StatelessWidget {
   final String reason;
-  final bool compact;
 
-  const _RareBadge({required this.reason, this.compact = false});
+  const _RareBadge({required this.reason});
 
   @override
   Widget build(BuildContext context) {
@@ -1134,9 +1134,7 @@ class _TradeBanBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Days remaining until trade unlock
-    final daysLeft = item.tradeBanUntil != null
-        ? item.tradeBanUntil!.difference(DateTime.now()).inDays
-        : null;
+    final daysLeft = item.tradeBanUntil?.difference(DateTime.now()).inDays;
 
     // Web style: icon + Xd in red, no border/box
     return Row(

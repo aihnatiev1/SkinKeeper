@@ -79,11 +79,25 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
                     ),
                     data: (items) {
                       if (items.isEmpty) {
-                        return const EmptyState(
+                        return EmptyState(
                           icon: Icons.visibility_outlined,
                           title: 'Watchlist is empty',
                           subtitle:
-                              'Track any CS2 item and get notified when it drops',
+                              'Track any CS2 item and get notified when the price drops.\nOpen your inventory to add one.',
+                          action: FilledButton.icon(
+                            onPressed: () => context.go('/inventory'),
+                            icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                            label: const Text('Browse inventory'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
                         );
                       }
 

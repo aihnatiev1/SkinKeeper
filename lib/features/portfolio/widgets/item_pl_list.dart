@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -394,8 +396,10 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
     final isSold = tab == PlTab.sold;
     final profitColor = item.isProfitable ? AppTheme.profit : AppTheme.loss;
     final pctPrefix = item.profitPct >= 0 ? '+' : '';
+    // Arrow makes sign readable for colorblind users (~8% of males).
+    final pctArrow = item.profitPct >= 0 ? '↑' : '↓';
     final pctText = item.hasCostData && item.currentPriceCents > 0
-        ? '$pctPrefix${item.profitPct.toStringAsFixed(1)}%'
+        ? '$pctArrow $pctPrefix${item.profitPct.toStringAsFixed(1)}%'
         : null;
 
     // Subtitle
@@ -641,6 +645,38 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
   }
 
   Future<void> _deleteAllForItem(BuildContext context, ItemPL item) async {
+    // Optimistic-delay pattern: show an Undo snackbar for 5s before actually
+    // hitting the backend. A mis-tapped delete on a long transaction history
+    // is catastrophic (cost basis resets, ownership chain lost), so the 5s
+    // window is a cheap safety net that needs no backend soft-delete support.
+    final messenger = ScaffoldMessenger.of(context);
+    final completer = Completer<bool>();
+    Timer? timer;
+
+    timer = Timer(const Duration(seconds: 5), () {
+      if (!completer.isCompleted) completer.complete(true);
+    });
+
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Deleted transactions for "${item.marketHashName}"'),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'UNDO',
+          textColor: AppTheme.profit,
+          onPressed: () {
+            timer?.cancel();
+            if (!completer.isCompleted) completer.complete(false);
+          },
+        ),
+      ),
+    );
+
+    final shouldDelete = await completer.future;
+    if (!shouldDelete) return;
+
     try {
       final api = ref.read(apiClientProvider);
       final encoded = Uri.encodeQueryComponent(item.marketHashName);
@@ -655,7 +691,7 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Delete failed: $e'),
+              content: Text('Delete failed: ${friendlyError(e)}'),
               backgroundColor: AppTheme.loss),
         );
       }
