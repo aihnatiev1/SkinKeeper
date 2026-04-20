@@ -6,8 +6,8 @@ import '../../core/steam_image.dart';
 class WatchlistItem {
   final int id;
   final String marketHashName;
-  final double targetPrice;
-  final double? currentPrice;
+  final int targetPriceCents;
+  final int? currentPriceCents;
   final String source;
   final String? iconUrl;
   final bool isActive;
@@ -15,8 +15,8 @@ class WatchlistItem {
   WatchlistItem({
     required this.id,
     required this.marketHashName,
-    required this.targetPrice,
-    this.currentPrice,
+    required this.targetPriceCents,
+    this.currentPriceCents,
     required this.source,
     this.iconUrl,
     required this.isActive,
@@ -34,23 +34,29 @@ class WatchlistItem {
       : null;
 
   bool get isBelowTarget =>
-      currentPrice != null && currentPrice! <= targetPrice;
+      currentPriceCents != null && currentPriceCents! <= targetPriceCents;
 
-  double? get distancePct => currentPrice != null && currentPrice! > 0
-      ? ((currentPrice! - targetPrice) / currentPrice!) * 100
-      : null;
+  /// Distance from current to target as a percentage (unchanged semantics,
+  /// int arithmetic avoids float drift on the difference).
+  double? get distancePct =>
+      currentPriceCents != null && currentPriceCents! > 0
+          ? ((currentPriceCents! - targetPriceCents) / currentPriceCents!) * 100
+          : null;
 
   factory WatchlistItem.fromJson(Map<String, dynamic> json) => WatchlistItem(
         id: json['id'] as int,
         marketHashName: json['market_hash_name'] as String,
-        targetPrice: (json['threshold'] as num).toDouble(),
-        currentPrice: json['current_price'] != null
-            ? (json['current_price'] as num).toDouble()
-            : null,
+        targetPriceCents: _cents(json['threshold']),
+        currentPriceCents: json['current_price'] == null
+            ? null
+            : _cents(json['current_price']),
         source: json['source'] as String? ?? 'any',
         iconUrl: json['icon_url'] as String?,
         isActive: json['is_active'] as bool? ?? true,
       );
+
+  static int _cents(Object? raw) =>
+      ((raw as num).toDouble() * 100).round();
 }
 
 class WatchlistNotifier extends AsyncNotifier<List<WatchlistItem>> {
@@ -69,12 +75,13 @@ class WatchlistNotifier extends AsyncNotifier<List<WatchlistItem>> {
     }
   }
 
-  Future<void> add(String marketHashName, double targetPrice,
+  Future<void> add(String marketHashName, int targetPriceCents,
       {String? source, String? iconUrl}) async {
     final api = ref.read(apiClientProvider);
     final data = <String, dynamic>{
       'marketHashName': marketHashName,
-      'targetPrice': targetPrice,
+      // Backend API still expects USD doubles; convert at the boundary.
+      'targetPrice': targetPriceCents / 100,
     };
     if (source != null) data['source'] = source;
     if (iconUrl != null) data['iconUrl'] = iconUrl;

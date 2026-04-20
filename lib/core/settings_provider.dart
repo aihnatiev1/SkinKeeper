@@ -36,12 +36,20 @@ class CurrencyInfo {
     return '$symbol${groupThousands(converted.toStringAsFixed(d))}';
   }
 
+  /// Format an int-cents amount (preferred for model fields that store money
+  /// as cents end-to-end). Avoids the double→double→String dance in callers.
+  String formatCents(int cents, {int? decimals}) =>
+      format(cents / 100, decimals: decimals);
+
   String formatWithSign(double usd, {int? decimals}) {
     final d = decimals ?? defaultDecimals;
     final converted = usd * rate;
     final prefix = converted >= 0 ? '+' : '-';
     return '$prefix$symbol${groupThousands(converted.abs().toStringAsFixed(d))}';
   }
+
+  String formatCentsWithSign(int cents, {int? decimals}) =>
+      formatWithSign(cents / 100, decimals: decimals);
 
   /// Format a value that is ALREADY in user's currency (e.g. from Steam wallet).
   /// Does NOT multiply by rate — use this for sell prices, quickprice, fee breakdowns.

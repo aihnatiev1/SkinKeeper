@@ -255,7 +255,7 @@ class _WatchlistCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Target: ${currency.format(item.targetPrice)}',
+                    'Target: ${currency.formatCents(item.targetPriceCents)}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppTheme.textSecondary,
@@ -270,9 +270,9 @@ class _WatchlistCard extends ConsumerWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (item.currentPrice != null)
+                if (item.currentPriceCents != null)
                   Text(
-                    currency.format(item.currentPrice!),
+                    currency.formatCents(item.currentPriceCents!),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -401,9 +401,10 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
       return;
     }
 
-    // Convert from display currency back to USD for storage
+    // Convert from display currency back to USD cents for storage.
     final rate = ref.read(currencyProvider).rate;
     final priceUsd = rate > 0 ? inputPrice / rate : inputPrice;
+    final priceCents = (priceUsd * 100).round();
 
     setState(() {
       _loading = true;
@@ -413,7 +414,7 @@ class _AddToWatchlistSheetState extends ConsumerState<_AddToWatchlistSheet> {
     try {
       await ref.read(watchlistProvider.notifier).add(
             _selectedName!,
-            priceUsd,
+            priceCents,
             iconUrl: _selectedIconUrl,
           );
       HapticFeedback.mediumImpact();
