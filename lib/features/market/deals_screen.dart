@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/analytics_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../../core/widgets/screen_state_builder.dart';
 import '../inventory/widgets/price_comparison_table.dart' show sourceColor;
 import '../../widgets/shared_ui.dart';
 import 'deals_provider.dart';
@@ -84,65 +85,58 @@ class _DealsScreenState extends ConsumerState<DealsScreen> {
             ),
 
             // Content
-            dealsAsync.when(
-              loading: () => SliverPadding(
+            SliverScreenStateBuilder<List<Deal>>(
+              state: dealsAsync,
+              isEmpty: (deals) => deals.isEmpty,
+              onRetry: () => ref.invalidate(dealsProvider),
+              emptyIcon: Icons.compare_arrows_rounded,
+              emptyTitle: 'No deals found',
+              emptySubtitle:
+                  'No profitable arbitrage opportunities right now.\nCheck back later!',
+              loadingSliver: SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, i) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
+                    (context, i) => const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
                       child: ShimmerCard(height: 100),
                     ),
                     childCount: 6,
                   ),
                 ),
               ),
-              error: (err, _) => SliverFillRemaining(
-                hasScrollBody: false,
-                child: _ErrorView(
-                  message: err.toString(),
-                  onRetry: () => ref.invalidate(dealsProvider),
+              sliverBuilder: (deals) => SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final deal = deals[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _DealCard(
+                                deal: deal,
+                                currency: ref.watch(currencyProvider))
+                            .animate()
+                            .fadeIn(
+                              duration: 300.ms,
+                              delay: Duration(
+                                  milliseconds:
+                                      (50 * index).clamp(0, 300)),
+                            )
+                            .slideY(
+                              begin: 0.05,
+                              duration: 300.ms,
+                              delay: Duration(
+                                  milliseconds:
+                                      (50 * index).clamp(0, 300)),
+                              curve: Curves.easeOutCubic,
+                            ),
+                      );
+                    },
+                    childCount: deals.length,
+                  ),
                 ),
               ),
-              data: (deals) {
-                if (deals.isEmpty) {
-                  return SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: EmptyState(
-                      icon: Icons.compare_arrows_rounded,
-                      title: 'No deals found',
-                      subtitle: 'No profitable arbitrage opportunities right now.\nCheck back later!',
-                    ),
-                  );
-                }
-
-                return SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final deal = deals[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _DealCard(deal: deal, currency: ref.watch(currencyProvider))
-                              .animate()
-                              .fadeIn(
-                                duration: 300.ms,
-                                delay: Duration(milliseconds: (50 * index).clamp(0, 300)),
-                              )
-                              .slideY(
-                                begin: 0.05,
-                                duration: 300.ms,
-                                delay: Duration(milliseconds: (50 * index).clamp(0, 300)),
-                                curve: Curves.easeOutCubic,
-                              ),
-                        );
-                      },
-                      childCount: deals.length,
-                    ),
-                  ),
-                );
-              },
             ),
           ],
         ),
@@ -390,37 +384,3 @@ class _DealCard extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorView({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline_rounded,
-                size: 48, color: AppTheme.loss.withValues(alpha: 0.6)),
-            const SizedBox(height: 16),
-            Text('Failed to load deals',
-                style: AppTheme.title, textAlign: TextAlign.center),
-            const SizedBox(height: 8),
-            Text(message,
-                style: AppTheme.caption, textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            GradientButton(
-              label: 'Retry',
-              icon: Icons.refresh_rounded,
-              onPressed: onRetry,
-              expanded: false,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
