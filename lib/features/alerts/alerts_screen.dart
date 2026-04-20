@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
+import '../../core/widgets/screen_state_builder.dart';
 import '../../models/alert.dart';
 import '../../widgets/shared_ui.dart';
 import 'alerts_provider.dart';
@@ -188,34 +189,24 @@ class _ActiveAlertsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final alertsAsync = ref.watch(alertsProvider);
 
-    return alertsAsync.when(
-      loading: () => const Center(
-        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+    return ScreenStateBuilder<List<PriceAlert>>(
+      state: alertsAsync,
+      isEmpty: (alerts) => alerts.isEmpty,
+      onRetry: () => ref.invalidate(alertsProvider),
+      emptyIcon: Icons.notifications_none,
+      emptyTitle: 'No alerts yet',
+      emptySubtitle: 'Create your first price alert',
+      builder: (alerts) => AppRefreshIndicator(
+        onRefresh: () async => ref.invalidate(alertsProvider),
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: alerts.length,
+          itemBuilder: (_, i) => _AlertCard(alert: alerts[i])
+              .animate()
+              .fadeIn(duration: 300.ms, delay: (i * 50).ms)
+              .slideX(begin: 0.03, end: 0),
+        ),
       ),
-      error: (e, _) => Center(
-        child: Text('Failed to load', style: const TextStyle(color: AppTheme.textSecondary)),
-      ),
-      data: (alerts) {
-        if (alerts.isEmpty) {
-          return const EmptyState(
-            icon: Icons.notifications_none,
-            title: 'No alerts yet',
-            subtitle: 'Create your first price alert',
-          );
-        }
-
-        return AppRefreshIndicator(
-          onRefresh: () async => ref.invalidate(alertsProvider),
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: alerts.length,
-            itemBuilder: (_, i) => _AlertCard(alert: alerts[i])
-                .animate()
-                .fadeIn(duration: 300.ms, delay: (i * 50).ms)
-                .slideX(begin: 0.03, end: 0),
-          ),
-        );
-      },
     );
   }
 }
@@ -400,34 +391,24 @@ class _HistoryTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(alertHistoryProvider);
 
-    return historyAsync.when(
-      loading: () => const Center(
-        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+    return ScreenStateBuilder<List<AlertHistoryItem>>(
+      state: historyAsync,
+      isEmpty: (history) => history.isEmpty,
+      onRetry: () => ref.invalidate(alertHistoryProvider),
+      emptyIcon: Icons.history,
+      emptyTitle: 'No triggered alerts yet',
+      emptySubtitle: 'Alerts will appear here when triggered',
+      builder: (history) => AppRefreshIndicator(
+        onRefresh: () async => ref.invalidate(alertHistoryProvider),
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: history.length,
+          itemBuilder: (_, i) => _HistoryCard(item: history[i])
+              .animate()
+              .fadeIn(duration: 300.ms, delay: (i * 50).ms)
+              .slideX(begin: 0.03, end: 0),
+        ),
       ),
-      error: (e, _) => Center(
-        child: Text('Failed to load', style: const TextStyle(color: AppTheme.textSecondary)),
-      ),
-      data: (history) {
-        if (history.isEmpty) {
-          return const EmptyState(
-            icon: Icons.history,
-            title: 'No triggered alerts yet',
-            subtitle: 'Alerts will appear here when triggered',
-          );
-        }
-
-        return AppRefreshIndicator(
-          onRefresh: () async => ref.invalidate(alertHistoryProvider),
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: history.length,
-            itemBuilder: (_, i) => _HistoryCard(item: history[i])
-                .animate()
-                .fadeIn(duration: 300.ms, delay: (i * 50).ms)
-                .slideX(begin: 0.03, end: 0),
-          ),
-        );
-      },
     );
   }
 }

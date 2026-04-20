@@ -56,7 +56,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         if (_inventoryViewedLogged) return;
         _inventoryViewedLogged = true;
         final totalValue = items.fold<double>(
-            0, (sum, it) => sum + (it.currentPriceCents / 100));
+            0, (sum, it) => sum + (it.bestPrice ?? 0));
         Analytics.inventoryViewed(
             itemCount: items.length, totalValue: totalValue);
       });

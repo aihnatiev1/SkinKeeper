@@ -10,6 +10,7 @@ import '../../core/analytics_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/steam_image.dart';
 import '../../core/theme.dart';
+import '../../core/widgets/screen_state_builder.dart';
 import '../../widgets/shared_ui.dart';
 import 'watchlist_provider.dart';
 
@@ -67,53 +68,40 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
 
                 // Content
                 Expanded(
-                  child: watchlistAsync.when(
-                    loading: () => const Center(
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppTheme.primary),
-                    ),
-                    error: (e, _) => Center(
-                      child: Text('Failed to load',
-                          style:
-                              const TextStyle(color: AppTheme.textSecondary)),
-                    ),
-                    data: (items) {
-                      if (items.isEmpty) {
-                        return EmptyState(
-                          icon: Icons.visibility_outlined,
-                          title: 'Watchlist is empty',
-                          subtitle:
-                              'Track any CS2 item and get notified when the price drops.\nOpen your inventory to add one.',
-                          action: FilledButton.icon(
-                            onPressed: () => context.go('/inventory'),
-                            icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                            label: const Text('Browse inventory'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      return AppRefreshIndicator(
-                        onRefresh: () async =>
-                            ref.invalidate(watchlistProvider),
-                        child: ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                          itemCount: items.length,
-                          itemBuilder: (_, i) => _WatchlistCard(item: items[i])
-                              .animate()
-                              .fadeIn(duration: 300.ms, delay: (i * 50).ms)
-                              .slideX(begin: 0.03, end: 0),
+                  child: ScreenStateBuilder<List<WatchlistItem>>(
+                    state: watchlistAsync,
+                    isEmpty: (items) => items.isEmpty,
+                    onRetry: () => ref.invalidate(watchlistProvider),
+                    emptyIcon: Icons.visibility_outlined,
+                    emptyTitle: 'Watchlist is empty',
+                    emptySubtitle:
+                        'Track any CS2 item and get notified when the price drops.\nOpen your inventory to add one.',
+                    emptyAction: FilledButton.icon(
+                      onPressed: () => context.go('/inventory'),
+                      icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                      label: const Text('Browse inventory'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      );
-                    },
+                      ),
+                    ),
+                    builder: (items) => AppRefreshIndicator(
+                      onRefresh: () async =>
+                          ref.invalidate(watchlistProvider),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                        itemCount: items.length,
+                        itemBuilder: (_, i) => _WatchlistCard(item: items[i])
+                            .animate()
+                            .fadeIn(duration: 300.ms, delay: (i * 50).ms)
+                            .slideX(begin: 0.03, end: 0),
+                      ),
+                    ),
                   ),
                 ),
               ],
