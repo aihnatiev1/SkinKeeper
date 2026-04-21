@@ -15,10 +15,10 @@ void main() {
   }
 
   Future<void> pumpScreen(WidgetTester tester, Widget widget) async {
-    // LoginScreen has several Rows that exceed the default 800x600 surface.
-    // Give the test a tall viewport; width is intentionally generous to dodge
-    // minor row overflows that aren't behaviour-relevant.
-    await tester.binding.setSurfaceSize(const Size(1024, 1400));
+    // Phone viewport — login screen should render cleanly at ~iPhone width
+    // now that the market-logos row is a Wrap and the button text is
+    // Flexible+ellipsis.
+    await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(widget);
     await tester.pump();

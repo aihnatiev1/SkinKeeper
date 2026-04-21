@@ -504,17 +504,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
           const SizedBox(height: 20),
-          // Market logos row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // Market logos row. Wrap so narrow viewports (small phones with
+          // localised strings) flow to a second line instead of overflowing.
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              Text('Steam', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+              const Text('Steam', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
               _dot(),
-              Text('Skinport', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+              const Text('Skinport', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
               _dot(),
-              Text('CSFloat', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+              const Text('CSFloat', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
               _dot(),
-              Text('DMarket', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+              const Text('DMarket', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
             ],
           ).animate().fadeIn(duration: 400.ms, delay: 800.ms),
           const SizedBox(height: 12),
@@ -613,15 +617,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.login_rounded, size: 22, color: Colors.white),
               const SizedBox(width: 12),
-              Text(
-                widget.isLinking ? 'Link with Steam' : 'Continue with Steam',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+              Flexible(
+                child: Text(
+                  widget.isLinking ? 'Link with Steam' : 'Continue with Steam',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
