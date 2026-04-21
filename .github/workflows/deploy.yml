@@ -22,38 +22,53 @@ jobs:
 
     steps:
       - name: SSH deploy
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
-          script_stop: true
-          script: |
-            set -e
-            REPO=/root/skinkeeper-api
-            cd "$REPO/backend"
-            # Stash any uncommitted prod edits so hard-reset doesn't eat them.
-            if ! git -C "$REPO" diff --quiet HEAD || [ -n "$(git -C "$REPO" ls-files --others --exclude-standard)" ]; then
-              git -C "$REPO" stash push -u -m "auto-deploy-$(date +%s)" || true
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_SSH_PORT:-22}"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Trust the host on first contact. Good enough for a single VPS;
+          # tighten later with a pinned known_hosts secret if needed.
+          ssh-keyscan -p "$PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/deploy_key -p "$PORT" \
+              -o StrictHostKeyChecking=accept-new \
+              -o IdentitiesOnly=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" 'bash -s' <<'EOS'
+          set -e
+          REPO=/root/skinkeeper-api
+          cd "$REPO/backend"
+          # Stash any uncommitted prod edits so hard-reset doesn't eat them.
+          if ! git -C "$REPO" diff --quiet HEAD || [ -n "$(git -C "$REPO" ls-files --others --exclude-standard)" ]; then
+            git -C "$REPO" stash push -u -m "auto-deploy-$(date +%s)" || true
+          fi
+          git -C "$REPO" fetch --quiet origin main
+          git -C "$REPO" reset --hard origin/main
+          npm ci --silent
+          npm run build
+          pm2 restart skinkeeper-api --update-env
+          pm2 save
+          # Smoke test — fail the deploy if health isn't reachable within 20s.
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -sf https://api.skinkeeper.store/api/health > /dev/null; then
+              echo "health ok"
+              exit 0
             fi
-            git -C "$REPO" fetch --quiet origin main
-            git -C "$REPO" reset --hard origin/main
-            npm ci --silent
-            npm run build
-            pm2 restart skinkeeper-api --update-env
-            pm2 save
-            # Smoke test — fail the deploy if health isn't reachable within 20s.
-            for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -sf https://api.skinkeeper.store/api/health > /dev/null; then
-                echo "health ok"
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "health check failed after restart"
-            pm2 logs skinkeeper-api --lines 30 --nostream
-            exit 1
+            sleep 2
+          done
+          echo "health check failed after restart"
+          pm2 logs skinkeeper-api --lines 30 --nostream
+          exit 1
+          EOS
 
       - name: Summary
         if: success()
