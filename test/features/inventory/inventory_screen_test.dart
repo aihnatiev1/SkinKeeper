@@ -32,7 +32,8 @@ void main() {
       inventoryProvider.overrideWith(() => _FakeInventoryNotifier(sampleItems)),
       itemPLFamilyProvider.overrideWith((ref, name) => null),
       sellOperationProvider.overrideWith(() => _FakeSellNotifier()),
-      quickPriceProvider.overrideWith((ref, name) async => 1250),
+      quickPriceProvider.overrideWith(
+          (ref, name) async => const QuickPriceResult(sellerReceivesCents: 1250)),
     ];
   }
 
