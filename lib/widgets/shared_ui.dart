@@ -543,6 +543,9 @@ class EmptyState extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget? action;
+  /// Disable fade-in+scale entrance. Useful for error states that can toggle
+  /// on every Retry cycle, where re-animating on each build is distracting.
+  final bool animate;
 
   const EmptyState({
     super.key,
@@ -550,11 +553,12 @@ class EmptyState extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.action,
+    this.animate = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final body = Center(
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.s40),
         child: Column(
@@ -590,10 +594,9 @@ class EmptyState extends StatelessWidget {
           ],
         ),
       ),
-    )
-        .animate()
-        .fadeIn(duration: 400.ms)
-        .scale(
+    );
+    if (!animate) return body;
+    return body.animate().fadeIn(duration: 400.ms).scale(
           begin: const Offset(0.95, 0.95),
           duration: 400.ms,
           curve: Curves.easeOutCubic,

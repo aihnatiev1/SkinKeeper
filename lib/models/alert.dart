@@ -33,11 +33,15 @@ class PriceAlert {
     this.cooldownMinutes = 60,
     this.lastTriggeredAt,
     required this.createdAt,
-  });
+  }) : assert(
+          (thresholdCents == null) != (thresholdPct == null),
+          'Exactly one of thresholdCents / thresholdPct must be non-null',
+        );
 
   factory PriceAlert.fromJson(Map<String, dynamic> json) {
     final condition = AlertCondition.values.firstWhere(
       (e) => e.name == json['condition'],
+      orElse: () => AlertCondition.above,
     );
     final raw = double.parse(json['threshold'].toString());
     final isPct = condition == AlertCondition.changePct;
@@ -89,7 +93,7 @@ class AlertHistoryItem {
   factory AlertHistoryItem.fromJson(Map<String, dynamic> json) {
     final condition = json['condition'] as String;
     final raw = double.parse(json['threshold'].toString());
-    final isPct = condition == 'changePct';
+    final isPct = condition == AlertCondition.changePct.name;
     return AlertHistoryItem(
       id: json['id'] as int,
       alertId: json['alert_id'] as int,

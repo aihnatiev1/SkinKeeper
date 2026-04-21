@@ -660,7 +660,8 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Deleted transactions for "${item.marketHashName}"'),
+        content: Text(
+            'Deleting transactions for "${item.marketHashName}" — tap UNDO to cancel'),
         duration: const Duration(seconds: 5),
         behavior: SnackBarBehavior.floating,
         action: SnackBarAction(

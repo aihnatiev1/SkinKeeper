@@ -50,6 +50,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     Analytics.screen('inventory');
     // Richer funnel event — captures item_count + totalValue so we can
     // segment "empty inventory" drop-off from "loaded inventory" retention.
+    // fireImmediately so the event still logs when the provider is already
+    // AsyncData at mount time (keep-alive + cached first load).
     ref.listenManual(inventoryProvider, (prev, next) {
       if (_inventoryViewedLogged) return;
       next.whenData((items) {
@@ -60,7 +62,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         Analytics.inventoryViewed(
             itemCount: items.length, totalValue: totalValue);
       });
-    });
+    }, fireImmediately: true);
   }
 
   Future<void> _showSellSheet(List<InventoryItem> items) async {

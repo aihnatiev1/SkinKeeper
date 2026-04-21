@@ -78,6 +78,7 @@ class ScreenStateBuilder<T> extends StatelessWidget {
     return EmptyState(
       icon: Icons.cloud_off_rounded,
       title: friendlyError(e),
+      animate: false,
       action: onRetry == null
           ? null
           : FilledButton.icon(
@@ -175,6 +176,7 @@ class SliverScreenStateBuilder<T> extends StatelessWidget {
     return EmptyState(
       icon: Icons.cloud_off_rounded,
       title: friendlyError(e),
+      animate: false,
       action: onRetry == null
           ? null
           : FilledButton.icon(

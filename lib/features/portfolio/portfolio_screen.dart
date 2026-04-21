@@ -59,6 +59,8 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
     Analytics.screen('portfolio');
     // Richer funnel event: fires once when P/L data resolves so we capture
     // actual totalValue for segmentation (empty vs $10 vs $1000 portfolios).
+    // fireImmediately so the event still logs when the provider is already
+    // AsyncData at mount time (keep-alive + cached first load).
     ref.listenManual(portfolioPLProvider, (prev, next) {
       if (_portfolioViewedLogged) return;
       next.whenData((data) {
@@ -66,7 +68,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
         _portfolioViewedLogged = true;
         Analytics.portfolioViewed(totalValue: data.totalCurrentValue);
       });
-    });
+    }, fireImmediately: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initSequence();
       _backgroundRefresh();
@@ -820,6 +822,7 @@ class _StatCards extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currency = ref.watch(currencyProvider);
     return Row(
       children: [
         Expanded(child: _StatCard(
@@ -833,7 +836,7 @@ class _StatCards extends ConsumerWidget {
         Expanded(child: _StatCard(
           label: '24H',
           value: AppTheme.pctText(data.change24hPct),
-          sub: AppTheme.pctText(data.change24hCents / 100),
+          sub: currency.formatCentsWithSign(data.change24hCents),
           accentColor: AppTheme.plColor(data.change24hPct),
         )),
         const SizedBox(width: 8),

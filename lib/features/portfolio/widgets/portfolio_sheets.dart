@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api_client.dart';
 import '../../../core/theme.dart';
 import '../../../models/profit_loss.dart';
 import '../../../widgets/glass_sheet.dart';
@@ -265,7 +266,8 @@ class PortfolioOptionsSheet extends ConsumerWidget {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                          content: Text('Delete failed: $e'),
+                          content:
+                              Text('Delete failed: ${friendlyError(e)}'),
                           backgroundColor: AppTheme.loss),
                     );
                   }
