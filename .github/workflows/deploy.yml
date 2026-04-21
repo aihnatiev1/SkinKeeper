@@ -1,0 +1,57 @@
+name: Deploy Backend
+
+# Fires after CI finishes on main. Skipped if CI was red. Keeps deploys
+# gated behind a green test suite without needing branch protection rules.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/skinkeeper/backend
+            git fetch --quiet origin main
+            git reset --hard origin/main
+            npm ci --production=false --silent
+            npm run build
+            npm prune --production --silent
+            pm2 restart skinkeeper-api --update-env
+            pm2 save
+            # Smoke test — fail the deploy if health isn't reachable within 20s.
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -sf https://api.skinkeeper.store/api/health > /dev/null; then
+                echo "health ok"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "health check failed after restart"
+            pm2 logs skinkeeper-api --lines 30 --nostream
+            exit 1
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "Deployed $(git rev-parse --short HEAD) to api.skinkeeper.store" >> $GITHUB_STEP_SUMMARY
