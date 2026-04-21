@@ -5,7 +5,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/analytics_service.dart';
 import '../../core/cache_service.dart';
@@ -15,7 +14,6 @@ import '../settings/currency_picker_dialog.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/stale_data_banner.dart';
-import '../../l10n/app_localizations.dart';
 import '../../models/profit_loss.dart';
 import '../../widgets/premium_gate.dart';
 import '../../widgets/shared_ui.dart';
@@ -190,7 +188,6 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
     final ref = this.ref;
     final portfolio = ref.watch(portfolioProvider);
     final tab = ref.watch(_tabProvider);
-    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -749,19 +746,6 @@ class _PortfolioHeader extends ConsumerWidget {
     );
   }
 
-  static void _sharePortfolio(WidgetRef ref, PortfolioSummary data, CurrencyInfo currency) {
-    final value = currency.formatCents(data.totalValueCents);
-    final change = currency.formatCentsWithSign(data.change24hCents);
-    final pct = AppTheme.pctText(data.change24hPct);
-    final items = data.itemCount;
-
-    SharePlus.instance.share(
-      ShareParams(
-        text: 'My CS2 Portfolio: $value ($change / $pct today)\n'
-            '$items items tracked with SkinKeeper',
-      ),
-    );
-  }
 }
 
 class _ChangeBadge extends StatelessWidget {
@@ -788,28 +772,6 @@ class _ChangeBadge extends StatelessWidget {
           color: color,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
-      ),
-    );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _IconBtn({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36, height: 36,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07), width: 0.5),
-        ),
-        child: Icon(icon, size: 18, color: AppTheme.textMuted),
       ),
     );
   }
@@ -1031,62 +993,6 @@ class _ValueTab extends ConsumerWidget {
           expanded: false,
           onPressed: () => ref.invalidate(portfolioProvider),
         ),
-      ),
-    );
-  }
-}
-
-class _ValueCard extends ConsumerWidget {
-  final PortfolioSummary data;
-  const _ValueCard({required this.data});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currency = ref.watch(currencyProvider);
-    final isUp = data.change24hCents >= 0;
-    final changeColor = AppTheme.plColor(data.change24hCents);
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('TOTAL VALUE', style: TextStyle(
-            fontSize: 10, fontWeight: FontWeight.w600,
-            letterSpacing: 1.5, color: AppTheme.textDisabled,
-          )),
-          const SizedBox(height: 10),
-          AnimatedNumber(
-            value: data.totalValueCents / 100,
-            style: AppTheme.priceLarge.copyWith(fontSize: 34, letterSpacing: -1),
-            formatter: (v) => currency.format(v),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(
-                isUp ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                color: changeColor, size: 16,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${currency.formatCentsWithSign(data.change24hCents)} (${AppTheme.pctText(data.change24hPct)})',
-                style: TextStyle(
-                  fontSize: 13, color: changeColor,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text('today', style: AppTheme.caption.copyWith(fontSize: 12)),
-            ],
-          ),
-        ],
       ),
     );
   }

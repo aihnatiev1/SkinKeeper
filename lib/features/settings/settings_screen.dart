@@ -25,7 +25,6 @@ class SettingsScreen extends ConsumerWidget {
     final sessionStatus = ref.watch(sessionStatusProvider);
     final l10n = AppLocalizations.of(context);
     final currency = ref.watch(currencyProvider);
-    final themeMode = ref.watch(themeModeProvider);
     final locale = ref.watch(localeProvider);
 
     return Scaffold(

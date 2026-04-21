@@ -21,8 +21,7 @@ import 'trades_provider.dart';
 /// Max items per single Steam trade offer
 const _kMaxTradeItems = 100;
 
-/// Non-tradable junk patterns to filter from "my items"
-const _kExcludedTypes = {'Collectible', 'Graffiti', 'Spray', 'Patch'};
+/// Non-tradable junk items to filter out of the "my items" picker.
 const _kExcludedNames = {'Charm Remover', 'Storage Unit'};
 
 class CreateTradeScreen extends ConsumerStatefulWidget {

@@ -5,17 +5,8 @@ import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
 import '../../../models/profit_loss.dart';
-import 'price_comparison_table.dart' show sourceColor, sourceDisplayName;
+import 'price_comparison_table.dart' show sourceColor;
 import 'rarity_gem.dart';
-
-// ── Wear pill colors ─────────────────────────────────────────────────
-const _wearPillColors = <String, Color>{
-  'FN': Color(0xFF10B981),
-  'MW': Color(0xFF06B6D4),
-  'FT': Color(0xFF3B82F6),
-  'WW': Color(0xFFF59E0B),
-  'BS': Color(0xFFEF4444),
-};
 
 class ItemCard extends StatelessWidget {
   final InventoryItem item;
@@ -440,39 +431,6 @@ class ItemCard extends StatelessWidget {
   }
 }
 
-// ─── Account Name Badge (3D square style) ────────────────────────────
-class _AccountNameBadge extends StatelessWidget {
-  final String? accountName;
-  const _AccountNameBadge({required this.accountName});
-
-  @override
-  Widget build(BuildContext context) {
-    final name = accountName ?? '?';
-    const maxLen = 14;
-    final display = name.length > maxLen ? '${name.substring(0, maxLen)}…' : name;
-    const color = AppTheme.primary;
-    return Container(
-      margin: const EdgeInsets.only(right: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
-      ),
-      child: Text(
-        display,
-        style: const TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          color: AppTheme.primaryLight,
-          letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Account Letter Dot (compact mode) ───────────────────────────────
 /// Circular account avatar — shows Steam avatar image or letter fallback
 class _AccountAvatar extends StatelessWidget {
   final String? avatarUrl;
@@ -517,37 +475,6 @@ class _AccountAvatar extends StatelessWidget {
           ),
         ),
       );
-}
-
-class _AccountLetterDot extends StatelessWidget {
-  const _AccountLetterDot();
-
-  @override
-  Widget build(BuildContext context) {
-    const letter = '?';
-    return Container(
-      width: 14,
-      height: 14,
-      decoration: BoxDecoration(
-        color: AppTheme.primary.withValues(alpha: 0.25),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: AppTheme.primary.withValues(alpha: 0.5),
-          width: 0.5,
-        ),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        letter,
-        style: const TextStyle(
-          fontSize: 8,
-          fontWeight: FontWeight.w800,
-          color: AppTheme.primaryLight,
-          height: 1,
-        ),
-      ),
-    );
-  }
 }
 
 // ─── Footer ──────────────────────────────────────────────────────────
@@ -1165,8 +1092,7 @@ class _TradeBanBadge extends StatelessWidget {
 class _DopplerPhasePill extends StatelessWidget {
   final String phase;
   final Color? color;
-  final bool compact;
-  const _DopplerPhasePill({required this.phase, this.color, this.compact = false});
+  const _DopplerPhasePill({required this.phase, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1181,7 +1107,7 @@ class _DopplerPhasePill extends StatelessWidget {
       child: Text(
         phase,
         style: TextStyle(
-          fontSize: compact ? 8 : 9,
+          fontSize: 9,
           fontWeight: FontWeight.w800,
           color: c,
           letterSpacing: 0.3,

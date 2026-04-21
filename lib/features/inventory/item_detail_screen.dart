@@ -14,9 +14,6 @@ import '../../core/analytics_service.dart';
 import '../../core/api_client.dart';
 import '../../core/export_service.dart';
 import '../auth/session_gate.dart';
-import '../purchases/iap_service.dart';
-import 'inventory_provider.dart';
-import '../portfolio/widgets/add_transaction_sheet.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
@@ -48,7 +45,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
 
   late InventoryItem _item;
   ChartPeriod _period = ChartPeriod.month;
-  bool _inspecting = false;
 
   @override
   void initState() {
@@ -61,49 +57,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
     _fetchHistory();
   }
 
-  /// On-demand inspect: fetch float/stickers/charms via CSFloat API
-  Future<void> _inspectItem() async {
-    if (_inspecting) return;
-    setState(() => _inspecting = true);
-    try {
-      final api = ref.read(apiClientProvider);
-      final response = await api.get('/inventory/${_item.assetId}/inspect');
-      final data = response.data as Map<String, dynamic>;
-      if (mounted) {
-        setState(() {
-          _item = _item.withInspectData(
-            floatValue: (data['floatValue'] as num).toDouble(),
-            paintSeed: data['paintSeed'] as int? ?? 0,
-            stickers: (data['stickers'] as List<dynamic>?)
-                    ?.map((e) =>
-                        StickerInfo.fromJson(e as Map<String, dynamic>))
-                    .toList() ??
-                [],
-            charms: (data['charms'] as List<dynamic>?)
-                    ?.map((e) =>
-                        CharmInfo.fromJson(e as Map<String, dynamic>))
-                    .toList() ??
-                [],
-          );
-          _inspecting = false;
-        });
-        HapticFeedback.mediumImpact();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _inspecting = false);
-        final is503 = e.toString().contains('503');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(is503
-                ? 'CSFloat API rate-limited — try in 15 min'
-                : 'Inspect unavailable — try later'),
-            backgroundColor: AppTheme.loss,
-          ),
-        );
-      }
-    }
-  }
 
   Future<void> _fetchHistory() async {
     try {
@@ -336,56 +289,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                   floatValue: item.floatValue!,
                   minFloat: item.minFloat,
                   maxFloat: item.maxFloat,
-                ),
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 250.ms),
-
-            // ── On-demand inspect button — disabled (CSFloat API unreliable) ──
-            if (false && item.floatValue == null &&
-                item.inspectLink != null &&
-                !item.isNonWeapon)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppTheme.s12),
-                child: GestureDetector(
-                  onTap: _inspecting ? null : _inspectItem,
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppTheme.r12),
-                      border: Border.all(
-                        color: AppTheme.primary.withValues(alpha: 0.2),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_inspecting)
-                          SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.primary,
-                            ),
-                          )
-                        else
-                          Icon(Icons.search_rounded,
-                              size: 16, color: AppTheme.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          _inspecting ? 'Inspecting...' : 'Inspect Float & Stickers',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               )
                   .animate()
@@ -1093,8 +996,6 @@ class _SellActions extends ConsumerWidget {
       marketHashName: item.marketHashName,
       fallbackPriceUsd: item.bestPrice ?? item.steamPrice,
     )));
-    final currency = ref.watch(currencyProvider);
-    final hasSession = ref.watch(hasSessionProvider);
 
     return GlassCard(
       padding: const EdgeInsets.all(AppTheme.s14),
@@ -1227,60 +1128,6 @@ class _SellActions extends ConsumerWidget {
   }
 }
 
-// ── Log Purchase Button ──────────────────────────────────────────
-class _LogPurchaseButton extends ConsumerWidget {
-  final InventoryItem item;
-
-  const _LogPurchaseButton({required this.item});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        final isPremium = ref.read(premiumProvider).valueOrNull ?? false;
-        if (!isPremium) {
-          context.push('/premium');
-          return;
-        }
-        showGlassSheet(
-          context,
-          AddTransactionSheet(
-            initialItemName: item.marketHashName,
-            initialIconUrl: item.iconUrl,
-          ),
-        );
-      },
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppTheme.profit.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AppTheme.r12),
-          border: Border.all(
-            color: AppTheme.profit.withValues(alpha: 0.2),
-            width: 0.8,
-          ),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add_shopping_cart_rounded,
-                size: 16, color: AppTheme.profit),
-            SizedBox(width: 8),
-            Text(
-              'Add What You Paid',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.profit,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ── Marketplace Links (with prices) ──────────────────────────────
 class _MarketplaceLinks extends StatelessWidget {
@@ -1907,83 +1754,3 @@ class _SteamMarketDepth extends StatelessWidget {
   }
 }
 
-// ── Drops From (Collection / Crate) ──────────────────────────────
-class _DropsFromSection extends StatelessWidget {
-  final InventoryItem item;
-
-  const _DropsFromSection({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: AppTheme.glass(),
-      padding: const EdgeInsets.all(AppTheme.s14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('ORIGIN', style: AppTheme.label),
-          const SizedBox(height: AppTheme.s10),
-          // Collection
-          if (item.collection != null)
-            _OriginRow(
-              icon: Icons.collections_bookmark_rounded,
-              label: item.collection!.name,
-              color: const Color(0xFF8B5CF6),
-            ),
-          // Crates
-          for (final crate in item.crates) ...[
-            if (item.collection != null || item.crates.indexOf(crate) > 0)
-              const SizedBox(height: AppTheme.s6),
-            _OriginRow(
-              icon: Icons.inventory_2_rounded,
-              label: crate.name,
-              color: const Color(0xFFF59E0B),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _OriginRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  const _OriginRow({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(AppTheme.r6),
-          ),
-          child: Icon(icon, size: 14, color: color),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}

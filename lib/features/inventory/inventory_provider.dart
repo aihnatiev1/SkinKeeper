@@ -199,13 +199,8 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
 });
 
 class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
-  // Incremented on every build() — guards against stale background refreshes
-  // writing old-account data to the shared CacheService after an account switch.
-  int _generation = 0;
-
   @override
   Future<List<InventoryItem>> build() async {
-    _generation++;
     // Re-build when account scope changes
     ref.watch(accountScopeProvider);
 
@@ -222,21 +217,6 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     } on DioException {
       // No cache and no network — show error
       rethrow;
-    }
-  }
-
-  Future<void> _refreshInBackground(int gen) async {
-    try {
-      // Sync from Steam first, then fetch updated data from DB
-      final api = ref.read(apiClientProvider);
-      await api.post('/inventory/refresh', queryParameters: _accountQuery);
-      if (gen != _generation) return; // account switched while we were fetching
-      final fresh = await _fetchFromApi();
-      if (gen != _generation) return; // double-check after second async gap
-      state = AsyncData(fresh);
-    } catch (_) {
-      // Keep showing cached data on network error — mark as stale
-      ref.read(inventoryStaleProvider.notifier).state = true;
     }
   }
 

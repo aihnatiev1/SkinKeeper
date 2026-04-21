@@ -221,10 +221,6 @@ class _InventoryStatsAndFilters extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(inventorySummaryProvider);
-    final currency = ref.watch(currencyProvider);
-    final activeCategory = ref.watch(categoryProvider);
-
     return Column(
       children: [
         // ── Category Chips ──
@@ -247,34 +243,8 @@ class _InventoryStatsAndFilters extends ConsumerWidget {
     );
   }
 
-  Widget _statItem(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1,
-            color: AppTheme.textDisabled,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _categoryChip(WidgetRef ref, InventoryCategory category, String label, IconData icon) {
     final isSelected = ref.watch(categoryProvider) == category;
-    final color = isSelected ? AppTheme.primary : Colors.white.withValues(alpha: 0.05);
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),

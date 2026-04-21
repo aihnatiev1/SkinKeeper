@@ -34,7 +34,6 @@ class TransactionsScreen extends ConsumerWidget {
     final sessionAsync = ref.watch(sessionStatusProvider);
     final needsReauth = sessionAsync.valueOrNull?.needsReauth ?? false;
     final hasSession = ref.watch(hasSessionProvider);
-    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -523,13 +522,11 @@ class _FilterChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final IconData? icon;
 
   const _FilterChip({
     required this.label,
     required this.selected,
     required this.onTap,
-    this.icon,
   });
 
   @override
@@ -550,10 +547,6 @@ class _FilterChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) ...[
-              Icon(icon, size: 13, color: selected ? AppTheme.primary : AppTheme.textMuted),
-              const SizedBox(width: 5),
-            ],
             Flexible(
               child: Text(
                 label,
