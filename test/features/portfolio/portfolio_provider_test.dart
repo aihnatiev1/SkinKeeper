@@ -10,10 +10,10 @@ void main() {
       final json = samplePortfolioSummaryJson();
       final summary = PortfolioSummary.fromJson(json);
 
-      expect(summary.totalValue, 1234.56);
-      expect(summary.change24h, 45.20);
+      expect(summary.totalValueCents, 123456);
+      expect(summary.change24hCents, 4520);
       expect(summary.change24hPct, 3.8);
-      expect(summary.change7d, 120.00);
+      expect(summary.change7dCents, 12000);
       expect(summary.change7dPct, 10.8);
       expect(summary.itemCount, 47);
       expect(summary.history.length, 2);
@@ -25,7 +25,7 @@ void main() {
         'value': 1234.56,
       });
       expect(point.date, DateTime(2026, 3, 1));
-      expect(point.value, 1234.56);
+      expect(point.valueCents, 123456);
     });
   });
 

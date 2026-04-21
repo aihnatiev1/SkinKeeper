@@ -203,23 +203,23 @@ Map<String, dynamic> sampleUserJson({bool isPremium = false}) {
 // ---- Portfolio --------------------------------------------------------------
 
 PortfolioSummary samplePortfolioSummary({
-  double totalValue = 1234.56,
-  double change24h = 45.20,
+  int totalValueCents = 123456,
+  int change24hCents = 4520,
   double change24hPct = 3.8,
-  double change7d = 120.00,
+  int change7dCents = 12000,
   double change7dPct = 10.8,
   int itemCount = 47,
 }) {
   return PortfolioSummary(
-    totalValue: totalValue,
-    change24h: change24h,
+    totalValueCents: totalValueCents,
+    change24hCents: change24hCents,
     change24hPct: change24hPct,
-    change7d: change7d,
+    change7dCents: change7dCents,
     change7dPct: change7dPct,
     itemCount: itemCount,
     history: [
-      PortfolioHistoryPoint(date: DateTime(2026, 2, 28), value: 1189.36),
-      PortfolioHistoryPoint(date: DateTime(2026, 3, 1), value: 1234.56),
+      PortfolioHistoryPoint(date: DateTime(2026, 2, 28), valueCents: 118936),
+      PortfolioHistoryPoint(date: DateTime(2026, 3, 1), valueCents: 123456),
     ],
   );
 }

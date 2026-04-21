@@ -9,19 +9,21 @@ import '../../core/widget_service.dart';
 import '../purchases/iap_service.dart';
 
 class PortfolioSummary {
-  final double totalValue;
-  final double change24h;
+  final int totalValueCents;
+  final int change24hCents;
+  /// 24h change as a percent (not money — stays double).
   final double change24hPct;
-  final double change7d;
+  final int change7dCents;
+  /// 7d change as a percent (not money — stays double).
   final double change7dPct;
   final int itemCount;
   final List<PortfolioHistoryPoint> history;
 
   const PortfolioSummary({
-    required this.totalValue,
-    required this.change24h,
+    required this.totalValueCents,
+    required this.change24hCents,
     required this.change24hPct,
-    required this.change7d,
+    required this.change7dCents,
     required this.change7dPct,
     required this.itemCount,
     required this.history,
@@ -29,10 +31,10 @@ class PortfolioSummary {
 
   factory PortfolioSummary.fromJson(Map<String, dynamic> json) {
     return PortfolioSummary(
-      totalValue: (json['total_value'] as num).toDouble(),
-      change24h: (json['change_24h'] as num).toDouble(),
+      totalValueCents: _cents(json['total_value']),
+      change24hCents: _cents(json['change_24h']),
       change24hPct: (json['change_24h_pct'] as num).toDouble(),
-      change7d: (json['change_7d'] as num).toDouble(),
+      change7dCents: _cents(json['change_7d']),
       change7dPct: (json['change_7d_pct'] as num).toDouble(),
       itemCount: json['item_count'] as int,
       history: (json['history'] as List<dynamic>)
@@ -41,18 +43,21 @@ class PortfolioSummary {
           .toList(),
     );
   }
+
+  static int _cents(Object? raw) =>
+      ((raw as num).toDouble() * 100).round();
 }
 
 class PortfolioHistoryPoint {
   final DateTime date;
-  final double value;
+  final int valueCents;
 
-  const PortfolioHistoryPoint({required this.date, required this.value});
+  const PortfolioHistoryPoint({required this.date, required this.valueCents});
 
   factory PortfolioHistoryPoint.fromJson(Map<String, dynamic> json) {
     return PortfolioHistoryPoint(
       date: DateTime.parse(json['date'] as String),
-      value: (json['value'] as num).toDouble(),
+      valueCents: ((json['value'] as num).toDouble() * 100).round(),
     );
   }
 }
@@ -123,11 +128,11 @@ class PortfolioNotifier extends AsyncNotifier<PortfolioSummary> {
 
       final currency = ref.read(currencyProvider);
       WidgetService.updateWidget(
-        totalValue: currency.format(summary.totalValue),
-        change24h: currency.formatWithSign(summary.change24h),
+        totalValue: currency.formatCents(summary.totalValueCents),
+        change24h: currency.formatCentsWithSign(summary.change24hCents),
         change24hPct:
             '${summary.change24hPct >= 0 ? "+" : ""}${summary.change24hPct.toStringAsFixed(1)}%',
-        isPositive: summary.change24h >= 0,
+        isPositive: summary.change24hCents >= 0,
         itemCount: summary.itemCount,
         totalProfit: isPremium && totalProfit != null
             ? currency.formatWithSign(totalProfit)

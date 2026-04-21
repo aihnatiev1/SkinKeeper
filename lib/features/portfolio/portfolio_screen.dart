@@ -685,7 +685,7 @@ class _PortfolioHeader extends ConsumerWidget {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: AnimatedNumber(
-                          value: data.totalValue,
+                          value: data.totalValueCents / 100,
                           style: const TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.w900,
@@ -709,12 +709,12 @@ class _PortfolioHeader extends ConsumerWidget {
           const SizedBox(height: 12),
           portfolio.when(
             data: (data) {
-              final isUp = data.change24h >= 0;
-              final color = AppTheme.plColor(data.change24h);
+              final isUp = data.change24hCents >= 0;
+              final color = AppTheme.plColor(data.change24hCents);
               return Row(
                 children: [
                   _ChangeBadge(
-                    text: '${isUp ? "↑" : "↓"} ${currency.formatWithSign(data.change24h, decimals: 0)}',
+                    text: '${isUp ? "↑" : "↓"} ${currency.formatCentsWithSign(data.change24hCents, decimals: 0)}',
                     color: color,
                   ),
                   const SizedBox(width: 6),
@@ -746,8 +746,8 @@ class _PortfolioHeader extends ConsumerWidget {
   }
 
   static void _sharePortfolio(WidgetRef ref, PortfolioSummary data, CurrencyInfo currency) {
-    final value = currency.format(data.totalValue);
-    final change = currency.formatWithSign(data.change24h);
+    final value = currency.formatCents(data.totalValueCents);
+    final change = currency.formatCentsWithSign(data.change24hCents);
     final pct = AppTheme.pctText(data.change24hPct);
     final items = data.itemCount;
 
@@ -831,7 +831,7 @@ class _StatCards extends ConsumerWidget {
         Expanded(child: _StatCard(
           label: '24H',
           value: AppTheme.pctText(data.change24hPct),
-          sub: AppTheme.pctText(data.change24h),
+          sub: AppTheme.pctText(data.change24hCents / 100),
           accentColor: AppTheme.plColor(data.change24hPct),
         )),
         const SizedBox(width: 8),
@@ -1038,8 +1038,8 @@ class _ValueCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currency = ref.watch(currencyProvider);
-    final isUp = data.change24h >= 0;
-    final changeColor = AppTheme.plColor(data.change24h);
+    final isUp = data.change24hCents >= 0;
+    final changeColor = AppTheme.plColor(data.change24hCents);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1057,7 +1057,7 @@ class _ValueCard extends ConsumerWidget {
           )),
           const SizedBox(height: 10),
           AnimatedNumber(
-            value: data.totalValue,
+            value: data.totalValueCents / 100,
             style: AppTheme.priceLarge.copyWith(fontSize: 34, letterSpacing: -1),
             formatter: (v) => currency.format(v),
           ),
@@ -1070,7 +1070,7 @@ class _ValueCard extends ConsumerWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                '${currency.formatWithSign(data.change24h)} (${AppTheme.pctText(data.change24hPct)})',
+                '${currency.formatCentsWithSign(data.change24hCents)} (${AppTheme.pctText(data.change24hPct)})',
                 style: TextStyle(
                   fontSize: 13, color: changeColor,
                   fontWeight: FontWeight.w600,
@@ -1137,14 +1137,19 @@ class _PortfolioChartState extends ConsumerState<_PortfolioChart> {
         : widget.history;
 
     final spots = chartHistory.asMap().entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value.value))
+        .map((e) => FlSpot(e.key.toDouble(), e.value.valueCents / 100))
         .toList();
 
-    final minY = chartHistory.map((e) => e.value).reduce((a, b) => a < b ? a : b);
-    final maxY = chartHistory.map((e) => e.value).reduce((a, b) => a > b ? a : b);
+    final minY = chartHistory
+        .map((e) => e.valueCents / 100)
+        .reduce((a, b) => a < b ? a : b);
+    final maxY = chartHistory
+        .map((e) => e.valueCents / 100)
+        .reduce((a, b) => a > b ? a : b);
     final range = maxY - minY > 0 ? maxY - minY : maxY.abs() * 0.1 + 1;
     final pad = range * 0.12;
-    final isUp = chartHistory.last.value >= chartHistory.first.value;
+    final isUp =
+        chartHistory.last.valueCents >= chartHistory.first.valueCents;
     final lineColor = isUp ? AppTheme.profit : AppTheme.loss;
 
     return Container(
