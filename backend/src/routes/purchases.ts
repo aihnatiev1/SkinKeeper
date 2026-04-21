@@ -24,8 +24,10 @@ const APPLE_APP_APPLE_ID = process.env.APPLE_APP_APPLE_ID
   : undefined;
 
 // ─── ASSN v2 signature verifier ─────────────────────────────────────
-// Loaded once at module load; throws on missing cert files so we fail
-// fast at startup rather than on the first notification.
+// Certs load at module time (fail-fast if they're missing from disk).
+// The SignedDataVerifier itself is lazy: in Production the library
+// requires appAppleId, and if APPLE_APP_APPLE_ID isn't configured yet
+// we don't want startup to crash — ASSN just stays disabled until it is.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CERT_DIR = join(__dirname, "..", "..", "certs", "apple");
 const APPLE_ROOT_CERTS: Buffer[] = [
@@ -39,13 +41,30 @@ const APPLE_ENV =
     ? Environment.PRODUCTION
     : Environment.SANDBOX;
 
-const appleNotificationVerifier = new SignedDataVerifier(
-  APPLE_ROOT_CERTS,
-  true, // enableOnlineChecks — verifies leaf cert isn't revoked
-  APPLE_ENV,
-  APPLE_BUNDLE_ID,
-  APPLE_APP_APPLE_ID
-);
+let appleNotificationVerifier: SignedDataVerifier | null = null;
+let appleVerifierInitTried = false;
+function getAppleNotificationVerifier(): SignedDataVerifier | null {
+  if (appleNotificationVerifier) return appleNotificationVerifier;
+  if (appleVerifierInitTried) return null;
+  appleVerifierInitTried = true;
+  try {
+    appleNotificationVerifier = new SignedDataVerifier(
+      APPLE_ROOT_CERTS,
+      true, // enableOnlineChecks — verifies leaf cert isn't revoked
+      APPLE_ENV,
+      APPLE_BUNDLE_ID,
+      APPLE_APP_APPLE_ID
+    );
+    return appleNotificationVerifier;
+  } catch (err) {
+    console.warn(
+      "[ASSN] SignedDataVerifier unavailable:",
+      (err as Error).message,
+      "— set APPLE_APP_APPLE_ID in .env to enable Apple notifications"
+    );
+    return null;
+  }
+}
 
 const router = Router();
 
@@ -236,13 +255,20 @@ router.post(
         return;
       }
 
+      const verifier = getAppleNotificationVerifier();
+      if (!verifier) {
+        console.warn("[ASSN] Verifier unavailable — notification ignored");
+        res.status(200).json({ ok: true });
+        return;
+      }
+
       // Full chain verification against Apple's Root CAs. Throws on any
       // tamper — bundleId mismatch, bad signature, revoked leaf cert,
       // wrong environment. The library also verifies the inner
       // transaction JWS was signed by the same chain.
       let notification;
       try {
-        notification = await appleNotificationVerifier
+        notification = await verifier
           .verifyAndDecodeNotification(signedPayload);
       } catch (err) {
         console.error("[ASSN] Signature verification failed:", err);
@@ -262,7 +288,7 @@ router.post(
 
       let tx;
       try {
-        tx = await appleNotificationVerifier
+        tx = await verifier
           .verifyAndDecodeTransaction(signedTransactionInfo);
       } catch (err) {
         console.error("[ASSN] Transaction verification failed:", err);
