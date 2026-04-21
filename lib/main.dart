@@ -114,7 +114,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     channel.setMethodCallHandler((call) async {
       if (call.method == 'onLink') {
         final url = call.arguments as String?;
-        print('CHANNEL DEEPLINK: $url');
+        dev.log('CHANNEL DEEPLINK: $url', name: 'DeepLink');
         if (url != null) _handleDeepLink(Uri.parse(url));
       }
     });

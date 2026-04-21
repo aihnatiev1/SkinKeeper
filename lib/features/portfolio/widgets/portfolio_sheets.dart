@@ -218,6 +218,7 @@ class PortfolioOptionsSheet extends ConsumerWidget {
               final navContext =
                   Navigator.of(context, rootNavigator: true).context;
               await Future.delayed(const Duration(milliseconds: 150));
+              if (!context.mounted) return;
 
               final confirmed = await showDialog<bool>(
                 context: navContext,

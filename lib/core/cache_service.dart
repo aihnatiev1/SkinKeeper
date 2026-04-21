@@ -168,7 +168,7 @@ class CacheService {
     return DateTime.now().difference(cached) > ttl;
   }
 
-  /// Deep-cast Hive's Map<dynamic, dynamic> → Map<String, dynamic> recursively.
+  /// Deep-cast Hive's `Map<dynamic, dynamic>` → `Map<String, dynamic>` recursively.
   static dynamic _deepCast(dynamic value) {
     if (value is Map) {
       return value.map<String, dynamic>(

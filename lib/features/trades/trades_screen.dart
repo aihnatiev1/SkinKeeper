@@ -1615,7 +1615,7 @@ class _SyncButtonState extends State<_SyncButton> {
               setState(() => _syncing = true);
               try {
                 await widget.ref.read(tradesProvider.notifier).syncFromSteam();
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Synced from Steam'),
@@ -1624,7 +1624,7 @@ class _SyncButtonState extends State<_SyncButton> {
                   );
                 }
               } catch (e) {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Sync failed: ${friendlyError(e)}')),
                   );

@@ -638,7 +638,7 @@ class _ItemCardState extends ConsumerState<_ItemCard> {
         ],
       ),
     );
-    if (result == true) {
+    if (result == true && context.mounted) {
       await _deleteAllForItem(context, item);
     }
     return false; // never actually dismiss the Dismissible — we handle removal via provider
