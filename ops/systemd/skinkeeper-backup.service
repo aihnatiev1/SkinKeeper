@@ -1,0 +1,15 @@
+[Unit]
+Description=SkinKeeper Postgres backup (local + offsite)
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=skinkeeper
+# Load DB_USER, DB_NAME, PGPASSWORD, BACKUP_RCLONE_REMOTE from the API env file.
+EnvironmentFile=/opt/skinkeeper/backend/.env
+ExecStart=/opt/skinkeeper/ops/backup-postgres.sh
+# Don't let a single slow upload block the next timer firing.
+TimeoutStartSec=20m
+StandardOutput=journal
+StandardError=journal
