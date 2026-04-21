@@ -33,8 +33,13 @@ jobs:
 
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          # Strip any whitespace/CR GitHub's textarea may have injected before decoding.
+          printf '%s' "$DEPLOY_SSH_KEY_B64" | tr -d '[:space:]' | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Diagnostic: a valid ed25519 OpenSSH key file is ~419 bytes.
+          # If the size is wildly different or parsing fails, the secret is wrong.
+          echo "key file size: $(wc -c < ~/.ssh/deploy_key) bytes"
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null && echo "key parses OK"
 
           # Trust the host on first contact. Good enough for a single VPS;
           # tighten later with a pinned known_hosts secret if needed.
