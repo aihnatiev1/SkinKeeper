@@ -48,7 +48,7 @@ void main() {
         ),
       );
       expect(find.text('Premium Content'), findsOneWidget);
-      expect(find.text('PRO Feature'), findsNothing);
+      expect(find.text('Upgrade to PRO'), findsNothing);
     });
 
     testWidgets('shows lock overlay for free user', (tester) async {
@@ -62,8 +62,8 @@ void main() {
           ),
         ),
       );
-      expect(find.text('PRO Feature'), findsOneWidget);
-      expect(find.text('Unlock PRO'), findsOneWidget);
+      expect(find.text('Available with SkinKeeper PRO'), findsOneWidget);
+      expect(find.text('Upgrade to PRO'), findsOneWidget);
     });
 
     testWidgets('shows feature name in lock overlay', (tester) async {
@@ -81,7 +81,7 @@ void main() {
       expect(find.text(featureName), findsOneWidget);
     });
 
-    testWidgets('shows premium icon for free user', (tester) async {
+    testWidgets('shows lock icon for free user', (tester) async {
       await pumpWidget(
         tester,
         createTestApp(
@@ -92,7 +92,7 @@ void main() {
           ),
         ),
       );
-      expect(find.byIcon(Icons.workspace_premium_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
     });
   });
 }

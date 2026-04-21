@@ -56,8 +56,8 @@ void main() {
         marketHashName: items.first.marketHashName,
         items: items,
       );
-      // bestPrice = 12.0, count = 2, totalValue = 24.0
-      expect(group.totalValue, 24.0);
+      // bestPrice prefers steam when set → 10.0 * 2 = 20.0
+      expect(group.totalValue, 20.0);
     });
   });
 

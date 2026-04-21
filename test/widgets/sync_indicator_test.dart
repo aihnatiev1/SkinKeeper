@@ -33,20 +33,20 @@ void main() {
       expect(find.byType(SyncIndicator), findsOneWidget);
     });
 
-    testWidgets('shows cloud_off icon when no sync has occurred', (tester) async {
+    testWidgets('shows refresh icon when idle', (tester) async {
       await tester.pumpWidget(
         createTestScaffold(body: const SyncIndicator()),
       );
       await tester.pump();
-      expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.refresh_rounded), findsOneWidget);
     });
 
-    testWidgets('shows Never synced label when no sync occurred', (tester) async {
+    testWidgets('shows "Not synced yet" label when no sync occurred', (tester) async {
       await tester.pumpWidget(
         createTestScaffold(body: const SyncIndicator()),
       );
       await tester.pump();
-      expect(find.text('Never synced'), findsOneWidget);
+      expect(find.text('Not synced yet'), findsOneWidget);
     });
 
     testWidgets('tap triggers onTap callback', (tester) async {

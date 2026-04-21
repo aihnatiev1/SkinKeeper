@@ -15,6 +15,10 @@ void main() {
   }
 
   Future<void> pumpScreen(WidgetTester tester, Widget widget) async {
+    // LoginScreen is designed for a phone viewport; default 800x600 causes
+    // RenderFlex overflow. Use iPhone-ish dimensions so rendering is honest.
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(widget);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));

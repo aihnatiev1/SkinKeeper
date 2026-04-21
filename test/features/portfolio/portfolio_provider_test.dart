@@ -95,14 +95,15 @@ void main() {
       expect(item.currentPrice, 44.0);
       expect(item.totalProfit, 56.0);
       expect(item.isProfitable, true);
-      expect(item.displayName, 'Redline');
+      // displayName strips wear parens, keeps the full weapon|skin label.
+      expect(item.displayName, 'AK-47 | Redline');
       expect(item.weaponName, 'AK-47');
     });
 
-    test('displayName extracts skin name from market hash name', () {
+    test('displayName strips wear from market hash name', () {
       final item = sampleItemPL(
           marketHashName: 'M4A4 | Howl (Factory New)');
-      expect(item.displayName, 'Howl');
+      expect(item.displayName, 'M4A4 | Howl');
     });
 
     test('isProfitable is false for loss items', () {

@@ -97,7 +97,7 @@ void main() {
       final item = sampleTradeBannedItem();
       await mockNetworkImagesFor(() async {
         await pumpCard(tester, ItemCard(item: item));
-        expect(find.byIcon(Icons.lock_clock), findsOneWidget);
+        expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
       });
     });
   });
