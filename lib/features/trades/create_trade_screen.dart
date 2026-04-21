@@ -665,7 +665,6 @@ class _TradeItemGroup {
   String get displayName => first.displayName;
   String get fullIconUrl => first.fullIconUrl;
   int get priceCents => first.priceCents;
-  double get priceUsd => first.priceUsd;
 }
 
 class _ItemExchangeStep extends StatefulWidget {
@@ -1096,7 +1095,7 @@ class _GroupTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasSelection = selectedCount > 0;
     final priceStr = group.priceCents > 0
-        ? currency.format(group.priceUsd)
+        ? currency.formatCents(group.priceCents)
         : '';
 
     return Column(
@@ -1572,7 +1571,7 @@ class _TradeMiniCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(4, 3, 4, 0),
               child: Text(
                 item.priceCents > 0
-                    ? currency.format(item.priceUsd)
+                    ? currency.formatCents(item.priceCents)
                     : '—',
                 style: const TextStyle(
                   fontSize: 9,
@@ -2112,7 +2111,7 @@ class _ReviewItemTile extends StatelessWidget {
           ),
           if (item.priceCents > 0)
             Text(
-              currency.format(item.priceUsd),
+              currency.formatCents(item.priceCents),
               style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -2174,7 +2173,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
   @override
   Widget build(BuildContext context) {
     final max = widget.maxQuantity;
-    final totalPrice = widget.group.priceUsd * _selectedCount;
+    final totalPriceCents = widget.group.priceCents * _selectedCount;
 
     return Container(
       decoration: BoxDecoration(
@@ -2235,7 +2234,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                         ),
                         if (widget.group.priceCents > 0)
                           Text(
-                            widget.currency.format(widget.group.priceUsd),
+                            widget.currency.formatCents(widget.group.priceCents),
                             style: const TextStyle(
                                 fontSize: 12, color: AppTheme.textMuted),
                           ),
@@ -2298,7 +2297,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                           style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
                         ),
                         Text(
-                          widget.currency.format(totalPrice),
+                          widget.currency.formatCents(totalPriceCents),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -2584,7 +2583,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
                       // Price
                       if (item.priceCents > 0)
                         Text(
-                          widget.currency.format(item.priceUsd),
+                          widget.currency.formatCents(item.priceCents),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,

@@ -560,7 +560,7 @@ class _TradeOfferTile extends ConsumerWidget {
                 Row(
                   children: [
                     Text(
-                      currency.format(offer.giveValueUsd),
+                      currency.formatCents(offer.valueGiveCents),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
@@ -573,7 +573,7 @@ class _TradeOfferTile extends ConsumerWidget {
                           size: 12, color: AppTheme.textDisabled),
                     ),
                     Text(
-                      currency.format(offer.recvValueUsd),
+                      currency.formatCents(offer.valueRecvCents),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
@@ -592,7 +592,7 @@ class _TradeOfferTile extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(AppTheme.r8),
                       ),
                       child: Text(
-                        '${currency.formatWithSign(offer.valueDiffUsd)} (${offer.valueDiffPct >= 0 ? '+' : ''}${offer.valueDiffPct.toStringAsFixed(1)}%)',
+                        '${currency.formatCentsWithSign(offer.valueDiffCents)} (${offer.valueDiffPct >= 0 ? '+' : ''}${offer.valueDiffPct.toStringAsFixed(1)}%)',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -1218,7 +1218,7 @@ class _ListingTile extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  currency.format(listing.sellerPriceValue),
+                  currency.formatCents(listing.sellerPriceCents),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1228,7 +1228,7 @@ class _ListingTile extends ConsumerWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Buyer: ${currency.format(listing.buyerPriceValue)}',
+                  'Buyer: ${currency.formatCents(listing.buyerPriceCents)}',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppTheme.textMuted,

@@ -180,7 +180,7 @@ class _TradeDetailBody extends ConsumerWidget {
                           ),
                         ),
                         Text(
-                          'You are giving ${currency.format(offer.giveValueUsd)} and receiving ${currency.format(offer.recvValueUsd)} (${currency.formatWithSign(offer.valueDiffUsd)})',
+                          'You are giving ${currency.formatCents(offer.valueGiveCents)} and receiving ${currency.formatCents(offer.valueRecvCents)} (${currency.formatCentsWithSign(offer.valueDiffCents)})',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.loss.withValues(alpha: 0.8),
@@ -205,7 +205,7 @@ class _TradeDetailBody extends ConsumerWidget {
                 children: [
                   _ValueColumn(
                     label: 'You Give',
-                    value: offer.giveValueUsd,
+                    valueCents: offer.valueGiveCents,
                     color: AppTheme.loss,
                     currency: currency,
                   ),
@@ -213,7 +213,7 @@ class _TradeDetailBody extends ConsumerWidget {
                       color: AppTheme.textDisabled, size: 24),
                   _ValueColumn(
                     label: 'You Get',
-                    value: offer.recvValueUsd,
+                    valueCents: offer.valueRecvCents,
                     color: AppTheme.profit,
                     currency: currency,
                   ),
@@ -224,7 +224,7 @@ class _TradeDetailBody extends ConsumerWidget {
                   ),
                   _ValueColumn(
                     label: 'Diff',
-                    value: offer.valueDiffUsd,
+                    valueCents: offer.valueDiffCents,
                     color: offer.valueDiffCents >= 0
                         ? AppTheme.profit
                         : AppTheme.loss,
@@ -582,7 +582,7 @@ class _DetailItemTile extends StatelessWidget {
           // Price
           if (item.priceCents > 0)
             Text(
-              currency.format(item.priceUsd),
+              currency.formatCents(item.priceCents),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -598,14 +598,14 @@ class _DetailItemTile extends StatelessWidget {
 
 class _ValueColumn extends StatelessWidget {
   final String label;
-  final double value;
+  final int valueCents;
   final Color color;
   final bool showSign;
   final CurrencyInfo currency;
 
   const _ValueColumn({
     required this.label,
-    required this.value,
+    required this.valueCents,
     required this.color,
     this.showSign = false,
     required this.currency,
@@ -624,7 +624,9 @@ class _ValueColumn extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         Text(
-          showSign ? currency.formatWithSign(value) : currency.format(value),
+          showSign
+              ? currency.formatCentsWithSign(valueCents)
+              : currency.formatCents(valueCents),
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,

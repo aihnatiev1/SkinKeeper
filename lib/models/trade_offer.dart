@@ -27,8 +27,6 @@ class TradeOfferItem {
     return parts.length > 1 ? parts[1].split(' (').first : marketHashName!;
   }
 
-  double get priceUsd => priceCents / 100;
-
   factory TradeOfferItem.fromJson(Map<String, dynamic> json) {
     return TradeOfferItem(
       id: (json['id'] as num?)?.toInt() ?? 0,
@@ -106,12 +104,8 @@ class TradeOffer {
   List<TradeOfferItem> get receiveItems =>
       items.where((i) => i.side == 'receive').toList();
 
-  double get giveValueUsd => valueGiveCents / 100;
-  double get recvValueUsd => valueRecvCents / 100;
-
   /// Value difference from user's perspective. Negative = losing value.
   int get valueDiffCents => valueRecvCents - valueGiveCents;
-  double get valueDiffUsd => valueDiffCents / 100;
 
   /// Profit/loss percentage relative to what you're giving.
   double get valueDiffPct =>

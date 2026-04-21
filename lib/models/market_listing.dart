@@ -62,7 +62,4 @@ class MarketListing {
       (name != null && name!.isNotEmpty) ? name! : (marketHashName ?? 'Unknown Item');
 
   String get fullIconUrl => SteamImage.url(iconUrl ?? '', size: '360fx360f');
-
-  double get sellerPriceValue => sellerPriceCents / 100;
-  double get buyerPriceValue => buyerPriceCents / 100;
 }

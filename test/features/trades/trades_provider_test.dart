@@ -46,10 +46,9 @@ void main() {
       expect(offer.isIncoming, true);
       expect(offer.isPending, true);
       expect(offer.status, 'pending');
-      expect(offer.giveValueUsd, 50.0);
-      expect(offer.recvValueUsd, 48.0);
+      expect(offer.valueGiveCents, 5000);
+      expect(offer.valueRecvCents, 4800);
       expect(offer.valueDiffCents, -200);
-      expect(offer.valueDiffUsd, -2.0);
       expect(offer.items.length, 2);
       expect(offer.giveItems.length, 1);
       expect(offer.receiveItems.length, 1);
@@ -108,7 +107,7 @@ void main() {
 
       expect(item.side, 'give');
       expect(item.assetId, '100');
-      expect(item.priceUsd, 12.50);
+      expect(item.priceCents, 1250);
       expect(item.displayName, 'Redline');
       expect(item.fullIconUrl, contains('icon1'));
     });
