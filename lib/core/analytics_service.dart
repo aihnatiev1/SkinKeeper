@@ -1,6 +1,7 @@
 import 'dart:developer' as dev;
 
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
@@ -8,9 +9,14 @@ import 'package:flutter/foundation.dart';
 ///
 /// Events follow a simple `noun_verb` naming convention:
 ///   sell_started, sell_completed, trade_created, alert_triggered, etc.
+///
+/// Every public method is a no-op when Firebase isn't initialized, so
+/// widget tests can invoke them without a Firebase mock harness. Prod
+/// always has Firebase initialized before any screen mounts.
 class Analytics {
-  static final _analytics = FirebaseAnalytics.instance;
-  static final _crashlytics = FirebaseCrashlytics.instance;
+  static bool get _firebaseReady => Firebase.apps.isNotEmpty;
+  static FirebaseAnalytics get _analytics => FirebaseAnalytics.instance;
+  static FirebaseCrashlytics get _crashlytics => FirebaseCrashlytics.instance;
 
   /// Initialize Crashlytics error handlers. Call after Firebase.initializeApp().
   static Future<void> init() async {
@@ -37,6 +43,7 @@ class Analytics {
   // ─── User Identity ─────────────────────────────────────────────────
 
   static Future<void> setUserId(String? userId) async {
+    if (!_firebaseReady) return;
     await _analytics.setUserId(id: userId);
     if (userId != null) {
       await _crashlytics.setUserIdentifier(userId);
@@ -44,18 +51,21 @@ class Analytics {
   }
 
   static Future<void> setUserProperty(String name, String? value) async {
+    if (!_firebaseReady) return;
     await _analytics.setUserProperty(name: name, value: value);
   }
 
   // ─── Screens ───────────────────────────────────────────────────────
 
   static Future<void> screen(String name) async {
+    if (!_firebaseReady) return;
     await _analytics.logScreenView(screenName: name);
   }
 
   // ─── Auth Events ───────────────────────────────────────────────────
 
   static Future<void> login({required String method}) async {
+    if (!_firebaseReady) return;
     await _analytics.logLogin(loginMethod: method);
   }
 
@@ -193,12 +203,14 @@ class Analytics {
   // ─── Error Logging ─────────────────────────────────────────────────
 
   static Future<void> recordError(dynamic error, StackTrace? stack, {String? reason}) async {
+    if (!_firebaseReady) return;
     await _crashlytics.recordError(error, stack, reason: reason ?? 'non-fatal');
   }
 
   // ─── Internal ──────────────────────────────────────────────────────
 
   static Future<void> _event(String name, [Map<String, Object>? params]) async {
+    if (!_firebaseReady) return;
     await _analytics.logEvent(name: name, parameters: params);
   }
 }

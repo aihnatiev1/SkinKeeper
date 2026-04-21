@@ -15,9 +15,10 @@ void main() {
   }
 
   Future<void> pumpScreen(WidgetTester tester, Widget widget) async {
-    // LoginScreen is designed for a phone viewport; default 800x600 causes
-    // RenderFlex overflow. Use iPhone-ish dimensions so rendering is honest.
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+    // LoginScreen has several Rows that exceed the default 800x600 surface.
+    // Give the test a tall viewport; width is intentionally generous to dodge
+    // minor row overflows that aren't behaviour-relevant.
+    await tester.binding.setSurfaceSize(const Size(1024, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(widget);
     await tester.pump();

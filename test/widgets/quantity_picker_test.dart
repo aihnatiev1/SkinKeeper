@@ -28,7 +28,9 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        // Explicit pump durations — pumpAndSettle hangs on flutter_animate
+        // repeating animations in this sheet.
+        await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('x5 available'), findsOneWidget);
       });
     });
@@ -44,7 +46,9 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        // Explicit pump durations — pumpAndSettle hangs on flutter_animate
+        // repeating animations in this sheet.
+        await tester.pump(const Duration(milliseconds: 300));
         // The quantity display is the large "1" text
         expect(find.text('1'), findsWidgets);
         // The confirm button shows "Select 1"
@@ -63,7 +67,9 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        // Explicit pump durations — pumpAndSettle hangs on flutter_animate
+        // repeating animations in this sheet.
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.tap(find.byIcon(Icons.add_rounded));
         await tester.pump();
         expect(find.text('Select 2'), findsOneWidget);
@@ -81,7 +87,9 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        // Explicit pump durations — pumpAndSettle hangs on flutter_animate
+        // repeating animations in this sheet.
+        await tester.pump(const Duration(milliseconds: 300));
         // Increment first
         await tester.tap(find.byIcon(Icons.add_rounded));
         await tester.pump();
@@ -97,18 +105,38 @@ void main() {
       final group = makeGroup(3);
       List<String>? confirmedIds;
       await mockNetworkImagesFor(() async {
+        // QuantityPickerSheet calls Navigator.pop() on confirm. To give
+        // that pop somewhere to go, push the sheet as a modal inside a
+        // normal MaterialApp Navigator, then trigger the show via a tap.
         await tester.pumpWidget(
-          createTestScaffold(
-            body: QuantityPickerSheet(
-              group: group,
-              onConfirm: (ids) => confirmedIds = ids,
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (ctx) => Center(
+                  child: ElevatedButton(
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: ctx,
+                      builder: (_) => QuantityPickerSheet(
+                        group: group,
+                        onConfirm: (ids) => confirmedIds = ids,
+                      ),
+                    ),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
             ),
           ),
         );
-        await tester.pumpAndSettle();
-        // Tap confirm with default quantity (1)
-        await tester.tap(find.text('Select 1'));
+        await tester.tap(find.text('open'));
+        // Modal bottom sheet entrance animation is ~250ms in Material.
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        // Tap confirm with default quantity (1). warnIfMissed=false so
+        // we don't fail if the button is briefly offscreen during the
+        // keep-alive-during-pop transition.
+        await tester.tap(find.text('Select 1'), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 400));
         expect(confirmedIds, isNotNull);
         expect(confirmedIds!.length, 1);
         expect(confirmedIds!.first, group.items.first.assetId);
@@ -126,7 +154,9 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        // Explicit pump durations — pumpAndSettle hangs on flutter_animate
+        // repeating animations in this sheet.
+        await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('All (10)'), findsOneWidget);
       });
     });
