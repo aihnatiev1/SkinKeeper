@@ -14,6 +14,7 @@
     "test:ci": "vitest run --coverage --reporter=verbose"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^3.0.0",
     "@csfloat/cs2-inspect-serializer": "^1.1.6",
     "axios": "^1.13.6",
     "cheerio": "^1.2.0",

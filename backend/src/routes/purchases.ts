@@ -1,4 +1,11 @@
 import { Router, Request, Response } from "express";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  SignedDataVerifier,
+  Environment,
+} from "@apple/app-store-server-library";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import {
   PRODUCT_IDS,
@@ -12,28 +19,33 @@ import { pool } from "../db/pool.js";
 
 const APPLE_BUNDLE_ID =
   process.env.APPLE_BUNDLE_ID ?? "app.skinkeeper.store";
+const APPLE_APP_APPLE_ID = process.env.APPLE_APP_APPLE_ID
+  ? Number(process.env.APPLE_APP_APPLE_ID)
+  : undefined;
 
-/// Decode a JWS compact-serialized token's payload without verifying the
-/// signature. Returns null on malformed input.
-///
-/// SECURITY: Apple signs ASSN v2 payloads with a cert chain rooted at
-/// the Apple Root CA. Full verification requires walking that chain —
-/// scoped as a follow-up (tracked in the commit message). Until then
-/// this endpoint trusts bundle-id + transaction-id lookup as the guard:
-/// an attacker would need a valid transactionId belonging to our app to
-/// trigger a state change, and they still only get to revoke the very
-/// user that owns that transaction (never elevate someone else).
-function decodeJwsPayload(jws: string): Record<string, unknown> | null {
-  const parts = jws.split(".");
-  if (parts.length !== 3) return null;
-  try {
-    return JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf8")
-    ) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
+// ─── ASSN v2 signature verifier ─────────────────────────────────────
+// Loaded once at module load; throws on missing cert files so we fail
+// fast at startup rather than on the first notification.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CERT_DIR = join(__dirname, "..", "..", "certs", "apple");
+const APPLE_ROOT_CERTS: Buffer[] = [
+  "AppleRootCA-G3.cer",
+  "AppleRootCA-G2.cer",
+  "AppleIncRootCertificate.cer",
+].map((name) => readFileSync(join(CERT_DIR, name)));
+
+const APPLE_ENV =
+  process.env.NODE_ENV === "production"
+    ? Environment.PRODUCTION
+    : Environment.SANDBOX;
+
+const appleNotificationVerifier = new SignedDataVerifier(
+  APPLE_ROOT_CERTS,
+  true, // enableOnlineChecks — verifies leaf cert isn't revoked
+  APPLE_ENV,
+  APPLE_BUNDLE_ID,
+  APPLE_APP_APPLE_ID
+);
 
 const router = Router();
 
@@ -224,19 +236,23 @@ router.post(
         return;
       }
 
-      const outer = decodeJwsPayload(signedPayload);
-      if (!outer) {
-        console.warn("[ASSN] Malformed outer JWS");
+      // Full chain verification against Apple's Root CAs. Throws on any
+      // tamper — bundleId mismatch, bad signature, revoked leaf cert,
+      // wrong environment. The library also verifies the inner
+      // transaction JWS was signed by the same chain.
+      let notification;
+      try {
+        notification = await appleNotificationVerifier
+          .verifyAndDecodeNotification(signedPayload);
+      } catch (err) {
+        console.error("[ASSN] Signature verification failed:", err);
         res.status(200).json({ ok: true });
         return;
       }
 
-      const notificationType = outer["notificationType"] as string | undefined;
-      const subtype = outer["subtype"] as string | undefined;
-      const data = outer["data"] as Record<string, unknown> | undefined;
-      const signedTransactionInfo = data?.["signedTransactionInfo"] as
-        | string
-        | undefined;
+      const notificationType = notification.notificationType;
+      const subtype = notification.subtype;
+      const signedTransactionInfo = notification.data?.signedTransactionInfo;
 
       if (!notificationType || !signedTransactionInfo) {
         console.warn("[ASSN] Missing notificationType or transaction info");
@@ -244,28 +260,20 @@ router.post(
         return;
       }
 
-      const tx = decodeJwsPayload(signedTransactionInfo);
-      if (!tx) {
-        console.warn("[ASSN] Malformed transaction JWS");
+      let tx;
+      try {
+        tx = await appleNotificationVerifier
+          .verifyAndDecodeTransaction(signedTransactionInfo);
+      } catch (err) {
+        console.error("[ASSN] Transaction verification failed:", err);
         res.status(200).json({ ok: true });
         return;
       }
 
-      // Bundle check — reject notifications for a different app.
-      if (tx["bundleId"] !== APPLE_BUNDLE_ID) {
-        console.warn(
-          `[ASSN] bundleId mismatch: got ${String(tx["bundleId"])} expected ${APPLE_BUNDLE_ID}`
-        );
-        res.status(200).json({ ok: true });
-        return;
-      }
-
-      const originalTransactionId = tx["originalTransactionId"] as
-        | string
-        | undefined;
-      const transactionId = tx["transactionId"] as string | undefined;
-      const productId = tx["productId"] as string | undefined;
-      const expiresDate = tx["expiresDate"] as number | undefined; // ms since epoch
+      const originalTransactionId = tx.originalTransactionId;
+      const transactionId = tx.transactionId;
+      const productId = tx.productId;
+      const expiresDate = tx.expiresDate; // ms since epoch
 
       if (!originalTransactionId) {
         console.warn("[ASSN] Missing originalTransactionId");
