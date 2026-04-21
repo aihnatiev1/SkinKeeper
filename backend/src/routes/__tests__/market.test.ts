@@ -238,16 +238,6 @@ describe("SESSION_EXPIRED propagation", () => {
     expect(res.body.code).toBe("SESSION_EXPIRED");
   });
 
-  it("POST /sell returns 401 when session is invalid", async () => {
-    mockDemoCheck();
-    const { SteamSessionService } = await import("../../services/steamSession.js");
-    vi.mocked(SteamSessionService.validateSession).mockResolvedValueOnce(false);
-    const jwt = createTestJwt(1);
-    const res = await request(app)
-      .post("/api/market/sell")
-      .set("Authorization", `Bearer ${jwt}`)
-      .send({ assetId: "a1", priceInCents: 500 });
-    expect(res.status).toBe(401);
-    expect(res.body.code).toBe("SESSION_EXPIRED");
-  });
+  // POST /sell is hardcoded-deprecated (returns 410) so session-propagation
+  // no longer applies there — session tests live on /sell-operation above.
 });

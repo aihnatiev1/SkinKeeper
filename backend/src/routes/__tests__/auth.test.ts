@@ -135,13 +135,16 @@ describe("POST /api/auth/steam/verify", () => {
   });
 
   it("returns 200 with token and user on valid OpenID params", async () => {
-    // upsert users → return user row
+    // SELECT sa.user_id FROM steam_accounts — existing-account lookup
+    // returns empty so the route falls into the INSERT users branch
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // INSERT users RETURNING ... → new user row
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 1, steam_id: "76561198000000001", display_name: "TestUser", avatar_url: "https://avatars.steamstatic.com/test.jpg", is_premium: false, premium_until: null }],
     });
-    // insert steam_accounts
+    // INSERT steam_accounts
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    // update users active_account_id
+    // UPDATE users active_account_id
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)

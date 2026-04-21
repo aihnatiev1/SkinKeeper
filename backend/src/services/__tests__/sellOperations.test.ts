@@ -164,22 +164,22 @@ describe("getDailyVolume", () => {
     const info = await getDailyVolume(1);
 
     expect(info.count).toBe(45);
-    expect(info.limit).toBe(200);
-    expect(info.warningAt).toBe(150);
-    expect(info.remaining).toBe(155); // 200 - 45
+    expect(info.limit).toBe(100);
+    expect(info.warningAt).toBe(80);
+    expect(info.remaining).toBe(55); // 100 - 45
   });
 
-  it("returns count=0 and remaining=200 for fresh user", async () => {
+  it("returns count=0 and remaining=100 for fresh user", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] }); // no row = no sells today
 
     const info = await getDailyVolume(1);
 
     expect(info.count).toBe(0);
-    expect(info.remaining).toBe(200);
+    expect(info.remaining).toBe(100);
   });
 
   it("returns remaining=0 when at limit", async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [{ count: 200 }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ count: 100 }] });
 
     const info = await getDailyVolume(1);
     expect(info.remaining).toBe(0);

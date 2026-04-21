@@ -26,6 +26,8 @@ vi.mock("../currency.js", () => ({
   getWalletCurrency: vi.fn().mockResolvedValue(null),
   getCurrencyInfo: vi.fn().mockReturnValue({ code: "USD", symbol: "$", decimals: 2 }),
   getExchangeRate: vi.fn().mockResolvedValue(null),
+  // Minimum undercut step in Steam wallet units. USD = 1 cent.
+  getMinUndercutUnit: vi.fn().mockReturnValue(1),
   parseSteamPrice: vi.fn().mockImplementation((s: string | undefined) => {
     if (!s) return null;
     const cleaned = s.replace(/[^\d.,]/g, "").replace(/\s/g, "");

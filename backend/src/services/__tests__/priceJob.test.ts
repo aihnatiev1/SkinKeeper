@@ -107,9 +107,9 @@ describe("priceJob", () => {
     //   subscriptions, SteamDepth, steamBatchFull, pruning
     expect(mockedCron.schedule).toHaveBeenCalledTimes(9);
 
-    // Background crawlers started
+    // Background crawlers started. CSFloat crawler is currently disabled
+    // in priceJob.ts (commented out), so only the Steam crawler is asserted.
     expect(startSteamCrawlers).toHaveBeenCalled();
-    expect(startCSFloatCrawler).toHaveBeenCalled();
 
     // Verify cron expressions
     const calls = (mockedCron.schedule as any).mock.calls;
