@@ -12,19 +12,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/analytics_service.dart';
 import '../../core/api_client.dart';
 import '../../core/export_service.dart';
-import '../auth/session_gate.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/inventory_item.dart';
 import '../../widgets/shared_ui.dart';
-import 'sell_provider.dart';
-import '../../widgets/glass_sheet.dart';
-import 'widgets/fee_breakdown.dart';
 import 'widgets/price_comparison_table.dart' show PriceComparisonTable, sourceColor, sourceDisplayName;
 import 'widgets/pl_section.dart';
 import 'widgets/price_history_chart.dart';
-import 'widgets/sell_bottom_sheet.dart';
-import 'widgets/sell_progress_sheet.dart';
+import 'widgets/sell_actions.dart';
 import 'widgets/steam_market_depth.dart';
 import 'widgets/sticker_display.dart';
 import 'widgets/sticker_value_row.dart';
@@ -372,7 +367,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
             const SizedBox(height: AppTheme.s16),
 
             // ── Sell actions ──
-            _SellActions(item: item)
+            SellActions(item: item)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 300.ms),
 
@@ -502,150 +497,6 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
 
 
 
-// ── Sell Actions ─────────────────────────────────────────────────
-
-class _SellActions extends ConsumerWidget {
-  final InventoryItem item;
-
-  const _SellActions({required this.item});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final quickPriceAsync = ref.watch(quickPriceProvider(QuickPriceRequest(
-      marketHashName: item.marketHashName,
-      fallbackPriceUsd: item.bestPrice ?? item.steamPrice,
-    )));
-
-    return GlassCard(
-      padding: const EdgeInsets.all(AppTheme.s14),
-      child: Column(
-        children: [
-          quickPriceAsync.when(
-            data: (result) {
-              final priceCents = result.sellerReceivesCents;
-              final stale = result.stale;
-              final priceStr = result.formatPrice(priceCents);
-              return Column(
-                children: [
-                  if (stale)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: AppTheme.s10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.loss.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppTheme.loss.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.warning_amber_rounded,
-                                color: AppTheme.loss, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Price may be outdated',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.loss,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  FeeBreakdown(sellerReceivesCents: priceCents, walletSymbol: result.currencySymbol),
-                  const SizedBox(height: AppTheme.s10),
-                  // Sell buttons — clean row
-                  Row(
-                    children: [
-                      // Quick Sell
-                      Expanded(
-                        child: SizedBox(
-                          height: 44,
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              if (!await requireSession(context, ref)) return;
-                              if (!context.mounted) return;
-                              if (stale) {
-                                HapticFeedback.selectionClick();
-                                showGlassSheet(context, SellBottomSheet(items: [item]));
-                                return;
-                              }
-                              HapticFeedback.mediumImpact();
-                              final items = [
-                                {
-                                  'assetId': item.assetId,
-                                  'marketHashName': item.marketHashName,
-                                  'priceCents': 0,
-                                  if (item.accountId != null) 'accountId': item.accountId,
-                                },
-                              ];
-                              if (context.mounted) {
-                                showGlassSheetLocked(context, const SellProgressSheet());
-                              }
-                              await ref.read(sellOperationProvider.notifier)
-                                  .startQuickSell(items, accountId: item.accountId);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: stale ? AppTheme.warning : AppTheme.primary,
-                              foregroundColor: stale ? Colors.black : Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(AppTheme.r12),
-                              ),
-                            ),
-                            child: Text(
-                              stale ? 'Check Price & Sell' : 'Quick Sell $priceStr',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Custom price
-                      SizedBox(
-                        height: 44,
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            if (!await requireSession(context, ref)) return;
-                            if (!context.mounted) return;
-                            HapticFeedback.selectionClick();
-                            showGlassSheet(context, SellBottomSheet(items: [item]));
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.textSecondary,
-                            side: const BorderSide(color: AppTheme.borderLight),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTheme.r12),
-                            ),
-                          ),
-                          child: const Text('Custom', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            },
-            loading: () => const ShimmerBox(height: 48),
-            error: (_, _) => GradientButton(
-              label: 'Sell Item',
-              icon: Icons.sell_rounded,
-              onPressed: () {
-                showGlassSheet(context, SellBottomSheet(items: [item]));
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 
 // ── Marketplace Links (with prices) ──────────────────────────────
