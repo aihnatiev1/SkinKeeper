@@ -74,8 +74,25 @@ export async function verifyAppleReceipt(
       };
     }
 
-    // Fallback: trust client data when Apple API not configured
-    console.warn("[Purchase] Apple API not configured — trusting client receipt data (NOT safe for production)");
+    // No server-side validation configured. In production this is a free-
+    // premium vulnerability (any jailbroken client gets Pro), so fail closed.
+    // Dev/test keeps the lenient path so local work and CI don't need real
+    // App Store Connect keys.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[Purchase] Apple API not configured — rejecting receipt in production"
+      );
+      return {
+        valid: false,
+        productId: clientData.productId || "",
+        transactionId,
+        error: "Receipt validation unavailable",
+      };
+    }
+
+    console.warn(
+      "[Purchase] Apple API not configured — trusting client receipt data (dev/test only)"
+    );
     return {
       valid: true,
       productId: clientData.productId || "",
@@ -107,30 +124,36 @@ export async function verifyGoogleReceipt(
 ): Promise<VerifyResult> {
   // TODO: Implement Google Play Developer API validation when service account key is available.
   // https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptions
-  console.warn("[Purchase] Google receipt not server-verified — no credentials configured");
 
-  try {
-    return {
-      valid: true,
-      productId,
-      transactionId: purchaseToken,
-      purchaseDate: new Date(),
-      // Google subscriptions: calculate expiry based on product
-      expiresDate: new Date(
-        Date.now() +
-          (productId === PRODUCTS.yearly
-            ? 365 * 24 * 60 * 60 * 1000
-            : 30 * 24 * 60 * 60 * 1000)
-      ),
-    };
-  } catch {
+  // Same fail-closed guard as Apple: never grant premium from an unverified
+  // client token in production. Dev/test keeps the lenient path.
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[Purchase] Google Play API not configured — rejecting receipt in production"
+    );
     return {
       valid: false,
-      productId: "",
-      transactionId: "",
-      error: "Invalid purchase token",
+      productId,
+      transactionId: purchaseToken,
+      error: "Receipt validation unavailable",
     };
   }
+
+  console.warn(
+    "[Purchase] Google receipt not server-verified — trusting client token (dev/test only)"
+  );
+  return {
+    valid: true,
+    productId,
+    transactionId: purchaseToken,
+    purchaseDate: new Date(),
+    expiresDate: new Date(
+      Date.now() +
+        (productId === PRODUCTS.yearly
+          ? 365 * 24 * 60 * 60 * 1000
+          : 30 * 24 * 60 * 60 * 1000)
+    ),
+  };
 }
 
 // ---- Save Receipt & Activate Premium ----

@@ -139,9 +139,25 @@ app.use("/api/data", dataRoutes);
 // Global error handler (must be after all routes)
 app.use(errorHandler);
 
-// Health check
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+// Health check. Used by external uptime monitors — must reflect real
+// reachability, not just "process is up", so we ping the DB with a
+// bounded timeout and return 503 if it's unhealthy.
+app.get("/api/health", async (_req, res) => {
+  try {
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("db timeout")), 2000)
+      ),
+    ]);
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({
+      status: "degraded",
+      reason: "database unreachable",
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 async function start() {
