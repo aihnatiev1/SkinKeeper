@@ -2,11 +2,20 @@ enum AlertCondition { above, below, changePct, bargain, sellNow, arbitrage }
 
 enum AlertSource { steam, skinport, csfloat, dmarket, any }
 
+/// A price alert stored on the backend.
+///
+/// `threshold` is semantically polymorphic on the wire: USD for every
+/// condition except [AlertCondition.changePct], where it's a raw percent.
+/// This model splits it into typed fields so callers don't have to guess:
+///   • [thresholdCents] — populated for money conditions; null for changePct.
+///   • [thresholdPct]   — populated for changePct; null otherwise.
+/// Exactly one is non-null per instance.
 class PriceAlert {
   final int id;
   final String marketHashName;
   final AlertCondition condition;
-  final double threshold;
+  final int? thresholdCents;
+  final double? thresholdPct;
   final AlertSource source;
   final bool isActive;
   final int cooldownMinutes;
@@ -17,7 +26,8 @@ class PriceAlert {
     required this.id,
     required this.marketHashName,
     required this.condition,
-    required this.threshold,
+    this.thresholdCents,
+    this.thresholdPct,
     this.source = AlertSource.any,
     this.isActive = true,
     this.cooldownMinutes = 60,
@@ -26,13 +36,17 @@ class PriceAlert {
   });
 
   factory PriceAlert.fromJson(Map<String, dynamic> json) {
+    final condition = AlertCondition.values.firstWhere(
+      (e) => e.name == json['condition'],
+    );
+    final raw = double.parse(json['threshold'].toString());
+    final isPct = condition == AlertCondition.changePct;
     return PriceAlert(
       id: json['id'] as int,
       marketHashName: json['market_hash_name'] as String,
-      condition: AlertCondition.values.firstWhere(
-        (e) => e.name == json['condition'],
-      ),
-      threshold: double.parse(json['threshold'].toString()),
+      condition: condition,
+      thresholdCents: isPct ? null : (raw * 100).round(),
+      thresholdPct: isPct ? raw : null,
       source: AlertSource.values.firstWhere(
         (e) => e.name == (json['source'] ?? 'any'),
         orElse: () => AlertSource.any,
@@ -45,14 +59,6 @@ class PriceAlert {
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
-
-  Map<String, dynamic> toCreateJson() => {
-        'market_hash_name': marketHashName,
-        'condition': condition.name,
-        'threshold': threshold,
-        'source': source.name,
-        'cooldown_minutes': cooldownMinutes,
-      };
 }
 
 class AlertHistoryItem {
@@ -60,9 +66,10 @@ class AlertHistoryItem {
   final int alertId;
   final String marketHashName;
   final String condition;
-  final double threshold;
+  final int? thresholdCents;
+  final double? thresholdPct;
   final String source;
-  final double priceUsd;
+  final int priceCents;
   final String message;
   final DateTime sentAt;
 
@@ -71,22 +78,27 @@ class AlertHistoryItem {
     required this.alertId,
     required this.marketHashName,
     required this.condition,
-    required this.threshold,
+    this.thresholdCents,
+    this.thresholdPct,
     required this.source,
-    required this.priceUsd,
+    required this.priceCents,
     required this.message,
     required this.sentAt,
   });
 
   factory AlertHistoryItem.fromJson(Map<String, dynamic> json) {
+    final condition = json['condition'] as String;
+    final raw = double.parse(json['threshold'].toString());
+    final isPct = condition == 'changePct';
     return AlertHistoryItem(
       id: json['id'] as int,
       alertId: json['alert_id'] as int,
       marketHashName: json['market_hash_name'] as String,
-      condition: json['condition'] as String,
-      threshold: double.parse(json['threshold'].toString()),
+      condition: condition,
+      thresholdCents: isPct ? null : (raw * 100).round(),
+      thresholdPct: isPct ? raw : null,
       source: json['source'] as String,
-      priceUsd: (json['price_usd'] as num).toDouble(),
+      priceCents: ((json['price_usd'] as num).toDouble() * 100).round(),
       message: json['message'] as String,
       sentAt: DateTime.parse(json['sent_at'] as String),
     );

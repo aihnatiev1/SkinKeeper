@@ -246,8 +246,8 @@ class _AlertCard extends ConsumerWidget {
     };
 
     final thresholdStr = alert.condition == AlertCondition.changePct
-        ? '${alert.threshold.toStringAsFixed(1)}%'
-        : currency.format(alert.threshold);
+        ? '${alert.thresholdPct!.toStringAsFixed(1)}%'
+        : currency.formatCents(alert.thresholdCents!);
 
     return Dismissible(
       key: ValueKey(alert.id),

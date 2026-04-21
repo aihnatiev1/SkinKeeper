@@ -2,7 +2,6 @@ import 'package:skin_keeper/models/inventory_item.dart';
 import 'package:skin_keeper/models/trade_offer.dart';
 import 'package:skin_keeper/models/user.dart';
 import 'package:skin_keeper/models/profit_loss.dart';
-import 'package:skin_keeper/models/price_data.dart';
 import 'package:skin_keeper/features/portfolio/portfolio_provider.dart';
 
 // ---- Inventory Items --------------------------------------------------------
@@ -279,25 +278,3 @@ ItemPL sampleItemPL({
   );
 }
 
-// ---- Prices -----------------------------------------------------------------
-
-PriceData samplePriceData({
-  String source = 'steam',
-  double priceUsd = 12.50,
-}) {
-  return PriceData(
-    marketHashName: 'AK-47 | Redline (Field-Tested)',
-    source: source,
-    priceUsd: priceUsd,
-    recordedAt: DateTime(2026, 3, 1),
-  );
-}
-
-PriceSummary samplePriceSummary() {
-  return const PriceSummary(
-    marketHashName: 'AK-47 | Redline (Field-Tested)',
-    currentPrices: {'steam': 12.50, 'skinport': 11.80, 'csfloat': 11.40},
-    change24h: 2.5,
-    change7d: -1.2,
-  );
-}
