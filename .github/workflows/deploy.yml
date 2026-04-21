@@ -31,12 +31,16 @@ jobs:
           script_stop: true
           script: |
             set -e
-            cd /opt/skinkeeper/backend
-            git fetch --quiet origin main
-            git reset --hard origin/main
-            npm ci --production=false --silent
+            REPO=/root/skinkeeper-api
+            cd "$REPO/backend"
+            # Stash any uncommitted prod edits so hard-reset doesn't eat them.
+            if ! git -C "$REPO" diff --quiet HEAD || [ -n "$(git -C "$REPO" ls-files --others --exclude-standard)" ]; then
+              git -C "$REPO" stash push -u -m "auto-deploy-$(date +%s)" || true
+            fi
+            git -C "$REPO" fetch --quiet origin main
+            git -C "$REPO" reset --hard origin/main
+            npm ci --silent
             npm run build
-            npm prune --production --silent
             pm2 restart skinkeeper-api --update-env
             pm2 save
             # Smoke test — fail the deploy if health isn't reachable within 20s.
