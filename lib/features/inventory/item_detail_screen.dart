@@ -28,6 +28,7 @@ import 'widgets/sell_bottom_sheet.dart';
 import 'widgets/sell_progress_sheet.dart';
 import 'widgets/steam_market_depth.dart';
 import 'widgets/sticker_display.dart';
+import 'widgets/sticker_value_row.dart';
 import 'widgets/wear_bar.dart';
 
 class ItemDetailScreen extends ConsumerStatefulWidget {
@@ -309,7 +310,7 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
                     ),
                     if (item.stickerValue != null && item.stickerValue! > 0) ...[
                       const SizedBox(height: AppTheme.s10),
-                      _StickerValueRow(
+                      StickerValueRow(
                         stickerValue: item.stickerValue!,
                         bestPrice: item.bestPrice,
                         currency: currency,
@@ -1166,85 +1167,4 @@ class _BuffSpreadWidget extends StatelessWidget {
   }
 }
 
-// ── Sticker Value + Overpay Row ──────────────────────────────────
-class _StickerValueRow extends StatelessWidget {
-  final double stickerValue;
-  final double? bestPrice;
-  final CurrencyInfo currency;
-
-  const _StickerValueRow({
-    required this.stickerValue,
-    required this.currency,
-    this.bestPrice,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Calculate overpay percentage: sticker value / base item price
-    final overpayPct = bestPrice != null && bestPrice! > 0
-        ? (stickerValue / bestPrice! * 100)
-        : null;
-    final isHighOverpay = overpayPct != null && overpayPct > 50;
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
-      children: [
-        // Sticker value badge
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.s10,
-            vertical: AppTheme.s6,
-          ),
-          decoration: BoxDecoration(
-            color: AppTheme.warning.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(AppTheme.r6),
-            border: Border.all(
-              color: AppTheme.warning.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.auto_awesome,
-                  size: 14, color: AppTheme.warning.withValues(alpha: 0.8)),
-              const SizedBox(width: 6),
-              Text(
-                'Sticker Value: ${currency.format(stickerValue)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.warning.withValues(alpha: 0.9),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Overpay indicator (if sticker value > 50% of item price)
-        if (isHighOverpay)
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.s10,
-              vertical: AppTheme.s6,
-            ),
-            decoration: BoxDecoration(
-              color: AppTheme.profit.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppTheme.r6),
-              border: Border.all(
-                color: AppTheme.profit.withValues(alpha: 0.2),
-              ),
-            ),
-            child: Text(
-              'Sticker Overpay: ${overpayPct.round()}%',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.profit,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
 
