@@ -25,7 +25,7 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
         run: |
           set -euo pipefail
@@ -33,13 +33,28 @@ jobs:
 
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          # Strip any whitespace/CR GitHub's textarea may have injected before decoding.
-          printf '%s' "$DEPLOY_SSH_KEY_B64" | tr -d '[:space:]' | base64 -d > ~/.ssh/deploy_key
+
+          # Accept either raw PEM or base64 in DEPLOY_SSH_KEY. PEM starts with
+          # "-----BEGIN"; base64 doesn't. Strip CR either way (GitHub's textarea
+          # on some browsers saves CRLF, which openssh refuses to parse).
+          if printf '%s' "$DEPLOY_SSH_KEY" | head -c 11 | grep -q "^-----BEGIN"; then
+            echo "detected PEM key"
+            printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          else
+            echo "detected base64 key"
+            printf '%s' "$DEPLOY_SSH_KEY" | tr -d '[:space:]' | base64 -d > ~/.ssh/deploy_key
+          fi
           chmod 600 ~/.ssh/deploy_key
-          # Diagnostic: a valid ed25519 OpenSSH key file is ~419 bytes.
-          # If the size is wildly different or parsing fails, the secret is wrong.
+
+          # Diagnostic: valid ed25519 OpenSSH private key is ~419 bytes.
           echo "key file size: $(wc -c < ~/.ssh/deploy_key) bytes"
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null && echo "key parses OK"
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            echo "::error::DEPLOY_SSH_KEY does not parse as a valid OpenSSH private key"
+            echo "first line: $(head -1 ~/.ssh/deploy_key)"
+            echo "last line : $(tail -1 ~/.ssh/deploy_key)"
+            exit 1
+          fi
+          echo "key parses OK"
 
           # Trust the host on first contact. Good enough for a single VPS;
           # tighten later with a pinned known_hosts secret if needed.
