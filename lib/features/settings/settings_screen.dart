@@ -1,16 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../auth/steam_auth_service.dart';
-import '../../core/router.dart';
-import '../onboarding/onboarding_screen.dart';
-import '../auth/session_provider.dart';
 import 'widgets/settings_sections.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -18,11 +12,7 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authStateProvider);
-    final sessionStatus = ref.watch(sessionStatusProvider);
     final l10n = AppLocalizations.of(context);
-    final currency = ref.watch(currencyProvider);
-    final locale = ref.watch(localeProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -51,80 +41,11 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           // Profile card
-          user.whenData((u) {
-            if (u == null) return const SizedBox.shrink();
-            return Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: AppTheme.glassElevated(),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundImage: NetworkImage(u.avatarUrl),
-                ),
-                title: Text(u.displayName),
-                subtitle: Text(u.steamId, style: const TextStyle(color: AppTheme.textMuted)),
-                trailing: u.isPremium
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppTheme.warning.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(AppTheme.r8),
-                        ),
-                        child: const Text(
-                          'PRO',
-                          style: TextStyle(
-                            color: AppTheme.warning,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-            ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.05, end: 0);
-          }).maybeWhen(orElse: () => const SizedBox.shrink()),
+          const ProfileCard(),
           const SizedBox(height: 16),
 
           // Account group: Steam Session + Linked Accounts
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Icon(
-                    Icons.vpn_key,
-                    color: sessionStatus.whenOrNull(
-                          data: (s) => s.status == 'valid' || s.status == 'expiring' ? AppTheme.profit : AppTheme.textMuted,
-                        ) ??
-                        AppTheme.textMuted,
-                  ),
-                  title: Text(l10n.steamSession),
-                  subtitle: Text(
-                    sessionStatus.whenOrNull(
-                          data: (s) => s.status == 'valid' || s.status == 'expiring' ? l10n.connected : s.status == 'expired' ? 'Expired' : l10n.notConfigured,
-                        ) ??
-                        l10n.checking,
-                    style: TextStyle(
-                      color: sessionStatus.whenOrNull(
-                            data: (s) => s.status == 'valid' || s.status == 'expiring' ? AppTheme.profit : AppTheme.textDisabled,
-                          ) ??
-                          AppTheme.textDisabled,
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () => context.push('/session'),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.people, color: AppTheme.textSecondary),
-                  title: Text(l10n.linkedAccounts),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () => context.push('/settings/accounts'),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 50.ms).slideY(begin: 0.05, end: 0),
+          const AccountSection(),
           const SizedBox(height: 16),
 
           // Notifications group: Price Alerts + Push Preferences
@@ -136,196 +57,32 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: 16),
 
           // Appearance & Preferences
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: Column(
-              children: [
-                // Currency
-                ListTile(
-                  leading: const Icon(Icons.attach_money, color: AppTheme.textSecondary),
-                  title: Text(l10n.currency),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${currency.symbol} ${currency.code}',
-                        style: const TextStyle(color: AppTheme.textMuted),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                    ],
-                  ),
-                  onTap: () => _showCurrencyPicker(context, ref),
-                ),
-                const Divider(height: 1),
-                // Language
-                ListTile(
-                  leading: const Icon(Icons.language, color: AppTheme.textSecondary),
-                  title: Text(l10n.language),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        locale != null
-                            ? kSupportedLocales[locale.languageCode] ?? locale.languageCode
-                            : l10n.systemDefault,
-                        style: const TextStyle(color: AppTheme.textMuted),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                    ],
-                  ),
-                  onTap: () => _showLanguagePicker(context, ref),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 150.ms).slideY(begin: 0.05, end: 0),
+          PreferencesSection(
+            onCurrencyTap: () => _showCurrencyPicker(context, ref),
+            onLanguageTap: () => _showLanguagePicker(context, ref),
+          ),
           const SizedBox(height: 16),
 
           // Premium & Tour
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.workspace_premium, color: AppTheme.warning),
-                  title: Text(l10n.upgradeToPremium),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () => context.push('/premium'),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.play_circle_outline, color: AppTheme.textSecondary),
-                  title: Text(l10n.appTour),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () async {
-                    await resetOnboarding();
-                    ref.invalidate(onboardingCompleteProvider);
-                    if (context.mounted) context.push('/onboarding');
-                  },
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 200.ms).slideY(begin: 0.05, end: 0),
+          const PremiumTourSection(),
           const SizedBox(height: 16),
 
           // SkinKeeper Ecosystem
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text(
-                    'One Ecosystem. Every Skin.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textMuted,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.extension, color: AppTheme.accent),
-                  title: const Text('Browser Extension'),
-                  subtitle: const Text(
-                    'Live prices, floats & arbitrage deals right inside Steam. No tab switching.',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
-                  onTap: () => launchUrl(Uri.parse('https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd')),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.language, color: AppTheme.accent),
-                  title: const Text('Web Dashboard'),
-                  subtitle: const Text(
-                    'Full portfolio analytics, deep charts & market data on any screen.',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
-                  onTap: () => launchUrl(Uri.parse('https://app.skinkeeper.store')),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.desktop_windows, color: AppTheme.accent),
-                  title: const Text('Desktop App'),
-                  subtitle: const Text(
-                    'Storage units, automation rules & GC operations — power user control.',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.open_in_new, color: AppTheme.textMuted, size: 18),
-                  onTap: () => launchUrl(Uri.parse('https://skinkeeper.store/download')),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 220.ms).slideY(begin: 0.05, end: 0),
+          const EcosystemSection(),
           const SizedBox(height: 16),
 
           // Legal
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.privacy_tip_outlined, color: AppTheme.textSecondary),
-                  title: Text(l10n.privacyPolicy),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () {
-                    launchUrl(Uri.parse('https://api.skinkeeper.store/legal/privacy'));
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.description_outlined, color: AppTheme.textSecondary),
-                  title: Text(l10n.termsOfService),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textMuted),
-                  onTap: () {
-                    launchUrl(Uri.parse('https://api.skinkeeper.store/legal/terms'));
-                  },
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 270.ms).slideY(begin: 0.05, end: 0),
+          const LegalSection(),
           const SizedBox(height: 16),
 
           // Sign Out
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: ListTile(
-              leading: const Icon(Icons.logout, color: AppTheme.loss),
-              title: Text(l10n.signOut, style: const TextStyle(color: AppTheme.loss)),
-              onTap: () {
-                ref.read(authStateProvider.notifier).logout();
-              },
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 320.ms).slideY(begin: 0.05, end: 0),
+          const SignOutSection(),
 
           // Delete Account
           const SizedBox(height: 24),
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: AppTheme.glass(),
-            child: ListTile(
-              leading: const Icon(Icons.delete_forever, color: AppTheme.textDisabled),
-              title: Text(
-                'Delete Account',
-                style: TextStyle(color: AppTheme.textDisabled, fontSize: 14),
-              ),
-              subtitle: Text(
-                'Permanently delete all data',
-                style: TextStyle(color: AppTheme.textDisabled.withValues(alpha: 0.6), fontSize: 11),
-              ),
-              onTap: () => _showDeleteConfirmation(context, ref),
-            ),
-          ).animate().fadeIn(duration: 300.ms, delay: 370.ms).slideY(begin: 0.05, end: 0),
+          DeleteAccountSection(
+            onTap: () => _showDeleteConfirmation(context, ref),
+          ),
           ],
         ),
       ),
@@ -497,4 +254,3 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 }
-
