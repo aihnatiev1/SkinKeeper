@@ -11,12 +11,10 @@ import '../../core/router.dart';
 import '../settings/currency_picker_dialog.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/stale_data_banner.dart';
-import '../../widgets/premium_gate.dart';
 import '../../widgets/shared_ui.dart';
 import '../inventory/inventory_provider.dart';
 import '../trades/trades_provider.dart';
 import '../transactions/transactions_provider.dart';
-import '../purchases/iap_service.dart';
 import 'portfolio_pl_provider.dart';
 import 'portfolio_provider.dart';
 import '../../core/sync_state_provider.dart';
@@ -25,12 +23,11 @@ import 'widgets/add_transaction_sheet.dart';
 import 'widgets/analytics_tab.dart';
 import 'widgets/portfolio_fab_and_banners.dart';
 import 'widgets/portfolio_header.dart';
+import 'widgets/portfolio_items_tab.dart';
 import 'widgets/portfolio_pill_tabs.dart';
 import 'widgets/portfolio_pl_chart_tab.dart';
-import 'widgets/portfolio_selector_bar.dart';
 import 'widgets/portfolio_stat_cards.dart';
 import 'widgets/portfolio_value_tab.dart';
-import 'widgets/item_pl_list.dart';
 import 'widgets/market_value_tab.dart';
 
 final _tabProvider = StateProvider<int>((ref) => 0);
@@ -304,7 +301,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
                     Visibility(
                       visible: tab == 2,
                       maintainState: true,
-                      child: _ItemsTab(key: const ValueKey('items')),
+                      child: PortfolioItemsTab(key: const ValueKey('items')),
                     ),
                     Visibility(
                       visible: tab == 3,
@@ -327,39 +324,3 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
   }
 }
 
-// ── Items Tab ────────────────────────────────────────────────────────
-class _ItemsTab extends ConsumerWidget {
-  const _ItemsTab({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final itemsPL = ref.watch(itemsPLProvider);
-    final isPremium = ref.watch(premiumProvider).valueOrNull ?? false;
-
-    return PremiumGate(
-      isPremium: isPremium,
-      featureName: 'Per-item profit & loss breakdown',
-      child: Column(
-        children: [
-          const PortfolioSelectorBar(),
-          const SizedBox(height: 8),
-          itemsPL.when(
-            data: (s) => ItemPLList(items: s.items, isLoadingMore: s.isLoadingMore)
-                .animate()
-                .fadeIn(duration: 400.ms),
-            loading: () => Column(
-              children: List.generate(5, (i) => const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: ShimmerBox(height: 56),
-              )),
-            ),
-            error: (err, _) => Center(child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Error: $err', style: const TextStyle(color: AppTheme.loss, fontSize: 11)),
-            )),
-          ),
-        ],
-      ),
-    );
-  }
-}
