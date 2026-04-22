@@ -7,7 +7,6 @@ import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
 import '../../auth/session_provider.dart';
 import '../../auth/steam_auth_service.dart';
-import '../../settings/accounts_provider.dart';
 import '../../../widgets/glass_sheet.dart';
 import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
@@ -16,6 +15,7 @@ import '../sell_provider.dart';
 import 'fee_breakdown.dart';
 import 'sell_progress_sheet.dart';
 import 'sell_sheet_header.dart';
+import 'sell_sheet_switch_account_banner.dart';
 
 class SellBottomSheet extends ConsumerStatefulWidget {
   final List<InventoryItem> items;
@@ -190,7 +190,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
 
             // Cross-account warning banner
             if (isNonActiveAccount) ...[
-              _buildSwitchAccountBanner(context),
+              SellSheetSwitchAccountBanner(targetAccountId: item.accountId!),
               const SizedBox(height: 4),
             ],
 
@@ -239,53 +239,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             const SizedBox(height: 8),
           ],
         ),
-      ),
-    );
-  }
-  Widget _buildSwitchAccountBanner(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.warning.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppTheme.warning.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.swap_horiz_rounded,
-              size: 16, color: AppTheme.warning.withValues(alpha: 0.8)),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'This item belongs to another account. Switch accounts to sell it.',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.warning,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              final accountId = widget.items.first.accountId;
-              if (accountId != null) {
-                Navigator.of(context).pop();
-                await ref.read(accountsProvider.notifier).setActive(accountId);
-              }
-            },
-            child: const Text(
-              'Switch',
-              style: TextStyle(
-                color: AppTheme.warning,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
