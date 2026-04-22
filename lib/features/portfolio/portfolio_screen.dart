@@ -18,7 +18,6 @@ import '../../models/profit_loss.dart';
 import '../../widgets/premium_gate.dart';
 import '../../widgets/shared_ui.dart';
 import '../../widgets/sync_indicator.dart';
-import '../auth/session_gate.dart';
 import '../inventory/inventory_provider.dart';
 import '../trades/trades_provider.dart';
 import '../transactions/transactions_provider.dart';
@@ -30,6 +29,7 @@ import '../../widgets/account_scope_chip.dart';
 import '../../widgets/glass_sheet.dart';
 import 'widgets/add_transaction_sheet.dart';
 import 'widgets/analytics_tab.dart';
+import 'widgets/portfolio_fab_and_banners.dart';
 import 'widgets/item_pl_list.dart';
 import 'widgets/market_value_tab.dart';
 import 'widgets/pl_history_chart.dart';
@@ -191,7 +191,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      floatingActionButton: _AddFab(onTap: () => _showAddTransaction(context)),
+      floatingActionButton: PortfolioAddFab(onTap: () => _showAddTransaction(context)),
       body: AppRefreshIndicator(
         onRefresh: () async {
           ref.invalidate(portfolioProvider);
@@ -222,7 +222,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
             ),
 
             // ── Sync banner (shows during background sync after login) ──
-            SliverToBoxAdapter(child: _SyncBanner()),
+            SliverToBoxAdapter(child: PortfolioSyncBanner()),
 
             // ── Stale data warning — trader-grade threshold ──
             // Banner appears at 15 min. Below that, the persistent
@@ -268,7 +268,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
 
             // ── Session nudge ──
             SliverToBoxAdapter(
-              child: _SessionNudgeBanner(),
+              child: SessionNudgeBanner(),
             ),
 
             // ── Tabs ──
@@ -323,86 +323,6 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen>
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Floating Add Button ──────────────────────────────────────
-class _AddFab extends StatelessWidget {
-  final VoidCallback onTap;
-  const _AddFab({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 100),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            gradient: AppTheme.primaryGradient,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.add_rounded, size: 26, color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Session Nudge Banner ─────────────────────────────────────
-class _SessionNudgeBanner extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasSession = ref.watch(hasSessionProvider);
-    final itemCount =
-        ref.watch(inventoryProvider).valueOrNull?.length ?? 0;
-
-    // Only show when no session AND user has inventory items
-    if (hasSession || itemCount == 0) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: GestureDetector(
-        onTap: () => requireSession(context, ref),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border:
-                Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.lock_open_rounded,
-                  size: 18, color: AppTheme.primary.withValues(alpha: 0.8)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Enable selling & trading — one extra step required by Steam',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded,
-                  size: 18, color: Colors.white.withValues(alpha: 0.3)),
-            ],
-          ),
         ),
       ),
     );
@@ -1636,48 +1556,3 @@ class _PortfolioSelectorBar extends ConsumerWidget {
     );
   }
 }
-// ─── Sync Banner ────────────────────────────────────────────────────────
-
-class _SyncBanner extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final syncState = ref.watch(syncStateProvider);
-    if (!syncState.isSyncing) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppTheme.accent.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.15)),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.5,
-                color: AppTheme.accent,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                syncState.label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.accent.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
