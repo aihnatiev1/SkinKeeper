@@ -218,67 +218,14 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                         name: _selectedItem!,
                         onClear: _clearItem,
                       ).animate().fadeIn(duration: 250.ms)
-                    else ...[
-                      TextField(
+                    else
+                      AlertItemSearchField(
                         controller: _searchController,
+                        suggestions: _suggestions,
                         onChanged: _onSearchChanged,
-                        decoration: InputDecoration(
-                          hintText: 'Search item...',
-                          hintStyle:
-                              const TextStyle(color: AppTheme.textDisabled),
-                          prefixIcon:
-                              const Icon(Icons.search, size: 20),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, size: 18),
-                                  onPressed: _clearItem,
-                                )
-                              : null,
-                          filled: true,
-                          fillColor: AppTheme.surface,
-                          border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.r12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 12),
-                        ),
-                        style: const TextStyle(fontSize: 14),
+                        onSelect: _selectItem,
+                        onClear: _clearItem,
                       ),
-                      if (_suggestions.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.only(top: 4),
-                          constraints: const BoxConstraints(maxHeight: 220),
-                          decoration: BoxDecoration(
-                            color: AppTheme.card,
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.r12),
-                            border: Border.all(color: AppTheme.border),
-                          ),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            padding: EdgeInsets.zero,
-                            itemCount: _suggestions.length,
-                            itemBuilder: (_, i) {
-                              final name = _suggestions[i];
-                              return InkWell(
-                                onTap: () => _selectItem(name),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 11),
-                                  child: Text(
-                                    name,
-                                    style: const TextStyle(fontSize: 13),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
 
                     const SizedBox(height: 24),
 
@@ -294,133 +241,20 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                     const SizedBox(height: 12),
 
                     // Condition pills
-                    Row(
-                      children: [
-                        AlertConditionPill(
-                          label: 'drops below',
-                          icon: Icons.trending_down,
-                          selected:
-                              _condition == AlertCondition.below,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(
-                                () => _condition = AlertCondition.below);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        AlertConditionPill(
-                          label: 'rises above',
-                          icon: Icons.trending_up,
-                          selected:
-                              _condition == AlertCondition.above,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(
-                                () => _condition = AlertCondition.above);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        AlertConditionPill(
-                          label: 'changes by %',
-                          icon: Icons.percent,
-                          selected:
-                              _condition == AlertCondition.changePct,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() =>
-                                _condition = AlertCondition.changePct);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Smart alert pills
-                    Row(
-                      children: [
-                        AlertConditionPill(
-                          label: 'deal alert',
-                          icon: Icons.local_fire_department,
-                          selected:
-                              _condition == AlertCondition.bargain,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(
-                                () => _condition = AlertCondition.bargain);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        AlertConditionPill(
-                          label: 'sell signal',
-                          icon: Icons.trending_up,
-                          selected:
-                              _condition == AlertCondition.sellNow,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(
-                                () => _condition = AlertCondition.sellNow);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        AlertConditionPill(
-                          label: 'arbitrage',
-                          icon: Icons.compare_arrows,
-                          selected:
-                              _condition == AlertCondition.arbitrage,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() =>
-                                _condition = AlertCondition.arbitrage);
-                          },
-                        ),
-                      ],
+                    AlertConditionPillGroup(
+                      condition: _condition,
+                      onChanged: (c) => setState(() => _condition = c),
                     ),
 
                     const SizedBox(height: 16),
 
                     // Threshold input
-                    TextField(
+                    AlertThresholdField(
                       controller: _thresholdController,
                       focusNode: _thresholdFocus,
-                      onChanged: (_) => setState(() => _error = null),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      decoration: InputDecoration(
-                        prefixText: _isPercentCondition ? null : '\$ ',
-                        prefixStyle: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                        suffixText: _isPercentCondition ? '%' : null,
-                        suffixStyle: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textMuted,
-                        ),
-                        hintText: _isPercentCondition
-                            ? '15'
-                            : _currentPriceHint ?? '0.00',
-                        hintStyle: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textDisabled.withValues(alpha: 0.3),
-                        ),
-                        filled: true,
-                        fillColor: AppTheme.surface,
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.r12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
-                      ),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                      textAlign: TextAlign.center,
+                      isPercent: _isPercentCondition,
+                      currentPriceHint: _currentPriceHint,
+                      onChanged: () => setState(() => _error = null),
                     ),
 
                     const SizedBox(height: 24),
@@ -435,141 +269,29 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [AlertSource.any, AlertSource.steam, AlertSource.skinport, AlertSource.csfloat, AlertSource.dmarket].map((s) {
-                        final selected = _source == s;
-                        final (label, color) = switch (s) {
-                          AlertSource.steam =>
-                            ('Steam', AppTheme.steamBlue),
-                          AlertSource.skinport =>
-                            ('Skinport', AppTheme.skinportGreen),
-                          AlertSource.csfloat =>
-                            ('CSFloat', AppTheme.csfloatOrange),
-                          AlertSource.dmarket =>
-                            ('DMarket', AppTheme.dmarketPurple),
-                          AlertSource.any =>
-                            ('Any', AppTheme.primary),
-                        };
-                        return GestureDetector(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _source = s);
-                          },
-                          child: AnimatedContainer(
-                            duration: 200.ms,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? color.withValues(alpha: 0.15)
-                                  : AppTheme.surface,
-                              borderRadius:
-                                  BorderRadius.circular(20),
-                              border: Border.all(
-                                color: selected
-                                    ? color.withValues(alpha: 0.5)
-                                    : AppTheme.border,
-                              ),
-                            ),
-                            child: Text(
-                              label,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: selected
-                                    ? color
-                                    : AppTheme.textMuted,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                    AlertSourceSelector(
+                      source: _source,
+                      onChanged: (s) => setState(() => _source = s),
                     ),
 
                     const SizedBox(height: 20),
 
                     // ── Advanced (cooldown) ──
-                    GestureDetector(
-                      onTap: () => setState(
-                          () => _showAdvanced = !_showAdvanced),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _showAdvanced
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            size: 18,
-                            color: AppTheme.textMuted,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'More options',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppTheme.textMuted,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
+                    AlertAdvancedSection(
+                      expanded: _showAdvanced,
+                      cooldownMinutes: _cooldownMinutes,
+                      cooldownLabel: _cooldownLabel(_cooldownMinutes),
+                      onToggle: () =>
+                          setState(() => _showAdvanced = !_showAdvanced),
+                      onCycleCooldown: () {
+                        const options = [15, 30, 60, 120, 360, 1440];
+                        final idx = options.indexOf(_cooldownMinutes);
+                        setState(() {
+                          _cooldownMinutes =
+                              options[(idx + 1) % options.length];
+                        });
+                      },
                     ),
-                    if (_showAdvanced) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Text(
-                            'Cooldown',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          const Spacer(),
-                          GestureDetector(
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              const options = [15, 30, 60, 120, 360, 1440];
-                              final idx = options.indexOf(_cooldownMinutes);
-                              setState(() {
-                                _cooldownMinutes = options[(idx + 1) % options.length];
-                              });
-                            },
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Container(
-                                key: ValueKey(_cooldownMinutes),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.surface,
-                                  borderRadius:
-                                      BorderRadius.circular(20),
-                                  border: Border.all(color: AppTheme.border),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.timer_outlined,
-                                        size: 14, color: AppTheme.textMuted),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      _cooldownLabel(_cooldownMinutes),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
 
                     // Error
                     if (_error != null) ...[
@@ -592,56 +314,11 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                child: GestureDetector(
-                  onTap: _loading ? null : _submit,
-                  child: AnimatedContainer(
-                    duration: 200.ms,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.primaryGradient,
-                      borderRadius: BorderRadius.circular(AppTheme.r16),
-                    ),
-                    foregroundDecoration: BoxDecoration(
-                      color: hasItem && _thresholdController.text.isNotEmpty
-                          ? Colors.transparent
-                          : Colors.black.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(AppTheme.r16),
-                    ),
-                    child: Center(
-                      child: _loading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.notifications_active_rounded,
-                                  size: 20,
-                                  color: hasItem
-                                      ? Colors.white
-                                      : AppTheme.textDisabled,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Create Alert',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: hasItem
-                                        ? Colors.white
-                                        : AppTheme.textDisabled,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
+                child: AlertCreateCtaButton(
+                  hasItem: hasItem,
+                  thresholdEmpty: _thresholdController.text.isEmpty,
+                  loading: _loading,
+                  onTap: _submit,
                 ),
               ),
             ),
