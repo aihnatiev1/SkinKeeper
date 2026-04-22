@@ -17,17 +17,8 @@ import '../../../widgets/shared_ui.dart';
 import '../manual_tx_provider.dart';
 import '../portfolio_pl_provider.dart';
 import '../portfolio_provider.dart';
+import 'add_transaction_source_chips.dart';
 import 'add_transaction_type_toggle.dart';
-
-/// Sources for transaction origin
-const _sources = [
-  ('csfloat', 'CSFloat', Icons.storefront_rounded),
-  ('buff163', 'Buff', Icons.store_rounded),
-  ('skinport', 'Skinport', Icons.shopping_bag_rounded),
-  ('trade', 'Trade', Icons.swap_horiz_rounded),
-  ('drop', 'Drop', Icons.card_giftcard_rounded),
-  ('manual', 'Other', Icons.edit_rounded),
-];
 
 class AddTransactionSheet extends ConsumerStatefulWidget {
   /// Pre-fill item name (e.g. from inventory "Log Purchase")
@@ -399,7 +390,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   // ── Source ──
                   _buildLabel('SOURCE'),
                   const SizedBox(height: 6),
-                  _buildSourceChips(),
+                  AddTransactionSourceChips(
+                    selected: _source,
+                    onChanged: (id) => setState(() => _source = id),
+                  ),
 
                   // ── Portfolio picker ──
                   Consumer(
@@ -901,58 +895,6 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSourceChips() {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: _sources.map((s) {
-        final (id, label, icon) = s;
-        final selected = _source == id;
-        return GestureDetector(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() => _source = id);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppTheme.primary.withValues(alpha: 0.15)
-                  : AppTheme.surface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: selected
-                    ? AppTheme.primary.withValues(alpha: 0.4)
-                    : AppTheme.border,
-                width: selected ? 1.2 : 0.8,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon,
-                    size: 14,
-                    color:
-                        selected ? AppTheme.primaryLight : AppTheme.textMuted),
-                const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    color:
-                        selected ? AppTheme.textPrimary : AppTheme.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }
