@@ -10,7 +10,7 @@ import '../../../core/theme.dart';
 import '../session_provider.dart';
 import 'connect_progress_overlay.dart';
 import 'session_gate_step_card.dart';
-import 'steam_webview_login.dart';
+import 'session_gate_webview_button.dart';
 
 /// Full-screen gate that prompts the user to connect their Steam session.
 ///
@@ -258,7 +258,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
             const SizedBox(height: 20),
 
             // ── WebView Login (PRIMARY) ────────────────────────────────
-            _WebViewLoginButton(onAuthenticated: _onAuthSuccess),
+            SessionGateWebViewLoginButton(onAuthenticated: _onAuthSuccess),
             const SizedBox(height: 20),
 
             // ── QR Code (alternative) ─────────────────────────────────
@@ -434,127 +434,6 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
   }
 }
 
-// ─── WebView Login Button ────────────────────────────────────────────────
-
-class _WebViewLoginButton extends ConsumerStatefulWidget {
-  final VoidCallback onAuthenticated;
-  const _WebViewLoginButton({required this.onAuthenticated});
-
-  @override
-  ConsumerState<_WebViewLoginButton> createState() => _WebViewLoginButtonState();
-}
-
-class _WebViewLoginButtonState extends ConsumerState<_WebViewLoginButton> {
-  bool _submitting = false;
-
-  Future<void> _launch() async {
-    final result = await Navigator.of(context).push<SteamWebViewResult>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => const SteamWebViewLogin(),
-      ),
-    );
-
-    if (result == null || !mounted) return;
-    setState(() => _submitting = true);
-
-    await ref.read(clientTokenAuthProvider.notifier).submitToken(
-      result.steamLoginSecure,
-      sessionId: result.sessionId,
-      steamRefreshToken: result.refreshToken,
-    );
-
-    if (mounted) {
-      setState(() => _submitting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.login_rounded, size: 20, color: AppTheme.primary),
-            const SizedBox(width: 8),
-            Text(
-              'Sign in with Steam',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.9),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Opens Steam login in a built-in browser — no copying needed',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withValues(alpha: 0.5),
-          ),
-        ),
-        const SizedBox(height: 16),
-        GestureDetector(
-          onTap: _submitting ? null : _launch,
-          child: Container(
-            width: double.infinity,
-            height: 52,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1B2838),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF2A475E)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (_submitting)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
-                else ...[
-                  const Icon(Icons.login_rounded, size: 20, color: Colors.white),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Sign in with Steam',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.lock_outline,
-                size: 12, color: Colors.white.withValues(alpha: 0.25)),
-            const SizedBox(width: 5),
-            Text(
-              'You sign in directly to Steam. We never see your password.',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.white.withValues(alpha: 0.25),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
 
 // ─── QR Fallback Section ─────────────────────────────────────────────────
 
