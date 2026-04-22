@@ -16,13 +16,8 @@ import '../../widgets/glass_sheet.dart';
 import '../../widgets/shared_ui.dart';
 import '../../models/trade_offer.dart';
 import '../auth/steam_auth_service.dart';
+import 'trade_constants.dart';
 import 'trades_provider.dart';
-
-/// Max items per single Steam trade offer
-const _kMaxTradeItems = 100;
-
-/// Non-tradable junk items to filter out of the "my items" picker.
-const _kExcludedNames = {'Charm Remover', 'Storage Unit'};
 
 class CreateTradeScreen extends ConsumerStatefulWidget {
   const CreateTradeScreen({super.key});
@@ -209,7 +204,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
         );
       }).where((i) {
         if (i.marketHashName == null) return false;
-        if (_kExcludedNames.contains(i.marketHashName)) return false;
+        if (kExcludedTradeNames.contains(i.marketHashName)) return false;
         if (i.marketHashName!.startsWith('Sealed Graffiti |')) return false;
         return true;
       }).toList();
@@ -322,7 +317,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
       if (_giveAssetIds.contains(assetId)) {
         _giveAssetIds.remove(assetId);
       } else {
-        if (_giveAssetIds.length >= _kMaxTradeItems) {
+        if (_giveAssetIds.length >= kMaxTradeItems) {
           _showLimitSnackbar('give');
           return;
         }
@@ -337,7 +332,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
       if (_recvAssetIds.contains(assetId)) {
         _recvAssetIds.remove(assetId);
       } else {
-        if (_recvAssetIds.length >= _kMaxTradeItems) {
+        if (_recvAssetIds.length >= kMaxTradeItems) {
           _showLimitSnackbar('get');
           return;
         }
@@ -350,7 +345,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
   void _addMultipleGive(List<String> assetIds) {
     HapticFeedback.selectionClick();
     setState(() {
-      final remaining = _kMaxTradeItems - _giveAssetIds.length;
+      final remaining = kMaxTradeItems - _giveAssetIds.length;
       final toAdd = assetIds.take(remaining).toList();
       _giveAssetIds.addAll(toAdd);
       if (toAdd.length < assetIds.length) _showLimitSnackbar('give');
@@ -365,7 +360,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
   void _addMultipleRecv(List<String> assetIds) {
     HapticFeedback.selectionClick();
     setState(() {
-      final remaining = _kMaxTradeItems - _recvAssetIds.length;
+      final remaining = kMaxTradeItems - _recvAssetIds.length;
       final toAdd = assetIds.take(remaining).toList();
       _recvAssetIds.addAll(toAdd);
       if (toAdd.length < assetIds.length) _showLimitSnackbar('get');
@@ -380,7 +375,7 @@ class _CreateTradeScreenState extends ConsumerState<CreateTradeScreen> {
   void _showLimitSnackbar(String side) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Max $_kMaxTradeItems items per side ($side)'),
+        content: Text('Max $kMaxTradeItems items per side ($side)'),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -938,7 +933,7 @@ class _GroupedItemListState extends State<_GroupedItemList> {
         .map((i) => i.assetId)
         .toSet();
     final currentCount = currentlySelected.length;
-    final maxAllowed = group.count.clamp(0, _kMaxTradeItems - sideSelected + currentCount);
+    final maxAllowed = group.count.clamp(0, kMaxTradeItems - sideSelected + currentCount);
 
     showGlassSheet(
       context,
@@ -1666,7 +1661,7 @@ class _SideLimitBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final atLimit = count >= _kMaxTradeItems;
+    final atLimit = count >= kMaxTradeItems;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -1674,7 +1669,7 @@ class _SideLimitBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.r8),
       ),
       child: Text(
-        '$label $count/$_kMaxTradeItems',
+        '$label $count/$kMaxTradeItems',
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -2264,7 +2259,7 @@ class _TradeQuantitySheetState extends State<_TradeQuantitySheet> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Limited to $max (trade max $_kMaxTradeItems per side)',
+                  'Limited to $max (trade max $kMaxTradeItems per side)',
                   style: TextStyle(
                     fontSize: 11,
                     color: AppTheme.warning.withValues(alpha: 0.8),
