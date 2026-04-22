@@ -5,16 +5,12 @@ import '../../l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/push_preferences.dart';
-import '../../core/push_service.dart';
-import '../../core/api_client.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../auth/steam_auth_service.dart';
 import '../../core/router.dart';
 import '../onboarding/onboarding_screen.dart';
 import '../auth/session_provider.dart';
-import '../../widgets/ecosystem_banner.dart';
 import 'widgets/settings_sections.dart';
 
 class SettingsScreen extends ConsumerWidget {
