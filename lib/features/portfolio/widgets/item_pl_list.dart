@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/api_client.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
@@ -16,19 +15,7 @@ import '../../transactions/transactions_provider.dart';
 import 'add_transaction_sheet.dart';
 import 'csv_import_sheet.dart';
 import 'item_pl_list_header.dart';
-
-// ── Sort labels ──────────────────────────────────────────────────────────────
-const _kSortLabels = <PlSortCol, String>{
-  PlSortCol.recent: 'Recent',
-  PlSortCol.qty: 'Quantity',
-  PlSortCol.buyPrice: 'Buy Price',
-  PlSortCol.currentPrice: 'Current',
-  PlSortCol.invested: 'Invested',
-  PlSortCol.worth: 'Worth',
-  PlSortCol.pct: 'Change %',
-  PlSortCol.gain: 'Gain',
-  PlSortCol.afterFees: 'After Fees',
-};
+import 'item_pl_sort_bar.dart';
 
 // ── Public widget ─────────────────────────────────────────────────────────────
 class ItemPLList extends ConsumerWidget {
@@ -210,7 +197,7 @@ class _TableContentState extends ConsumerState<_TableContent> {
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       child: Column(
         children: [
-          _SortBar(sort: widget.sort),
+          ItemPLSortBar(sort: widget.sort),
           const SizedBox(height: 4),
           for (int i = 0; i < widget.items.length; i++) ...[
             if (i > 0) const SizedBox(height: 8),
@@ -221,106 +208,6 @@ class _TableContentState extends ConsumerState<_TableContent> {
     );
   }
 }
-
-// ── Sort bar ─────────────────────────────────────────────────────────────────
-class _SortBar extends ConsumerWidget {
-  final PlSort sort;
-  const _SortBar({required this.sort});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final label = _kSortLabels[sort.col] ?? 'Recent';
-    final arrow = sort.desc ? ' \u2193' : ' \u2191';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-      child: Row(
-        children: [
-          Text('Sort by: ',
-              style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-          GestureDetector(
-            onTap: () => _showSortMenu(context, ref),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppTheme.primary.withValues(alpha: 0.25)),
-              ),
-              child: Text(
-                '$label$arrow',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.primary,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSortMenu(BuildContext context, WidgetRef ref) {
-    final current = ref.read(plSortProvider);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: AppTheme.glass(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text('Sort by',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14)),
-            ),
-            for (final col in PlSortCol.values)
-              ListTile(
-                dense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16),
-                title: Text(
-                  _kSortLabels[col] ?? col.name,
-                  style: TextStyle(
-                    color: current.col == col
-                        ? AppTheme.primary
-                        : AppTheme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: current.col == col
-                        ? FontWeight.w700
-                        : FontWeight.w400,
-                  ),
-                ),
-                trailing: current.col == col
-                    ? Text(
-                        current.desc ? '\u2193' : '\u2191',
-                        style: TextStyle(
-                            color: AppTheme.primary, fontSize: 14),
-                      )
-                    : null,
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  ref.read(plSortProvider.notifier).state =
-                      current.withCol(col);
-                  context.pop();
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Item card ────────────────────────────────────────────────────────────────
 class _ItemCard extends ConsumerStatefulWidget {
   final ItemPL item;
   const _ItemCard({required this.item});
