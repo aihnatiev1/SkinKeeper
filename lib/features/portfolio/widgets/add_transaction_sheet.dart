@@ -1,22 +1,19 @@
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/settings_provider.dart';
-import '../../../core/steam_image.dart';
 import '../../../core/theme.dart';
-import '../../../models/profit_loss.dart';
 import '../../../widgets/shared_ui.dart';
 import '../manual_tx_provider.dart';
 import '../portfolio_pl_provider.dart';
 import '../portfolio_provider.dart';
 import 'add_transaction_date_picker.dart';
+import 'add_transaction_sheet_parts.dart';
 import 'add_transaction_source_chips.dart';
 import 'add_transaction_type_toggle.dart';
 
@@ -218,48 +215,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.textDisabled,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 16, 12),
-            child: Row(
-              children: [
-                const Text(
-                  'Add Purchase',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => context.pop(),
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.close_rounded,
-                        size: 18, color: AppTheme.textMuted),
-                  ),
-                ),
-              ],
-            ),
+          AddTransactionHeader(
+            title: 'Add Purchase',
+            onClose: () => context.pop(),
           ),
 
           // Content
@@ -278,10 +236,46 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   const SizedBox(height: 16),
 
                   // ── Item search ──
-                  _buildLabel('ITEM'),
+                  const AddTransactionFieldLabel('ITEM'),
                   const SizedBox(height: 6),
-                  _buildItemSearch(),
-                  if (_showSearch) _buildSearchResults(),
+                  AddTransactionItemSearch(
+                    controller: _itemController,
+                    selectedItem: _selectedItem,
+                    selectedIconUrl: _selectedIconUrl,
+                    onChanged: (v) {
+                      setState(() {
+                        _showSearch = v.length >= 2;
+                        if (v != _selectedItem) {
+                          _selectedItem = null;
+                          _selectedIconUrl = null;
+                        }
+                      });
+                    },
+                    onTap: () {
+                      if (_itemController.text.length >= 2) {
+                        setState(() => _showSearch = true);
+                      }
+                    },
+                  ),
+                  if (_showSearch)
+                    AddTransactionSearchResults(
+                      query: _itemController.text,
+                      onUseAnyway: () {
+                        setState(() {
+                          _selectedItem = _itemController.text;
+                          _selectedIconUrl = null;
+                          _showSearch = false;
+                        });
+                      },
+                      onPick: (name, iconUrl) {
+                        setState(() {
+                          _selectedItem = name;
+                          _selectedIconUrl = iconUrl;
+                          _itemController.text = name;
+                          _showSearch = false;
+                        });
+                      },
+                    ),
                   const SizedBox(height: 16),
 
                   // ── Price & Quantity row ──
@@ -292,7 +286,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildLabel('PRICE'),
+                            const AddTransactionFieldLabel('PRICE'),
                             const SizedBox(height: 6),
                             _buildTextField(
                               controller: _priceController,
@@ -323,7 +317,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildLabel('QTY'),
+                            const AddTransactionFieldLabel('QTY'),
                             const SizedBox(height: 6),
                             _buildTextField(
                               controller: _qtyController,
@@ -348,41 +342,15 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   // ── Total display ──
                   if (_priceCents > 0 && _quantity > 0) ...[
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          Text(
-                            currency.formatRaw(_totalPrice),
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                              fontFeatures: [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ).animate().fadeIn(duration: 200.ms),
+                    AddTransactionTotalRow(
+                      totalPrice: _totalPrice,
+                      formatter: currency.formatRaw,
+                    ),
                   ],
                   const SizedBox(height: 16),
 
                   // ── Date ──
-                  _buildLabel('DATE'),
+                  const AddTransactionFieldLabel('DATE'),
                   const SizedBox(height: 6),
                   AddTransactionDatePicker(
                     date: _date,
@@ -391,7 +359,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   const SizedBox(height: 16),
 
                   // ── Source ──
-                  _buildLabel('SOURCE'),
+                  const AddTransactionFieldLabel('SOURCE'),
                   const SizedBox(height: 6),
                   AddTransactionSourceChips(
                     selected: _source,
@@ -399,77 +367,14 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   ),
 
                   // ── Portfolio picker ──
-                  Consumer(
-                    builder: (ctx, ref, _) {
-                      final portfoliosAsync = ref.watch(portfoliosProvider);
-                      return portfoliosAsync.when(
-                        loading: () => const SizedBox.shrink(),
-                        error: (e, _) => const SizedBox.shrink(),
-                        data: (portfolios) {
-                          if (portfolios.isEmpty) return const SizedBox.shrink();
-                          final selected = portfolios
-                              .where((p) => p.id == _portfolioId)
-                              .firstOrNull;
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.folder_outlined,
-                                    size: 16, color: AppTheme.textMuted),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Portfolio',
-                                  style: AppTheme.captionSmall
-                                      .copyWith(color: AppTheme.textMuted),
-                                ),
-                                const Spacer(),
-                                GestureDetector(
-                                  onTap: () =>
-                                      _pickPortfolio(context, portfolios),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: selected != null
-                                          ? selected.color
-                                              .withValues(alpha: 0.15)
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: selected != null
-                                            ? selected.color
-                                            : AppTheme.divider,
-                                      ),
-                                    ),
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 160),
-                                      child: Text(
-                                        selected?.name ?? 'None',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: selected?.color ??
-                                              AppTheme.textMuted,
-                                          fontWeight: selected != null
-                                              ? FontWeight.w600
-                                              : FontWeight.w400,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    },
+                  AddTransactionPortfolioPickerRow(
+                    portfolioId: _portfolioId,
+                    onPicked: (id) => setState(() => _portfolioId = id),
                   ),
                   const SizedBox(height: 16),
 
                   // ── Note (optional) ──
-                  _buildLabel('NOTE'),
+                  const AddTransactionFieldLabel('NOTE'),
                   const SizedBox(height: 6),
                   _buildTextField(
                     controller: _noteController,
@@ -507,78 +412,6 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         ],
       ),
     ),
-    );
-  }
-
-  // ─── Portfolio picker ──────────────────────────────────────
-
-  Future<void> _pickPortfolio(
-      BuildContext context, List<Portfolio> portfolios) async {
-    final picked = await showModalBottomSheet<int?>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(16),
-        decoration: AppTheme.glass(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Assign Portfolio',
-              style: AppTheme.bodySmall.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: Icon(Icons.close, color: AppTheme.textMuted, size: 18),
-              title: Text('None',
-                  style:
-                      AppTheme.bodySmall.copyWith(color: AppTheme.textMuted)),
-              onTap: () => context.pop(-1), // -1 = clear
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
-            for (final p in portfolios)
-              ListTile(
-                leading: Container(
-                  width: 12,
-                  height: 12,
-                  decoration:
-                      BoxDecoration(color: p.color, shape: BoxShape.circle),
-                ),
-                title: Text(p.name,
-                    style: AppTheme.bodySmall
-                        .copyWith(color: AppTheme.textPrimary)),
-                onTap: () => context.pop(p.id),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked == -1) {
-      setState(() => _portfolioId = null);
-    } else if (picked != null) {
-      setState(() => _portfolioId = picked);
-    }
-  }
-
-  // ─── Builders ─────────────────────────────────────────────
-
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
-        color: AppTheme.textDisabled,
-      ),
     );
   }
 
@@ -630,218 +463,6 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildItemSearch() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _selectedItem != null
-              ? AppTheme.profit.withValues(alpha: 0.3)
-              : AppTheme.border,
-        ),
-      ),
-      child: Row(
-        children: [
-          if (_selectedIconUrl != null) ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 10),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: CachedNetworkImage(
-                  imageUrl:
-                      SteamImage.url(_selectedIconUrl!, size: '64fx64f'),
-                  width: 28,
-                  height: 28,
-                  fit: BoxFit.contain,
-                  errorWidget: (_, _, _) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          ],
-          Expanded(
-            child: TextField(
-              controller: _itemController,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textPrimary,
-              ),
-              onChanged: (v) {
-                setState(() {
-                  _showSearch = v.length >= 2;
-                  if (v != _selectedItem) {
-                    _selectedItem = null;
-                    _selectedIconUrl = null;
-                  }
-                });
-              },
-              onTap: () {
-                if (_itemController.text.length >= 2) {
-                  setState(() => _showSearch = true);
-                }
-              },
-              decoration: InputDecoration(
-                hintText: 'Search item name...',
-                hintStyle:
-                    const TextStyle(color: AppTheme.textDisabled, fontSize: 14),
-                prefixIcon: _selectedIconUrl == null
-                    ? const Icon(Icons.search_rounded,
-                        size: 18, color: AppTheme.textMuted)
-                    : null,
-                suffixIcon: _selectedItem != null
-                    ? const Icon(Icons.check_circle_rounded,
-                        size: 18, color: AppTheme.profit)
-                    : null,
-                border: InputBorder.none,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchResults() {
-    final query = _itemController.text;
-    if (query.length < 2) return const SizedBox.shrink();
-
-    final results = ref.watch(itemSearchProvider(query));
-
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      constraints: const BoxConstraints(maxHeight: 200),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: results.when(
-        data: (items) {
-          if (items.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'No items found',
-                    style: TextStyle(
-                        fontSize: 13, color: AppTheme.textMuted),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedItem = _itemController.text;
-                        _selectedIconUrl = null;
-                        _showSearch = false;
-                      });
-                    },
-                    child: Text(
-                      'Use "${_itemController.text}" anyway',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: EdgeInsets.zero,
-              itemCount: items.length,
-              separatorBuilder: (_, _) =>
-                  const Divider(height: 1, color: AppTheme.border),
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return InkWell(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _selectedItem = item.marketHashName;
-                      _selectedIconUrl = item.iconUrl;
-                      _itemController.text = item.marketHashName;
-                      _showSearch = false;
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    child: Row(
-                      children: [
-                        if (item.imageUrl.isNotEmpty) ...[
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: CachedNetworkImage(
-                              imageUrl: item.imageUrl,
-                              width: 28,
-                              height: 28,
-                              fit: BoxFit.contain,
-                              errorWidget: (_, _, _) =>
-                                  const SizedBox(width: 28, height: 28),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                        ],
-                        Expanded(
-                          child: Text(
-                            item.marketHashName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          );
-        },
-        loading: () => const Padding(
-          padding: EdgeInsets.all(16),
-          child: Center(
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppTheme.primary,
-              ),
-            ),
-          ),
-        ),
-        error: (_, _) => const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Search failed',
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
         ),
       ),
     );
