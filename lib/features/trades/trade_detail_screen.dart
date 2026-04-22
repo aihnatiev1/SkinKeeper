@@ -12,6 +12,7 @@ import '../../core/theme.dart';
 import '../../models/trade_offer.dart';
 import '../inventory/inventory_provider.dart';
 import 'trades_provider.dart';
+import 'widgets/trade_detail_parts.dart';
 
 class TradeDetailScreen extends ConsumerWidget {
   final String offerId;
@@ -203,7 +204,7 @@ class _TradeDetailBody extends ConsumerWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _ValueColumn(
+                  TradeDetailValueColumn(
                     label: 'You Give',
                     valueCents: offer.valueGiveCents,
                     color: AppTheme.loss,
@@ -211,7 +212,7 @@ class _TradeDetailBody extends ConsumerWidget {
                   ),
                   Icon(Icons.swap_horiz,
                       color: AppTheme.textDisabled, size: 24),
-                  _ValueColumn(
+                  TradeDetailValueColumn(
                     label: 'You Get',
                     valueCents: offer.valueRecvCents,
                     color: AppTheme.profit,
@@ -222,7 +223,7 @@ class _TradeDetailBody extends ConsumerWidget {
                     height: 36,
                     color: AppTheme.border,
                   ),
-                  _ValueColumn(
+                  TradeDetailValueColumn(
                     label: 'Diff',
                     valueCents: offer.valueDiffCents,
                     color: offer.valueDiffCents >= 0
@@ -238,21 +239,21 @@ class _TradeDetailBody extends ConsumerWidget {
 
           // Give items
           const SizedBox(height: 16),
-          _SectionHeader(
+          TradeDetailSectionHeader(
             title: 'Items You Give',
             count: giveItems.length,
             color: AppTheme.loss,
           ),
           const SizedBox(height: 8),
           ...giveItems.asMap().entries.map((entry) =>
-            _DetailItemTile(item: entry.value, currency: currency)
+            TradeDetailItemTile(item: entry.value, currency: currency)
                 .animate()
                 .fadeIn(duration: 200.ms, delay: (150 + entry.key * 30).ms),
           ),
 
           // Receive items
           const SizedBox(height: 16),
-          _SectionHeader(
+          TradeDetailSectionHeader(
             title: 'Items You Receive',
             count: recvItems.length,
             color: AppTheme.profit,
@@ -277,7 +278,7 @@ class _TradeDetailBody extends ConsumerWidget {
             )
           else
             ...recvItems.asMap().entries.map((entry) =>
-              _DetailItemTile(item: entry.value, currency: currency)
+              TradeDetailItemTile(item: entry.value, currency: currency)
                   .animate()
                   .fadeIn(duration: 200.ms, delay: (200 + entry.key * 30).ms),
             ),
@@ -472,169 +473,3 @@ class _TradeDetailBody extends ConsumerWidget {
 
 // ---------------------------------------------------------------------------
 // Supporting widgets
-// ---------------------------------------------------------------------------
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final int count;
-  final Color color;
-
-  const _SectionHeader({
-    required this.title,
-    required this.count,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(AppTheme.r8),
-          ),
-          child: Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DetailItemTile extends StatelessWidget {
-  final TradeOfferItem item;
-  final CurrencyInfo currency;
-
-  const _DetailItemTile({required this.item, required this.currency});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
-      decoration: AppTheme.glass(radius: AppTheme.r12),
-      child: Row(
-        children: [
-          // Image
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              borderRadius: BorderRadius.circular(AppTheme.r8),
-            ),
-            child: item.fullIconUrl.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: item.fullIconUrl,
-                    fit: BoxFit.contain,
-                    errorWidget: (_, _, _) => const Icon(
-                        Icons.image_not_supported,
-                        size: 18,
-                        color: AppTheme.textDisabled),
-                  )
-                : const Icon(Icons.image_not_supported,
-                    size: 18, color: AppTheme.textDisabled),
-          ),
-          const SizedBox(width: 10),
-          // Name + float
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.displayName,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (item.floatValue != null)
-                  Text(
-                    'FV ${item.floatValue!.toStringAsFixed(6)}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textMuted,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // Price
-          if (item.priceCents > 0)
-            Text(
-              currency.formatCents(item.priceCents),
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ValueColumn extends StatelessWidget {
-  final String label;
-  final int valueCents;
-  final Color color;
-  final bool showSign;
-  final CurrencyInfo currency;
-
-  const _ValueColumn({
-    required this.label,
-    required this.valueCents,
-    required this.color,
-    this.showSign = false,
-    required this.currency,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppTheme.textMuted,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          showSign
-              ? currency.formatCentsWithSign(valueCents)
-              : currency.formatCents(valueCents),
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: color,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
-}
