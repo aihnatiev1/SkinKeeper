@@ -8,6 +8,7 @@ import '../../../core/theme.dart';
 import '../sell_provider.dart';
 import '../../inventory/inventory_provider.dart';
 import '../../inventory/inventory_selection_provider.dart';
+import 'sell_progress_parts.dart';
 
 class SellProgressSheet extends ConsumerStatefulWidget {
   const SellProgressSheet({super.key});
@@ -82,7 +83,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildHandle(),
+                const SellProgressHandle(),
                 const SizedBox(height: 32),
                 const CircularProgressIndicator(color: AppTheme.primary),
                 const SizedBox(height: 16),
@@ -96,7 +97,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildHandle(),
+                const SellProgressHandle(),
                 const SizedBox(height: 32),
                 const CircularProgressIndicator(color: AppTheme.primary),
                 const SizedBox(height: 16),
@@ -134,7 +135,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
         loading: () => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHandle(),
+            const SellProgressHandle(),
             const SizedBox(height: 32),
             const CircularProgressIndicator(color: AppTheme.primary),
             const SizedBox(height: 16),
@@ -145,7 +146,7 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
         error: (e, _) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHandle(),
+            const SellProgressHandle(),
             const SizedBox(height: 24),
             const Icon(Icons.error_outline, color: AppTheme.loss, size: 40),
             const SizedBox(height: 12),
@@ -165,21 +166,13 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            _buildDoneButton(context),
+            SellProgressDoneButton(
+              onPressed: () {
+                ref.read(sellOperationProvider.notifier).reset();
+                context.pop();
+              },
+            ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHandle() {
-    return Center(
-      child: Container(
-        width: 40,
-        height: 4,
-        decoration: BoxDecoration(
-          color: AppTheme.textDisabled,
-          borderRadius: BorderRadius.circular(2),
         ),
       ),
     );
@@ -196,90 +189,26 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
         operation.items.where((i) => i.requiresConfirmation).length;
     final uncertainCount =
         operation.items.where((i) => i.status == SellItemStatus.uncertain).length;
+    final currency = ref.read(currencyProvider);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildHandle(),
+        const SellProgressHandle(),
         const SizedBox(height: 16),
 
         // Header
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                isActive
-                    ? 'Selling ${operation.totalItems} items...'
-                    : 'Sell operation complete',
-                style: AppTheme.title,
-              ),
-            ),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? AppTheme.primary.withValues(alpha: 0.15)
-                    : AppTheme.profit.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '${operation.succeeded + operation.failed} of ${operation.totalItems}',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isActive
-                      ? AppTheme.primary
-                      : AppTheme.profit,
-                ),
-              ),
-            ),
-          ],
-        ),
+        SellProgressHeader(isActive: isActive, operation: operation),
         const SizedBox(height: 12),
 
-        // Progress bar
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 6,
-            backgroundColor: AppTheme.surface,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              hasFailures
-                  ? AppTheme.warning
-                  : AppTheme.profit,
-            ),
-          ),
+        // Progress bar + listed total + rate-limit hint
+        SellProgressBar(
+          progress: progress,
+          hasFailures: hasFailures,
+          operation: operation,
+          isActive: isActive,
+          currency: currency,
         ),
-        // Running total of listed value
-        if (operation.succeeded > 0) ...[
-          const SizedBox(height: 6),
-          Builder(builder: (_) {
-            final listedCents = operation.items
-                .where((i) => i.status == SellItemStatus.listed)
-                .fold<int>(0, (sum, i) => sum + i.priceCents);
-            if (listedCents > 0) {
-              final currency = ref.read(currencyProvider);
-              return Text(
-                'Listed: ${currency.formatRaw(listedCents / 100)}',
-                style: AppTheme.mono.copyWith(color: AppTheme.profit, fontSize: 13),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
-        ],
-
-        // Rate limit info (when processing many items)
-        if (isActive && operation.totalItems > 5)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Processing one at a time to avoid Steam rate limits',
-              style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
-              textAlign: TextAlign.center,
-            ),
-          ),
 
         const SizedBox(height: 6),
 
@@ -289,386 +218,49 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             controller: _scrollController,
             shrinkWrap: true,
             itemCount: operation.items.length,
-            itemBuilder: (_, index) =>
-                _buildItemRow(operation.items[index]),
+            itemBuilder: (_, index) => SellProgressItemRow(
+              item: operation.items[index],
+              currency: currency,
+            ),
           ),
         ),
 
         // Summary (when completed)
         if (!isActive) ...[
           const SizedBox(height: 12),
-          _buildSummary(operation, needsConfirmation, uncertainCount),
+          SellProgressSummary(
+            operation: operation,
+            needsConfirmation: needsConfirmation,
+            uncertainCount: uncertainCount,
+            currency: currency,
+          ),
         ],
 
         const SizedBox(height: 14),
 
         // Action buttons
-        _buildActions(context, operation, isActive, hasFailures),
-      ],
-    );
-  }
-
-  Widget _buildItemRow(SellOperationItem item) {
-    final (IconData icon, Color color, Widget trailing) =
-        switch (item.status) {
-      SellItemStatus.queued => (
-          Icons.schedule,
-          AppTheme.textDisabled,
-          Text(
-            'Waiting...',
-            style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
-          ) as Widget,
-        ),
-      SellItemStatus.listing => (
-          Icons.sync,
-          AppTheme.accent,
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
-          ) as Widget,
-        ),
-      SellItemStatus.listed => (
-          Icons.check_circle,
-          AppTheme.profit,
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Show listing price (buyer pays) — matches what appears on Steam market
-              // sellerReceives is shown smaller below so user isn't confused
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    ref.read(currencyProvider).formatRaw(
-                      ((item.priceCents / 0.8696).ceil()) / 100,
-                    ),
-                    style: AppTheme.mono.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.profit,
-                    ),
-                  ),
-                  Text(
-                    '→ ${ref.read(currencyProvider).formatRaw(item.priceCents / 100)}',
-                    style: AppTheme.captionSmall.copyWith(
-                      fontSize: 10,
-                      color: AppTheme.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-              if (item.requiresConfirmation) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.warning.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'Confirm',
-                    style: AppTheme.captionSmall.copyWith(
-                      fontSize: 10,
-                      color: AppTheme.warning,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ) as Widget,
-        ),
-      SellItemStatus.uncertain => (
-          Icons.help_outline,
-          AppTheme.warning,
-          Text(
-            'Check Steam',
-            style: AppTheme.captionSmall.copyWith(
-              color: AppTheme.warning,
-              fontWeight: FontWeight.w600,
-            ),
-          ) as Widget,
-        ),
-      SellItemStatus.failed => (
-          Icons.cancel,
-          AppTheme.loss,
-          Flexible(
-            child: Text(
-              item.errorMessage ?? 'Failed',
-              style: AppTheme.captionSmall.copyWith(color: AppTheme.loss),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ) as Widget,
-        ),
-    };
-
-    // Show full name for packages/capsules (no ' | ' separator) so duplicates are distinguishable.
-    // For skins like "AK-47 | Redline (FT)", show just "Redline" to save space.
-    final parts = item.marketHashName.split(' | ');
-    final displayName = parts.length > 1
-        ? '${parts[0].split(' ').last} | ${parts[1].split(' (').first}'
-        : item.marketHashName;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppTheme.divider),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              displayName,
-              style: AppTheme.bodySmall.copyWith(color: AppTheme.textPrimary),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          trailing,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummary(SellOperation operation, int needsConfirmation, int uncertainCount) {
-    final currency = ref.read(currencyProvider);
-    final listedItems = operation.items.where((i) => i.status == SellItemStatus.listed).toList();
-    final totalSellerReceivesCents = listedItems.fold<int>(0, (sum, i) => sum + i.priceCents);
-
-    // Estimate buyer-pays and fees from seller-receives
-    int totalBuyerPays = 0;
-    for (final item in listedItems) {
-      // Reverse: buyer_pays ≈ seller_receives / 0.8696
-      final bp = (item.priceCents / 0.8696).ceil();
-      totalBuyerPays += bp;
-    }
-    final totalFees = totalBuyerPays - totalSellerReceivesCents;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: AppTheme.glass(radius: AppTheme.r12),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Result', style: AppTheme.bodySmall),
-              Text(
-                '${operation.succeeded} listed, ${operation.failed} failed',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: operation.failed > 0
-                      ? AppTheme.warning
-                      : AppTheme.profit,
-                ),
-              ),
-            ],
-          ),
-          if (operation.succeeded > 0) ...[
-            const Divider(height: 16, color: AppTheme.divider),
-            // Buyer pays (listing price)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Buyer pays', style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted)),
-                Text(currency.formatRaw(totalBuyerPays / 100),
-                    style: AppTheme.captionSmall.copyWith(color: AppTheme.textSecondary)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // Steam + CS2 fee
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Steam + CS2 fee (15%)', style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted)),
-                Text('-${currency.formatRaw(totalFees / 100)}',
-                    style: AppTheme.captionSmall.copyWith(color: AppTheme.loss)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // You receive (bold, green)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('You receive', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                Text(currency.formatRaw(totalSellerReceivesCents / 100),
-                    style: AppTheme.price.copyWith(color: AppTheme.profit)),
-              ],
-            ),
-          ],
-          if (needsConfirmation > 0) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.phone_android,
-                      size: 16, color: AppTheme.warning),
-                  const SizedBox(width: 8),
-                  Text(
-                    '$needsConfirmation items need confirmation in Steam app',
-                    style: AppTheme.captionSmall.copyWith(
-                      color: AppTheme.warning,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (uncertainCount > 0) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.help_outline,
-                      size: 16, color: AppTheme.warning),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '$uncertainCount item${uncertainCount > 1 ? 's' : ''} may need manual verification on Steam',
-                      style: AppTheme.captionSmall.copyWith(
-                        color: AppTheme.warning,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActions(
-    BuildContext context,
-    SellOperation operation,
-    bool isActive,
-    bool hasFailures,
-  ) {
-    if (isActive) {
-      return SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: OutlinedButton(
-          onPressed: () {
+        SellProgressActions(
+          isActive: isActive,
+          hasFailures: hasFailures,
+          onCancel: () {
             HapticFeedback.mediumImpact();
             ref.read(sellOperationProvider.notifier).cancelOperation();
           },
-          style: OutlinedButton.styleFrom(
-            side: const BorderSide(color: AppTheme.loss),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppTheme.r16),
-            ),
-          ),
-          child: Text(
-            'Cancel',
-            style: AppTheme.title.copyWith(color: AppTheme.loss),
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        if (hasFailures) ...[
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: OutlinedButton(
-                onPressed: () => _retryFailed(operation),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppTheme.warning),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.r16),
-                  ),
-                ),
-                child: Text(
-                  'Retry Failed',
-                  style: AppTheme.title.copyWith(color: AppTheme.warning),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        Expanded(
-          child: SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                // Refresh inventory and clear selection after selling
-                ref.read(inventoryProvider.notifier).refresh();
-                ref.read(selectionProvider.notifier).clear();
-                ref.read(sellOperationProvider.notifier).reset();
-                context.pop();
-                // Prompt for review after successful sell
-                if (operation.succeeded > 0) {
-                  ReviewService.maybeRequestReview();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.profit,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.r16),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Done',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          onRetry: () => _retryFailed(operation),
+          onDone: () {
+            HapticFeedback.lightImpact();
+            // Refresh inventory and clear selection after selling
+            ref.read(inventoryProvider.notifier).refresh();
+            ref.read(selectionProvider.notifier).clear();
+            ref.read(sellOperationProvider.notifier).reset();
+            context.pop();
+            // Prompt for review after successful sell
+            if (operation.succeeded > 0) {
+              ReviewService.maybeRequestReview();
+            }
+          },
         ),
       ],
-    );
-  }
-
-  Widget _buildDoneButton(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: ElevatedButton(
-        onPressed: () {
-          ref.read(sellOperationProvider.notifier).reset();
-          context.pop();
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.surface,
-          foregroundColor: AppTheme.textPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.r16),
-          ),
-          elevation: 0,
-        ),
-        child: const Text('Close'),
-      ),
     );
   }
 }
