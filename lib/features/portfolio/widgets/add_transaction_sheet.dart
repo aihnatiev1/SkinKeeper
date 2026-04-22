@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/settings_provider.dart';
@@ -17,6 +16,7 @@ import '../../../widgets/shared_ui.dart';
 import '../manual_tx_provider.dart';
 import '../portfolio_pl_provider.dart';
 import '../portfolio_provider.dart';
+import 'add_transaction_date_picker.dart';
 import 'add_transaction_source_chips.dart';
 import 'add_transaction_type_toggle.dart';
 
@@ -384,7 +384,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   // ── Date ──
                   _buildLabel('DATE'),
                   const SizedBox(height: 6),
-                  _buildDatePicker(),
+                  AddTransactionDatePicker(
+                    date: _date,
+                    onChanged: (d) => setState(() => _date = d),
+                  ),
                   const SizedBox(height: 16),
 
                   // ── Source ──
@@ -839,60 +842,6 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           padding: EdgeInsets.all(16),
           child: Text('Search failed',
               style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDatePicker() {
-    return GestureDetector(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: _date,
-          firstDate: DateTime(2015),
-          lastDate: DateTime.now(),
-          builder: (context, child) {
-            return Theme(
-              data: AppTheme.darkTheme.copyWith(
-                colorScheme: const ColorScheme.dark(
-                  primary: AppTheme.primary,
-                  surface: AppTheme.bgSecondary,
-                ),
-              ),
-              child: child!,
-            );
-          },
-        );
-        if (picked != null) {
-          HapticFeedback.selectionClick();
-          setState(() => _date = picked);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.calendar_today_rounded,
-                size: 16, color: AppTheme.textMuted),
-            const SizedBox(width: 10),
-            Text(
-              DateFormat('MMM d, yyyy').format(_date),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const Spacer(),
-            const Icon(Icons.keyboard_arrow_down_rounded,
-                size: 18, color: AppTheme.textMuted),
-          ],
         ),
       ),
     );
