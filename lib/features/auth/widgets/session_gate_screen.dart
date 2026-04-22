@@ -9,6 +9,7 @@ import '../../../core/api_client.dart';
 import '../../../core/theme.dart';
 import '../session_provider.dart';
 import 'connect_progress_overlay.dart';
+import 'session_gate_qr_fallback.dart';
 import 'session_gate_step_card.dart';
 import 'session_gate_webview_button.dart';
 
@@ -262,7 +263,7 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
             const SizedBox(height: 20),
 
             // ── QR Code (alternative) ─────────────────────────────────
-            _QrFallbackSection(onAuthenticated: _onAuthSuccess),
+            SessionGateQrFallbackSection(onAuthenticated: _onAuthSuccess),
             const SizedBox(height: 20),
 
             // ── Browser fallback (collapsed) ──────────────────────────
@@ -434,207 +435,6 @@ class _SessionGateScreenState extends ConsumerState<SessionGateScreen>
   }
 }
 
-
-// ─── QR Fallback Section ─────────────────────────────────────────────────
-
-class _QrFallbackSection extends ConsumerStatefulWidget {
-  final VoidCallback onAuthenticated;
-  const _QrFallbackSection({required this.onAuthenticated});
-
-  @override
-  ConsumerState<_QrFallbackSection> createState() =>
-      _QrFallbackSectionState();
-}
-
-class _QrFallbackSectionState extends ConsumerState<_QrFallbackSection> {
-  Timer? _pollTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    // Auto-start QR generation
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(qrAuthProvider.notifier).startQR();
-      _startPolling();
-    });
-  }
-
-  @override
-  void dispose() {
-    _pollTimer?.cancel();
-    super.dispose();
-  }
-
-
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      final status = await ref.read(qrAuthProvider.notifier).pollQR();
-      if (!mounted) return;
-      if (status == 'authenticated') {
-        _pollTimer?.cancel();
-        widget.onAuthenticated();
-      } else if (status == 'expired') {
-        _pollTimer?.cancel();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final qrState = ref.watch(qrAuthProvider);
-
-    return Column(
-      children: [
-        // QR header
-        Row(
-          children: [
-            Icon(Icons.qr_code_2,
-                size: 20, color: AppTheme.primary),
-            const SizedBox(width: 8),
-            Text(
-              'Scan with Steam Guard',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.9),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Open Steam Guard on another device and scan this code',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withValues(alpha: 0.5),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // QR content
-        if (qrState.loading)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
-        else if (qrState.status == 'error')
-          _buildQrError(qrState)
-        else if (qrState.status == 'expired')
-          _buildQrExpired()
-        else
-          _buildQrReady(qrState),
-      ],
-    );
-  }
-
-  Widget _buildQrReady(QrAuthState qrState) {
-    return Column(
-      children: [
-        if (qrState.qrImage != null)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Image.memory(
-              base64Decode(qrState.qrImage!.replaceFirst(RegExp(r'^data:image/\w+;base64,'), '')),
-              width: 180,
-              height: 180,
-              fit: BoxFit.contain,
-            ),
-          ),
-        const SizedBox(height: 12),
-        if (qrState.status == 'ready' || qrState.status == 'polling')
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: Colors.white.withValues(alpha: 0.4),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Waiting for confirmation...',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.4),
-                ),
-              ),
-            ],
-          ),
-        const SizedBox(height: 8),
-        Text(
-          'Open Steam Guard on another device and scan this code',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.white.withValues(alpha: 0.3),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQrExpired() {
-    return Column(
-      children: [
-        Text(
-          'QR code expired',
-          style: TextStyle(
-            fontSize: 13,
-            color: Colors.white.withValues(alpha: 0.5),
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: () {
-            ref.read(qrAuthProvider.notifier).startQR();
-            _startPolling();
-          },
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Refresh'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQrError(QrAuthState qrState) {
-    return Column(
-      children: [
-        Text(
-          'Failed to generate QR code',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppTheme.loss.withValues(alpha: 0.8),
-          ),
-        ),
-        if (qrState.error != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            friendlyError(qrState.error),
-            style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-          ),
-        ],
-        const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: () {
-            ref.read(qrAuthProvider.notifier).startQR();
-            _startPolling();
-          },
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Retry'),
-        ),
-      ],
-    );
-  }
-}
 
 // ── Browser Fallback Section (collapsible) ─────────────────────────────
 class _BrowserFallbackSection extends StatelessWidget {
