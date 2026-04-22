@@ -22,6 +22,7 @@ import '../inventory/inventory_provider.dart';
 import '../purchases/iap_service.dart';
 import 'transactions_provider.dart';
 import 'widgets/date_filter_sheet.dart';
+import 'widgets/item_filter_sheet.dart';
 import 'widgets/transaction_filter_chips.dart';
 import 'widgets/transaction_stats_bar.dart';
 
@@ -388,7 +389,7 @@ class TransactionsScreen extends ConsumerWidget {
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
-      builder: (sheetCtx) => _ItemFilterSheet(
+      builder: (sheetCtx) => ItemFilterSheet(
         items: items,
         onSelect: (name) {
           ref.read(txItemFilterProvider.notifier).state = name;
@@ -970,101 +971,6 @@ class _TradeValueBox extends StatelessWidget {
               fontSize: 14,
               fontWeight: FontWeight.bold,
               color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Item Filter Bottom Sheet with Search ──────────────────────────
-class _ItemFilterSheet extends StatefulWidget {
-  final List<String> items;
-  final void Function(String?) onSelect;
-
-  const _ItemFilterSheet({required this.items, required this.onSelect});
-
-  @override
-  State<_ItemFilterSheet> createState() => _ItemFilterSheetState();
-}
-
-class _ItemFilterSheetState extends State<_ItemFilterSheet> {
-  String _query = '';
-
-  List<String> get _filtered => _query.isEmpty
-      ? widget.items
-      : widget.items.where((n) => n.toLowerCase().contains(_query.toLowerCase())).toList();
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      maxChildSize: 0.9,
-      minChildSize: 0.3,
-      expand: false,
-      builder: (_, controller) => Column(
-        children: [
-          // Handle
-          Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 8),
-            child: Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.textDisabled,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ),
-          // Search
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: TextField(
-              autofocus: true,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Search items...',
-                hintStyle: const TextStyle(color: AppTheme.textDisabled),
-                prefixIcon: const Icon(Icons.search, size: 20, color: AppTheme.textMuted),
-                filled: true,
-                fillColor: AppTheme.surfaceLight,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          const SizedBox(height: 4),
-          // List
-          Expanded(
-            child: ListView.builder(
-              controller: controller,
-              itemCount: _filtered.length + 1,
-              itemBuilder: (_, i) {
-                if (i == 0) {
-                  return ListTile(
-                    leading: const Icon(Icons.all_inclusive, size: 18, color: AppTheme.primary),
-                    title: const Text('All items', style: TextStyle(color: AppTheme.textPrimary)),
-                    onTap: () => widget.onSelect(null),
-                  );
-                }
-                final name = _filtered[i - 1];
-                return ListTile(
-                  title: Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-                  ),
-                  onTap: () => widget.onSelect(name),
-                );
-              },
             ),
           ),
         ],
