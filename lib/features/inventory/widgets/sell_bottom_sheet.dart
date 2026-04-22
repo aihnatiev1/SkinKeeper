@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
@@ -14,9 +13,12 @@ import '../../../core/push_service.dart';
 import '../sell_provider.dart';
 import 'fee_breakdown.dart';
 import 'sell_progress_sheet.dart';
+import 'sell_sheet_action_buttons.dart';
 import 'sell_sheet_custom_price_input.dart';
 import 'sell_sheet_header.dart';
 import 'sell_sheet_switch_account_banner.dart';
+import 'sell_sheet_total_row.dart';
+import 'sell_sheet_warnings.dart';
 
 class SellBottomSheet extends ConsumerStatefulWidget {
   final List<InventoryItem> items;
@@ -257,64 +259,15 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Session expiring warning
-        if (sessionWarning)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.25)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_rounded,
-                      color: AppTheme.warning, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Session expiring soon — refresh after selling',
-                      style: AppTheme.captionSmall.copyWith(
-                        color: AppTheme.warning,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        if (sessionWarning) const SellSheetSessionWarning(),
 
         // Rate limit warning
         volume.whenData((vol) {
           if (!vol.isWarning) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.25)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.speed, color: AppTheme.warning, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${vol.today} of ${vol.limit} daily listings used — ${vol.remaining} remaining',
-                      style: AppTheme.captionSmall.copyWith(
-                        color: AppTheme.warning,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          return SellSheetVolumeWarning(
+            today: vol.today,
+            limit: vol.limit,
+            remaining: vol.remaining,
           );
         }).maybeWhen(orElse: () => const SizedBox.shrink()),
 
@@ -371,59 +324,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Stale price warning
-        if (stale)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.loss.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.loss.withValues(alpha: 0.3)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded,
-                          color: AppTheme.loss, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Price may be outdated — enter manually or check Steam Market',
-                          style: AppTheme.captionSmall.copyWith(
-                            color: AppTheme.loss,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (marketUrl != null) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 36,
-                      child: OutlinedButton.icon(
-                        onPressed: () => launchUrl(Uri.parse(marketUrl),
-                            mode: LaunchMode.externalApplication),
-                        icon: const Icon(Icons.open_in_new, size: 16),
-                        label: const Text('Open on Steam Market'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.loss,
-                          side: BorderSide(color: AppTheme.loss.withValues(alpha: 0.4)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+        if (stale) SellSheetStalePriceWarning(marketUrl: marketUrl),
 
         // Fee breakdown for quick price (amounts are in wallet currency, not USD)
         FeeBreakdown(
@@ -432,164 +333,32 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
         ),
         const SizedBox(height: 6),
 
-        if (count > 1)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Total ($count items)',
-                    style: AppTheme.bodySmall,
-                  ),
-                  Text(
-                    totalStr,
-                    style: AppTheme.price.copyWith(fontSize: 15),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        if (count > 1) SellSheetTotalRow(count: count, totalStr: totalStr),
 
         const SizedBox(height: 8),
 
         // Dual buttons (or single Sell button when no price)
-        if (quickPriceCents > 0 && !stale) ...[
-          // Has valid price — show Quick Sell + Sell
-          Row(
-            children: [
-              Expanded(
-                flex: 4,
-                child: SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _isSelling ? null : () => _startSell(quickPriceCents, priceCurrencyId: qp.currencyId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.warning,
-                      foregroundColor: Colors.black,
-                      disabledBackgroundColor: AppTheme.surface,
-                      disabledForegroundColor: AppTheme.textDisabled,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.r16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: count == 1 ? 'Quick Sell ' : 'Quick Sell All ',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                          ),
-                          TextSpan(
-                            text: count == 1 ? priceStr : totalStr,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: SizedBox(
-                  height: 48,
-                  child: OutlinedButton(
-                  onPressed: () {
-                    HapticFeedback.selectionClick();
-                    if (_showCustomPrice) {
-                      // Dismiss keyboard before AnimatedSize removes the TextField
-                      FocusManager.instance.primaryFocus?.unfocus();
-                    }
-                    setState(() => _showCustomPrice = !_showCustomPrice);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: _showCustomPrice
-                          ? AppTheme.primary
-                          : AppTheme.textDisabled,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.r16),
-                    ),
-                  ),
-                  child: Text(
-                    'Sell',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: _showCustomPrice
-                          ? AppTheme.primary
-                          : AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+        if (quickPriceCents > 0 && !stale)
+          SellSheetQuickSellButtons(
+            count: count,
+            priceStr: priceStr,
+            totalStr: totalStr,
+            isSelling: _isSelling,
+            showCustomPrice: _showCustomPrice,
+            onQuickSell: () => _startSell(quickPriceCents, priceCurrencyId: qp.currencyId),
+            onToggleCustomPrice: () {
+              if (_showCustomPrice) {
+                // Dismiss keyboard before AnimatedSize removes the TextField
+                FocusManager.instance.primaryFocus?.unfocus();
+              }
+              setState(() => _showCustomPrice = !_showCustomPrice);
+            },
+          )
+        else
+          SellSheetNoPriceButtons(
+            marketUrl: marketUrl,
+            onShowCustomPrice: () => setState(() => _showCustomPrice = true),
           ),
-        ] else ...[
-          // No valid Steam price — show market link + Sell only
-          if (marketUrl != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton.icon(
-                  onPressed: () => launchUrl(Uri.parse(marketUrl),
-                      mode: LaunchMode.externalApplication),
-                  icon: const Icon(Icons.open_in_new, size: 16),
-                  label: const Text('Check Price on Steam Market'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.steamBlue,
-                    side: BorderSide(color: AppTheme.steamBlue.withValues(alpha: 0.4)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.r16),
-                    ),
-                    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                setState(() => _showCustomPrice = true);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.r16),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Sell at Custom Price',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
 
         // Custom price input (expanded)
         AnimatedSize(
