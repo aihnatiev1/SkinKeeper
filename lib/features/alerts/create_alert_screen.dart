@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../models/alert.dart';
 import '../inventory/inventory_provider.dart';
 import 'alerts_provider.dart';
+import 'widgets/alert_form_widgets.dart';
 
 class CreateAlertScreen extends ConsumerStatefulWidget {
   final String? marketHashName;
@@ -213,7 +214,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                   children: [
                     // ── Item ──
                     if (hasItem && _suggestions.isEmpty)
-                      _SelectedItemChip(
+                      AlertSelectedItemChip(
                         name: _selectedItem!,
                         onClear: _clearItem,
                       ).animate().fadeIn(duration: 250.ms)
@@ -295,7 +296,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                     // Condition pills
                     Row(
                       children: [
-                        _ConditionPill(
+                        AlertConditionPill(
                           label: 'drops below',
                           icon: Icons.trending_down,
                           selected:
@@ -307,7 +308,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                           },
                         ),
                         const SizedBox(width: 8),
-                        _ConditionPill(
+                        AlertConditionPill(
                           label: 'rises above',
                           icon: Icons.trending_up,
                           selected:
@@ -319,7 +320,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                           },
                         ),
                         const SizedBox(width: 8),
-                        _ConditionPill(
+                        AlertConditionPill(
                           label: 'changes by %',
                           icon: Icons.percent,
                           selected:
@@ -336,7 +337,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                     // Smart alert pills
                     Row(
                       children: [
-                        _ConditionPill(
+                        AlertConditionPill(
                           label: 'deal alert',
                           icon: Icons.local_fire_department,
                           selected:
@@ -348,7 +349,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                           },
                         ),
                         const SizedBox(width: 8),
-                        _ConditionPill(
+                        AlertConditionPill(
                           label: 'sell signal',
                           icon: Icons.trending_up,
                           selected:
@@ -360,7 +361,7 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
                           },
                         ),
                         const SizedBox(width: 8),
-                        _ConditionPill(
+                        AlertConditionPill(
                           label: 'arbitrage',
                           icon: Icons.compare_arrows,
                           selected:
@@ -648,97 +649,6 @@ class _CreateAlertScreenState extends ConsumerState<CreateAlertScreen> {
         ),
       )),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Selected Item Chip ────────────────────────────────────────────
-class _SelectedItemChip extends StatelessWidget {
-  final String name;
-  final VoidCallback onClear;
-
-  const _SelectedItemChip({required this.name, required this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.profit.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppTheme.r12),
-        border: Border.all(
-          color: AppTheme.profit.withValues(alpha: 0.25),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.check_circle, color: AppTheme.profit, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              name,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.profit,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          GestureDetector(
-            onTap: onClear,
-            child: const Icon(Icons.close, size: 16, color: AppTheme.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Condition Pill ────────────────────────────────────────────────
-class _ConditionPill extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ConditionPill({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppTheme.primary.withValues(alpha: 0.15)
-                : AppTheme.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? AppTheme.primary : AppTheme.border,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: selected ? AppTheme.primaryLight : AppTheme.textMuted,
-              ),
-            ),
-          ),
         ),
       ),
     );
