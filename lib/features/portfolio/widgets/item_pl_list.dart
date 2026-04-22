@@ -15,6 +15,7 @@ import '../portfolio_provider.dart';
 import '../../transactions/transactions_provider.dart';
 import 'add_transaction_sheet.dart';
 import 'csv_import_sheet.dart';
+import 'item_pl_list_header.dart';
 
 // ── Sort labels ──────────────────────────────────────────────────────────────
 const _kSortLabels = <PlSortCol, String>{
@@ -123,7 +124,7 @@ class ItemPLList extends ConsumerWidget {
       decoration: AppTheme.glass(),
       child: Column(
         children: [
-          _Header(activeCount: active.length, soldCount: sold.length),
+          ItemPLListHeader(activeCount: active.length, soldCount: sold.length),
           Divider(height: 1, color: AppTheme.divider),
           if (sorted.isEmpty)
             Padding(
@@ -189,65 +190,6 @@ class ItemPLList extends ConsumerWidget {
     }
     out.sort((a, b) => s.desc ? cmp(a, b) : -cmp(a, b));
     return out;
-  }
-}
-
-// ── Header: tabs + item count ────────────────────────────────────────────────
-class _Header extends ConsumerWidget {
-  final int activeCount;
-  final int soldCount;
-  const _Header({required this.activeCount, required this.soldCount});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tab = ref.watch(plTabProvider);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      child: Row(
-        children: [
-          _TabChip(label: 'Active', count: activeCount, active: tab == PlTab.active,
-              onTap: () { HapticFeedback.selectionClick(); ref.read(plTabProvider.notifier).state = PlTab.active; }),
-          const SizedBox(width: 8),
-          _TabChip(label: 'Sold', count: soldCount, active: tab == PlTab.sold,
-              onTap: () { HapticFeedback.selectionClick(); ref.read(plTabProvider.notifier).state = PlTab.sold; }),
-        ],
-      ),
-    );
-  }
-}
-
-class _TabChip extends StatelessWidget {
-  final String label;
-  final int count;
-  final bool active;
-  final VoidCallback onTap;
-  const _TabChip({required this.label, required this.count, required this.active, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: active ? AppTheme.primary.withValues(alpha: 0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? AppTheme.primary : AppTheme.divider,
-            width: active ? 1.5 : 1,
-          ),
-        ),
-        child: Text(
-          '$label  $count',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            color: active ? AppTheme.primary : AppTheme.textMuted,
-          ),
-        ),
-      ),
-    );
   }
 }
 
