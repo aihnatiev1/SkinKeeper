@@ -14,6 +14,7 @@ import '../../../core/push_service.dart';
 import '../sell_provider.dart';
 import 'fee_breakdown.dart';
 import 'sell_progress_sheet.dart';
+import 'sell_sheet_custom_price_input.dart';
 import 'sell_sheet_header.dart';
 import 'sell_sheet_switch_account_banner.dart';
 
@@ -595,10 +596,19 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
           child: _showCustomPrice && !_isClosing
-              ? _buildCustomPriceInput(count,
+              ? SellSheetCustomPriceInput(
+                  count: count,
                   currencySymbol: qp.currencySymbol,
                   walletCurrencyId: qp.currencyId,
-                  walletCurrencyCode: qp.currencyCode)
+                  walletCurrencyCode: qp.currencyCode,
+                  controller: _priceController,
+                  customPriceInUsd: _customPriceInUsd,
+                  customPriceCents: _customPriceCents,
+                  isSelling: _isSelling,
+                  onPriceChanged: _onCustomPriceChanged,
+                  onUsdToggle: (usd) => setState(() => _customPriceInUsd = usd),
+                  onList: (cents, currencyId) => _startSell(cents, priceCurrencyId: currencyId),
+                )
               : const SizedBox.shrink(),
         ),
 
@@ -612,170 +622,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     );
   }
 
-  Widget _buildCustomPriceInput(int count, {
-    String currencySymbol = '\$',
-    int walletCurrencyId = 1,
-    String walletCurrencyCode = 'USD',
-  }) {
-    final isWalletUsd = walletCurrencyId == 1;
-    final activeSymbol = _customPriceInUsd ? '\$' : currencySymbol;
-    final activeCurrencyId = _customPriceInUsd ? 1 : walletCurrencyId;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Currency toggle (only show when wallet is not USD)
-          if (!isWalletUsd)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _CurrencyToggleButton(
-                      label: walletCurrencyCode,
-                      symbol: currencySymbol,
-                      isActive: !_customPriceInUsd,
-                      onTap: () => setState(() => _customPriceInUsd = false),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _CurrencyToggleButton(
-                      label: 'USD',
-                      symbol: '\$',
-                      isActive: _customPriceInUsd,
-                      onTap: () => setState(() => _customPriceInUsd = true),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // USD conversion warning
-          if (_customPriceInUsd && !isWalletUsd)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.warning.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.25)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.currency_exchange,
-                        color: AppTheme.warning, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Your Steam wallet is $walletCurrencyCode. USD price will be converted — actual listing may differ slightly.',
-                        style: AppTheme.captionSmall.copyWith(
-                          color: AppTheme.warning,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // Price input
-          TextField(
-            controller: _priceController,
-            onChanged: _onCustomPriceChanged,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d{0,2}')),
-              TextInputFormatter.withFunction((oldValue, newValue) {
-                return newValue.copyWith(text: newValue.text.replaceAll(',', '.'));
-              }),
-            ],
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              prefixText: '$activeSymbol ',
-              prefixStyle: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary,
-              ),
-              hintText: '0.00',
-              hintStyle: TextStyle(color: AppTheme.textDisabled),
-              filled: true,
-              fillColor: AppTheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.r12),
-                borderSide: BorderSide(color: AppTheme.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.r12),
-                borderSide: BorderSide(color: AppTheme.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.r12),
-                borderSide: const BorderSide(color: AppTheme.primary),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Live fee breakdown for custom price — user enters buyer-pays (listing price)
-          if (_customPriceCents != null && _customPriceCents! > 0) ...[
-            FeeBreakdown(
-              sellerReceivesCents: _customPriceCents!,
-              fromBuyerPays: true,
-              compact: false,
-              currency: CurrencyInfo(code: walletCurrencyCode, symbol: activeSymbol, rate: 1.0),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // List button
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: _customPriceCents != null && _customPriceCents! > 0 && !_isSelling
-                  ? () {
-                      // User enters buyer-pays price — convert to seller-receives for backend
-                      final fees = calculateFeesFromBuyerPays(_customPriceCents!);
-                      _startSell(fees.sellerReceivesCents, priceCurrencyId: activeCurrencyId);
-                    }
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.25),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.r16),
-                ),
-                elevation: 0,
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                _customPriceCents != null && _customPriceCents! > 0
-                    ? count == 1
-                        ? 'List at $activeSymbol${(_customPriceCents! / 100).toStringAsFixed(2)}'
-                        : 'List $count at $activeSymbol${(_customPriceCents! / 100).toStringAsFixed(2)} each'
-                    : 'Enter a price',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildPriceError() {
     return Container(
@@ -816,10 +662,19 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
           if (_showCustomPrice) ...[
             Builder(builder: (_) {
               final w = ref.watch(walletInfoProvider).valueOrNull ?? WalletInfo.usd;
-              return _buildCustomPriceInput(widget.items.length,
-                  currencySymbol: w.symbol,
-                  walletCurrencyId: w.currencyId,
-                  walletCurrencyCode: w.code);
+              return SellSheetCustomPriceInput(
+                count: widget.items.length,
+                currencySymbol: w.symbol,
+                walletCurrencyId: w.currencyId,
+                walletCurrencyCode: w.code,
+                controller: _priceController,
+                customPriceInUsd: _customPriceInUsd,
+                customPriceCents: _customPriceCents,
+                isSelling: _isSelling,
+                onPriceChanged: _onCustomPriceChanged,
+                onUsdToggle: (usd) => setState(() => _customPriceInUsd = usd),
+                onList: (cents, currencyId) => _startSell(cents, priceCurrencyId: currencyId),
+              );
             }),
           ],
         ],
@@ -828,45 +683,3 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
   }
 }
 
-class _CurrencyToggleButton extends StatelessWidget {
-  final String label;
-  final String symbol;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _CurrencyToggleButton({
-    required this.label,
-    required this.symbol,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? AppTheme.primary.withValues(alpha: 0.15) : AppTheme.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isActive ? AppTheme.primary : AppTheme.border,
-            width: isActive ? 1.5 : 1,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            '$symbol $label',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-              color: isActive ? AppTheme.primary : AppTheme.textSecondary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
