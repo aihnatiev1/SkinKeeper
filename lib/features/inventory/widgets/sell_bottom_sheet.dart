@@ -15,6 +15,7 @@ import '../../../core/push_service.dart';
 import '../sell_provider.dart';
 import 'fee_breakdown.dart';
 import 'sell_progress_sheet.dart';
+import 'sell_sheet_header.dart';
 
 class SellBottomSheet extends ConsumerStatefulWidget {
   final List<InventoryItem> items;
@@ -63,9 +64,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     super.dispose();
   }
 
-  bool get _isSingle => widget.items.length == 1;
-  bool get _allSameName => widget.items.every((i) => i.marketHashName == widget.items.first.marketHashName);
-
   void _onCustomPriceChanged(String value) {
     final parsed = double.tryParse(value.replaceAll(',', '.'));
     setState(() {
@@ -73,56 +71,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     });
   }
 
-  void _showItemList(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.bgSecondary,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        maxChildSize: 0.8,
-        minChildSize: 0.3,
-        expand: false,
-        builder: (_, scrollCtrl) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                '${widget.items.length} items to sell',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollCtrl,
-                itemCount: widget.items.length,
-                itemBuilder: (_, i) {
-                  final item = widget.items[i];
-                  return ListTile(
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        width: 36, height: 36,
-                        color: AppTheme.surface,
-                        child: Image.network(item.fullIconUrl, fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const Icon(Icons.image, size: 14, color: AppTheme.textDisabled)),
-                      ),
-                    ),
-                    title: Text(item.displayName, style: const TextStyle(fontSize: 13, color: Colors.white)),
-                    subtitle: Text(item.weaponName, style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-                    dense: true,
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _startSell(int priceCentsPerItem, {int? priceCurrencyId}) async {
     if (_isSelling) return; // Fix 9: prevent double-tap
@@ -247,7 +195,7 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
             ],
 
             // Header — item info
-            _buildHeader(item, count),
+            SellSheetHeader(items: widget.items),
             const SizedBox(height: 16),
 
             // Session is guaranteed valid by caller (requireSession).
@@ -294,108 +242,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
       ),
     );
   }
-
-  Widget _buildHeader(InventoryItem item, int count) {
-    if (!_isSingle && !_allSameName) {
-      // Multi-item with different types — tappable to show list
-      return GestureDetector(
-        onTap: () => _showItemList(context),
-        child: Row(
-          children: [
-            // Stack of icons
-            SizedBox(
-              width: 56,
-              height: 56,
-              child: Stack(
-                children: [
-                  for (var i = 0; i < widget.items.take(3).length; i++)
-                    Positioned(
-                      left: i * 12.0,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          color: AppTheme.surface,
-                          child: Image.network(
-                            widget.items[i].fullIconUrl,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const Icon(
-                                Icons.image, size: 16, color: AppTheme.textDisabled),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$count items',
-                    style: AppTheme.title,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Tap to view & edit list',
-                    style: AppTheme.bodySmall.copyWith(color: AppTheme.primary),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, size: 20, color: AppTheme.textMuted),
-          ],
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        // Item icon
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            width: 56,
-            height: 56,
-            color: AppTheme.surface,
-            child: Image.network(
-              item.fullIconUrl,
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) =>
-                  const Icon(Icons.image_not_supported, color: AppTheme.textDisabled),
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _isSingle
-                    ? item.displayName
-                    : '$count x ${item.displayName}',
-                style: AppTheme.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _isSingle ? item.weaponName : item.marketHashName,
-                style: AppTheme.bodySmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildSwitchAccountBanner(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
