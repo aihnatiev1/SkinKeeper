@@ -5,6 +5,7 @@ import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
 import '../../../models/inventory_item.dart';
 import '../../../models/profit_loss.dart';
+import 'item_card_badges.dart';
 import 'item_card_footer.dart';
 import 'price_comparison_table.dart' show sourceColor;
 import 'rarity_gem.dart';
@@ -159,7 +160,7 @@ class ItemCard extends StatelessWidget {
                               const SizedBox(height: 2),
                               Row(
                                 children: [
-                                  _ArbitrageBadge(
+                                  ArbitrageBadge(
                                     steamPrice: item.steamPrice!,
                                     buffPrice: item.prices['buff']!,
                                   ),
@@ -297,12 +298,12 @@ class ItemCard extends StatelessWidget {
                         else if (item.isDoppler && item.dopplerPhase != null)
                           Positioned(
                             top: 4, right: 6,
-                            child: _DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor),
+                            child: DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor),
                           )
                         else if (item.isRareItem && item.rareReason != null)
                           Positioned(
                             top: 4, right: 6,
-                            child: _RareBadge(reason: item.rareReason!),
+                            child: RareBadge(reason: item.rareReason!),
                           ),
                       ],
 
@@ -531,43 +532,6 @@ class _BestExternalPrice extends StatelessWidget {
   }
 }
 
-// ─── Arbitrage Badge ──────────────────────────────────────────────────
-class _ArbitrageBadge extends StatelessWidget {
-  final double steamPrice;
-  final double buffPrice;
-
-  const _ArbitrageBadge({required this.steamPrice, required this.buffPrice});
-
-  @override
-  Widget build(BuildContext context) {
-    if (steamPrice <= 0) return const SizedBox.shrink();
-    // Buff price is usually lower than Steam.
-    // We show how much cheaper it is on Buff (e.g. -25%)
-    final diff = ((buffPrice / steamPrice) - 1) * 100;
-    if (diff.abs() < 1) return const SizedBox.shrink();
-
-    final color = diff < -15 ? const Color(0xFF10B981) : AppTheme.textDisabled;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.2), width: 0.5),
-      ),
-      child: Text(
-        'BUFF ${diff > 0 ? '+' : ''}${diff.toStringAsFixed(0)}%',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 8,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
 
 // ─── Sticker Thumbnail ──────────────────────────────────────────────
 class _StickerThumb extends StatelessWidget {
@@ -656,80 +620,4 @@ class _CharmThumb extends StatelessWidget {
   }
 }
 
-// ─── Rare Badge ─────────────────────────────────────────────────────
-class _RareBadge extends StatelessWidget {
-  final String reason;
-
-  const _RareBadge({required this.reason});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (reason) {
-      'Blue Gem' => const Color(0xFF3B82F6),
-      'Ruby' => const Color(0xFFEF4444),
-      'Sapphire' => const Color(0xFF06B6D4),
-      'Emerald' => const Color(0xFF10B981),
-      'Black Pearl' => const Color(0xFF9B59B6),
-      _ => const Color(0xFFF59E0B), // amber for others
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: color.withValues(alpha: 0.4),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const RarityGem(size: 9, glow: false),
-          const SizedBox(width: 3),
-          Text(
-            reason.toUpperCase(),
-            style: TextStyle(
-              fontSize: 8,
-              fontWeight: FontWeight.w900,
-              color: color,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-// ─── Doppler Phase Pill (non-rare phases) ─────────────────────────
-class _DopplerPhasePill extends StatelessWidget {
-  final String phase;
-  final Color? color;
-  const _DopplerPhasePill({required this.phase, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? AppTheme.textMuted;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-      decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: c.withValues(alpha: 0.4), width: 0.5),
-      ),
-      child: Text(
-        phase,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: c,
-          letterSpacing: 0.3,
-        ),
-      ),
-    );
-  }
-}
 
