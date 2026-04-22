@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +10,7 @@ import '../../core/sync_state_provider.dart';
 import '../../core/theme.dart';
 import 'steam_auth_service.dart';
 import 'session_provider.dart';
+import 'widgets/login_parts.dart';
 import 'widgets/steam_webview_login.dart';
 import '../inventory/inventory_provider.dart';
 import '../portfolio/portfolio_provider.dart';
@@ -319,13 +319,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 SizedBox(height: canPop ? 8 : 32),
                 _buildHeader(),
                 const SizedBox(height: 32),
-                _buildFeaturePills(),
+                const LoginFeaturePills(),
                 const Spacer(),
                 _buildSteamButton(),
                 const SizedBox(height: 12),
-                if (_isPolling) _buildPollingStatus(),
-                if (_timedOut) _buildTimeoutStatus(),
-                if (!_isPolling && !_timedOut) _buildSecurityNote(),
+                if (_isPolling) LoginPollingStatus(onCheckNow: _checkNow),
+                if (_timedOut) LoginTimeoutStatus(onRetry: _startLogin),
+                if (!_isPolling && !_timedOut) const LoginSecurityNote(),
                 SizedBox(height: MediaQuery.of(context).padding.bottom + 32),
               ],
             ),
@@ -384,126 +384,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildFeaturePills() {
-    const features = [
-      ('Live prices', Icons.trending_up_rounded, Color(0xFF10B981)),
-      ('Portfolio P/L', Icons.pie_chart_rounded, Color(0xFF6366F1)),
-      ('Trade & sell', Icons.swap_horiz_rounded, Color(0xFFF59E0B)),
-      ('Price alerts', Icons.notifications_active_rounded, Color(0xFFEF4444)),
-      ('Bulk sell', Icons.sell_rounded, Color(0xFF8B5CF6)),
-      ('Multi-account', Icons.people_rounded, Color(0xFF06B6D4)),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          // Feature grid — 3 columns, compact
-          for (var i = 0; i < features.length; i += 3)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  for (var j = i; j < i + 3 && j < features.length; j++) ...[
-                    if (j > i) const SizedBox(width: 6),
-                    Expanded(child: _featureChip(features[j].$1, features[j].$2, features[j].$3, j)),
-                  ],
-                ],
-              ),
-            ),
-          const SizedBox(height: 20),
-          // Market logos row. Wrap so narrow viewports (small phones with
-          // localised strings) flow to a second line instead of overflowing.
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              const Text('Steam', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
-              _dot(),
-              const Text('Skinport', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
-              _dot(),
-              const Text('CSFloat', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
-              _dot(),
-              const Text('DMarket', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
-            ],
-          ).animate().fadeIn(duration: 400.ms, delay: 800.ms),
-          const SizedBox(height: 12),
-          Text(
-            'Free to use \u2022 No ads',
-            style: TextStyle(fontSize: 11, color: AppTheme.textDisabled),
-          ).animate().fadeIn(duration: 400.ms, delay: 900.ms),
-          const SizedBox(height: 16),
-          // Ecosystem row
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _platformBadge(Icons.language_rounded, 'Web', 'https://app.skinkeeper.store'),
-              _platformBadge(Icons.desktop_windows_rounded, 'Desktop', 'https://skinkeeper.store/download'),
-              _platformBadge(Icons.extension_rounded, 'Extension', 'https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd'),
-            ],
-          ).animate().fadeIn(duration: 400.ms, delay: 1000.ms),
-        ],
-      ),
-    );
-  }
-
-  Widget _platformBadge(IconData icon, String label, String url) {
-    return GestureDetector(
-      onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppTheme.primary.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 12, color: AppTheme.primaryLight),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryLight),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dot() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 6),
-    child: Text('\u2022', style: TextStyle(fontSize: 8, color: AppTheme.textDisabled)),
-  );
-
-  Widget _featureChip(String label, IconData icon, Color color, int index) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.12)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 300.ms, delay: Duration(milliseconds: 400 + index * 60))
-        .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1));
-  }
-
   Widget _buildSteamButton() {
     return GestureDetector(
       onTap: _isPolling
@@ -553,75 +433,4 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
   }
 
-  Widget _buildPollingStatus() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppTheme.textMuted,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Waiting for Steam login...',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textMuted,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: _checkNow,
-            child: Text(
-              'Completed login? Tap to continue',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.primary.withValues(alpha: 0.8),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 300.ms);
-  }
-
-  Widget _buildTimeoutStatus() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: GestureDetector(
-        onTap: _startLogin,
-        child: const Text(
-          'Login timed out. Tap to try again.',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppTheme.textMuted,
-          ),
-        ),
-      ),
-    ).animate().fadeIn(duration: 300.ms);
-  }
-
-  Widget _buildSecurityNote() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Text(
-        'You sign in directly to Steam. We never see your password.',
-        style: TextStyle(
-          fontSize: 12,
-          color: Colors.white.withValues(alpha: 0.3),
-        ),
-      ),
-    ).animate().fadeIn(duration: 500.ms, delay: 800.ms);
-  }
 }
