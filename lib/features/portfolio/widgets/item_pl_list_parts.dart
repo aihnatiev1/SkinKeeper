@@ -1,0 +1,460 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/api_client.dart';
+import '../../../core/settings_provider.dart';
+import '../../../core/theme.dart';
+import '../../../models/profit_loss.dart';
+import '../../../widgets/glass_sheet.dart';
+import '../portfolio_pl_provider.dart';
+import '../portfolio_provider.dart';
+import '../../transactions/transactions_provider.dart';
+import 'add_transaction_sheet.dart';
+import 'csv_import_sheet.dart';
+
+class ItemPLEmptyState extends StatelessWidget {
+  const ItemPLEmptyState({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+      decoration: AppTheme.glass(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'No purchases yet.\nAdd what you paid to track profit.',
+            textAlign: TextAlign.center,
+            style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => showGlassSheet(context, const AddTransactionSheet()),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_rounded, size: 16, color: AppTheme.primary),
+                        const SizedBox(width: 6),
+                        Text('Add Purchase',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.primary)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => showGlassSheet(context, const CsvImportSheet()),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.divider),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.upload_file_rounded, size: 16, color: AppTheme.textMuted),
+                        const SizedBox(width: 6),
+                        Text('Import CSV',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textMuted)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ItemPLLoadingMoreFooter extends StatelessWidget {
+  const ItemPLLoadingMoreFooter({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Loading more items…',
+            style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ItemPLCard extends ConsumerStatefulWidget {
+  final ItemPL item;
+  const ItemPLCard({super.key, required this.item});
+
+  @override
+  ConsumerState<ItemPLCard> createState() => _ItemPLCardState();
+}
+
+class _ItemPLCardState extends ConsumerState<ItemPLCard> {
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final currency = ref.watch(currencyProvider);
+    final tab = ref.watch(plTabProvider);
+    final isSold = tab == PlTab.sold;
+    final profitColor = item.isProfitable ? AppTheme.profit : AppTheme.loss;
+    final pctPrefix = item.profitPct >= 0 ? '+' : '';
+    // Arrow makes sign readable for colorblind users (~8% of males).
+    final pctArrow = item.profitPct >= 0 ? '↑' : '↓';
+    final pctText = item.hasCostData && item.currentPriceCents > 0
+        ? '$pctArrow $pctPrefix${item.profitPct.toStringAsFixed(1)}%'
+        : null;
+
+    // Subtitle
+    final subtitle = isSold
+        ? '${item.totalQuantitySold} sold \u00B7 ${currency.format(item.avgSellPrice)} avg'
+        : '${item.currentHolding} held \u00B7 ${currency.format(item.avgBuyPrice)} avg';
+
+    // Worth / Earned
+    final worthLabel = isSold ? 'Earned' : 'Worth';
+    final worthValue = isSold
+        ? (item.totalEarnedCents > 0
+            ? currency.format(item.totalEarned)
+            : '\u2014')
+        : (item.totalWorthNowCents > 0
+            ? currency.format(item.totalWorthNow)
+            : '\u2014');
+
+    // Profit
+    final profitValue = item.hasCostData && item.currentPriceCents > 0
+        ? currency.formatWithSign(item.totalProfit)
+        : '\u2014';
+
+    return Dismissible(
+      key: ValueKey(item.marketHashName),
+      background: _swipeBackground(
+        alignment: Alignment.centerLeft,
+        color: AppTheme.primary,
+        icon: Icons.edit_outlined,
+      ),
+      secondaryBackground: _swipeBackground(
+        alignment: Alignment.centerRight,
+        color: AppTheme.loss,
+        icon: Icons.delete_outline,
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          // Swipe right → edit: pre-fill with existing data
+          showGlassSheet(
+            context,
+            AddTransactionSheet(
+              initialItemName: item.marketHashName,
+              initialIconUrl: item.imageUrl,
+              initialPriceUsd: item.avgBuyPrice,
+              initialQty: item.currentHolding,
+              editMode: true,
+            ),
+          );
+          return false;
+        } else {
+          // Swipe left → delete
+          return _confirmDeleteAll(context, item);
+        }
+      },
+      child: GestureDetector(
+      onLongPress: () => _showItemActions(context, item),
+      child: Container(
+          decoration: AppTheme.glass(),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Row 1: icon + name + profit badge
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Item icon
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: _itemIcon(item),
+                  ),
+                  const SizedBox(width: 10),
+                  // Name + subtitle
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.displayName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Profit % badge
+                  if (pctText != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: profitColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        pctText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: profitColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              // Divider
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    color: AppTheme.divider),
+              ),
+              // Row 3: Worth / Profit / Change
+              Row(
+                children: [
+                  _metricColumn(worthLabel, worthValue, Colors.white),
+                  _metricColumn('Profit', profitValue, profitColor),
+                  _metricColumn(
+                    'Change',
+                    pctText ?? '\u2014',
+                    profitColor,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _metricColumn(String label, String value, Color valueColor) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: AppTheme.textDisabled),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _itemIcon(ItemPL item) {
+    if (item.imageUrl != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: CachedNetworkImage(
+          imageUrl: item.imageUrl!,
+          width: 32,
+          height: 32,
+          fit: BoxFit.contain,
+          errorWidget: (ctx, url, err) => _iconPlaceholder(),
+          placeholder: (ctx, url) => _iconPlaceholder(),
+        ),
+      );
+    }
+    return _iconPlaceholder();
+  }
+
+  Widget _iconPlaceholder() => Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      );
+
+  Widget _swipeBackground({
+    required Alignment alignment,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: color, size: 24),
+    );
+  }
+
+  // ── Delete confirmation ──────────────────────────────────────────────────
+  Future<bool> _confirmDeleteAll(BuildContext context, ItemPL item) async {
+    HapticFeedback.mediumImpact();
+    final result = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: Text('Delete transactions?',
+            style: const TextStyle(color: Colors.white, fontSize: 15)),
+        content: Text(
+          'Remove all records for "${item.displayName}"? Cannot be undone.',
+          style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child:
+                Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: Text('Delete',
+                style: TextStyle(
+                    color: AppTheme.loss, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (result == true && context.mounted) {
+      await _deleteAllForItem(context, item);
+    }
+    return false; // never actually dismiss the Dismissible — we handle removal via provider
+  }
+
+  Future<void> _deleteAllForItem(BuildContext context, ItemPL item) async {
+    // Optimistic-delay pattern: show an Undo snackbar for 5s before actually
+    // hitting the backend. A mis-tapped delete on a long transaction history
+    // is catastrophic (cost basis resets, ownership chain lost), so the 5s
+    // window is a cheap safety net that needs no backend soft-delete support.
+    final messenger = ScaffoldMessenger.of(context);
+    final completer = Completer<bool>();
+    Timer? timer;
+
+    timer = Timer(const Duration(seconds: 5), () {
+      if (!completer.isCompleted) completer.complete(true);
+    });
+
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+            'Deleting transactions for "${item.marketHashName}" — tap UNDO to cancel'),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'UNDO',
+          textColor: AppTheme.profit,
+          onPressed: () {
+            timer?.cancel();
+            if (!completer.isCompleted) completer.complete(false);
+          },
+        ),
+      ),
+    );
+
+    final shouldDelete = await completer.future;
+    if (!shouldDelete) return;
+
+    try {
+      final api = ref.read(apiClientProvider);
+      final encoded = Uri.encodeQueryComponent(item.marketHashName);
+      await api.delete('/transactions?item=$encoded');
+      // Invalidate all related providers immediately
+      ref.invalidate(itemsPLProvider);
+      ref.invalidate(portfolioPLProvider);
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(portfolioProvider);
+      ref.invalidate(txStatsProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Delete failed: ${friendlyError(e)}'),
+              backgroundColor: AppTheme.loss),
+        );
+      }
+    }
+  }
+
+  // ── Item long-press actions ──────────────────────────────────────────────
+  void _showItemActions(BuildContext context, ItemPL item) {
+    HapticFeedback.mediumImpact();
+    showGlassSheet(
+      context,
+      AddTransactionSheet(
+        initialItemName: item.marketHashName,
+        initialIconUrl: item.imageUrl,
+        initialPriceUsd: item.avgBuyPrice,
+        initialQty: item.currentHolding,
+        editMode: true,
+      ),
+    );
+  }
+}
