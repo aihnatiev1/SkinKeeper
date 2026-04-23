@@ -551,6 +551,7 @@ router.post("/accounts/link", authMiddleware, async (req: AuthRequest, res: Resp
       if (countRow[0].cnt >= 2) {
         res.status(403).json({
           error: "premium_required",
+          code: "PREMIUM_REQUIRED",
           message: "Upgrade to Premium to link more than 2 Steam accounts",
         });
         return;

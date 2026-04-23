@@ -86,7 +86,7 @@ export async function requirePremium(
       next();
       return;
     }
-    res.status(403).json({ error: "Premium subscription required" });
+    res.status(403).json({ error: "Premium subscription required", code: "PREMIUM_REQUIRED" });
     return;
   }
 
@@ -104,7 +104,7 @@ export async function requirePremium(
       req.isPremium = true;
       next();
     } else {
-      res.status(403).json({ error: "Premium subscription required" });
+      res.status(403).json({ error: "Premium subscription required", code: "PREMIUM_REQUIRED" });
     }
   } catch (err) {
     console.error("Premium check error:", err);

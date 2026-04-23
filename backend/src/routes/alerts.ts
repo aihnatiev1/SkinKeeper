@@ -61,6 +61,7 @@ router.post(
         if (!isPremium) {
           res.status(403).json({
             error: "premium_required",
+            code: "PREMIUM_REQUIRED",
             message: "Upgrade to PRO to create more than 5 price alerts",
           });
           return;

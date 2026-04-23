@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/account_scope_provider.dart';
 import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
+import '../../core/review_service.dart';
 import '../../models/inventory_item.dart';
 import '../auth/session_provider.dart';
 import '../settings/accounts_provider.dart';
@@ -263,7 +264,20 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     try {
       final api = ref.read(apiClientProvider);
       await api.post('/inventory/refresh', queryParameters: _accountQuery);
-      state = AsyncData(await _fetchFromApi());
+      final items = await _fetchFromApi();
+      state = AsyncData(items);
+      // Positive-moment review prompt: first time we can show a user their
+      // inventory with real value is the highest-satisfaction moment in the
+      // app. Guard on a non-trivial value so we don't prompt freshly-created
+      // accounts with empty inventories. The service handles cooldown +
+      // lifetime cap internally.
+      final inventoryUsd = items.fold<double>(
+        0,
+        (sum, it) => sum + (it.bestPrice ?? 0),
+      );
+      if (inventoryUsd >= 100) {
+        ReviewService.maybeRequestReview();
+      }
     } on DioException {
       // Network error during refresh — try cache fallback, mark stale
       ref.read(inventoryStaleProvider.notifier).state = true;

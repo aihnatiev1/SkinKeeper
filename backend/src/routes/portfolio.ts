@@ -146,10 +146,13 @@ router.get(
   }
 );
 
-// GET /api/portfolio/pl — Portfolio P/L summary (PREMIUM)
+// GET /api/portfolio/pl — Portfolio P/L summary (FREE)
+// The top-of-screen numbers (invested/current/realized/unrealized) are free
+// so users see concrete value on their own data — this is what motivates the
+// upgrade to unlock history charts and per-item breakdowns.
 // Optional ?accountId=X to filter by specific steam account
 // Optional ?portfolioId=X to filter by named portfolio
-router.get("/pl", authMiddleware, requirePremium, async (req: AuthRequest, res: Response) => {
+router.get("/pl", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const accountId = req.query.accountId ? parseInt(req.query.accountId as string) : undefined;
     const portfolioId = req.query.portfolioId ? parseInt(req.query.portfolioId as string) : undefined;

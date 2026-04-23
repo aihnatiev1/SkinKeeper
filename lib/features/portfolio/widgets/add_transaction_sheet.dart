@@ -168,8 +168,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         context.pop();
       }
     } on DioException catch (e) {
-      final errorCode = (e.response?.data as Map<String, dynamic>?)?['error'];
-      if (errorCode == 'premium_required' && mounted) {
+      final data = e.response?.data as Map<String, dynamic>?;
+      final isPremiumBlocked = data?['code'] == 'PREMIUM_REQUIRED' ||
+          data?['error'] == 'premium_required';
+      if (isPremiumBlocked && mounted) {
         context.pop();
         context.push('/premium');
         return;

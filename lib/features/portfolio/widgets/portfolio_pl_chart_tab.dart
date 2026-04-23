@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/settings_provider.dart';
@@ -37,7 +38,13 @@ class _PortfolioPLChartTabState extends ConsumerState<PortfolioPLChartTab> {
           data: (d) => _PLSummaryCard(data: d)
               .animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, duration: 400.ms, curve: Curves.easeOutCubic),
           loading: () => const ShimmerCard(height: 150),
-          error: (_, _) => const SizedBox.shrink(),
+          // Don't swallow errors silently — users seeing an empty P/L screen
+          // is exactly the "looks broken, bounce" moment we want to avoid.
+          // If the backend says PRO is required, route to the paywall; for
+          // any other failure surface a retry affordance.
+          error: (err, _) => isPremiumRequired(err)
+              ? const _PLUpgradeTeaser()
+              : _PLErrorCard(onRetry: () => ref.invalidate(portfolioPLProvider)),
         ),
         const SizedBox(height: 12),
         accountsPL.when(
@@ -259,6 +266,82 @@ class _AccountBreakdownCard extends ConsumerWidget {
             );
           }),
         ],
+      ),
+    );
+  }
+}
+
+class _PLUpgradeTeaser extends StatelessWidget {
+  const _PLUpgradeTeaser();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        context.push('/premium');
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.25), width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.auto_graph_rounded, color: AppTheme.primary, size: 20),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Unlock profit analytics',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                  SizedBox(height: 2),
+                  Text('See realized/unrealized P/L across your trades',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.primary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PLErrorCard extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _PLErrorCard({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onRetry,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.textSecondary),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Tap to retry loading P/L', style: AppTheme.caption.copyWith(color: AppTheme.textSecondary))),
+          ],
+        ),
       ),
     );
   }

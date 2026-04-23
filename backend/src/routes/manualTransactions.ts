@@ -29,7 +29,9 @@ router.post(
         portfolioId,
       } = req.body;
 
-      // Free tier: max 5 manual transactions
+      // Free tier: max 10 manual transactions (bumped from 5 to give users
+      // enough data for P/L to feel meaningful before they hit the gate).
+      const FREE_MANUAL_TX_LIMIT = 10;
       const { rows: userRows } = await pool.query(
         `SELECT is_premium FROM users WHERE id = $1`, [req.userId]
       );
@@ -39,10 +41,11 @@ router.post(
           `SELECT COUNT(*)::int AS cnt FROM transactions WHERE user_id = $1 AND source = 'manual'`,
           [req.userId]
         );
-        if (countRows[0].cnt >= 5) {
+        if (countRows[0].cnt >= FREE_MANUAL_TX_LIMIT) {
           res.status(403).json({
             error: "premium_required",
-            message: "Upgrade to PRO to add more than 5 manual transactions",
+            code: "PREMIUM_REQUIRED",
+            message: `Upgrade to PRO to add more than ${FREE_MANUAL_TX_LIMIT} manual transactions`,
           });
           return;
         }

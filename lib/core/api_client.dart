@@ -33,6 +33,19 @@ bool isTokenExpired(dynamic e) {
   return false;
 }
 
+/// Returns true if the error is a 403 because the feature requires PRO.
+bool isPremiumRequired(dynamic e) {
+  if (e is DioException && e.response?.statusCode == 403) {
+    final data = e.response?.data;
+    if (data is Map) {
+      if (data['code'] == 'PREMIUM_REQUIRED') return true;
+      // Legacy: older backend builds returned only `error: "premium_required"`.
+      if (data['error'] == 'premium_required') return true;
+    }
+  }
+  return false;
+}
+
 /// Extract a user-friendly message from any error (Dio or otherwise).
 /// Messages include actionable next steps — users should know what to try
 /// next, not just that something failed.
