@@ -12,6 +12,7 @@ import { checkExpiredSubscriptions } from "./purchases.js";
 import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js";
 import { checkPriceChanges } from "./priceChangeNotifier.js";
 import { initProxyPool } from "./proxyPool.js";
+import { runSessionRefreshSweep } from "./sessionRefreshJob.js";
 
 // ─── Job Health Tracking ────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ const jobHealth: Record<string, JobHealth> = {
   csfloat: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   plSnapshot: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   subscriptions: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  sessionRefresh: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
 };
 
 function recordJobRun(name: string, success: boolean, error?: string): void {
@@ -176,6 +178,23 @@ export function startPriceJobs() {
     } catch (err) {
       recordJobRun("subscriptions", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] Subscription check failed:", err);
+    }
+  }));
+
+  // Pre-emptive Steam session refresh: every 30 min.
+  // Refreshes any account whose 24h access-token has <4h life left using the
+  // long-lived refresh token. Keeps users logged in "forever" the same way
+  // a browser silently rotates the token in the background.
+  scheduledTasks.push(cron.schedule("*/30 * * * *", async () => {
+    try {
+      const { scanned, attempted } = await runSessionRefreshSweep();
+      if (scanned > 0) {
+        console.log(`[CRON] Session refresh sweep: scanned=${scanned} attempted=${attempted}`);
+      }
+      recordJobRun("sessionRefresh", true);
+    } catch (err) {
+      recordJobRun("sessionRefresh", false, err instanceof Error ? err.message : String(err));
+      console.error("[CRON] Session refresh sweep failed:", err);
     }
   }));
 
