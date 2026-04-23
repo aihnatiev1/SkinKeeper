@@ -5,6 +5,16 @@ import { sellItem, quickSellPrice, checkAssetListed, getListedAssetIds } from ".
 import { getWalletCurrency } from "./currency.js";
 import { recalculateCostBasis } from "./profitLoss.js";
 import { refreshPricesOnDemand } from "./steamHistogram.js";
+import { withTimeout, TimeoutError } from "../utils/withTimeout.js";
+
+// Hard caps so quick-sell never feels stuck. Budget rationale:
+//   2s for the bulk price pre-fetch (it's an optimization — per-item
+//     quickSellPrice has its own fallback chain, so missing it is safe)
+//   2s for per-item quickSellPrice (cache + depth + DB hits complete in
+//     <100ms when healthy; anything longer means a network path is
+//     starving us, and the user's wait matters more than price freshness)
+const PRICE_PREFETCH_BUDGET_MS = 2000;
+const QUICKSELL_PRICE_BUDGET_MS = 2000;
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -228,10 +238,18 @@ async function processOperation(
       const uniqueNames = [...new Set(needsPrice.map((i) => i.market_hash_name as string))];
       const walletCurrencyId = await getWalletCurrency(fallbackAccountId) ?? 1;
       try {
-        await refreshPricesOnDemand(uniqueNames, walletCurrencyId);
+        await withTimeout(
+          refreshPricesOnDemand(uniqueNames, walletCurrencyId),
+          PRICE_PREFETCH_BUDGET_MS,
+          "refreshPricesOnDemand",
+        );
         log.info("sell_prices_prefetched", { operationId, count: uniqueNames.length });
       } catch (err) {
-        log.warn("sell_prices_prefetch_failed", { operationId }, err);
+        if (err instanceof TimeoutError) {
+          log.warn("sell_prices_prefetch_timeout", { operationId, count: uniqueNames.length });
+        } else {
+          log.warn("sell_prices_prefetch_failed", { operationId }, err);
+        }
         // Non-fatal: quickSellPrice will still work via other fallbacks
       }
     }
@@ -265,12 +283,25 @@ async function processOperation(
       let priceCurrencyId: number = item.price_currency_id ?? walletCurrencyId;
       let priceFromQuickprice = false;
       if (priceCents <= 0 && item.market_hash_name) {
-        const qpResult = await quickSellPrice(item.market_hash_name, walletCurrencyId);
+        let qpResult: Awaited<ReturnType<typeof quickSellPrice>> = null;
+        try {
+          qpResult = await withTimeout(
+            quickSellPrice(item.market_hash_name, walletCurrencyId),
+            QUICKSELL_PRICE_BUDGET_MS,
+            "quickSellPrice",
+          );
+        } catch (err) {
+          if (err instanceof TimeoutError) {
+            log.warn("sell_quickprice_timeout", { operationId, assetId: item.asset_id });
+          } else {
+            log.warn("sell_quickprice_failed", { operationId, assetId: item.asset_id }, err);
+          }
+        }
         const qp = qpResult?.sellerReceivesCents ?? null;
         if (qp === null || qp <= 0) {
           await pool.query(
             `UPDATE sell_operation_items
-             SET status = 'failed', error_message = 'No market price available', updated_at = NOW()
+             SET status = 'failed', error_message = 'No market price available — please retry', updated_at = NOW()
              WHERE id = $1`,
             [item.id]
           );
@@ -310,7 +341,18 @@ async function processOperation(
       // Skip when we just resolved priceCents from quickSellPrice ourselves —
       // the price IS the market price, no point hitting Steam histogram twice.
       if (priceCents > 0 && !priceFromQuickprice && item.market_hash_name) {
-        const marketPrice = await quickSellPrice(item.market_hash_name, priceCurrencyId);
+        let marketPrice: Awaited<ReturnType<typeof quickSellPrice>> = null;
+        try {
+          marketPrice = await withTimeout(
+            quickSellPrice(item.market_hash_name, priceCurrencyId),
+            QUICKSELL_PRICE_BUDGET_MS,
+            "quickSellPrice (sanity)",
+          );
+        } catch {
+          // If we can't reach Steam for the sanity check in time, trust the
+          // client price and proceed. Better than stalling the sell loop.
+          marketPrice = null;
+        }
         if (marketPrice && marketPrice.sellerReceivesCents > 0) {
           const ratio = priceCents / marketPrice.sellerReceivesCents;
           if (ratio > MAX_PRICE_MULTIPLIER) {

@@ -214,6 +214,7 @@ export async function sellItem(
           },
           maxRedirects: 0,
           validateStatus: (s: number) => s >= 200 && s < 400,
+          timeout: 3000,
         }
       );
       const setCookies: string[] = eligRes.headers["set-cookie"] ?? [];
