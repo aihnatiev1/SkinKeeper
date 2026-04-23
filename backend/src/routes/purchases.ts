@@ -6,7 +6,7 @@ import {
   SignedDataVerifier,
   Environment,
 } from "@apple/app-store-server-library";
-import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, AuthRequest, invalidatePremiumCache } from "../middleware/auth.js";
 import {
   PRODUCT_IDS,
   PRODUCTS,
@@ -338,6 +338,7 @@ router.post(
             `UPDATE users SET is_premium = FALSE, premium_until = NULL WHERE id = $1`,
             [userId]
           );
+          invalidatePremiumCache(userId);
           console.log(
             `[ASSN] Revoked premium for user ${userId} (tx=${originalTransactionId})`
           );
@@ -350,6 +351,7 @@ router.post(
               `UPDATE users SET is_premium = TRUE, premium_until = $2 WHERE id = $1`,
               [userId, new Date(expiresDate)]
             );
+            invalidatePremiumCache(userId);
           }
           break;
 
@@ -362,6 +364,7 @@ router.post(
             `UPDATE users SET is_premium = FALSE WHERE id = $1`,
             [userId]
           );
+          invalidatePremiumCache(userId);
           break;
 
         // Other types (DID_CHANGE_RENEWAL_STATUS, OFFER_REDEEMED, etc.)
