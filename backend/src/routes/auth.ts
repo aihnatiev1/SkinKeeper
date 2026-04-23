@@ -637,7 +637,22 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
       );
     }
 
-    // Hard delete — removes account and cascades to inventory_items etc.
+    // Before the hard delete, wipe per-account rollups that would otherwise
+    // be FK SET NULL'd and collide with the user's existing global (NULL)
+    // rollup row on the partial-unique indexes
+    // `(user_id, COALESCE(steam_account_id, 0), ...)`. Merging would be
+    // nicer for P/L continuity, but the simpler thing matches user intent:
+    // unlinking an account wipes its attribution, while the user-level
+    // roll-up row (steam_account_id IS NULL) stays intact. Sequential
+    // DELETEs are safe on retry (idempotent) — no transaction needed.
+    await pool.query(
+      `DELETE FROM item_cost_basis WHERE user_id = $1 AND steam_account_id = $2`,
+      [req.userId, accountId]
+    );
+    await pool.query(
+      `DELETE FROM daily_pl_snapshots WHERE user_id = $1 AND steam_account_id = $2`,
+      [req.userId, accountId]
+    );
     await pool.query(
       `DELETE FROM steam_accounts WHERE id = $1 AND user_id = $2`,
       [accountId, req.userId]
