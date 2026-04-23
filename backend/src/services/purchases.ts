@@ -1,5 +1,6 @@
 import { pool } from "../db/pool.js";
 import { isAppleApiConfigured, getTransactionInfo } from "./appleStoreApi.js";
+import { invalidatePremiumCache } from "../middleware/auth.js";
 
 // Product IDs — must match App Store Connect / Google Play Console
 export const PRODUCTS = {
@@ -192,6 +193,12 @@ export async function activatePremium(
     );
 
     await client.query("COMMIT");
+
+    // requirePremium caches the is_premium flag for 5 min to avoid hitting
+    // the DB on every gated request. Without an explicit invalidation here,
+    // a user who was checked before the purchase would keep seeing 403 on
+    // premium routes until the TTL expires.
+    invalidatePremiumCache(userId);
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
