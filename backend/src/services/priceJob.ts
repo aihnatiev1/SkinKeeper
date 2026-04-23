@@ -13,6 +13,7 @@ import { recordFetchStart, recordSuccess, recordFailure } from "./priceStats.js"
 import { checkPriceChanges } from "./priceChangeNotifier.js";
 import { initProxyPool } from "./proxyPool.js";
 import { runSessionRefreshSweep } from "./sessionRefreshJob.js";
+import { runSessionExpiryNotifierSweep } from "./sessionExpiryNotifier.js";
 
 // ─── Job Health Tracking ────────────────────────────────────────────────
 
@@ -195,6 +196,24 @@ export function startPriceJobs() {
     } catch (err) {
       recordJobRun("sessionRefresh", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] Session refresh sweep failed:", err);
+    }
+  }));
+
+  // Session-expiry warning push: daily at 09:00 UTC.
+  // Warns users when their Steam refresh-token (~30d lifetime) has <=48h
+  // left — past that point we can no longer auto-refresh and they'd lose
+  // trading capability mid-day. Idempotent: skips accounts already warned
+  // for the current refresh-token.
+  scheduledTasks.push(cron.schedule("0 9 * * *", async () => {
+    try {
+      const { scanned, notified } = await runSessionExpiryNotifierSweep();
+      if (notified > 0 || scanned > 0) {
+        console.log(`[CRON] Session expiry notifier: scanned=${scanned} notified=${notified}`);
+      }
+      recordJobRun("sessionExpiryNotify", true);
+    } catch (err) {
+      recordJobRun("sessionExpiryNotify", false, err instanceof Error ? err.message : String(err));
+      console.error("[CRON] Session expiry notifier failed:", err);
     }
   }));
 

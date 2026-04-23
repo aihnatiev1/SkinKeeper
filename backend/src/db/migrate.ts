@@ -431,6 +431,10 @@ CREATE INDEX IF NOT EXISTS idx_users_stripe_customer ON users(stripe_customer_id
 
 -- Allow 'stripe' in purchase_receipts.store (widen from 10 to 20 for future stores)
 ALTER TABLE purchase_receipts ALTER COLUMN store TYPE VARCHAR(20);
+
+-- 033: Track which refresh-token expiry we last pushed a warning for, so the
+-- daily session-expiry notifier is idempotent across re-runs.
+ALTER TABLE steam_accounts ADD COLUMN IF NOT EXISTS expiry_notified_for TIMESTAMPTZ;
 `;
 
 export async function migrate() {

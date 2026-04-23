@@ -137,15 +137,27 @@ class _SteamWebViewLoginState extends State<SteamWebViewLogin> {
       sessionId = sidCookie.value.toString();
     }
 
-    // Try to get refresh token from login.steampowered.com
+    // Steam sets the refresh JWT as `steamRefresh_{steamid64}`; the steamid64
+    // is per-user, so we can't hardcode the cookie name. Enumerate all cookies
+    // on both login.steampowered.com and steamcommunity.com and pick the first
+    // one that matches the prefix.
     String? refreshToken;
     try {
-      final refreshCookie = await _cookieManager.getCookie(
-        url: WebUri('https://login.steampowered.com'),
-        name: 'steamRefresh_steam',
-      );
-      if (refreshCookie != null && refreshCookie.value.toString().isNotEmpty) {
-        refreshToken = refreshCookie.value.toString();
+      final candidates = <String>[];
+      for (final host in const [
+        'https://login.steampowered.com',
+        'https://steamcommunity.com',
+      ]) {
+        final cookies = await _cookieManager.getCookies(url: WebUri(host));
+        for (final c in cookies) {
+          if (c.name.startsWith('steamRefresh_')) {
+            final val = c.value.toString();
+            if (val.isNotEmpty) candidates.add(val);
+          }
+        }
+      }
+      if (candidates.isNotEmpty) {
+        refreshToken = candidates.first;
         dev.log('Got refresh token: len=${refreshToken.length}', name: 'WebView');
       }
     } catch (e) {
