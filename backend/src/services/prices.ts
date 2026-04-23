@@ -403,7 +403,7 @@ async function fetchSteamSearchPage(
  *
  * Steam caps results at 10 per page. Parallel streams per proxy slot.
  */
-const STEAM_BATCH_TOP_PAGES = 500; // ~5K items — the valuable portion of the market
+const STEAM_BATCH_TOP_PAGES = 250; // ~2.5K items — top of the market (was 500; full crawl nightly covers the rest)
 
 export async function runSteamBatchCrawl(mode: "top" | "full" = "top"): Promise<void> {
   if (steamBatchRunning) {
@@ -558,7 +558,11 @@ async function crawlSteamSegment(
 export function startSteamCrawlers(): void {
   initProxyPool();
 
-  const TOP_INTERVAL_MS = 150 * 60_000; // 2.5h
+  // 4h instead of 2.5h — the top-500 cycle is analytics-grade coverage,
+  // not user-facing, and the daily full crawl at 03:00 UTC already covers
+  // the long tail. Slowing this down is the single biggest cut we can make
+  // to steamcommunity.com traffic without affecting any user-visible freshness.
+  const TOP_INTERVAL_MS = 240 * 60_000; // 4h (was 2.5h)
 
   async function scheduledTopRun() {
     try {
@@ -570,7 +574,7 @@ export function startSteamCrawlers(): void {
   }
 
   steamBatchTimer = setTimeout(scheduledTopRun, 2 * 60_000);
-  console.log("[Steam Batch] Scheduled: top-500 every 2.5h, full daily at 03:00 UTC");
+  console.log("[Steam Batch] Scheduled: top-500 every 4h, full daily at 03:00 UTC");
 }
 
 export function stopSteamCrawlers(): void {
@@ -956,14 +960,19 @@ export async function pruneOldPrices(): Promise<void> {
 // The batch crawler (/market/search/render/) is demoted to COLD background —
 // used for analytics, charts, non-inventory items.
 
-const HOT_LOOP_GAP_MS = 5_000;          // 5s between requests per slot
+// Tunables for HotSteam — these directly set our steady-state load against
+// steamcommunity.com. Steam will rate-limit an IP that exceeds its budget,
+// which trips the ProxyPool cooldown and stalls *every* user-facing call
+// that needs a histogram (quick-sell, sanity checks, on-demand refresh).
+// Keep the cold tier conservative; alert-linked hot items still always run.
+const HOT_LOOP_GAP_MS = 8_000;          // 8s between requests per slot (was 5)
 const HOT_LOOP_PAUSE_MS = 60_000;       // 1 min pause when hot set is empty
 const HOT_LOOP_COOLING_MAX_MS = 60_000; // re-check every ≤60s while all slots are cooling
 const HOT_STEAM_DOMAIN = "steamcommunity.com";
-const HOT_MAX_REQUEUES = 3;             // drop an item after N 429 re-queues within one cycle
-const HOT_COLD_TIER_CAP = 300;          // max cold items per cycle — hot (alert-linked) always in full
+const HOT_MAX_REQUEUES = 2;             // drop an item after N 429 re-queues (was 3)
+const HOT_COLD_TIER_CAP = 150;          // max cold items per cycle (was 300)
 const HOT_FRESH_AFTER_MIN = 30;         // hot-tier items refetched if older than 30 min
-const HOT_COLD_FRESH_AFTER_MIN = 60;    // cold-tier items refetched if older than 60 min
+const HOT_COLD_FRESH_AFTER_MIN = 120;   // cold-tier items refetched if older than 120 min (was 60)
 let hotLoopRunning = false;
 let hotLoopStopped = false;
 
