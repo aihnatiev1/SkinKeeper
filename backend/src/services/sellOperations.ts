@@ -263,6 +263,7 @@ async function processOperation(
       let priceCents: number = item.price_cents;
       // priceCurrencyId from client: null/undefined = wallet currency, 1 = USD, etc.
       let priceCurrencyId: number = item.price_currency_id ?? walletCurrencyId;
+      let priceFromQuickprice = false;
       if (priceCents <= 0 && item.market_hash_name) {
         const qpResult = await quickSellPrice(item.market_hash_name, walletCurrencyId);
         const qp = qpResult?.sellerReceivesCents ?? null;
@@ -282,6 +283,7 @@ async function processOperation(
         }
         priceCents = qp;
         priceCurrencyId = qpResult!.currencyId;
+        priceFromQuickprice = true;
         await pool.query(
           `UPDATE sell_operation_items SET price_cents = $1 WHERE id = $2`,
           [priceCents, item.id]
@@ -304,8 +306,10 @@ async function processOperation(
         continue;
       }
 
-      // Fix: price sanity check — reject if price is absurdly above market
-      if (priceCents > 0 && item.market_hash_name) {
+      // Fix: price sanity check — reject if price is absurdly above market.
+      // Skip when we just resolved priceCents from quickSellPrice ourselves —
+      // the price IS the market price, no point hitting Steam histogram twice.
+      if (priceCents > 0 && !priceFromQuickprice && item.market_hash_name) {
         const marketPrice = await quickSellPrice(item.market_hash_name, priceCurrencyId);
         if (marketPrice && marketPrice.sellerReceivesCents > 0) {
           const ratio = priceCents / marketPrice.sellerReceivesCents;
