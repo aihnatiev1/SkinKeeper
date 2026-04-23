@@ -65,7 +65,8 @@ class CurrencyInfo {
     return '$prefix$symbol${groupThousands(value.abs().toStringAsFixed(d))}';
   }
 
-  /// Insert comma as thousands separator: 15860.47 → 15,860.47
+  /// Insert narrow non-breaking space as thousands separator: 15860.47 → 15 860.47
+  /// (Avoids ambiguity with decimal comma used in uk/ru/eu locales.)
   static String groupThousands(String formatted) {
     final parts = formatted.split('.');
     final intPart = parts[0];
@@ -74,7 +75,7 @@ class CurrencyInfo {
     if (start == 1) buf.write('-');
     final digits = intPart.substring(start);
     for (var i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
+      if (i > 0 && (digits.length - i) % 3 == 0) buf.write('\u202F');
       buf.write(digits[i]);
     }
     if (parts.length > 1) {

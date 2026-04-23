@@ -46,10 +46,9 @@ const _fallbackCurrencies = [
 ];
 
 /// Shows a bottom sheet asking user to pick their Steam wallet currency.
-/// Returns true if user picked something, false if dismissed.
+/// Blocks until a currency is picked — cannot be dismissed via back / tap outside.
+/// Returns true when a currency was picked and persisted.
 Future<bool> showCurrencyPickerDialog(BuildContext context, WidgetRef ref) async {
-  await markCurrencyPickerShown();
-
   // Try to fetch currencies from backend
   List<_SteamCurrency> currencies = _fallbackCurrencies;
   try {
@@ -71,34 +70,35 @@ Future<bool> showCurrencyPickerDialog(BuildContext context, WidgetRef ref) async
 
   if (!context.mounted) return false;
 
-  final selected = await showModalBottomSheet<int>(
-    context: context,
-    isScrollControlled: true,
-    isDismissible: false,
-    enableDrag: false,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) {
-      return _CurrencyPickerSheet(currencies: currencies);
-    },
-  );
-
-  if (selected != null && context.mounted) {
-    // Save to backend
-    try {
-      final api = ref.read(apiClientProvider);
-      await api.put('/market/wallet-currency', data: {'currencyId': selected});
-    } catch (e) {
-      dev.log('Failed to save wallet currency: $e', name: 'CurrencyPicker');
-    }
-
-    // Also update display currency to match
-    final cur = currencies.firstWhere((c) => c.id == selected, orElse: () => currencies.first);
-    ref.read(currencyProvider.notifier).setCurrency(cur.code);
-
-    return true;
+  int? selected;
+  while (selected == null) {
+    if (!context.mounted) return false;
+    selected = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _CurrencyPickerSheet(currencies: currencies),
+    );
   }
 
-  return false;
+  if (!context.mounted) return false;
+
+  try {
+    final api = ref.read(apiClientProvider);
+    await api.put('/market/wallet-currency', data: {'currencyId': selected});
+  } catch (e) {
+    dev.log('Failed to save wallet currency: $e', name: 'CurrencyPicker');
+  }
+
+  final cur = currencies.firstWhere(
+    (c) => c.id == selected,
+    orElse: () => currencies.first,
+  );
+  ref.read(currencyProvider.notifier).setCurrency(cur.code);
+  await markCurrencyPickerShown();
+  return true;
 }
 
 class _CurrencyPickerSheet extends StatefulWidget {
@@ -124,7 +124,9 @@ class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
+    return PopScope(
+      canPop: false,
+      child: DraggableScrollableSheet(
       initialChildSize: 0.5,
       maxChildSize: 0.65,
       minChildSize: 0.35,
@@ -229,6 +231,7 @@ class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
           ),
         );
       },
+    ),
     );
   }
 }
