@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -26,6 +28,9 @@ class ItemCard extends StatelessWidget {
   final bool isSelected;
   final bool showAccountBadge;
   final VoidCallback? onAccountBadgeTap;
+  /// When true, render the card dimmed & desaturated to signal the underlying
+  /// Steam account session is expired and user must relogin before acting.
+  final bool isDisabled;
 
   const ItemCard({
     super.key,
@@ -42,6 +47,7 @@ class ItemCard extends StatelessWidget {
     this.isSelected = false,
     this.showAccountBadge = false,
     this.onAccountBadgeTap,
+    this.isDisabled = false,
   });
 
   @override
@@ -52,7 +58,7 @@ class ItemCard extends StatelessWidget {
 
     final borderWidth = isSelected ? 1.5 : 0.5;
 
-    return GestureDetector(
+    Widget card = GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
@@ -431,5 +437,45 @@ class ItemCard extends StatelessWidget {
         ),
       ),
     );
+
+    if (isDisabled) {
+      card = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Opacity(
+            opacity: 0.75,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 1.8, sigmaY: 1.8),
+                child: card,
+              ),
+            ),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppTheme.warning.withValues(alpha: 0.8),
+                  width: 1,
+                ),
+              ),
+              child: const Icon(
+                Icons.vpn_key_off_rounded,
+                size: 12,
+                color: AppTheme.warning,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return card;
   }
 }

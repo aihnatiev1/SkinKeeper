@@ -5,10 +5,18 @@ import '../../core/api_client.dart';
 import '../../core/cache_service.dart';
 import '../../models/inventory_item.dart';
 import '../auth/session_provider.dart';
+import '../settings/accounts_provider.dart';
 
-/// Whether the active account has a valid Steam session.
-/// Used to gate sell/trade UI elements without blocking inventory display.
+/// Whether ANY linked Steam account has a valid session.
+/// Used to unlock history/trade UI when at least one account can talk to Steam,
+/// even if the currently active account's cookies are expired.
 final hasSessionProvider = Provider<bool>((ref) {
+  final accounts = ref.watch(accountsProvider).valueOrNull;
+  if (accounts != null &&
+      accounts.any((a) =>
+          a.sessionStatus == 'valid' || a.sessionStatus == 'expiring')) {
+    return true;
+  }
   final status = ref.watch(sessionStatusProvider).valueOrNull;
   if (status == null) return false;
   return status.status == 'valid' || status.status == 'expiring';

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/account_scope_provider.dart';
 import '../core/theme.dart';
+import '../features/inventory/widgets/session_expired_item_dialog.dart';
 import '../features/settings/accounts_provider.dart';
 import '../models/user.dart';
 
@@ -56,9 +57,22 @@ class AccountScopeChip extends ConsumerWidget {
       builder: (_) => _ScopePicker(
         accounts: accounts,
         currentScope: currentScope,
-        onSelect: (id) {
+        onSelect: (account) {
+          if (account != null &&
+              (account.sessionStatus == 'expired' ||
+                  account.sessionStatus == 'none')) {
+            HapticFeedback.mediumImpact();
+            Navigator.of(context, rootNavigator: true).pop();
+            showSessionExpiredItemDialog(
+              context,
+              ref,
+              account,
+              title: 'Login to this account?',
+            );
+            return;
+          }
           HapticFeedback.selectionClick();
-          ref.read(accountScopeProvider.notifier).state = id;
+          ref.read(accountScopeProvider.notifier).state = account?.id;
           Navigator.of(context, rootNavigator: true).pop();
         },
       ),
@@ -198,7 +212,8 @@ class _StackedAvatars extends StatelessWidget {
 class _ScopePicker extends StatelessWidget {
   final List<SteamAccount> accounts;
   final int? currentScope;
-  final void Function(int?) onSelect;
+  /// Receives null for "All accounts", or the tapped [SteamAccount].
+  final void Function(SteamAccount?) onSelect;
 
   const _ScopePicker({
     required this.accounts,
@@ -256,15 +271,24 @@ class _ScopePicker extends StatelessWidget {
                 label: account.displayName.isNotEmpty
                     ? account.displayName
                     : account.steamId,
-                sublabel: account.isActive ? 'Active' : null,
+                sublabel: _sublabelFor(account),
+                sessionExpired: account.sessionStatus == 'expired' ||
+                    account.sessionStatus == 'none',
                 selected: currentScope == account.id,
-                onTap: () => onSelect(account.id),
+                onTap: () => onSelect(account),
               ),
             const SizedBox(height: 12),
           ],
         ),
       ),
     );
+  }
+
+  String? _sublabelFor(SteamAccount account) {
+    if (account.sessionStatus == 'expired' || account.sessionStatus == 'none') {
+      return 'Session expired — tap to relogin';
+    }
+    return account.isActive ? 'Active' : null;
   }
 }
 
@@ -273,6 +297,7 @@ class _PickerRow extends StatelessWidget {
   final String label;
   final String? sublabel;
   final bool selected;
+  final bool sessionExpired;
   final VoidCallback onTap;
 
   const _PickerRow({
@@ -280,18 +305,36 @@ class _PickerRow extends StatelessWidget {
     required this.label,
     this.sublabel,
     required this.selected,
+    this.sessionExpired = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final labelColor = sessionExpired
+        ? AppTheme.textMuted
+        : selected
+            ? AppTheme.primaryLight
+            : AppTheme.textPrimary;
+    final sublabelColor =
+        sessionExpired ? AppTheme.warning : AppTheme.textMuted;
+
     return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
           children: [
-            SizedBox(width: 36, height: 36, child: Center(child: leading)),
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Opacity(
+                  opacity: sessionExpired ? 0.5 : 1.0,
+                  child: leading,
+                ),
+              ),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -302,21 +345,27 @@ class _PickerRow extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: selected ? AppTheme.primaryLight : AppTheme.textPrimary,
+                      color: labelColor,
                     ),
                   ),
                   if (sublabel != null)
                     Text(
                       sublabel!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppTheme.textMuted,
+                        color: sublabelColor,
                       ),
                     ),
                 ],
               ),
             ),
-            if (selected)
+            if (sessionExpired)
+              const Icon(
+                Icons.vpn_key_off_rounded,
+                size: 18,
+                color: AppTheme.warning,
+              )
+            else if (selected)
               const Icon(Icons.check_rounded, size: 18, color: AppTheme.primary),
           ],
         ),

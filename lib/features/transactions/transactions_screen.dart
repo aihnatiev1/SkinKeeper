@@ -12,6 +12,9 @@ import '../../widgets/shared_ui.dart';
 import '../auth/session_gate.dart';
 import '../auth/session_provider.dart';
 import '../inventory/inventory_provider.dart';
+import '../inventory/widgets/session_expired_item_dialog.dart';
+import '../settings/accounts_provider.dart';
+import '../../models/user.dart';
 import '../purchases/iap_service.dart';
 import 'transactions_provider.dart';
 import 'widgets/date_filter_sheet.dart';
@@ -33,6 +36,11 @@ class TransactionsScreen extends ConsumerWidget {
     final sessionAsync = ref.watch(sessionStatusProvider);
     final needsReauth = sessionAsync.valueOrNull?.needsReauth ?? false;
     final hasSession = ref.watch(hasSessionProvider);
+    final allAccounts = ref.watch(accountsProvider).valueOrNull ?? const [];
+    final expiredAccounts = allAccounts
+        .where((a) =>
+            a.sessionStatus == 'expired' || a.sessionStatus == 'none')
+        .toList();
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -101,10 +109,47 @@ class TransactionsScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            // Session banner
-            if (needsReauth && hasSession)
+            // Partial data banner — shown when ANY linked account is logged out.
+            // Lists missing accounts so the user knows why data looks incomplete.
+            if (expiredAccounts.isNotEmpty && hasSession)
               GestureDetector(
-                onTap: () => requireSession(context, ref),
+                onTap: () => _handleExpiredBannerTap(context, ref, expiredAccounts),
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warning.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.vpn_key_off_rounded,
+                          color: AppTheme.warning, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          expiredAccounts.length == 1
+                              ? 'History may be incomplete — ${expiredAccounts.first.displayName} is logged out. Tap to relogin.'
+                              : '${expiredAccounts.length} accounts logged out — history is incomplete. Tap to relogin.',
+                          style: const TextStyle(
+                            color: AppTheme.warning,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.textMuted, size: 20),
+                    ],
+                  ),
+                ),
+              )
+            // Legacy active-session-needs-reauth banner (kept for completeness).
+            else if (needsReauth && hasSession)
+              GestureDetector(
+                onTap: () => _handleReauthTap(context, ref),
                 child: Container(
                   width: double.infinity,
                   margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -116,15 +161,20 @@ class TransactionsScreen extends ConsumerWidget {
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.lock_outline_rounded, color: AppTheme.warning, size: 20),
+                      Icon(Icons.lock_outline_rounded,
+                          color: AppTheme.warning, size: 20),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'Extra verification needed for history sync',
-                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500),
                         ),
                       ),
-                      Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
+                      Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.textMuted, size: 20),
                     ],
                   ),
                 ),
@@ -410,6 +460,36 @@ class TransactionsScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  Future<void> _handleReauthTap(BuildContext context, WidgetRef ref) async {
+    HapticFeedback.selectionClick();
+    final accounts = ref.read(accountsProvider).valueOrNull ?? const [];
+    for (final a in accounts) {
+      if (a.isActive &&
+          (a.sessionStatus == 'expired' || a.sessionStatus == 'none')) {
+        await showSessionExpiredItemDialog(context, ref, a);
+        return;
+      }
+    }
+    if (context.mounted) {
+      await requireSession(context, ref);
+    }
+  }
+
+  Future<void> _handleExpiredBannerTap(
+    BuildContext context,
+    WidgetRef ref,
+    List<SteamAccount> expired,
+  ) async {
+    HapticFeedback.selectionClick();
+    if (expired.isEmpty) return;
+    // Pick the active one if it's expired, otherwise the first in list.
+    final target = expired.firstWhere(
+      (a) => a.isActive,
+      orElse: () => expired.first,
+    );
+    await showSessionExpiredItemDialog(context, ref, target);
   }
 }
 

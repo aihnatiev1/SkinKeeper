@@ -11,11 +11,13 @@ import '../inventory_provider.dart';
 import '../inventory_selection_provider.dart';
 import '../../auth/steam_auth_service.dart';
 import '../../portfolio/portfolio_pl_provider.dart' show itemPLFamilyProvider;
+import '../../../models/user.dart';
 import '../../settings/accounts_provider.dart';
 import 'glass_bottom_sheet.dart';
 import 'group_expand_sheet.dart';
 import 'item_card.dart';
 import 'quantity_picker_sheet.dart';
+import 'session_expired_item_dialog.dart';
 
 class InventoryGrid extends ConsumerWidget {
   const InventoryGrid({super.key});
@@ -246,6 +248,19 @@ class _GridItemState extends ConsumerState<_GridItem>
     );
     final showBadge = accountCount > 1;
 
+    final accounts = ref.watch(accountsProvider).valueOrNull ?? const [];
+    SteamAccount? expiredAccount;
+    if (accountCount > 1 && item.accountId != null) {
+      for (final a in accounts) {
+        if (a.id == item.accountId &&
+            (a.sessionStatus == 'expired' || a.sessionStatus == 'none')) {
+          expiredAccount = a;
+          break;
+        }
+      }
+    }
+    final isSessionExpired = expiredAccount != null;
+
     // Check if item (or any in group) is trade banned
     final isTradeBanned = !item.tradable &&
         (item.tradeBanUntil == null ||
@@ -267,6 +282,7 @@ class _GridItemState extends ConsumerState<_GridItem>
         selectedCount: group.isGroup && selectedCount > 0 ? selectedCount : null,
         isSelected: isSelected || selectedCount > 0,
         showAccountBadge: showBadge,
+        isDisabled: isSessionExpired,
         onAccountBadgeTap: showBadge && item.accountId != null
             ? () async {
                 final accountId = item.accountId!;
@@ -276,6 +292,16 @@ class _GridItemState extends ConsumerState<_GridItem>
               }
             : null,
         onTap: () {
+          if (isSessionExpired) {
+            HapticFeedback.mediumImpact();
+            showSessionExpiredItemDialog(
+              context,
+              ref,
+              expiredAccount!,
+              title: 'Wanna sell this skin?',
+            );
+            return;
+          }
           if (isTradeBanned) {
             _showTradeBanToast(context, item.tradeBanUntil);
             return;
@@ -288,6 +314,16 @@ class _GridItemState extends ConsumerState<_GridItem>
           }
         },
         onLongPress: () {
+          if (isSessionExpired) {
+            HapticFeedback.mediumImpact();
+            showSessionExpiredItemDialog(
+              context,
+              ref,
+              expiredAccount!,
+              title: 'Wanna sell this skin?',
+            );
+            return;
+          }
           HapticFeedback.mediumImpact();
           if (group.isGroup) {
             _showGroupSheet(context, group);
@@ -296,6 +332,16 @@ class _GridItemState extends ConsumerState<_GridItem>
           }
         },
         onInfoTap: () {
+          if (isSessionExpired) {
+            HapticFeedback.mediumImpact();
+            showSessionExpiredItemDialog(
+              context,
+              ref,
+              expiredAccount!,
+              title: 'Wanna sell this skin?',
+            );
+            return;
+          }
           HapticFeedback.lightImpact();
           if (group.isGroup) {
             _showGroupSheet(context, group);
