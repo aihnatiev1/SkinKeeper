@@ -299,8 +299,14 @@ inventoryQueue.process(async (job, updateProgress) => {
   const privateAccounts: number[] = [];
 
   for (const account of accounts) {
-    // Use session cookies to see trade-banned items not visible publicly
-    const session = await SteamSessionService.getSession(account.id);
+    // Use session cookies to see trade-banned items not visible publicly —
+    // but only when the JWT inside steamLoginSecure is still valid. Passing
+    // expired cookies to Steam just yields 403s, which poisons the shared
+    // proxy pool's cooldown state for everyone else.
+    const sessionStatus = await SteamSessionService.getSessionStatus(account.id);
+    const session = (sessionStatus === "valid" || sessionStatus === "expiring")
+      ? await SteamSessionService.getSession(account.id)
+      : null;
     let items: Awaited<ReturnType<typeof fetchSteamInventory>>;
     try {
       items = await fetchSteamInventory(
