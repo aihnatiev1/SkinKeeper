@@ -1,10 +1,12 @@
+import "./instrument.js";
+import * as Sentry from "@sentry/node";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import { migrate } from "./db/migrate.js";
-import { pool, checkPoolHealth } from "./db/pool.js";
+import { pool, checkPoolHealth, getPoolStats } from "./db/pool.js";
 import { startPriceJobs, stopAllJobs } from "./services/priceJob.js";
 import { initFirebase } from "./services/firebase.js";
 import authRoutes from "./routes/auth.js";
@@ -136,6 +138,9 @@ app.use("/api/transactions", manualTxRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/data", dataRoutes);
 
+// Sentry error handler must come before the custom one
+Sentry.setupExpressErrorHandler(app);
+
 // Global error handler (must be after all routes)
 app.use(errorHandler);
 
@@ -150,12 +155,17 @@ app.get("/api/health", async (_req, res) => {
         setTimeout(() => reject(new Error("db timeout")), 2000)
       ),
     ]);
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      pool: getPoolStats(),
+    });
   } catch (err) {
     res.status(503).json({
       status: "degraded",
       reason: "database unreachable",
       timestamp: new Date().toISOString(),
+      pool: getPoolStats(),
     });
   }
 });

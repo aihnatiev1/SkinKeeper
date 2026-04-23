@@ -301,7 +301,12 @@ export async function fetchTradeToken(
     }
     return null;
   } catch (err) {
-    console.warn("[Trade] Failed to fetch trade token:", (err as Error).message);
+    const msg = (err as Error).message;
+    // Expired sessions redirect to login, which trips axios' maxRedirects.
+    // The caller logs the ensuing 403, so this inner warning is just noise.
+    if (!msg.includes("Maximum number of redirects exceeded")) {
+      console.warn("[Trade] Failed to fetch trade token:", msg);
+    }
     return null;
   }
 }

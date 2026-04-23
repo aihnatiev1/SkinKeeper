@@ -606,6 +606,12 @@ router.post("/bulk-sell", authMiddleware, (_req, res) => {
  *   limit    — max results (default 50, max 100)
  *   minProfit — minimum profit % to include (default 5)
  */
+// Global in-memory cache for /deals. Result is user-agnostic (join filters by
+// "any user owns it"), and the underlying prices refresh on the order of
+// minutes, so a short TTL keeps response time low without staleness.
+const dealsCache = new Map<string, { expiresAt: number; payload: unknown }>();
+const DEALS_CACHE_MS = 2 * 60 * 1000;
+
 router.get(
   "/deals",
   authMiddleware,
@@ -613,6 +619,13 @@ router.get(
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
       const minProfit = parseFloat(req.query.minProfit as string) || 5;
+
+      const cacheKey = `${limit}:${minProfit}`;
+      const cached = dealsCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        res.json(cached.payload);
+        return;
+      }
 
       // Use current_prices table (always fresh) instead of 10M+ row price_history.
       // Compare external marketplace prices vs Steam to find arbitrage.
@@ -684,7 +697,9 @@ router.get(
         };
       });
 
-      res.json({ deals, count: deals.length });
+      const payload = { deals, count: deals.length };
+      dealsCache.set(cacheKey, { expiresAt: Date.now() + DEALS_CACHE_MS, payload });
+      res.json(payload);
     } catch (err) {
       console.error("Market deals error:", err);
       res.status(500).json({ error: "Failed to load deals" });
