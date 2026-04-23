@@ -85,7 +85,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen>
                 ),
                 if (needsReauth && hasSession)
                   GestureDetector(
-                    onTap: () => requireSession(context, ref),
+                    onTap: () => requireSession(context, ref, forceShow: true),
                     child: Container(
                       width: double.infinity,
                       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
