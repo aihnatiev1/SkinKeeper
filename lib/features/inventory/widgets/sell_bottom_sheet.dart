@@ -16,7 +16,6 @@ import 'sell_progress_sheet.dart';
 import 'sell_sheet_action_buttons.dart';
 import 'sell_sheet_custom_price_input.dart';
 import 'sell_sheet_header.dart';
-import 'sell_sheet_switch_account_banner.dart';
 import 'sell_sheet_total_row.dart';
 import 'sell_sheet_warnings.dart';
 
@@ -143,8 +142,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
     final activeAccountId = ref.watch(
       authStateProvider.select((u) => u.valueOrNull?.activeAccountId),
     );
-    final isNonActiveAccount = item.accountId != null &&
-        item.accountId != activeAccountId;
 
     // Pre-fetch fresh prices for all items via histogram (warms backend cache)
     if (count > 1) {
@@ -190,12 +187,6 @@ class _SellBottomSheetState extends ConsumerState<SellBottomSheet> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Cross-account warning banner
-            if (isNonActiveAccount) ...[
-              SellSheetSwitchAccountBanner(targetAccountId: item.accountId!),
-              const SizedBox(height: 4),
-            ],
 
             // Header — item info
             SellSheetHeader(items: widget.items),

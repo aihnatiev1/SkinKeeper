@@ -239,23 +239,31 @@ class SellOperationNotifier extends AsyncNotifier<SellOperation?> {
         progressMessage: 'Fetching prices for $itemCount items...',
       ));
 
-      // Batch refresh prices via histogram API
+      // Batch refresh prices via histogram API.
+      // If refresh stalls or fails, we fall back to backend quickprice per item
+      // (priceCents: 0 below) instead of surfacing a timeout error to the user.
       final uniqueNames = items
           .map((i) => i['marketHashName'] as String)
           .toSet()
           .toList();
 
       final api = ref.read(apiClientProvider);
-      final refreshResponse = await api.post('/market/refresh-prices', data: {
-        'names': uniqueNames,
-        'accountId': ?accountId,
-      }).timeout(
-        Duration(seconds: 10 + uniqueNames.length * 2),
-        onTimeout: () => throw TimeoutException('refresh-prices timeout'),
-      );
-
-      final pricesData = (refreshResponse.data as Map<String, dynamic>)['prices']
-          as Map<String, dynamic>? ?? {};
+      Map<String, dynamic> pricesData = const {};
+      try {
+        final refreshResponse = await api.post('/market/refresh-prices', data: {
+          'names': uniqueNames,
+          'accountId': ?accountId,
+        }).timeout(
+          Duration(seconds: 10 + uniqueNames.length * 2),
+          onTimeout: () => throw TimeoutException('refresh-prices timeout'),
+        );
+        pricesData = (refreshResponse.data as Map<String, dynamic>)['prices']
+                as Map<String, dynamic>? ??
+            const {};
+      } catch (e) {
+        dev.log('refresh-prices failed, using quickprice fallback: $e',
+            name: 'Sell');
+      }
 
       // Build sell items with fresh prices
       final sellItems = items.map((item) {

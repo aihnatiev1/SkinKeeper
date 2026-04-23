@@ -143,37 +143,46 @@ class _SellProgressSheetState extends ConsumerState<SellProgressSheet> {
             const SizedBox(height: 32),
           ],
         ),
-        error: (e, _) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SellProgressHandle(),
-            const SizedBox(height: 24),
-            const Icon(Icons.error_outline, color: AppTheme.loss, size: 40),
-            const SizedBox(height: 12),
-            Text(
-              e.toString().contains('timeout')
-                  ? 'Price fetch timed out'
-                  : 'Operation failed',
-              style: AppTheme.body.copyWith(color: AppTheme.loss),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              e.toString().contains('timeout')
-                  ? 'Steam is slow. Try again or sell with manual price.'
-                  : 'Check your connection and try again.',
-              style: AppTheme.captionSmall.copyWith(color: AppTheme.textDisabled),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            SellProgressDoneButton(
-              onPressed: () {
-                ref.read(sellOperationProvider.notifier).reset();
-                context.pop();
-              },
-            ),
-          ],
-        ),
+        error: (e, _) {
+          final isTimeout = e.toString().contains('timeout');
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SellProgressHandle(),
+              const SizedBox(height: 24),
+              Icon(
+                isTimeout ? Icons.hourglass_empty_rounded : Icons.error_outline,
+                color: AppTheme.warning,
+                size: 40,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isTimeout ? 'Steam is taking its time' : 'Couldn\u2019t list',
+                style: AppTheme.body.copyWith(color: AppTheme.textPrimary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  isTimeout
+                      ? 'Close this and tap the item again — pick "Set price manually" to sell right now without waiting on Steam.'
+                      : 'Check your connection, then reopen the item and try again.',
+                  style: AppTheme.captionSmall
+                      .copyWith(color: AppTheme.textSecondary, height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SellProgressDoneButton(
+                onPressed: () {
+                  ref.read(sellOperationProvider.notifier).reset();
+                  context.pop();
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
   }
