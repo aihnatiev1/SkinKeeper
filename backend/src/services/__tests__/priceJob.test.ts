@@ -103,9 +103,10 @@ describe("priceJob", () => {
     // Wait for the initial async IIFE to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    // 9 cron jobs: Skinport, CSGOTrader, DMarket, P/L, priceChangeNotify,
-    //   subscriptions, SteamDepth, steamBatchFull, pruning
-    expect(mockedCron.schedule).toHaveBeenCalledTimes(9);
+    // 11 cron jobs: Skinport, CSGOTrader, DMarket, P/L, priceChangeNotify,
+    //   subscriptions, sessionRefresh, sessionExpiryNotify,
+    //   SteamDepth, steamBatchFull, pruning
+    expect(mockedCron.schedule).toHaveBeenCalledTimes(11);
 
     // Background crawlers started. CSFloat crawler is currently disabled
     // in priceJob.ts (commented out), so only the Steam crawler is asserted.
