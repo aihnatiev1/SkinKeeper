@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../../core/api_client.dart';
 import '../auth/steam_auth_service.dart';
+import 'tour/tour_provider.dart';
 
 const _kMonthlyId = 'skinkeeper_pro_monthly';
 const _kYearlyId = 'skinkeeper_pro_yearly';
@@ -67,6 +68,22 @@ class PremiumNotifier extends AsyncNotifier<bool> {
       dev.log('Failed to refresh premium status: $e', name: 'IAP');
     }
   }
+}
+
+// ---- Premium cache invalidation ----
+
+/// Refreshes premium status from the server and invalidates dependent auth
+/// state. Callers (paywall, purchase verification, App Store notifications)
+/// should await this to ensure UI reflects the authoritative backend state
+/// before reacting — critical for the `PremiumGate` false → true unlock
+/// animation, which MUST NOT fire on an optimistic local flip.
+///
+/// Contract: returns only after `premiumProvider` has been updated with a
+/// fresh server response. Safe to call during async work.
+Future<void> invalidatePremiumCache(WidgetRef ref) async {
+  final notifier = ref.read(premiumProvider.notifier);
+  await notifier.refreshFromServer();
+  ref.invalidate(authStateProvider);
 }
 
 // ---- IAP Service Provider ----
@@ -136,7 +153,45 @@ class IAPService {
       return false;
     }
 
-    final purchaseParam = PurchaseParam(productDetails: product);
+    // CRIT-3: bind the purchase to the authenticated user.
+    //
+    // On Android, `applicationUserName` populates Google Play's
+    // `obfuscatedExternalAccountId` field on the resulting purchase record.
+    // The backend (`verifyGoogleReceipt` in `purchases.ts`) compares it
+    // against the JWT-authenticated caller — without a match, an attacker
+    // could replay user A's purchase token under user B and steal Premium.
+    //
+    // On iOS, `applicationUserName` maps to StoreKit's `applicationUsername`
+    // (which Apple hashes and exposes as `appAccountToken`). We don't rely
+    // on it for Apple right now (Apple's verification chain is signed and
+    // tied to the purchasing Apple ID), but setting it is harmless and
+    // future-proofs us if we add appAccountToken-based binding later.
+    //
+    // Constraint (Google): ≤ 64 chars, no PII. Numeric backend user id is
+    // an opaque DB row id, not a Steam id — safe to use as-is. Hashing was
+    // considered but adds nothing here: the backend compares string-to-
+    // string, and a hash would have to be deterministic across devices,
+    // which means an attacker who knows the userId can recompute it
+    // anyway. Plain stringified userId keeps the backend check simple
+    // (`info.obfuscatedExternalAccountId !== String(expectedUserId)`).
+    //
+    // If `userId` is null (forward-compat for stale backend builds that
+    // didn't return `id` on /auth/me), we still attempt the purchase but
+    // log loudly — backend will reject with RECEIPT_NOT_BOUND and the user
+    // will be prompted to re-login.
+    final user = _ref.read(authStateProvider).valueOrNull;
+    final userId = user?.userId;
+    if (userId == null) {
+      dev.log(
+        'No authenticated userId — purchase will fail backend user-binding check (CRIT-3)',
+        name: 'IAP',
+      );
+    }
+
+    final purchaseParam = PurchaseParam(
+      productDetails: product,
+      applicationUserName: userId?.toString(),
+    );
     try {
       return await _iap.buyNonConsumable(purchaseParam: purchaseParam);
     } catch (e) {
@@ -158,8 +213,9 @@ class IAPService {
 
       switch (purchase.status) {
         case PurchaseStatus.purchased:
+          _verifyAndDeliver(purchase, isRestore: false);
         case PurchaseStatus.restored:
-          _verifyAndDeliver(purchase);
+          _verifyAndDeliver(purchase, isRestore: true);
         case PurchaseStatus.error:
           dev.log('Purchase error: ${purchase.error}', name: 'IAP');
           if (purchase.pendingCompletePurchase) {
@@ -173,7 +229,22 @@ class IAPService {
     }
   }
 
-  Future<void> _verifyAndDeliver(PurchaseDetails purchase) async {
+  /// Hook invoked after a fresh purchase has been verified and premium is
+  /// confirmed. Set by app shell at startup; defaults to a no-op so unit
+  /// tests don't have to provide a context.
+  ///
+  /// CRITICAL: this fires only on `PurchaseStatus.purchased` — NEVER on
+  /// `restored`. The post-purchase tour is a one-shot welcome experience and
+  /// re-running it on restore (e.g. user re-installed the app) would be
+  /// confusing. The hook itself also checks the `tour_v1_completed`
+  /// SharedPreferences flag so the tour only ever shows once per device per
+  /// user.
+  void Function()? onFreshPurchaseSuccess;
+
+  Future<void> _verifyAndDeliver(
+    PurchaseDetails purchase, {
+    required bool isRestore,
+  }) async {
     try {
       final api = _ref.read(apiClientProvider);
 
@@ -196,11 +267,38 @@ class IAPService {
       final data = res.data as Map<String, dynamic>;
 
       if (data['success'] == true) {
-        // Activate premium in local state
-        _ref.read(premiumProvider.notifier).setPremium(true);
-        // Refresh auth state to update user model
+        // Server is the source of truth — refresh FIRST so the
+        // PremiumGate `false → true` listener never sees a transient
+        // optimistic flip that the server hasn't confirmed.
+        //
+        // Without this ordering: an optimistic `setPremium(true)` would
+        // make `premiumProvider` emit `true`, fire the 650ms unlock
+        // choreography, then snap back to `false` when `refreshFromServer`
+        // returns the authoritative state — a P0 UX bug (PLAN §9 risk #1).
+        //
+        // After: animation fires only once `refreshFromServer` has applied
+        // the confirmed status. The explicit `setPremium(true)` below is a
+        // guard for the rare case where `/purchases/verify` reports success
+        // but `/purchases/status` lags behind (entitlement propagation
+        // race). It's a no-op when the refresh already produced `true`.
+        final notifier = _ref.read(premiumProvider.notifier);
+        await notifier.refreshFromServer();
+        final freshPremium = _ref.read(premiumProvider).valueOrNull ?? false;
+        if (!freshPremium) {
+          notifier.setPremium(true);
+        }
+        // Cascade auth-state invalidation last — downstream consumers
+        // (e.g. `authStateProvider`) read the now-fresh premium flag.
         _ref.invalidate(authStateProvider);
         dev.log('Premium activated!', name: 'IAP');
+
+        // P8: post-purchase tour trigger. Restore path skips this entirely
+        // — only first-time purchases get the welcome flow. The hook also
+        // checks `tour_v1_completed` so a user who already saw the tour
+        // (e.g. resubscribed after a churn) won't see it again.
+        if (!isRestore) {
+          _maybeTriggerTour();
+        }
       }
     } catch (e) {
       dev.log('Verification failed: $e', name: 'IAP');
@@ -209,6 +307,30 @@ class IAPService {
     // Complete the purchase
     if (purchase.pendingCompletePurchase) {
       await _iap.completePurchase(purchase);
+    }
+  }
+
+  /// Fire the post-purchase tour callback if all guards pass. Failure modes
+  /// (no completion service available, hook not set, flag already set) are
+  /// silent — the tour is a nice-to-have, never a blocker.
+  Future<void> _maybeTriggerTour() async {
+    final hook = onFreshPurchaseSuccess;
+    if (hook == null) {
+      dev.log(
+        'Tour trigger skipped: onFreshPurchaseSuccess not wired',
+        name: 'IAP',
+      );
+      return;
+    }
+    try {
+      final completion = _ref.read(tourCompletionServiceProvider);
+      if (await completion.isCompleted()) {
+        dev.log('Tour trigger skipped: already completed', name: 'IAP');
+        return;
+      }
+      hook();
+    } catch (e) {
+      dev.log('Tour trigger failed: $e', name: 'IAP');
     }
   }
 

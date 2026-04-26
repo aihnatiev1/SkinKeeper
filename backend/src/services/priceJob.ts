@@ -14,6 +14,7 @@ import { checkPriceChanges } from "./priceChangeNotifier.js";
 import { initProxyPool } from "./proxyPool.js";
 import { runSessionRefreshSweep } from "./sessionRefreshJob.js";
 import { runSessionExpiryNotifierSweep } from "./sessionExpiryNotifier.js";
+import { registerAutoSellCron, stopAutoSellCron, drainOnStartup as drainAutoSellOnStartup } from "./autoSellEngine.js";
 
 // ─── Job Health Tracking ────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ const jobHealth: Record<string, JobHealth> = {
   plSnapshot: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   subscriptions: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
   sessionRefresh: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
+  autoSell: { lastRun: null, lastSuccess: null, consecutiveFailures: 0, lastError: null },
 };
 
 function recordJobRun(name: string, success: boolean, error?: string): void {
@@ -100,6 +102,15 @@ const scheduledTasks: cron.ScheduledTask[] = [];
 export function startPriceJobs() {
   // Initialize proxy pool before starting any jobs
   initProxyPool();
+
+  // Auto-sell engine (P3 premium feature). Cron is registered first so a
+  // failure here surfaces immediately at boot rather than after price-job
+  // setup. drainOnStartup is fire-and-forget — it picks up any
+  // pending_window executions whose 60s window expired during downtime.
+  registerAutoSellCron((success, err) => recordJobRun("autoSell", success, err));
+  drainAutoSellOnStartup().catch((err) =>
+    console.error("[INIT] auto-sell drain failed:", err)
+  );
 
   // Skinport: every 10 minutes (was 5 — reduced to stay well within 8 req/5min limit)
   scheduledTasks.push(cron.schedule("*/10 * * * *", async () => {
@@ -303,6 +314,9 @@ export function stopAllJobs(): void {
   stopHotSteamLoop();
   stopSteamCrawlers();
   stopCSFloatCrawler();
+
+  // Stop auto-sell cron (idempotent)
+  stopAutoSellCron();
 
   console.log("[CRON] All jobs stopped");
 }

@@ -168,5 +168,17 @@
   "error": "Something went wrong",
   "noData": "No data available",
   "refresh": "Refresh",
-  "search": "Search"
+  "search": "Search",
+
+  "cancelModalTitle": "Listing in progress",
+  "cancelModalCountdown": "Listing in {seconds}s",
+  "@cancelModalCountdown": {
+    "description": "Countdown shown while the auto-sell cancel window is still open. Param is whole seconds remaining.",
+    "placeholders": { "seconds": { "type": "int" } }
+  },
+  "cancelModalContinue": "Continue",
+  "cancelModalCancel": "Cancel",
+  "cancelModalCancelled": "Listing cancelled",
+  "cancelModalErrorExpired": "Too late — listing already on Steam",
+  "cancelModalErrorGeneric": "Failed to cancel"
 }

@@ -10,7 +10,7 @@ import '../../../core/theme.dart';
 import '../../../models/profit_loss.dart';
 import '../../../widgets/premium_gate.dart';
 import '../../../widgets/shared_ui.dart';
-import '../../purchases/iap_service.dart';
+import '../../../widgets/tease_card.dart';
 import '../../transactions/transactions_provider.dart';
 import '../portfolio_pl_provider.dart';
 import 'pl_history_chart.dart';
@@ -28,7 +28,6 @@ class _PortfolioPLChartTabState extends ConsumerState<PortfolioPLChartTab> {
   Widget build(BuildContext context) {
     final pl = ref.watch(portfolioPLProvider);
     final history = ref.watch(plHistoryProvider(_period.days));
-    final isPremium = ref.watch(premiumProvider).valueOrNull ?? false;
 
     final accountsPL = ref.watch(accountsPLProvider);
 
@@ -53,12 +52,31 @@ class _PortfolioPLChartTabState extends ConsumerState<PortfolioPLChartTab> {
                   .animate().fadeIn(duration: 400.ms, delay: 100.ms)
               : const SizedBox.shrink(),
           loading: () => const SizedBox.shrink(),
-          error: (_, _) => const SizedBox.shrink(),
+          // P10 fix: free users hit 403 PREMIUM_REQUIRED on this endpoint
+          // (P9 server-side gating). Surface a tease card instead of an
+          // empty pane so the user understands the feature exists. Generic
+          // errors fall through to the silent no-op — the parent P/L card
+          // already shows the upgrade teaser when the WHOLE P/L is gated.
+          error: (err, _) => isPremiumRequired(err)
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  child: TeaseCard(
+                    // TODO(l10n)
+                    headline: 'Per-account P&L breakdown',
+                    subtitle:
+                        'See profit & loss split across each linked Steam '
+                        'account.',
+                    icon: Icons.people_alt_rounded,
+                    margin: EdgeInsets.zero,
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
         const SizedBox(height: 12),
         PremiumGate(
-          isPremium: isPremium,
+          featureId: 'portfolio_pl_charts',
           featureName: 'Detailed P/L charts over time',
+          lockedSubtitle: 'Visualize your profit & loss across days, weeks, and months.',
           child: history.when(
             data: (data) => PLHistoryChart(
               history: data,

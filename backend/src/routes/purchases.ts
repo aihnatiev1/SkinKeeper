@@ -14,7 +14,9 @@ import {
   verifyGoogleReceipt,
   activatePremium,
   getSubscriptionStatus,
+  ReceiptAlreadyLinkedError,
 } from "../services/purchases.js";
+import { getFeaturePreviews } from "../services/featurePreviews.js";
 import { pool } from "../db/pool.js";
 
 const APPLE_BUNDLE_ID =
@@ -115,7 +117,15 @@ router.post(
             .json({ error: "Missing purchaseToken or productId" });
           return;
         }
-        result = await verifyGoogleReceipt(purchaseToken, productId);
+        // CRIT-3: pass req.userId so verifyGoogleReceipt can match against
+        // Google's obfuscatedExternalAccountId (set by the Android client
+        // via PurchaseParam.applicationUserName). Without this binding,
+        // user A could submit user B's receipt and steal their Premium.
+        result = await verifyGoogleReceipt(
+          purchaseToken,
+          productId,
+          req.userId!
+        );
       }
 
       if (!result.valid) {
@@ -123,7 +133,23 @@ router.post(
         return;
       }
 
-      await activatePremium(req.userId!, store, result);
+      try {
+        await activatePremium(req.userId!, store, result);
+      } catch (err) {
+        if (err instanceof ReceiptAlreadyLinkedError) {
+          // CRIT-1/2: receipt is already bound to a different user. Don't
+          // grant Premium and don't leak which user owns it.
+          console.warn(
+            `[Purchase] User ${req.userId} attempted to verify a receipt linked to another account (tx=${result.transactionId})`
+          );
+          res.status(409).json({
+            error: "Receipt already linked to another account",
+            code: "RECEIPT_ALREADY_LINKED",
+          });
+          return;
+        }
+        throw err;
+      }
 
       console.log(
         `[Purchase] User ${req.userId} activated premium via ${store}: ${result.productId}`
@@ -153,6 +179,59 @@ router.get(
   }
 );
 
+// GET /api/purchases/feature-previews — precomputed personalization data for
+// the post-purchase tour ("Your top item: AK Redline | $15.50") and for the
+// pre-purchase paywall teaser. Same payload, two consumers.
+//
+// Auth: requireAuth only — NOT requirePremium. Free users hit this when the
+// paywall renders the teaser; premium users hit it when the tour starts.
+//
+// Response shape (consumed by Flutter mobile + web app paywall):
+//   {
+//     topItem: {                       // null if inventory is empty
+//       marketHashName: string,
+//       iconUrl:       string | null,
+//       currentPriceUsd: number,       // USD, source = steam
+//       trend7d:       string | null,  // "+8.2%" / "-3.1%", null if no history
+//     } | null,
+//     inventoryStats: {
+//       totalItems:    number,         // SUM of stacks across active account
+//       totalValueUsd: number,         // SUM(price * count) across active account
+//       uniqueItems:   number,         // distinct market_hash_name
+//     },
+//     trackedItemsCount:           number,  // price_alerts WHERE is_watchlist
+//     alertsActive:                number,  // price_alerts WHERE is_active AND NOT watchlist
+//     potentialAutoSellCandidates: number,  // items where current ≥ 1.5× cost basis
+//   }
+//
+// Caching: in-memory 5-min TTL keyed by userId. Mutating endpoints (inventory
+// sync, alert/watchlist CRUD) should call invalidateFeaturePreviews(userId).
+//
+// Errors:
+//   401 SESSION_EXPIRED — user has no linked Steam account
+//   500                  — DB failure
+router.get(
+  "/feature-previews",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const previews = await getFeaturePreviews(req.userId!);
+      res.json(previews);
+    } catch (err) {
+      const msg = (err as Error).message ?? "";
+      if (msg.includes("No linked Steam accounts")) {
+        res.status(401).json({
+          error: "No active Steam account",
+          code: "SESSION_EXPIRED",
+        });
+        return;
+      }
+      console.error("Feature previews error:", err);
+      res.status(500).json({ error: "Failed to load feature previews" });
+    }
+  }
+);
+
 // POST /api/purchases/restore — restore purchases (re-verify existing receipts)
 router.post(
   "/restore",
@@ -161,24 +240,65 @@ router.post(
     try {
       const { store, receiptData, purchaseToken, productId } = req.body;
 
-      if (!store) {
-        res.status(400).json({ error: "Missing store" });
+      // Match /verify validation: only apple/google routed through native
+      // receipt verification. Stripe uses its own checkout flow and shouldn't
+      // fall through to the Google branch (data-integrity bug — without this
+      // check, store="stripe" would silently treat purchaseToken as a Google
+      // receipt).
+      if (store !== "apple" && store !== "google") {
+        res.status(400).json({ error: "Invalid store (apple or google)" });
         return;
       }
 
       let result;
       if (store === "apple") {
+        // Was permissive: missing receiptData would propagate `undefined`
+        // into JSON.parse and bubble out as a 500. Reject up-front.
+        if (!receiptData || typeof receiptData !== "string") {
+          res.status(400).json({ error: "Missing receiptData" });
+          return;
+        }
         result = await verifyAppleReceipt(receiptData);
       } else {
-        result = await verifyGoogleReceipt(purchaseToken, productId);
+        if (!purchaseToken || !productId) {
+          res
+            .status(400)
+            .json({ error: "Missing purchaseToken or productId" });
+          return;
+        }
+        // CRIT-3: same user-binding guard as /verify. /restore is the
+        // alternate entry point for an existing subscription, so the same
+        // protection applies — without it, an attacker could call /restore
+        // with someone else's purchase token and adopt their Premium.
+        result = await verifyGoogleReceipt(
+          purchaseToken,
+          productId,
+          req.userId!
+        );
       }
 
       if (!result.valid) {
-        res.status(400).json({ error: "No valid purchase found" });
+        res.status(400).json({ error: result.error || "No valid purchase found" });
         return;
       }
 
-      await activatePremium(req.userId!, store, result);
+      try {
+        await activatePremium(req.userId!, store, result);
+      } catch (err) {
+        if (err instanceof ReceiptAlreadyLinkedError) {
+          // CRIT-1/2: same guard as /verify — restore must not let user A
+          // adopt user B's receipt by calling /restore instead of /verify.
+          console.warn(
+            `[Purchase] User ${req.userId} attempted to restore a receipt linked to another account (tx=${result.transactionId})`
+          );
+          res.status(409).json({
+            error: "Receipt already linked to another account",
+            code: "RECEIPT_ALREADY_LINKED",
+          });
+          return;
+        }
+        throw err;
+      }
 
       const status = await getSubscriptionStatus(req.userId!);
       res.json({ success: true, subscription: status });
@@ -228,6 +348,10 @@ if (process.env.NODE_ENV !== "production") {
         `UPDATE users SET is_premium = FALSE, premium_until = NULL WHERE id = $1`,
         [req.userId]
       );
+      // Match the ASSN handler's behavior — without invalidation the dev
+      // would still hit cached `is_premium=true` for up to 5 min and
+      // think mock-revoke was broken.
+      invalidatePremiumCache(req.userId!);
       console.log(`[Purchase:mock] User ${req.userId} mock-revoked premium`);
       res.json({ success: true });
     }

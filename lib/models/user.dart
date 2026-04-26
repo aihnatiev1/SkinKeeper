@@ -1,4 +1,16 @@
 class SteamUser {
+  /// Backend `users.id` (numeric primary key).
+  ///
+  /// Distinct from [steamId] (Steam's external identifier). Required for
+  /// security checks where we need to confirm an inbound payload (e.g. push
+  /// notification `userId`) actually targets the currently-signed-in user
+  /// rather than a previously-signed-in user whose token is still cached.
+  ///
+  /// Nullable for forward-compat: older backend builds didn't return `id` on
+  /// `/auth/me`, and users with stale clients should still authenticate
+  /// successfully — the security check downgrades to "skip verification" in
+  /// that case (and logs a warning) instead of locking everyone out.
+  final int? userId;
   final String steamId;
   final String displayName;
   final String avatarUrl;
@@ -8,6 +20,7 @@ class SteamUser {
   final int accountCount;
 
   const SteamUser({
+    this.userId,
     required this.steamId,
     required this.displayName,
     required this.avatarUrl,
@@ -19,6 +32,7 @@ class SteamUser {
 
   factory SteamUser.fromJson(Map<String, dynamic> json) {
     return SteamUser(
+      userId: json['id'] as int?,
       steamId: json['steam_id'] as String,
       displayName: json['display_name'] as String,
       avatarUrl: json['avatar_url'] as String,

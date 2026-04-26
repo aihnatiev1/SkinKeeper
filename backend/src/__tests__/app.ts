@@ -12,8 +12,11 @@ import marketRoutes from "../routes/market.js";
 import transactionsRoutes from "../routes/transactions.js";
 import tradesRoutes from "../routes/trades.js";
 import adminRoutes from "../routes/admin.js";
+import autoSellRoutes from "../routes/autoSell.js";
 import manualTxRoutes from "../routes/manualTransactions.js";
 import sessionRoutes from "../routes/session.js";
+import purchasesRoutes from "../routes/purchases.js";
+import usersRoutes from "../routes/users.js";
 import { errorHandler } from "../middleware/errorHandler.js";
 
 export function createTestApp() {
@@ -30,7 +33,10 @@ export function createTestApp() {
   app.use("/api/transactions", manualTxRoutes);
   app.use("/api/trades", tradesRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/auto-sell", autoSellRoutes);
   app.use("/api/session", sessionRoutes);
+  app.use("/api/purchases", purchasesRoutes);
+  app.use("/api/users", usersRoutes);
 
   app.use(errorHandler);
   return app;

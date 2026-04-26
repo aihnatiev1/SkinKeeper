@@ -63,7 +63,15 @@ export async function authMiddleware(
   }
 }
 
-// TTL cache for premium status (5 min) to avoid DB hit on every request
+// TTL cache for premium status (5 min) to avoid DB hit on every request.
+//
+// IMPORTANT: this cache is in-process. Under PM2 cluster mode (>1 worker)
+// each worker holds its own copy, so `invalidatePremiumCache(userId)` only
+// clears the worker that called it. The same caveat applies to the ASSN
+// webhook handler and the `checkExpiredSubscriptions` cron — both rely on
+// per-worker invalidation. Worst case: a user keeps Premium on N-1 workers
+// for up to 5 minutes after revocation/expiry. Migrating to Redis is the
+// long-term fix; tracked outside this file.
 const PREMIUM_CACHE_TTL = 5 * 60 * 1000;
 const premiumCache = new TTLCache<number, boolean>(PREMIUM_CACHE_TTL, 500);
 registerCache("premiumStatus", premiumCache as unknown as TTLCache<unknown, unknown>);
@@ -115,4 +123,48 @@ export async function requirePremium(
 /** Clear premium cache for a user (call after subscription changes). */
 export function invalidatePremiumCache(userId: number): void {
   premiumCache.delete(userId);
+}
+
+/**
+ * Gate a route on a feature flag (P9 rollout infrastructure).
+ *
+ * Independent of requirePremium — a route can use both:
+ *   router.post('/x', authMiddleware, requirePremium, requireFeatureFlag('auto_sell'), handler)
+ *
+ * Default-OFF: if the flag isn't resolved, request is rejected. This is the
+ * safe behavior — kill switches must succeed at disabling features even if
+ * the flag table somehow isn't populated.
+ *
+ * Returns 403 with code FEATURE_DISABLED on failure. Flutter clients can
+ * surface a "coming soon" / fallback UI on this code.
+ */
+export function requireFeatureFlag(flagName: string) {
+  return async function (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    if (!req.userId) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+    try {
+      // Lazy-load to avoid a hot import cycle (featureFlags imports nothing
+      // from middleware, but service may be imported elsewhere).
+      const { isFeatureEnabled } = await import("../services/featureFlags.js");
+      const enabled = await isFeatureEnabled(req.userId, flagName, false);
+      if (!enabled) {
+        res.status(403).json({
+          error: `Feature '${flagName}' is not enabled for this user`,
+          code: "FEATURE_DISABLED",
+          flag: flagName,
+        });
+        return;
+      }
+      next();
+    } catch (err) {
+      console.error(`Feature flag check error for '${flagName}':`, err);
+      res.status(500).json({ error: "Failed to check feature flag" });
+    }
+  };
 }

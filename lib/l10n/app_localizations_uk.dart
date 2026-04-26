@@ -474,4 +474,27 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get search => 'Пошук';
+
+  @override
+  String get cancelModalTitle => 'Виставляємо на продаж';
+
+  @override
+  String cancelModalCountdown(int seconds) {
+    return 'Виставляємо за $seconds с';
+  }
+
+  @override
+  String get cancelModalContinue => 'Продовжити';
+
+  @override
+  String get cancelModalCancel => 'Скасувати';
+
+  @override
+  String get cancelModalCancelled => 'Продаж скасовано';
+
+  @override
+  String get cancelModalErrorExpired => 'Запізно — лот уже на Steam';
+
+  @override
+  String get cancelModalErrorGeneric => 'Не вдалося скасувати';
 }

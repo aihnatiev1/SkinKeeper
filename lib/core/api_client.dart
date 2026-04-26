@@ -46,6 +46,27 @@ bool isPremiumRequired(dynamic e) {
   return false;
 }
 
+/// Returns true if the error is a 403 because the feature is disabled via
+/// server-side feature flag (`FEATURE_DISABLED`). Distinct from
+/// [isPremiumRequired] — premium users still hit this when a kill switch is
+/// flipped or a feature is partially rolled out.
+///
+/// Consumers should react by invalidating [featureFlagsProvider] so the UI
+/// downgrades to the disabled state on the next frame, and surface a
+/// non-blocking toast.
+bool isFeatureDisabled(dynamic e) {
+  if (e is DioException && e.response?.statusCode == 403) {
+    final data = e.response?.data;
+    if (data is Map && data['code'] == 'FEATURE_DISABLED') return true;
+  }
+  return false;
+}
+
+/// Stream that fires when any API call returns FEATURE_DISABLED. App shell
+/// listens and invalidates [featureFlagsProvider] + shows a toast — central
+/// handling so individual call sites don't have to know about flags.
+final featureDisabledController = StreamController<String?>.broadcast();
+
 /// Extract a user-friendly message from any error (Dio or otherwise).
 /// Messages include actionable next steps — users should know what to try
 /// next, not just that something failed.
@@ -156,6 +177,16 @@ class ApiClient {
               !path.startsWith('/auth')) {
             sessionExpiredController.add(null);
           }
+        } else if (isFeatureDisabled(error)) {
+          // Server-side kill switch hit: surface to app shell so it can
+          // invalidate `featureFlagsProvider` (force re-fetch) and toast the
+          // user. Backend payload shape (see `middleware/auth.ts:requireFeatureFlag`):
+          //   { error, code: 'FEATURE_DISABLED', flag: '<flag_name>' }
+          // The key is `flag` — NOT `feature`. We previously read `feature` and
+          // got `null` every time, so the toast fell back to a generic message.
+          final data = error.response?.data;
+          final flag = (data is Map ? data['flag'] : null) as String?;
+          featureDisabledController.add(flag);
         }
         // Record server errors (5xx) as non-fatal for crash reporting
         final statusCode = error.response?.statusCode ?? 0;

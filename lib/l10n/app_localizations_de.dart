@@ -474,4 +474,27 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get search => 'Suchen';
+
+  @override
+  String get cancelModalTitle => 'Listing in progress';
+
+  @override
+  String cancelModalCountdown(int seconds) {
+    return 'Listing in ${seconds}s';
+  }
+
+  @override
+  String get cancelModalContinue => 'Continue';
+
+  @override
+  String get cancelModalCancel => 'Cancel';
+
+  @override
+  String get cancelModalCancelled => 'Listing cancelled';
+
+  @override
+  String get cancelModalErrorExpired => 'Too late — listing already on Steam';
+
+  @override
+  String get cancelModalErrorGeneric => 'Failed to cancel';
 }

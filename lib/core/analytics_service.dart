@@ -13,6 +13,29 @@ import 'package:flutter/foundation.dart';
 /// Every public method is a no-op when Firebase isn't initialized, so
 /// widget tests can invoke them without a Firebase mock harness. Prod
 /// always has Firebase initialized before any screen mounts.
+/// Surface from which the paywall was opened. Used for conversion funnel
+/// analysis.
+///
+/// P1 introduced the enum shape so `PremiumGate` and paywall routing can
+/// thread a typed value end-to-end. P2 wires it through:
+/// `Analytics.paywallViewed(source: …)` logs `source: <analyticsValue>`
+/// and the `/premium` route extracts the value from `GoRouterState.extra`.
+enum PaywallSource {
+  lockedTap,
+  teaseCard,
+  settings,
+  deepLink,
+  unknown;
+
+  String get analyticsValue => switch (this) {
+        PaywallSource.lockedTap => 'locked_tap',
+        PaywallSource.teaseCard => 'tease_card',
+        PaywallSource.settings => 'settings',
+        PaywallSource.deepLink => 'deep_link',
+        PaywallSource.unknown => 'unknown',
+      };
+}
+
 class Analytics {
   static bool get _firebaseReady => Firebase.apps.isNotEmpty;
   static FirebaseAnalytics get _analytics => FirebaseAnalytics.instance;
@@ -180,8 +203,13 @@ class Analytics {
 
   // ─── Premium Events ────────────────────────────────────────────────
 
-  static Future<void> paywallViewed() async {
-    await _event('paywall_viewed');
+  /// Logs `paywall_viewed` with `source: <enum.analyticsValue>`.
+  ///
+  /// Backward compatible: callers may omit [source]; we log
+  /// `source: 'unknown'` so the funnel always carries this dimension.
+  static Future<void> paywallViewed({PaywallSource? source}) async {
+    final value = (source ?? PaywallSource.unknown).analyticsValue;
+    await _event('paywall_viewed', {'source': value});
   }
 
   /// Tracks paywall exits — critical for conversion diagnosis.
@@ -192,6 +220,76 @@ class Analytics {
 
   static Future<void> premiumPurchased({required String plan}) async {
     await _event('premium_purchased', {'plan': plan});
+  }
+
+  /// Logs `paywall_matrix_expanded` when the free-vs-PRO comparison matrix
+  /// is expanded from its collapsed disclosure on the rewritten paywall.
+  /// Funnel signal: lower expand-rate vs `paywall_viewed` confirms that the
+  /// hero + value props carry the value prop without needing the matrix.
+  static Future<void> paywallMatrixExpanded() async {
+    await _event('paywall_matrix_expanded');
+  }
+
+  // ─── Locked-feature funnel ────────────────────────────────────────
+
+  /// In-memory dedupe set: ensures `lockedFeatureViewed` fires at most once
+  /// per `featureId` per session (a session = process lifetime, or until
+  /// [resetLockedFeatureSession] is called on auth-state change).
+  ///
+  /// Lives on the analytics class — not in any widget — so multiple gates
+  /// for the same feature on the same screen don't double-log.
+  static final Set<String> _lockedFeatureSeenThisSession = <String>{};
+
+  /// Logs `locked_feature_viewed` once per [feature] per session.
+  /// Subsequent calls with the same [feature] are silently skipped until
+  /// [resetLockedFeatureSession] is invoked (e.g. on auth state change).
+  static Future<void> lockedFeatureViewed({required String feature}) async {
+    if (!_lockedFeatureSeenThisSession.add(feature)) return;
+    await _event('locked_feature_viewed', {'feature': feature});
+  }
+
+  /// Logs `locked_feature_tapped` on every tap. NOT debounced — taps on a
+  /// locked CTA are always intentional and we want raw counts.
+  static Future<void> lockedFeatureTapped({required String feature}) async {
+    await _event('locked_feature_tapped', {'feature': feature});
+  }
+
+  /// Clears the per-session dedupe set. Call when auth state changes
+  /// (login / logout / account switch) so the new session sees fresh views.
+  static void resetLockedFeatureSession() {
+    _lockedFeatureSeenThisSession.clear();
+  }
+
+  // ─── Tour Events (stubs for P8) ───────────────────────────────────
+
+  static Future<void> tourStarted() async {
+    await _event('tour_started');
+  }
+
+  static Future<void> tourSlideViewed({required int slide}) async {
+    await _event('tour_slide_viewed', {'slide': slide});
+  }
+
+  static Future<void> tourCompleted() async {
+    await _event('tour_completed');
+  }
+
+  static Future<void> tourSkipped() async {
+    await _event('tour_skipped');
+  }
+
+  static Future<void> tourSkippedFromSlide({required int slide}) async {
+    await _event('tour_skipped_from_slide', {'at_slide': slide});
+  }
+
+  /// Logs a CTA tap inside the tour. [action] is a stable analytics key
+  /// (`try_now`, `continue`, `done`, `feature_tile`). [slide] is 0-indexed.
+  /// Used by P8 to attribute conversion to specific slides + actions.
+  static Future<void> tourCtaTapped({
+    required int slide,
+    required String action,
+  }) async {
+    await _event('tour_cta_tapped', {'slide': slide, 'action': action});
   }
 
   // ─── Inventory Events ──────────────────────────────────────────────
@@ -209,8 +307,40 @@ class Analytics {
 
   // ─── Internal ──────────────────────────────────────────────────────
 
+  /// Test-only event recorder. When non-null, every `_event` call is also
+  /// recorded here (in addition to Firebase, which is a no-op in tests).
+  /// Lets unit tests assert event names + params without a Firebase mock.
+  @visibleForTesting
+  static AnalyticsTestRecorder? testRecorder;
+
   static Future<void> _event(String name, [Map<String, Object>? params]) async {
+    testRecorder?.record(name, params);
     if (!_firebaseReady) return;
     await _analytics.logEvent(name: name, parameters: params);
   }
+}
+
+/// Test-only recorder. Install via `Analytics.testRecorder = ...` in
+/// `setUp` and inspect [events] in your assertions.
+@visibleForTesting
+class AnalyticsTestRecorder {
+  final List<RecordedEvent> events = <RecordedEvent>[];
+
+  void record(String name, Map<String, Object>? params) {
+    events.add(RecordedEvent(name, params == null
+        ? const <String, Object>{}
+        : Map.unmodifiable(params)));
+  }
+
+  void clear() => events.clear();
+}
+
+@visibleForTesting
+class RecordedEvent {
+  const RecordedEvent(this.name, this.params);
+  final String name;
+  final Map<String, Object> params;
+
+  @override
+  String toString() => 'RecordedEvent($name, $params)';
 }

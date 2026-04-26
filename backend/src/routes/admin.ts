@@ -593,6 +593,140 @@ router.post("/prune-prices", requireAdminSecret, async (_req: Request, res: Resp
   }
 });
 
+// GET /api/admin/auto-sell-stats — auto-sell engine activity (P3)
+// Quick dashboard for monitoring fire/failure rates without scanning logs.
+router.get("/auto-sell-stats", requireAdminSecret, async (_req: Request, res: Response) => {
+  try {
+    const [activeRules, fires24h, failures24h, refusals24h] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM auto_sell_rules
+          WHERE enabled = TRUE AND cancelled_at IS NULL`
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM auto_sell_executions
+          WHERE fired_at > NOW() - INTERVAL '24 hours'`
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM auto_sell_executions
+          WHERE fired_at > NOW() - INTERVAL '24 hours' AND action = 'failed'`
+      ),
+      // MIN-guard refusals are recorded as 'notified' rows with a non-null
+      // error_message that mentions "refusing to auto-list".
+      pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM auto_sell_executions
+          WHERE fired_at > NOW() - INTERVAL '24 hours'
+            AND action = 'notified'
+            AND error_message ILIKE '%refusing to auto-list%'`
+      ),
+    ]);
+
+    const jobs = getJobHealth();
+    res.json({
+      activeRules: activeRules.rows[0]?.cnt ?? 0,
+      fires24h: fires24h.rows[0]?.cnt ?? 0,
+      failures24h: failures24h.rows[0]?.cnt ?? 0,
+      minGuardRefusals24h: refusals24h.rows[0]?.cnt ?? 0,
+      cron: jobs.autoSell ?? null,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Feature Flags (P9) ──────────────────────────────────────────────────
+// Per-user flag overrides + canary rollout introspection. See
+// backend/docs/feature-flags.md.
+
+// GET /api/admin/feature-flags/canary-stats — current rollout config + estimates
+router.get("/feature-flags/canary-stats", requireAdminSecret, async (_req: Request, res: Response) => {
+  try {
+    const { getCanaryConfig, FLAG_NAMES } = await import("../services/featureFlags.js");
+    const cfg = getCanaryConfig();
+    const { rows } = await pool.query(`SELECT COUNT(*)::int AS total FROM users`);
+    const totalUsers = rows[0]?.total ?? 0;
+
+    res.json({
+      totalUsers,
+      flags: cfg.map(c => ({
+        flag: c.flag,
+        percentage: c.percentage,
+        killed: c.killed,
+        // Estimate. Actual canary count is exact via deterministic hash, but
+        // we don't iterate every userId here — pct of total is good enough.
+        estimatedUsersInCanary: c.killed ? 0 : Math.round((totalUsers * c.percentage) / 100),
+      })),
+      knownFlags: FLAG_NAMES,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/feature-flags/:userId — resolved flags (post env+canary merge)
+router.get("/feature-flags/:userId", requireAdminSecret, async (req: Request, res: Response) => {
+  const userId = parseInt(req.params.userId as string, 10);
+  if (isNaN(userId)) {
+    res.status(400).json({ error: "Invalid userId" });
+    return;
+  }
+  try {
+    const { getFeatureFlagsForUser, userBucket } = await import("../services/featureFlags.js");
+    const { rows } = await pool.query(
+      `SELECT id, feature_flags FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const resolved = await getFeatureFlagsForUser(userId);
+    res.json({
+      userId,
+      bucket: userBucket(userId),
+      rawOverrides: rows[0].feature_flags ?? {},
+      resolved,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/feature-flags/:userId — set/clear a flag override
+// Body: { flag: string, value: boolean | null }
+//   value=null removes the override (user falls back to canary/env logic).
+router.post("/feature-flags/:userId", requireAdminSecret, async (req: Request, res: Response) => {
+  const userId = parseInt(req.params.userId as string, 10);
+  if (isNaN(userId)) {
+    res.status(400).json({ error: "Invalid userId" });
+    return;
+  }
+  const flag = req.body?.flag;
+  const value = req.body?.value;
+  if (typeof flag !== "string" || !/^[a-z][a-z0-9_]*$/.test(flag)) {
+    res.status(400).json({ error: "Invalid flag name (must be lowercase snake_case)" });
+    return;
+  }
+  if (value !== null && typeof value !== "boolean") {
+    res.status(400).json({ error: "value must be boolean or null" });
+    return;
+  }
+
+  try {
+    const { rows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const { setFeatureFlag } = await import("../services/featureFlags.js");
+    const resolved = await setFeatureFlag(userId, flag, value);
+    console.log(`[Admin] Feature flag ${flag}=${value} set for user ${userId}`);
+    res.json({ userId, flag, value, resolved });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/admin/set-premium/:userId — manually set premium (for testing release builds)
 // Body: { premium: true/false, days?: number }
 router.post("/set-premium/:userId", requireAdminSecret, async (req: Request, res: Response) => {

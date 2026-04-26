@@ -1023,6 +1023,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search'**
   String get search;
+
+  /// No description provided for @cancelModalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Listing in progress'**
+  String get cancelModalTitle;
+
+  /// Countdown shown while the auto-sell cancel window is still open. Param is whole seconds remaining.
+  ///
+  /// In en, this message translates to:
+  /// **'Listing in {seconds}s'**
+  String cancelModalCountdown(int seconds);
+
+  /// No description provided for @cancelModalContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get cancelModalContinue;
+
+  /// No description provided for @cancelModalCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancelModalCancel;
+
+  /// No description provided for @cancelModalCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Listing cancelled'**
+  String get cancelModalCancelled;
+
+  /// No description provided for @cancelModalErrorExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Too late — listing already on Steam'**
+  String get cancelModalErrorExpired;
+
+  /// No description provided for @cancelModalErrorGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to cancel'**
+  String get cancelModalErrorGeneric;
 }
 
 class _AppLocalizationsDelegate

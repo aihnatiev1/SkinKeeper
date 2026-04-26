@@ -7,22 +7,31 @@ import '../../core/theme.dart';
 import 'iap_service.dart';
 import 'paywall_screen_parts.dart';
 
+/// P6 paywall rewrite — outcome-led: hero "Sell at the peak" + 3 value props
+/// as the main content. The legacy feature matrix is demoted under a
+/// disclosure ("Compare all features"). Subscription disclosure lives ABOVE
+/// the purchase CTA per App Store 3.1.2 guidance.
 class PaywallScreen extends ConsumerStatefulWidget {
-  const PaywallScreen({super.key});
+  const PaywallScreen({super.key, this.source});
+
+  /// Where the user came from. Threaded by the `/premium` route from
+  /// `GoRouterState.extra`. Defaults to [PaywallSource.deepLink] when
+  /// missing (cold-start of the route, push-notification deep links, etc).
+  final PaywallSource? source;
 
   @override
   ConsumerState<PaywallScreen> createState() => _PaywallScreenState();
 }
 
 class _PaywallScreenState extends ConsumerState<PaywallScreen> {
-  bool _selectedYearly = true;
+  bool _selectedYearly = true; // Yearly is the default — best value.
   bool _purchasing = false;
   bool _loadingProducts = true;
 
   @override
   void initState() {
     super.initState();
-    Analytics.paywallViewed();
+    Analytics.paywallViewed(source: widget.source);
     _loadProducts();
   }
 
@@ -37,6 +46,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   @override
   Widget build(BuildContext context) {
     final isPremium = ref.watch(premiumProvider).valueOrNull ?? false;
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -49,64 +59,86 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                 Navigator.of(context).pop();
               },
             ),
-            Expanded(child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            if (isPremium) ...[
-              const PaywallActiveBadge(),
-              const SizedBox(height: 24),
-            ],
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    if (isPremium) ...[
+                      const PaywallActiveBadge(),
+                      const SizedBox(height: 24),
+                    ],
 
-            const PaywallHero(),
-            const SizedBox(height: 28),
+                    // Hero — "Sell at the peak." + animated chart.
+                    const PaywallHero(),
+                    const SizedBox(height: 28),
 
-            const PaywallFeatureList()
-                .animate()
-                .fadeIn(duration: 400.ms, delay: 200.ms)
-                .slideY(begin: 0.05, end: 0),
-            const SizedBox(height: 28),
+                    // Primary content: 3 value-prop cards.
+                    if (reduceMotion)
+                      const PaywallValueProps()
+                    else
+                      const PaywallValueProps()
+                          .animate()
+                          .fadeIn(duration: 400.ms, delay: 200.ms)
+                          .slideY(begin: 0.05, end: 0),
+                    const SizedBox(height: 20),
 
-            if (!isPremium) ...[
-              if (_loadingProducts)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: CircularProgressIndicator(color: AppTheme.primary),
-                )
-              else ...[
-              // Plan selector
-              _buildPlanSelector()
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 300.ms)
-                  .slideY(begin: 0.05, end: 0),
-              const SizedBox(height: 20),
+                    // Demoted feature matrix — disclosure-gated.
+                    const PaywallMatrixDisclosure(),
+                    const SizedBox(height: 24),
 
-              // Purchase button
-              _buildPurchaseButton()
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 400.ms),
-              const SizedBox(height: 12),
+                    if (!isPremium) ...[
+                      if (_loadingProducts)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: CircularProgressIndicator(
+                            color: AppTheme.primary,
+                          ),
+                        )
+                      else ...[
+                        // Plan selector (yearly highlighted as best value).
+                        if (reduceMotion)
+                          _buildPlanSelector()
+                        else
+                          _buildPlanSelector()
+                              .animate()
+                              .fadeIn(duration: 400.ms, delay: 300.ms)
+                              .slideY(begin: 0.05, end: 0),
+                        const SizedBox(height: 16),
 
-              // Restore
-              TextButton(
-                onPressed: _purchasing ? null : _restore,
-                child: const Text(
-                  'Restore Purchases',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                  ),
+                        // App Store 3.1.2: subscription disclosure ABOVE the
+                        // purchase CTA. Don't move below or hide behind a
+                        // disclosure — that's a known rejection trigger.
+                        const PaywallLegalFooter(),
+                        const SizedBox(height: 16),
+
+                        // Purchase button.
+                        if (reduceMotion)
+                          _buildPurchaseButton()
+                        else
+                          _buildPurchaseButton()
+                              .animate()
+                              .fadeIn(duration: 400.ms, delay: 400.ms),
+                        const SizedBox(height: 12),
+
+                        // Restore.
+                        TextButton(
+                          onPressed: _purchasing ? null : _restore,
+                          child: const Text(
+                            'Restore Purchases',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                    const SizedBox(height: 80),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-
-              ], // end of !_loadingProducts
-              const PaywallLegalFooter(),
-            ],
-            const SizedBox(height: 80),
-          ],
-        ),
-      )),
+            ),
           ],
         ),
       ),
@@ -118,46 +150,73 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     final monthly = iap.monthlyProduct;
     final yearly = iap.yearlyProduct;
 
-    return Row(
-      children: [
-        Expanded(
-          child: _PlanCard(
-            title: 'Monthly',
-            price: monthly?.price ?? '\$4.99',
-            subtitle: 'per month',
-            isSelected: !_selectedYearly,
-            onTap: () {
-              HapticFeedback.selectionClick();
-              setState(() => _selectedYearly = false);
-            },
+    // IntrinsicHeight + CrossAxisAlignment.stretch keeps both plan cards
+    // the same height even when the yearly card carries a "BEST VALUE"
+    // badge that would otherwise make it taller than the monthly card.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _PlanCard(
+              title: 'Monthly',
+              price: monthly?.price ?? '\$4.99',
+              subtitle: 'per month',
+              isSelected: !_selectedYearly,
+              highlightAccent: AppTheme.primary,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedYearly = false);
+              },
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _PlanCard(
-            title: 'Yearly',
-            price: yearly?.price ?? '\$34.99',
-            subtitle: '7-day free trial',
-            badge: 'Best Value',
-            isSelected: _selectedYearly,
-            onTap: () {
-              HapticFeedback.selectionClick();
-              setState(() => _selectedYearly = true);
-            },
+          const SizedBox(width: 12),
+          Expanded(
+            child: _PlanCard(
+              title: 'Yearly',
+              price: yearly?.price ?? '\$34.99',
+              subtitle: '7-day free trial',
+              badge: 'BEST VALUE — Save 40%',
+              badgeColor: AppTheme.warning,
+              isSelected: _selectedYearly,
+              highlightAccent: AppTheme.warning,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedYearly = true);
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildPurchaseButton() {
+    final yearlyPrice = ref.read(iapServiceProvider).yearlyProduct?.price;
+    final monthlyPrice = ref.read(iapServiceProvider).monthlyProduct?.price;
     return SizedBox(
       width: double.infinity,
       height: 52,
       child: Container(
         decoration: BoxDecoration(
-          gradient: AppTheme.primaryGradient,
+          gradient: _selectedYearly
+              ? const LinearGradient(
+                  colors: [AppTheme.warning, AppTheme.warningLight],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : AppTheme.primaryGradient,
           borderRadius: BorderRadius.circular(AppTheme.r16),
+          boxShadow: _selectedYearly
+              ? [
+                  BoxShadow(
+                    color: AppTheme.warning.withValues(alpha: 0.4),
+                    blurRadius: 20,
+                    spreadRadius: -4,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : null,
         ),
         child: ElevatedButton(
           onPressed: _purchasing ? null : _purchase,
@@ -179,8 +238,8 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                 )
               : Text(
                   _selectedYearly
-                      ? 'Start 7-Day Free Trial'
-                      : 'Subscribe Monthly — ${ref.read(iapServiceProvider).monthlyProduct?.price ?? '\$4.99'}',
+                      ? 'Start 7-Day Free Trial — ${yearlyPrice ?? '\$34.99'}/yr'
+                      : 'Subscribe Monthly — ${monthlyPrice ?? '\$4.99'}',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -257,7 +316,9 @@ class _PlanCard extends StatelessWidget {
   final String price;
   final String subtitle;
   final String? badge;
+  final Color? badgeColor;
   final bool isSelected;
+  final Color highlightAccent;
   final VoidCallback onTap;
 
   const _PlanCard({
@@ -265,7 +326,9 @@ class _PlanCard extends StatelessWidget {
     required this.price,
     required this.subtitle,
     this.badge,
+    this.badgeColor,
     required this.isSelected,
+    required this.highlightAccent,
     required this.onTap,
   });
 
@@ -277,7 +340,7 @@ class _PlanCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: isSelected
-            ? AppTheme.glassAccent(accentColor: AppTheme.primary)
+            ? AppTheme.glassAccent(accentColor: highlightAccent)
             : AppTheme.glass(),
         child: Column(
           children: [
@@ -285,17 +348,24 @@ class _PlanCard extends StatelessWidget {
               Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.warning.withValues(alpha: 0.15),
+                  color: (badgeColor ?? AppTheme.warning)
+                      .withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: (badgeColor ?? AppTheme.warning)
+                        .withValues(alpha: 0.4),
+                    width: 0.5,
+                  ),
                 ),
                 child: Text(
                   badge!,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.warning,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: badgeColor ?? AppTheme.warning,
+                    letterSpacing: 0.6,
                   ),
                 ),
               ),

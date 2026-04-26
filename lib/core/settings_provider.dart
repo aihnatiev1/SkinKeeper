@@ -282,3 +282,35 @@ const kSupportedLocales = {
   'uk': 'Українська',
   'ru': 'Русский',
 };
+
+// ─── Blur fallback (low-end devices) ────────────────────────────────
+
+/// Whether to skip `BackdropFilter` in `PremiumGate` locked state and fall
+/// back to a semi-opaque dark gradient. Defaults to `false`.
+///
+/// Enabled manually from dev tools / advanced settings for now. P3 may wire
+/// this to Remote Config + device-class detection (Pixel 3a class Androids
+/// drop frames with a live blur in a scrolling ListView).
+class BlurFallbackNotifier extends Notifier<bool> {
+  static const _kPrefsKey = 'blur_fallback_enabled';
+
+  @override
+  bool build() {
+    _load();
+    return false;
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(_kPrefsKey) ?? false;
+  }
+
+  Future<void> setEnabled(bool value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kPrefsKey, value);
+  }
+}
+
+final blurFallbackProvider =
+    NotifierProvider<BlurFallbackNotifier, bool>(BlurFallbackNotifier.new);

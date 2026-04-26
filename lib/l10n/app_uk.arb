@@ -167,5 +167,13 @@
   "error": "Щось пішло не так",
   "noData": "Немає даних",
   "refresh": "Оновити",
-  "search": "Пошук"
+  "search": "Пошук",
+
+  "cancelModalTitle": "Виставляємо на продаж",
+  "cancelModalCountdown": "Виставляємо за {seconds} с",
+  "cancelModalContinue": "Продовжити",
+  "cancelModalCancel": "Скасувати",
+  "cancelModalCancelled": "Продаж скасовано",
+  "cancelModalErrorExpired": "Запізно — лот уже на Steam",
+  "cancelModalErrorGeneric": "Не вдалося скасувати"
 }

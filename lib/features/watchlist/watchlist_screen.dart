@@ -8,6 +8,7 @@ import '../../core/analytics_service.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/screen_state_builder.dart';
 import '../../widgets/shared_ui.dart';
+import '../../widgets/tease_card.dart';
 import 'watchlist_provider.dart';
 import 'widgets/add_to_watchlist_sheet.dart';
 import 'widgets/watchlist_card.dart';
@@ -63,6 +64,17 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
+
+                // P10: tease card pitches smart alerts on the watchlist (only
+                // visible to free users — TeaseCard self-hides for PRO).
+                const TeaseCard(
+                  // TODO(l10n): tease card headlines (3 across the app).
+                  headline: 'Smart alerts on this list',
+                  subtitle:
+                      'Get push notifications the moment any watched item '
+                      'crosses your target.',
+                  icon: Icons.notifications_active_outlined,
+                ),
 
                 // Content
                 Expanded(

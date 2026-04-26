@@ -75,8 +75,13 @@ const jwt = createTestJwt(1);
 const mockDemoCheck = () => mockQuery.mockResolvedValueOnce({ rows: [{ steam_id: "76561198000000001" }] });
 
 describe("Portfolio routes", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mockQuery.mockReset();
+    // requirePremium has a 5min in-memory cache keyed by userId.
+    // Without invalidation, cached negatives from earlier tests cause
+    // false 403s on subsequent tests using the same userId.
+    const { invalidatePremiumCache } = await import("../../middleware/auth.js");
+    invalidatePremiumCache(1);
   });
 
   describe("GET /api/portfolio/summary", () => {
@@ -122,6 +127,38 @@ describe("Portfolio routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.total_value).toBeCloseTo(12.34, 2);
+    });
+  });
+
+  describe("GET /api/portfolio/pl/by-account", () => {
+    // Regression: requirePremium was commented out (b0fde416, 2026-03-10) and
+    // never restored alongside /pl/items in eec494c3. Restored in P9.T4.
+    it("returns 401 without token", async () => {
+      const res = await request(app).get("/api/portfolio/pl/by-account");
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 403 for non-premium user", async () => {
+      mockDemoCheck();
+      // requirePremium queries is_premium
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: false }] });
+      const res = await request(app)
+        .get("/api/portfolio/pl/by-account")
+        .set("Authorization", `Bearer ${jwt}`);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe("PREMIUM_REQUIRED");
+    });
+
+    it("returns 200 for premium user", async () => {
+      mockDemoCheck();
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_premium: true }] });
+      const { getPortfolioPLByAccount } = await import("../../services/profitLoss.js");
+      vi.mocked(getPortfolioPLByAccount).mockResolvedValueOnce([]);
+      const res = await request(app)
+        .get("/api/portfolio/pl/by-account")
+        .set("Authorization", `Bearer ${jwt}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("accounts");
     });
   });
 

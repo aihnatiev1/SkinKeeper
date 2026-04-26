@@ -18,9 +18,14 @@ import '../features/transactions/transactions_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/settings/linked_accounts_screen.dart';
 import '../features/purchases/paywall_screen.dart';
+import '../features/purchases/tour/tour_screen.dart';
+import '../core/analytics_service.dart';
 import '../core/sync_state_provider.dart';
 import '../features/alerts/alerts_screen.dart';
 import '../features/alerts/create_alert_screen.dart';
+import '../features/automation/models/auto_sell_rule.dart';
+import '../features/automation/screens/auto_sell_detail_screen.dart';
+import '../features/automation/screens/auto_sell_list_screen.dart';
 import '../features/market/deals_screen.dart';
 import '../features/watchlist/watchlist_screen.dart';
 import '../features/tradeup/tradeup_screen.dart';
@@ -84,6 +89,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/session', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/link-account', builder: (_, _) => const LoginScreen(isLinking: true)),
       GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),
+      // Post-purchase tour — fullscreen dialog so popping returns the user
+      // to whichever shell screen they were on before the tour mounted.
+      // P8: triggered once per user from `IAPService` after a fresh purchase
+      // success (NOT on restore), guarded by the `tour_v1_completed` flag.
+      GoRoute(
+        path: '/tour',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, _) => const MaterialPage<void>(
+          fullscreenDialog: true,
+          child: TourScreen(),
+        ),
+      ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (_, _, child) => AppShell(child: child),
@@ -98,9 +115,35 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/transactions', pageBuilder: (_, _) => const NoTransitionPage(child: TransactionsScreen())),
           GoRoute(path: '/settings', pageBuilder: (_, _) => const NoTransitionPage(child: SettingsScreen())),
           GoRoute(path: '/settings/accounts', builder: (_, _) => const LinkedAccountsScreen()),
-          GoRoute(path: '/premium', builder: (_, _) => const PaywallScreen()),
+          GoRoute(
+            path: '/premium',
+            builder: (_, state) {
+              // Callers push `/premium` with a typed `PaywallSource` extra
+              // (PremiumGate, tease cards, settings). Cold-start / deep-link
+              // hits the route with no extra → fall back to deepLink.
+              final extra = state.extra;
+              final source = extra is PaywallSource ? extra : PaywallSource.deepLink;
+              return PaywallScreen(source: source);
+            },
+          ),
           GoRoute(path: '/alerts', pageBuilder: (_, _) => const NoTransitionPage(child: AlertsScreen())),
           GoRoute(path: '/alerts/create', builder: (_, state) => CreateAlertScreen(marketHashName: state.extra as String?)),
+          GoRoute(
+            path: '/auto-sell',
+            pageBuilder: (_, _) =>
+                const NoTransitionPage(child: AutoSellListScreen()),
+          ),
+          GoRoute(
+            path: '/auto-sell/:id',
+            builder: (_, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+              final extra = state.extra;
+              return AutoSellDetailScreen(
+                ruleId: id,
+                initial: extra is AutoSellRule ? extra : null,
+              );
+            },
+          ),
           GoRoute(path: '/deals', builder: (_, _) => const DealsScreen()),
           GoRoute(path: '/tradeup', builder: (_, _) => const TradeUpScreen()),
           GoRoute(path: '/watchlist', builder: (_, _) => const WatchlistScreen()),

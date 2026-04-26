@@ -25,7 +25,9 @@ import exportRoutes from "./routes/export.js";
 import manualTxRoutes from "./routes/manualTransactions.js";
 import legalRoutes from "./routes/legal.js";
 import adminRoutes from "./routes/admin.js";
+import autoSellRoutes from "./routes/autoSell.js";
 import dataRoutes from "./routes/data.js";
+import usersRoutes from "./routes/users.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { log } from "./utils/logger.js";
 import { preloadCSGOData } from "./services/csgoData.js";
@@ -37,7 +39,54 @@ const PORT = process.env.PORT || 3000;
 
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(cors());
+
+// HIGH-5: explicit CORS allowlist. The wildcard `cors()` was reflecting any
+// Origin back as Access-Control-Allow-Origin, meaning a malicious site could
+// invoke browser fetch with credentials and read responses. Whitelist:
+//   - app.skinkeeper.store + skinkeeper.store (web app + marketing)
+//   - localhost:3000 / 8080 in non-prod for local dev
+//   - specific Chrome extension IDs from CHROME_EXTENSION_IDS env (CSV)
+//
+// Server-to-server callers (Apple ASSN webhook, Stripe webhook) and native
+// mobile (no Origin header on fetch) are ALWAYS allowed — the !origin
+// branch covers them. Browsers always send Origin on cross-origin fetch.
+const CHROME_EXTENSION_IDS = (process.env.CHROME_EXTENSION_IDS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const STATIC_ALLOWED_ORIGINS: string[] = [
+  "https://app.skinkeeper.store",
+  "https://skinkeeper.store",
+];
+const DEV_ALLOWED_ORIGINS: string[] = [
+  "http://localhost:3000",
+  "http://localhost:8080",
+];
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // No Origin header: server-to-server (webhooks, curl, mobile native).
+      // CORS only applies to browser-initiated cross-origin fetches.
+      if (!origin) return callback(null, true);
+
+      const allowed = [
+        ...STATIC_ALLOWED_ORIGINS,
+        ...(process.env.NODE_ENV !== "production" ? DEV_ALLOWED_ORIGINS : []),
+      ];
+      if (allowed.includes(origin)) return callback(null, true);
+
+      // Specific Chrome extension IDs only — never a generic
+      // chrome-extension://* match (any malicious extension on the user's
+      // machine could otherwise read authenticated responses).
+      if (CHROME_EXTENSION_IDS.some((id) => origin === `chrome-extension://${id}`)) {
+        return callback(null, true);
+      }
+
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 
 // Stripe webhook needs raw body for signature verification — must be before express.json()
 app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
@@ -136,7 +185,9 @@ app.use("/api/ext", extensionRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/transactions", manualTxRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/auto-sell", autoSellRoutes);
 app.use("/api/data", dataRoutes);
+app.use("/api/users", usersRoutes);
 
 // Sentry error handler must come before the custom one
 Sentry.setupExpressErrorHandler(app);

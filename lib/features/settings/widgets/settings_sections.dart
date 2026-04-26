@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -261,6 +262,7 @@ class PremiumTourSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final blurFallback = ref.watch(blurFallbackProvider);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: AppTheme.glass(),
@@ -283,6 +285,29 @@ class PremiumTourSection extends ConsumerWidget {
               if (context.mounted) context.push('/onboarding');
             },
           ),
+          // P10 dev/QA toggle: low-end blur fallback. Only visible in debug
+          // builds — production users never see this. Lets QA flip the
+          // BackdropFilter → solid-fallback path on a real device without
+          // editing SharedPreferences manually. Production rollout will be
+          // driven by Remote Config + device-class detection (PLAN.md §0).
+          if (kDebugMode) ...[
+            const Divider(height: 1),
+            SwitchListTile(
+              secondary: const Icon(
+                Icons.blur_off_rounded,
+                color: AppTheme.textSecondary,
+              ),
+              // TODO(l10n): debug-only — translation optional.
+              title: const Text('Low-end blur fallback'),
+              subtitle: const Text(
+                'Skips BackdropFilter in PremiumGate (debug only)',
+                style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+              ),
+              value: blurFallback,
+              onChanged: (v) =>
+                  ref.read(blurFallbackProvider.notifier).setEnabled(v),
+            ),
+          ],
         ],
       ),
     ).animate().fadeIn(duration: 300.ms, delay: 200.ms).slideY(begin: 0.05, end: 0);

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/theme.dart';
+import '../features/automation/widgets/cancel_window_modal.dart';
 import '../l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,7 +28,10 @@ class AppShell extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      body: child,
+      // CancelWindowMounter listens for pending auto-sell executions and
+      // pops the cancel modal anywhere in the shell. Mounted once here so
+      // it survives navigation between tabs.
+      body: CancelWindowMounter(child: child),
       extendBody: true,
       bottomNavigationBar: RepaintBoundary(
         child: ClipRect(

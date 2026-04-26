@@ -168,7 +168,7 @@ router.get("/pl", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.get(
   "/pl/by-account",
   authMiddleware,
-  // requirePremium,
+  requirePremium,
   async (req: AuthRequest, res: Response) => {
     try {
       const accounts = await getPortfolioPLByAccount(req.userId!);

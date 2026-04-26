@@ -75,6 +75,12 @@ vi.mock("../priceChangeNotifier.js", () => ({
   checkPriceChanges: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../autoSellEngine.js", () => ({
+  registerAutoSellCron: vi.fn(),
+  stopAutoSellCron: vi.fn(),
+  drainOnStartup: vi.fn().mockResolvedValue(undefined),
+}));
+
 import cron from "node-cron";
 import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers } from "../prices.js";
 import { startCSFloatCrawler } from "../csfloat.js";
@@ -103,9 +109,12 @@ describe("priceJob", () => {
     // Wait for the initial async IIFE to complete
     await new Promise((r) => setTimeout(r, 50));
 
-    // 11 cron jobs: Skinport, CSGOTrader, DMarket, P/L, priceChangeNotify,
+    // 11 cron jobs scheduled directly via cron.schedule in priceJob.ts:
+    //   Skinport, CSGOTrader, DMarket, P/L, priceChangeNotify,
     //   subscriptions, sessionRefresh, sessionExpiryNotify,
-    //   SteamDepth, steamBatchFull, pruning
+    //   SteamDepth, steamBatchFull, pruning.
+    // (autoSell registers its OWN cron inside autoSellEngine, which is
+    // mocked here — so it doesn't show up in this count.)
     expect(mockedCron.schedule).toHaveBeenCalledTimes(11);
 
     // Background crawlers started. CSFloat crawler is currently disabled

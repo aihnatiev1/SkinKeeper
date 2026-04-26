@@ -316,6 +316,7 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     res.json({
       token,
       user: {
+        id: user.id,
         steam_id: steamId,
         display_name: profile.personaname,
         avatar_url: profile.avatarfull,
@@ -416,8 +417,14 @@ router.post("/desktop", async (req: Request, res: Response) => {
 // GET /api/auth/me
 router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    // `u.id` is exposed as `id` so the Flutter client can store the canonical
+    // backend user id (independent of which Steam account is active). This is
+    // load-bearing for the push-payload verification path: cancel-window
+    // pushes carry a `userId` field that the client compares against the
+    // signed-in user — without `id` here that check has no anchor.
     const { rows } = await pool.query(
       `SELECT
+         u.id,
          COALESCE(sa.steam_id, u.steam_id) AS steam_id,
          COALESCE(sa.display_name, u.display_name) AS display_name,
          COALESCE(sa.avatar_url, u.avatar_url) AS avatar_url,
@@ -883,6 +890,7 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
       status: "authenticated",
       token,
       user: {
+        id: user.id,
         steam_id: steamId,
         display_name: profile.personaname,
         avatar_url: profile.avatarfull,
@@ -998,6 +1006,7 @@ router.post("/token", async (req: Request, res: Response) => {
       status: "authenticated",
       token,
       user: {
+        id: user.id,
         steam_id: steamId,
         display_name: profile.personaname,
         avatar_url: profile.avatarfull,

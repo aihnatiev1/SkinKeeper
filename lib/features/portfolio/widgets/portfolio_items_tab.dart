@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme.dart';
 import '../../../widgets/premium_gate.dart';
 import '../../../widgets/shared_ui.dart';
-import '../../purchases/iap_service.dart';
 import '../portfolio_pl_provider.dart';
 import 'item_pl_list.dart';
 import 'portfolio_selector_bar.dart';
@@ -16,11 +15,11 @@ class PortfolioItemsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final itemsPL = ref.watch(itemsPLProvider);
-    final isPremium = ref.watch(premiumProvider).valueOrNull ?? false;
 
     return PremiumGate(
-      isPremium: isPremium,
+      featureId: 'portfolio_items_pl',
       featureName: 'Per-item profit & loss breakdown',
+      lockedSubtitle: 'See realized and unrealized P/L for each skin in your inventory.',
       child: Column(
         children: [
           const PortfolioSelectorBar(),
