@@ -1,6 +1,12 @@
 import { pool } from "./pool.js";
 
-const schema = `
+/**
+ * LEGACY_SCHEMA — the monolithic schema const used before DevOps-1.
+ * Kept for emergency fallback. Do not add new blocks here; create
+ * a numbered .sql file in migrations/ instead.
+ * @deprecated Use runMigrations() from migrationRunner.ts
+ */
+export const LEGACY_SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
   steam_id      VARCHAR(17) UNIQUE NOT NULL,
@@ -537,9 +543,15 @@ CREATE INDEX IF NOT EXISTS idx_price_alerts_snooze
   ON price_alerts (snooze_until) WHERE snooze_until IS NOT NULL;
 `;
 
+/**
+ * migrate() — legacy boot-time schema apply.
+ * @deprecated Use runMigrations() from migrationRunner.ts (DevOps-1).
+ * Kept as emergency fallback: if migrationRunner has a startup bug,
+ * revert index.ts import to use this function temporarily.
+ */
 export async function migrate() {
-  console.log("Running migrations...");
-  await pool.query(schema);
+  console.log("[Legacy] Running schema migration (LEGACY path)...");
+  await pool.query(LEGACY_SCHEMA);
 
   // Data migration: copy session data from users → steam_accounts (one-time)
   await pool.query(`

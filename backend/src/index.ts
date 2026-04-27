@@ -5,7 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
-import { migrate } from "./db/migrate.js";
+import { runMigrations } from "./db/migrationRunner.js";
 import { pool, checkPoolHealth, getPoolStats } from "./db/pool.js";
 import { startPriceJobs, stopAllJobs } from "./services/priceJob.js";
 import { initFirebase } from "./services/firebase.js";
@@ -235,7 +235,7 @@ async function start() {
   await checkPoolHealth();
 
   // Run migrations
-  await migrate();
+  await runMigrations();
 
   // Initialize Firebase for push notifications
   initFirebase();

@@ -1,5 +1,5 @@
 -- 003_sell_operations.sql
--- Tracked sell operations with per-item status, and daily volume tracking.
+-- Sell operations with per-item tracking and daily volume.
 
 CREATE TABLE IF NOT EXISTS sell_operations (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
