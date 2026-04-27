@@ -12,6 +12,7 @@ import { inspectItem, batchInspect } from "../services/inspect.js";
 import { getSkinInfoBatch } from "../services/csgoData.js";
 import { SteamSessionService } from "../services/steamSession.js";
 import { getQueue } from "../infra/JobQueue.js";
+import { invalidateFeaturePreviews } from "../services/featurePreviews.js";
 
 const router = Router();
 
@@ -406,6 +407,13 @@ inventoryQueue.process(async (job, updateProgress) => {
     batchInspect(userId, ids).catch((err) =>
       console.error("Background inspect error:", err)
     );
+  }
+
+  // Bust feature-preview cache so post-purchase tour / paywall teaser pick up
+  // the fresh inventory totals (totalItems, totalValueUsd, topItem). Skip on
+  // partial failure — invalidating + re-querying stale DB rows is just churn.
+  if (!stale) {
+    invalidateFeaturePreviews(userId);
   }
 
   return { totalItems, privateAccounts, stale };

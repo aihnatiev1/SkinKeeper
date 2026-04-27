@@ -28,6 +28,11 @@ const makeAlert = (overrides: Record<string, any> = {}) => ({
   ...overrides,
 });
 
+// Helper: every evaluateAlerts() call now issues an auto-clear UPDATE *before*
+// the alert SELECT (added with the snooze_until column in 036). Tests that
+// stage a sequence of mocks must satisfy this leading UPDATE first.
+const mockAutoClear = () => mockQuery.mockResolvedValueOnce({ rows: [] });
+
 describe("evaluateAlerts", () => {
   beforeEach(() => {
     mockQuery.mockReset();
@@ -54,6 +59,7 @@ describe("evaluateAlerts", () => {
   it("triggers 'above' alert when price >= threshold", async () => {
     const alert = makeAlert({ condition: "above", threshold: 10.0 });
 
+    mockAutoClear();
     // Query 1: fetch matching alerts
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
     // Query 2: fetch user devices
@@ -79,6 +85,7 @@ describe("evaluateAlerts", () => {
   it("does NOT trigger 'above' alert when price < threshold", async () => {
     const alert = makeAlert({ condition: "above", threshold: 20.0 });
 
+    mockAutoClear();
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
 
     await evaluateAlerts(
@@ -92,6 +99,7 @@ describe("evaluateAlerts", () => {
   it("triggers 'below' alert when price <= threshold", async () => {
     const alert = makeAlert({ condition: "below", threshold: 10.0 });
 
+    mockAutoClear();
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
     mockQuery.mockResolvedValueOnce({ rows: [{ fcm_token: "tok1" }] });
     mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -113,6 +121,7 @@ describe("evaluateAlerts", () => {
   it("triggers 'changePct' alert when % change exceeds threshold", async () => {
     const alert = makeAlert({ condition: "changePct", threshold: 5.0 });
 
+    mockAutoClear();
     // Fetch alerts
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
     // Fetch previous price (for changePct check)
@@ -147,6 +156,7 @@ describe("evaluateAlerts", () => {
       last_triggered_at: recentTrigger,
     });
 
+    mockAutoClear();
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
 
     await evaluateAlerts(
@@ -167,6 +177,7 @@ describe("evaluateAlerts", () => {
       last_triggered_at: oldTrigger,
     });
 
+    mockAutoClear();
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
     mockQuery.mockResolvedValueOnce({ rows: [{ fcm_token: "tok1" }] });
     mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -183,6 +194,7 @@ describe("evaluateAlerts", () => {
   it("skips push when user has no devices", async () => {
     const alert = makeAlert({ condition: "above", threshold: 5.0 });
 
+    mockAutoClear();
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
     // No devices
     mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -198,6 +210,7 @@ describe("evaluateAlerts", () => {
   it("cleans up failed FCM tokens", async () => {
     const alert = makeAlert({ condition: "above", threshold: 5.0 });
 
+    mockAutoClear();
     mockQuery.mockResolvedValueOnce({ rows: [alert] });
     mockQuery.mockResolvedValueOnce({
       rows: [{ fcm_token: "good_token" }, { fcm_token: "bad_token" }],
@@ -229,6 +242,42 @@ describe("evaluateAlerts", () => {
     expect(deleteCalls[0][1]).toEqual([42, "bad_token"]);
   });
 
+  it("auto-clear UPDATE runs before fetching alerts (expired snoozes re-arm)", async () => {
+    // First call should be the auto-clear UPDATE; we let it succeed and then
+    // return no matching alerts so the engine bails out. The point is to
+    // verify the auto-clear query was issued.
+    mockAutoClear();
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // alert SELECT — none match
+
+    await evaluateAlerts(
+      new Map([["AK-47 | Redline (Field-Tested)", 15.0]]),
+      "steam"
+    );
+
+    const firstCall = mockQuery.mock.calls[0]?.[0] as string;
+    expect(firstCall).toContain("UPDATE price_alerts");
+    expect(firstCall).toContain("snooze_until = NULL");
+    expect(firstCall).toContain("snooze_until < NOW()");
+
+    // No push fired because no alert rows came back
+    expect(mockSendPush).not.toHaveBeenCalled();
+  });
+
+  it("guards rule-fire query against snoozed alerts", async () => {
+    mockAutoClear();
+    // SELECT returns no rows because the WHERE excluded the snoozed alert
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await evaluateAlerts(
+      new Map([["AK-47 | Redline (Field-Tested)", 100.0]]),
+      "steam"
+    );
+
+    const selectCall = mockQuery.mock.calls[1]?.[0] as string;
+    expect(selectCall).toContain("(snooze_until IS NULL OR snooze_until < NOW())");
+    expect(mockSendPush).not.toHaveBeenCalled();
+  });
+
   it("handles multiple alerts for different items in one batch", async () => {
     const alert1 = makeAlert({
       id: 1,
@@ -243,6 +292,7 @@ describe("evaluateAlerts", () => {
       threshold: 30.0,
     });
 
+    mockAutoClear();
     mockQuery.mockResolvedValueOnce({ rows: [alert1, alert2] });
     // Devices (shared user)
     mockQuery.mockResolvedValueOnce({ rows: [{ fcm_token: "tok1" }] });

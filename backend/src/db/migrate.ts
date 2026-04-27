@@ -521,6 +521,20 @@ CREATE INDEX IF NOT EXISTS idx_auto_sell_exec_sell_op
 -- services/featureFlags.ts. Default '{}' means "no overrides; use canary/env".
 ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_flags JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS idx_users_feature_flags ON users USING GIN (feature_flags);
+
+-- 036: Alert snooze
+-- Server-side snooze for price alerts. Replaces the P5 device-local
+-- SharedPreferences fallback (which lost state on reinstall / device change).
+-- Convention: while snoozed, is_active=FALSE so existing engine queries skip
+-- the row; engine additionally guards on snooze_until so a manual re-enable
+-- doesn't accidentally fire during the snooze window. Engine auto-clears
+-- snooze_until and flips is_active=TRUE on the next eval cycle after expiry,
+-- so the user doesn't have to tap anything to re-arm.
+-- Index is partial — only snoozed rows live in it (small subset of total alerts).
+ALTER TABLE price_alerts
+  ADD COLUMN IF NOT EXISTS snooze_until TIMESTAMPTZ NULL;
+CREATE INDEX IF NOT EXISTS idx_price_alerts_snooze
+  ON price_alerts (snooze_until) WHERE snooze_until IS NOT NULL;
 `;
 
 export async function migrate() {

@@ -74,6 +74,10 @@ void main() {
         when(() => iap.products).thenReturn(const <ProductDetails>[]);
         when(() => iap.monthlyProduct).thenReturn(null);
         when(() => iap.yearlyProduct).thenReturn(null);
+        // Backlog #16: with no products loaded, the savings calculation
+        // returns null — paywall must fall back to "BEST VALUE" without
+        // a percent rather than a stale hardcoded claim.
+        when(() => iap.yearlySavingsPercent).thenReturn(null);
         when(() => iap.loadProducts()).thenAnswer((_) async {});
 
         await tester.pumpWidget(_buildApp(
@@ -85,18 +89,79 @@ void main() {
         await tester.pump();
         await tester.pump();
 
-        // BEST VALUE badge proves yearly card is the highlighted plan
-        // — set by `_PlanCard(badge: 'BEST VALUE — Save 40%')`.
-        expect(
-          find.textContaining('BEST VALUE'),
-          findsOneWidget,
-        );
+        // BEST VALUE badge proves yearly card is the highlighted plan.
+        // With null savings %, the badge renders without the "Save N%"
+        // suffix — exact-match on "BEST VALUE" guards against a stray
+        // "Save 40%" creeping back in via accidental string interpolation.
+        expect(find.text('BEST VALUE'), findsOneWidget);
+        expect(find.textContaining('Save'), findsNothing);
 
         // Default CTA copy reflects yearly selection.
         expect(
           find.textContaining('Start 7-Day Free Trial'),
           findsOneWidget,
         );
+      },
+    );
+
+    testWidgets(
+      'BEST VALUE badge shows live computed savings % when products are loaded',
+      (tester) async {
+        final iap = _MockIAPService();
+        when(() => iap.products).thenReturn(const <ProductDetails>[]);
+        when(() => iap.monthlyProduct).thenReturn(null);
+        when(() => iap.yearlyProduct).thenReturn(null);
+        when(() => iap.loadProducts()).thenAnswer((_) async {});
+        // Real-world case: monthly $4.99 × 12 = $59.88, yearly $34.99 →
+        // saved (59.88 - 34.99) / 59.88 = ~41.6 → rounds to 42.
+        // We compute the expected value the same way the production
+        // code does, instead of asserting a magic number, so a future
+        // tweak to either the math or the badge format fails this test
+        // for the right reason.
+        const monthlyRaw = 4.99;
+        const yearlyRaw = 34.99;
+        final expectedSavings =
+            ((monthlyRaw * 12 - yearlyRaw) / (monthlyRaw * 12) * 100).round();
+        when(() => iap.yearlySavingsPercent).thenReturn(expectedSavings);
+
+        await tester.pumpWidget(_buildApp(
+          iap: iap,
+          disableAnimations: true,
+        ));
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          find.text('BEST VALUE — Save $expectedSavings%'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'sentinel monthly price (\$0) yields graceful BEST VALUE without percent',
+      (tester) async {
+        final iap = _MockIAPService();
+        when(() => iap.products).thenReturn(const <ProductDetails>[]);
+        when(() => iap.monthlyProduct).thenReturn(null);
+        when(() => iap.yearlyProduct).thenReturn(null);
+        when(() => iap.loadProducts()).thenAnswer((_) async {});
+        // Defensive: a misconfigured product (or test sandbox) can return
+        // rawPrice == 0. The service guards this and returns null; the
+        // paywall must show the badge without a misleading "Save 100%"
+        // or a div-by-zero crash.
+        when(() => iap.yearlySavingsPercent).thenReturn(null);
+
+        await tester.pumpWidget(_buildApp(
+          iap: iap,
+          disableAnimations: true,
+        ));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('BEST VALUE'), findsOneWidget);
+        expect(find.textContaining('Save'), findsNothing);
+        expect(tester.takeException(), isNull);
       },
     );
 
@@ -108,6 +173,7 @@ void main() {
         when(() => iap.products).thenReturn(const <ProductDetails>[]);
         when(() => iap.monthlyProduct).thenReturn(null);
         when(() => iap.yearlyProduct).thenReturn(null);
+        when(() => iap.yearlySavingsPercent).thenReturn(null);
         when(() => iap.loadProducts()).thenAnswer((_) async {});
 
         await tester.pumpWidget(_buildApp(

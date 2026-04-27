@@ -18,6 +18,11 @@ export const toggleAlertSchema = z.object({
   is_active: z.boolean(),
 });
 
+// 036: server-side snooze. Default 24h, max 7d (168h).
+export const snoozeAlertSchema = z.object({
+  hours: z.number().int().min(1).max(168).optional().default(24),
+});
+
 export const registerDeviceSchema = z.object({
   fcm_token: z.string().min(1),
   platform: z.string().min(1).max(10),

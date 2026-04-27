@@ -85,11 +85,16 @@ void main() {
     expect(find.text('AK-47 | Redline (Field-Tested)'), findsOneWidget);
   });
 
-  testWidgets('Snooze button calls PATCH is_active=false and pops sheet',
+  testWidgets('Snooze button POSTs /snooze with 24h and pops sheet',
       (tester) async {
     final api = MockApiClient();
-    when(() => api.patch('/alerts/7', data: any(named: 'data')))
-        .thenAnswer((_) async => mockResponse({'id': 7, 'is_active': false}));
+    when(() => api.post(
+          '/alerts/7/snooze',
+          data: any(named: 'data'),
+          queryParameters: any(named: 'queryParameters'),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        )).thenAnswer((_) async =>
+        mockResponse({'id': 7, 'is_active': false, 'snooze_until': 'x'}));
 
     await tester.pumpWidget(_harness(api: api, routeStub: 'CREATE_ROUTE'));
     await openSheet(tester);
@@ -97,36 +102,70 @@ void main() {
     await tester.pumpAndSettle();
 
     final captured = verify(
-      () => api.patch('/alerts/7', data: captureAny(named: 'data')),
+      () => api.post(
+        '/alerts/7/snooze',
+        data: captureAny(named: 'data'),
+        queryParameters: any(named: 'queryParameters'),
+        receiveTimeout: any(named: 'receiveTimeout'),
+      ),
     ).captured;
-    expect(captured.single, {'is_active': false});
+    expect(captured.single, {'hours': 24});
 
     // Sheet dismissed.
     expect(find.text('Snooze 24h'), findsNothing);
   });
 
-  testWidgets('Relist button calls PATCH is_active=true', (tester) async {
+  testWidgets('Snooze falls back to local prefs on backend failure',
+      (tester) async {
     final api = MockApiClient();
-    when(() => api.patch('/alerts/7', data: any(named: 'data')))
-        .thenAnswer((_) async => mockResponse({'id': 7, 'is_active': true}));
+    when(() => api.post(
+          '/alerts/7/snooze',
+          data: any(named: 'data'),
+          queryParameters: any(named: 'queryParameters'),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        )).thenThrow(Exception('network down'));
+
+    await tester.pumpWidget(_harness(api: api, routeStub: 'CREATE_ROUTE'));
+    await openSheet(tester);
+    await tester.tap(find.text('Snooze 24h'));
+    await tester.pumpAndSettle();
+
+    // Sheet still dismissed — fallback path is treated as success.
+    expect(find.text('Snooze 24h'), findsNothing);
+
+    // The pending offline snooze must be persisted.
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('alert_snooze_v2');
+    expect(raw, isNotNull);
+    expect(raw, contains('"synced":false'));
+    expect(raw, contains('"7"'));
+  });
+
+  testWidgets('Relist button POSTs /unsnooze and pops sheet', (tester) async {
+    final api = MockApiClient();
+    when(() => api.post(
+          '/alerts/7/unsnooze',
+          data: any(named: 'data'),
+          queryParameters: any(named: 'queryParameters'),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        )).thenAnswer((_) async =>
+        mockResponse({'id': 7, 'is_active': true, 'snooze_until': null}));
 
     await tester.pumpWidget(_harness(api: api, routeStub: 'CREATE_ROUTE'));
     await openSheet(tester);
     await tester.tap(find.text('Relist'));
     await tester.pumpAndSettle();
 
-    // Relist is followed by a snooze-clear (duration zero) which also issues
-    // a PATCH is_active=false; the *first* patch we care about is the re-arm.
-    // `captured` returns a flat list of every captured arg across all
-    // matching invocations. Map literal `==` is identity in Dart, so we
-    // assert via `any` + manual key check rather than `contains(literalMap)`.
-    final calls = verify(
-      () => api.patch('/alerts/7', data: captureAny(named: 'data')),
-    ).captured;
-    final reArmed = calls
-        .whereType<Map<String, dynamic>>()
-        .any((m) => m['is_active'] == true);
-    expect(reArmed, isTrue, reason: 'Relist must PATCH is_active=true');
+    verify(
+      () => api.post(
+        '/alerts/7/unsnooze',
+        data: any(named: 'data'),
+        queryParameters: any(named: 'queryParameters'),
+        receiveTimeout: any(named: 'receiveTimeout'),
+      ),
+    ).called(1);
+    // Sheet popped on success.
+    expect(find.text('Relist'), findsNothing);
   });
 
   testWidgets('Edit button navigates to /alerts/create with item name',

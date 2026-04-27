@@ -13,9 +13,9 @@ import '../services/alert_snooze_service.dart';
 /// and Edit (jump to the create flow with the symbol pre-filled).
 ///
 /// Per P3-PLAN §2.4 the platform native push actions are deferred — taps on
-/// a triggered alert open this sheet instead. Backend currently has no
-/// `snooze_until` column, so Snooze is a local-only disable + scheduled
-/// reactivate (see [AlertSnoozeService]).
+/// a triggered alert open this sheet instead. Snooze writes through to the
+/// server (`POST /alerts/:id/snooze`); on network failure it falls back to
+/// the local pending-snooze prefs store and replays on next launch.
 class AlertActionsSheet extends ConsumerStatefulWidget {
   const AlertActionsSheet({super.key, required this.alert});
 
@@ -51,16 +51,10 @@ class _AlertActionsSheetState extends ConsumerState<AlertActionsSheet> {
       _error = null;
     });
     try {
-      // "Relist" semantics: a triggered alert sits at `is_active=true` already
-      // (we don't auto-disable on fire). The user-visible promise is "remind
-      // me again next time it crosses" — done by clearing any pending snooze
-      // and ensuring the alert is enabled. Cooldown then governs spacing.
+      // "Relist" = clear any active snooze AND re-enable. The server unsnooze
+      // route does both atomically; if there was no snooze it's idempotent.
       final api = ref.read(apiClientProvider);
-      await api.patch('/alerts/${widget.alert.id}', data: {'is_active': true});
-      await AlertSnoozeService(api).snooze(
-        widget.alert.id,
-        duration: Duration.zero, // clears any pending snooze immediately
-      );
+      await AlertSnoozeService(api).unsnooze(widget.alert.id);
       ref.invalidate(alertsProvider);
       if (mounted) Navigator.of(context).pop('relist');
     } catch (e) {
@@ -80,17 +74,28 @@ class _AlertActionsSheetState extends ConsumerState<AlertActionsSheet> {
       _error = null;
     });
     final api = ref.read(apiClientProvider);
-    final ok = await AlertSnoozeService(api).snooze(widget.alert.id);
+    final result = await AlertSnoozeService(api).snooze(widget.alert.id);
     if (!mounted) return;
-    if (ok) {
-      ref.invalidate(alertsProvider);
-      Navigator.of(context).pop('snooze');
-    } else {
+    if (!result.ok) {
       setState(() {
         _busy = false;
         _error = 'Failed to snooze — try again';
       });
+      return;
     }
+    ref.invalidate(alertsProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.online
+              ? 'Snoozed for 24 hours'
+              : 'Snoozed offline; will sync when online',
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+    Navigator.of(context).pop('snooze');
   }
 
   void _onEdit() {

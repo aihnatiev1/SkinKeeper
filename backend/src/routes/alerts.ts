@@ -6,7 +6,13 @@ import {
   AuthRequest,
 } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
-import { createAlertSchema, toggleAlertSchema, registerDeviceSchema } from "../middleware/schemas.js";
+import {
+  createAlertSchema,
+  toggleAlertSchema,
+  registerDeviceSchema,
+  snoozeAlertSchema,
+} from "../middleware/schemas.js";
+import { invalidateFeaturePreviews } from "../services/featurePreviews.js";
 
 const router = Router();
 
@@ -18,7 +24,8 @@ router.get(
     try {
       const { rows } = await pool.query(
         `SELECT id, market_hash_name, condition, threshold::float, source,
-                is_active, cooldown_minutes, last_triggered_at, created_at
+                is_active, cooldown_minutes, last_triggered_at, snooze_until,
+                created_at
          FROM price_alerts
          WHERE user_id = $1 AND (is_watchlist = FALSE OR is_watchlist IS NULL)
          ORDER BY created_at DESC`,
@@ -88,6 +95,10 @@ router.post(
          RETURNING id, market_hash_name, condition, threshold, source, is_active, cooldown_minutes, created_at`,
         [req.userId, market_hash_name, condition, threshold, alertSource, cooldown]
       );
+
+      // 5-min preview cache holds alertsActive — bump it so the post-purchase
+      // tour reflects the new alert immediately, not after TTL expiry.
+      invalidateFeaturePreviews(req.userId!);
 
       res.status(201).json(rows[0]);
     } catch (err) {
@@ -248,6 +259,9 @@ router.post(
         [req.userId, marketHashName, targetPrice, source || "any", iconUrl]
       );
 
+      // trackedItemsCount in feature previews changes — invalidate cache
+      invalidateFeaturePreviews(req.userId!);
+
       res.json({ id: rows[0].id, success: true });
     } catch (err) {
       console.error("Watchlist add error:", err);
@@ -266,10 +280,78 @@ router.delete(
         `DELETE FROM price_alerts WHERE id = $1 AND user_id = $2 AND is_watchlist = TRUE`,
         [req.params.id, req.userId]
       );
+      invalidateFeaturePreviews(req.userId!);
       res.json({ success: true });
     } catch (err) {
       console.error("Watchlist remove error:", err);
       res.status(500).json({ error: "Failed to remove from watchlist" });
+    }
+  }
+);
+
+// POST /api/alerts/:id/snooze — server-side snooze (1..168 hours, default 24)
+//
+// Disables the alert and stamps snooze_until = NOW() + hours. The engine has
+// a matching guard so the alert cannot fire even if some other code path
+// flipped is_active back on. After snooze_until elapses, the next engine
+// eval cycle auto-clears the column and re-enables the alert (no user tap
+// needed — see services/alertEngine.ts).
+router.post(
+  "/:id/snooze",
+  authMiddleware,
+  validateBody(snoozeAlertSchema),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { hours } = req.body;
+      const { rows } = await pool.query(
+        `UPDATE price_alerts
+            SET snooze_until = NOW() + ($1 || ' hours')::interval,
+                is_active    = FALSE
+          WHERE id = $2 AND user_id = $3
+          RETURNING id, market_hash_name, condition, threshold, source,
+                    is_active, cooldown_minutes, last_triggered_at,
+                    snooze_until, created_at`,
+        [String(hours), req.params.id, req.userId]
+      );
+      if (rows.length === 0) {
+        res.status(404).json({ error: "Alert not found" });
+        return;
+      }
+      // alertsActive count just dropped by 1 → bust feature-preview cache
+      invalidateFeaturePreviews(req.userId!);
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("Alert snooze error:", err);
+      res.status(500).json({ error: "Failed to snooze alert" });
+    }
+  }
+);
+
+// POST /api/alerts/:id/unsnooze — clear snooze and re-enable
+router.post(
+  "/:id/unsnooze",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `UPDATE price_alerts
+            SET snooze_until = NULL,
+                is_active    = TRUE
+          WHERE id = $1 AND user_id = $2
+          RETURNING id, market_hash_name, condition, threshold, source,
+                    is_active, cooldown_minutes, last_triggered_at,
+                    snooze_until, created_at`,
+        [req.params.id, req.userId]
+      );
+      if (rows.length === 0) {
+        res.status(404).json({ error: "Alert not found" });
+        return;
+      }
+      invalidateFeaturePreviews(req.userId!);
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("Alert unsnooze error:", err);
+      res.status(500).json({ error: "Failed to unsnooze alert" });
     }
   }
 );
@@ -292,6 +374,8 @@ router.patch(
         res.status(404).json({ error: "Alert not found" });
         return;
       }
+      // Toggling is_active changes the alertsActive count in feature previews
+      invalidateFeaturePreviews(req.userId!);
       res.json(rows[0]);
     } catch (err) {
       console.error("Alert toggle error:", err);
@@ -319,6 +403,7 @@ router.delete(
         res.status(404).json({ error: "Alert not found" });
         return;
       }
+      invalidateFeaturePreviews(req.userId!);
       res.json({ success: true });
     } catch (err) {
       console.error("Alert delete error:", err);

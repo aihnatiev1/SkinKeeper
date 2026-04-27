@@ -139,11 +139,14 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
             container: ProviderScope.containerOf(context, listen: false),
           );
           PushService.initHandlers(ref.read(apiClientProvider));
-          // Re-arm any locally-snoozed alerts whose 24h window has elapsed.
-          // Backend has no `snooze_until` column today, so this is the local
-          // catch-up path. Best-effort — failures retry next launch.
+        }
+        // Replay pending offline snoozes + drop expired local hint rows
+        // whenever the auth identity changes (initial login or account
+        // switch). Server-side snoozes auto-clear via the engine — this
+        // path only flushes writes that never reached the server.
+        if (next.valueOrNull != null) {
           AlertSnoozeService(ref.read(apiClientProvider))
-              .reactivateExpiredSnoozes();
+              .replayPendingSnoozes();
         }
         // Reset locked-feature dedupe set whenever the active identity
         // changes (login, logout, account switch). Lets the new session log

@@ -149,6 +149,18 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     final iap = ref.read(iapServiceProvider);
     final monthly = iap.monthlyProduct;
     final yearly = iap.yearlyProduct;
+    // Backlog #16: derive the savings % from live store prices instead of
+    // hardcoding "40%". Apple/Google apply regional pricing, so a fixed
+    // claim can be inaccurate in some markets and Apple review can flag
+    // it as misleading. When the value can't be computed (products not
+    // loaded yet, currency mismatch, etc.) we fall back to "BEST VALUE"
+    // with no percent rather than risk a false claim.
+    // TODO(l10n): the surrounding "BEST VALUE — Save N%" copy is still
+    // hardcoded English; localise the substring once paywall l10n lands.
+    final savingsPercent = ref.watch(yearlySavingsPercentProvider);
+    final yearlyBadge = savingsPercent != null
+        ? 'BEST VALUE — Save $savingsPercent%'
+        : 'BEST VALUE';
 
     // IntrinsicHeight + CrossAxisAlignment.stretch keeps both plan cards
     // the same height even when the yearly card carries a "BEST VALUE"
@@ -176,7 +188,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               title: 'Yearly',
               price: yearly?.price ?? '\$34.99',
               subtitle: '7-day free trial',
-              badge: 'BEST VALUE — Save 40%',
+              badge: yearlyBadge,
               badgeColor: AppTheme.warning,
               isSelected: _selectedYearly,
               highlightAccent: AppTheme.warning,

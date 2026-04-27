@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../../core/api_client.dart';
@@ -12,6 +13,40 @@ import 'tour/tour_provider.dart';
 const _kMonthlyId = 'skinkeeper_pro_monthly';
 const _kYearlyId = 'skinkeeper_pro_yearly';
 const _kProductIds = {_kMonthlyId, _kYearlyId};
+
+/// Pure computation of the yearly-vs-monthly savings %, exposed as a
+/// top-level function so it can be unit-tested without bringing up
+/// `IAPService` (whose constructor wires the `in_app_purchase` plugin
+/// and can't run in flutter_test).
+///
+/// Rules — see [IAPService.yearlySavingsPercent] dartdoc for the
+/// reasoning. Returns null on any of:
+/// - either product missing
+/// - currency code mismatch (cross-currency ratio is meaningless)
+/// - non-positive raw price (sentinel/test data)
+/// - result <=0 or >=100 (misconfigured pricing — yearly costlier than
+///   12× monthly, or essentially free)
+@visibleForTesting
+int? computeYearlySavingsPercent(
+  ProductDetails? monthly,
+  ProductDetails? yearly,
+) {
+  if (monthly == null || yearly == null) return null;
+  if (monthly.currencyCode != yearly.currencyCode) return null;
+  final monthlyRaw = monthly.rawPrice;
+  final yearlyRaw = yearly.rawPrice;
+  if (monthlyRaw <= 0 || yearlyRaw <= 0) return null;
+  final fullYear = monthlyRaw * 12;
+  if (fullYear <= 0) return null;
+  final saved = (fullYear - yearlyRaw) / fullYear * 100;
+  if (saved <= 0 || saved >= 100) return null;
+  final rounded = saved.round();
+  // Belt-and-braces: even if `saved` is 99.5+, rounding can lift it to
+  // 100, which is misleading copy ("Save 100%" suggests free). Drop to
+  // null so the badge falls back to the unqualified "BEST VALUE".
+  if (rounded <= 0 || rounded >= 100) return null;
+  return rounded;
+}
 
 // ---- Subscription Status Model ----
 
@@ -94,6 +129,24 @@ final iapServiceProvider = Provider<IAPService>((ref) {
   return service;
 });
 
+/// Live yearly-vs-monthly savings %, derived from real store prices.
+///
+/// `null` whenever [IAPService.yearlySavingsPercent] returns null —
+/// products not loaded, currency mismatch, sentinel prices, or out-of-
+/// range result. Consumers (paywall badge) treat `null` as "show the
+/// badge text without a percent" so the UI never makes a numerical
+/// claim it can't back up with the active store price.
+///
+/// Note: this is a thin pass-through over `iapServiceProvider`. Because
+/// `IAPService.products` mutates in place after `loadProducts`, Riverpod
+/// won't auto-recompute — callers should `ref.read` after the paywall's
+/// loading state has flipped (paywall does this via its own
+/// `setState(() => _loadingProducts = false)`), or `ref.watch` inside a
+/// widget that already rebuilds on that flip.
+final yearlySavingsPercentProvider = Provider<int?>((ref) {
+  return ref.watch(iapServiceProvider).yearlySavingsPercent;
+});
+
 class IAPService {
   final Ref _ref;
   final InAppPurchase _iap = InAppPurchase.instance;
@@ -111,6 +164,25 @@ class IAPService {
 
   ProductDetails? get yearlyProduct =>
       _products.where((p) => p.id == _kYearlyId).firstOrNull;
+
+  /// Percentage savings of the yearly plan vs paying the monthly plan
+  /// 12 times, derived from real StoreKit / Play Billing prices.
+  ///
+  /// Returns `null` when the calculation can't be trusted:
+  /// - either product is missing (products not loaded yet, region with
+  ///   only one SKU configured, etc.)
+  /// - either price is non-positive (sentinel/test data)
+  /// - currency codes mismatch (ratio across currencies is meaningless)
+  /// - the result is non-positive or >=100% (yearly priced higher than
+  ///   12× monthly, or essentially free — both indicate misconfigured
+  ///   pricing rather than a real saving)
+  ///
+  /// Apple/Google can apply regional pricing — a hardcoded "Save 40%"
+  /// can be a lie in markets where the yearly discount differs, and
+  /// Apple's review can flag misleading claims. Computing live prevents
+  /// that.
+  int? get yearlySavingsPercent =>
+      computeYearlySavingsPercent(monthlyProduct, yearlyProduct);
 
   Future<void> _init() async {
     final available = await _iap.isAvailable();

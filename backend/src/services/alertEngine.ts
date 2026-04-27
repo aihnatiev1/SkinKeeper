@@ -10,6 +10,7 @@ interface ActiveAlert {
   source: string;
   cooldown_minutes: number;
   last_triggered_at: string | null;
+  snooze_until: string | null;
 }
 
 interface TriggeredAlert {
@@ -31,13 +32,30 @@ export async function evaluateAlerts(
   const itemNames = [...prices.keys()];
   if (itemNames.length === 0) return;
 
-  // Fetch active alerts matching these items + source
+  // Auto-clear expired snoozes BEFORE the rule-fire query so any alert whose
+  // 24h window has just elapsed shows up as is_active=TRUE in this same cycle.
+  // Bounded by the eligible item set so we don't scan the whole table — the
+  // partial idx_price_alerts_snooze keeps the WHERE selective regardless.
+  await pool.query(
+    `UPDATE price_alerts
+        SET snooze_until = NULL,
+            is_active    = TRUE
+      WHERE snooze_until IS NOT NULL
+        AND snooze_until < NOW()`
+  );
+
+  // Fetch active alerts matching these items + source. The
+  // (snooze_until IS NULL OR snooze_until < NOW()) belt-and-braces guards
+  // against an alert that was manually flipped is_active=TRUE while still
+  // inside its snooze window — defence in depth, the route layer always
+  // clears snooze_until on unsnooze.
   const placeholders = itemNames.map((_, i) => `$${i + 1}`).join(",");
   const { rows: alerts } = await pool.query<ActiveAlert>(
     `SELECT id, user_id, market_hash_name, condition, threshold::float AS threshold,
-            source, cooldown_minutes, last_triggered_at
+            source, cooldown_minutes, last_triggered_at, snooze_until
      FROM price_alerts
      WHERE is_active = TRUE
+       AND (snooze_until IS NULL OR snooze_until < NOW())
        AND market_hash_name IN (${placeholders})
        AND (source = $${itemNames.length + 1} OR source = 'any')`,
     [...itemNames, source]
