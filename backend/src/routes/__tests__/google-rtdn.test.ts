@@ -385,6 +385,69 @@ describe("POST /api/purchases/google-rtdn-<token>", () => {
     expect(mockInvalidatePremiumCache.mock.calls.length).toBe(cacheCallsBefore);
   });
 
+  // HIGH-6 (migration 038): when the user has been deleted, the receipt's
+  // user_id is NULL but deleted_user_id preserves the original owner.
+  // The RTDN handler must:
+  //   1. Detect the soft-deleted state (live user_id IS NULL).
+  //   2. Log the refund/event for audit (forensic paper trail).
+  //   3. Skip premium revocation (no live user row to update).
+  //   4. NOT crash trying to UPDATE users WHERE id = NULL.
+  it("HIGH-6: REVOKED for soft-deleted user (user_id=NULL, deleted_user_id set) → no UPDATE users, no cache invalidation", async () => {
+    // SELECT returns the soft-deleted shape — live link gone, audit link kept.
+    mockPoolQuery.mockResolvedValueOnce({
+      rows: [{ user_id: null, deleted_user_id: 42, revoked_at: null }],
+      rowCount: 1,
+    });
+
+    const res = await request(app)
+      .post(RTDN_PATH)
+      .send(pubsubEnvelope(subscriptionPayload(12)));
+
+    expect(res.status).toBe(204);
+    // Only the SELECT lookup — handler bails after detecting soft-delete.
+    // No UPDATE users (no live row), no UPDATE purchase_receipts.
+    expect(mockPoolQuery).toHaveBeenCalledTimes(1);
+    expect(mockInvalidatePremiumCache).not.toHaveBeenCalled();
+  });
+
+  it("HIGH-6: receipt with both user_id NULL and deleted_user_id NULL → warn, 204, no writes", async () => {
+    // Defensive: a row with NEITHER live nor deleted user shouldn't normally
+    // exist. If it does (data corruption / manual SQL gone wrong), don't crash.
+    mockPoolQuery.mockResolvedValueOnce({
+      rows: [{ user_id: null, deleted_user_id: null, revoked_at: null }],
+      rowCount: 1,
+    });
+
+    const res = await request(app)
+      .post(RTDN_PATH)
+      .send(pubsubEnvelope(subscriptionPayload(12)));
+
+    expect(res.status).toBe(204);
+    expect(mockPoolQuery).toHaveBeenCalledTimes(1);
+    expect(mockInvalidatePremiumCache).not.toHaveBeenCalled();
+  });
+
+  it("HIGH-6: live user_id wins over deleted_user_id (active subscription path)", async () => {
+    // If somehow both columns are populated (re-registered same Steam ID, edge
+    // case), the live user_id is authoritative — refund applies to them.
+    mockPoolQuery
+      .mockResolvedValueOnce({
+        rows: [{ user_id: 7, deleted_user_id: 99, revoked_at: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // UPDATE users
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE purchase_receipts
+
+    const res = await request(app)
+      .post(RTDN_PATH)
+      .send(pubsubEnvelope(subscriptionPayload(12)));
+
+    expect(res.status).toBe(204);
+    // Cache invalidated for the LIVE user, not the deleted one.
+    expect(mockInvalidatePremiumCache).toHaveBeenCalledWith(7);
+    expect(mockInvalidatePremiumCache).not.toHaveBeenCalledWith(99);
+  });
+
   it("missing subscriptionNotification (oneTimeProduct only) → 204, no DB", async () => {
     const payload = {
       version: "1.0",

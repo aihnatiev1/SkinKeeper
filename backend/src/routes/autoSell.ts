@@ -101,6 +101,13 @@ const listExecutionsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
+// Stats period — default 30d, capped at 1y. The 1y query is heavier (more
+// rows + GROUP BY DATE) so we don't make it the default. Clients pick from
+// {7, 30, 90, 365} via chips but anything in [1, 365] is accepted.
+const statsQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(365).default(30),
+});
+
 // ─── Premium limits ──────────────────────────────────────────────────────
 
 const MAX_RULES_PER_USER_PREMIUM = 10;
@@ -350,6 +357,122 @@ router.get(
     } catch (err) {
       console.error("Auto-sell executions fetch error:", err);
       res.status(500).json({ error: "Failed to fetch executions" });
+    }
+  }
+);
+
+/**
+ * GET /api/auto-sell/stats?days=N — user dashboard aggregates.
+ *
+ * Drives the in-app "auto-sell dashboard" screen (P11). PREMIUM-gated so
+ * the dashboard is only visible to active PRO subscribers — same gating as
+ * rule mutations. Lapsed users hit 403 and the screen falls back to the
+ * paywall via the standard PremiumGate plumbing.
+ *
+ * Returns two payloads in one round-trip:
+ *   - `stats`: scalar counters and totals across the period.
+ *   - `history`: per-day fire counts for the chart. Sparse — we only emit
+ *     rows for days that actually had fires, so the client must fill gaps
+ *     when plotting (avoids dragging a full N-row payload across the wire
+ *     for users with sparse rule activity).
+ *
+ * NOT gated by `requireFeatureFlag('auto_sell')`: if we kill-switch the
+ * engine the dashboard should still show "your last 30 days of activity"
+ * — same rationale as DELETE /rules/:id staying open during a kill.
+ */
+router.get(
+  "/stats",
+  authMiddleware,
+  requirePremium,
+  validateQuery(statsQuerySchema),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      // Express 5 makes req.query a getter that doesn't accept the merged
+      // data from validateQuery cleanly — the raw string survives. Re-parse
+      // here so `days` is a true number for arithmetic + JSON output. Zod
+      // already validated the bounds in middleware.
+      const parsed = statsQuerySchema.safeParse(req.query);
+      const days = parsed.success ? parsed.data.days : 30;
+
+      // Single round-trip aggregate. The CTE scopes by the active user's
+      // rules so this is IDOR-safe — `auto_sell_rules.user_id` is the only
+      // ownership boundary. We bind `days` as a parameter and multiply by
+      // INTERVAL '1 day' in SQL so the planner can still use the
+      // `(rule_id, fired_at DESC)` index.
+      const { rows: stats } = await pool.query(
+        `WITH e AS (
+           SELECT ae.action, ae.error_message, ae.actual_price_usd,
+                  ae.intended_list_price_usd, ae.trigger_price_usd
+             FROM auto_sell_executions ae
+             JOIN auto_sell_rules ar ON ae.rule_id = ar.id
+            WHERE ar.user_id = $1
+              AND ae.fired_at > NOW() - ($2 || ' days')::INTERVAL
+         )
+         SELECT
+           (SELECT COUNT(*)::int FROM auto_sell_rules
+              WHERE user_id = $1 AND cancelled_at IS NULL) AS active_rules,
+           (SELECT COUNT(*)::int FROM auto_sell_rules
+              WHERE user_id = $1 AND mode = 'auto_list' AND cancelled_at IS NULL) AS auto_list_rules,
+           (SELECT COUNT(*)::int FROM e) AS total_fires,
+           (SELECT COUNT(*)::int FROM e WHERE action = 'listed') AS listed_count,
+           (SELECT COUNT(*)::int FROM e WHERE action = 'cancelled') AS cancelled_count,
+           (SELECT COUNT(*)::int FROM e WHERE action = 'failed') AS failed_count,
+           (SELECT COUNT(*)::int FROM e WHERE action = 'notified') AS notified_count,
+           (SELECT COALESCE(SUM(intended_list_price_usd), 0)::float
+              FROM e WHERE action = 'listed' AND intended_list_price_usd IS NOT NULL) AS total_listed_value_usd,
+           (SELECT COALESCE(AVG(intended_list_price_usd - trigger_price_usd), 0)::float
+              FROM e
+             WHERE action = 'listed'
+               AND intended_list_price_usd IS NOT NULL
+               AND intended_list_price_usd > 0
+               AND trigger_price_usd > 0) AS avg_premium_over_trigger,
+           (SELECT json_agg(json_build_object('reason', reason, 'count', cnt) ORDER BY cnt DESC)
+              FROM (
+                SELECT COALESCE(error_message, 'unknown') AS reason, COUNT(*)::int AS cnt
+                  FROM e
+                 WHERE (action = 'failed' OR action = 'notified')
+                   AND error_message IS NOT NULL
+              GROUP BY error_message
+              ORDER BY cnt DESC
+                 LIMIT 5
+              ) refs) AS top_refusal_reasons`,
+        [req.userId, String(days)]
+      );
+
+      const { rows: history } = await pool.query(
+        `SELECT TO_CHAR(DATE(ae.fired_at), 'YYYY-MM-DD') AS date,
+                COUNT(*)::int AS fires,
+                COUNT(*) FILTER (WHERE ae.action = 'listed')::int AS listed,
+                COALESCE(SUM(ae.intended_list_price_usd) FILTER (WHERE ae.action = 'listed'), 0)::float AS listed_value
+           FROM auto_sell_executions ae
+           JOIN auto_sell_rules ar ON ae.rule_id = ar.id
+          WHERE ar.user_id = $1
+            AND ae.fired_at > NOW() - ($2 || ' days')::INTERVAL
+       GROUP BY DATE(ae.fired_at)
+       ORDER BY DATE(ae.fired_at) ASC`,
+        [req.userId, String(days)]
+      );
+
+      const row = stats[0] ?? {};
+      res.json({
+        stats: {
+          active_rules: row.active_rules ?? 0,
+          auto_list_rules: row.auto_list_rules ?? 0,
+          total_fires: row.total_fires ?? 0,
+          listed_count: row.listed_count ?? 0,
+          cancelled_count: row.cancelled_count ?? 0,
+          failed_count: row.failed_count ?? 0,
+          notified_count: row.notified_count ?? 0,
+          total_listed_value_usd: row.total_listed_value_usd ?? 0,
+          avg_premium_over_trigger: row.avg_premium_over_trigger ?? 0,
+          top_refusal_reasons: row.top_refusal_reasons ?? [],
+        },
+        history,
+        period_days: days,
+      });
+    } catch (err) {
+      console.error("Auto-sell stats error:", err);
+      res.status(500).json({ error: "Failed to fetch auto-sell stats" });
     }
   }
 );

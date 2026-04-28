@@ -190,6 +190,113 @@ describe("evaluateRules — fire path", () => {
     mockIsFirebaseReady.mockReturnValue(false); // no push noise; assert by DB calls
   });
 
+  // MED-3: push notification body must NOT contain dollar amounts that would
+  // surface portfolio activity on the device lock screen. Pricing rides in
+  // the data payload only — the in-app modal reads it once authenticated.
+  describe("MED-3 lock-screen privacy", () => {
+    beforeEach(() => {
+      mockIsFirebaseReady.mockReturnValue(true);
+    });
+
+    it("sendCancelWindowPush: body has no $ amount, data payload has intendedPriceUsd", async () => {
+      const okRule = { ...baseRule, sell_price_usd: 9.5 };
+      // Sequence: lock probe + rules + price + insert + bumpFiredCounters
+      // + getUserFcmTokens (push) + drain SELECT + unlock
+      mockQuery.mockImplementation((sql: string) => {
+        if (sql.includes("pg_try_advisory_lock"))
+          return Promise.resolve({ rows: [{ locked: true }], rowCount: 1 });
+        if (sql.includes("FROM auto_sell_rules"))
+          return Promise.resolve({ rows: [okRule], rowCount: 1 });
+        if (sql.includes("FROM current_prices"))
+          return Promise.resolve({ rows: [{ price_usd: 10 }] });
+        if (sql.includes("INSERT INTO auto_sell_executions"))
+          return Promise.resolve({ rows: [{ id: 555 }] });
+        if (sql.includes("UPDATE auto_sell_rules"))
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        if (sql.includes("FROM user_devices"))
+          return Promise.resolve({ rows: [{ fcm_token: "tok-abc" }] });
+        if (sql.includes("pg_advisory_unlock"))
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        // drainExpiredCancelWindows
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      });
+
+      await evaluateRules();
+
+      // Find the cancel-window push call.
+      const pushCall = mockSendPush.mock.calls.find(
+        (c) =>
+          (c[3] as Record<string, string> | undefined)?.type ===
+          "auto_sell_cancel_window"
+      );
+      expect(pushCall).toBeDefined();
+      const [, title, body, data] = pushCall as [
+        unknown,
+        string,
+        string,
+        Record<string, string>,
+      ];
+
+      // Title & body have no portfolio dollar amount.
+      expect(title).not.toMatch(/\$/);
+      expect(body).not.toMatch(/\$/);
+      // Body still identifies the rule (user needs context to act).
+      expect(body).toContain(baseRule.market_hash_name);
+
+      // Pricing rides in data payload — read by cancel_window_modal.dart.
+      expect(data.intendedPriceUsd).toBe("9.50");
+      expect(data.actualPriceUsd).toBe("10.00");
+      expect(data.executionId).toBe("555");
+      expect(data.userId).toBe(String(baseRule.user_id));
+    });
+
+    it("sendNotifyOnlyPush (MIN guard refusal): body has no $ amount, refusalReason in data only", async () => {
+      // baseRule has sell_price_usd=5, currentPrice=20 below → ratio=0.25 → MIN guard.
+      mockQuery.mockImplementation((sql: string) => {
+        if (sql.includes("pg_try_advisory_lock"))
+          return Promise.resolve({ rows: [{ locked: true }], rowCount: 1 });
+        if (sql.includes("FROM auto_sell_rules"))
+          return Promise.resolve({ rows: [baseRule], rowCount: 1 });
+        if (sql.includes("FROM current_prices"))
+          return Promise.resolve({ rows: [{ price_usd: 20 }] });
+        if (sql.includes("INSERT INTO auto_sell_executions"))
+          return Promise.resolve({ rows: [{ id: 999 }] });
+        if (sql.includes("UPDATE auto_sell_rules"))
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        if (sql.includes("FROM user_devices"))
+          return Promise.resolve({ rows: [{ fcm_token: "tok-abc" }] });
+        if (sql.includes("pg_advisory_unlock"))
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      });
+
+      await evaluateRules();
+
+      const pushCall = mockSendPush.mock.calls.find(
+        (c) =>
+          (c[3] as Record<string, string> | undefined)?.type ===
+          "auto_sell_notify"
+      );
+      expect(pushCall).toBeDefined();
+      const [, title, body, data] = pushCall as [
+        unknown,
+        string,
+        string,
+        Record<string, string>,
+      ];
+
+      // Title is generic (no portfolio leak).
+      expect(title).toBe("SkinKeeper auto-sell");
+      // Body for refusals comes from refusalReason — already $-free by design,
+      // assert that explicitly so future refusalReason changes don't regress.
+      expect(body).not.toMatch(/\$/);
+      // refusalReason present in data for in-app rendering.
+      expect(data.refusalReason).toMatch(/refusing to auto-list/i);
+      // Actual pricing in data.
+      expect(data.actualPriceUsd).toBe("20.00");
+    });
+  });
+
   it("MIN guard: ratio < 0.5 → action='notified' with refusalReason set", async () => {
     // sell_price=5 (fixed), currentPrice=20 → ratio=0.25 (< 0.5) → MIN guard fires.
     // Even though rule.mode='auto_list', the fire is downgraded to notified.

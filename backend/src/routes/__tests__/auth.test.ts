@@ -352,3 +352,71 @@ describe("POST /api/auth/accounts/link — premium gate", () => {
     expect(typeof res.body.url).toBe("string");
   });
 });
+
+// ─── DELETE /api/auth/user — HIGH-6 soft-delete of receipts ──────────────
+
+describe("DELETE /api/auth/user (HIGH-6)", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  it("stamps purchase_receipts.deleted_user_id BEFORE deleting the user row", async () => {
+    mockDemoCheck();
+    // 1: UPDATE users SET active_account_id = NULL
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    // 2: UPDATE purchase_receipts SET deleted_user_id = user_id (HIGH-6)
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    // 3: DELETE FROM users RETURNING ...
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 1,
+          steam_id: "76561198000000001",
+          display_name: "TestUser",
+          created_at: new Date().toISOString(),
+        },
+      ],
+      rowCount: 1,
+    });
+
+    const res = await request(app)
+      .delete("/api/auth/user")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Critical ordering assertion: the receipts UPDATE must run BEFORE the
+    // DELETE. If they ran in reverse, the cascade would have already run
+    // ON DELETE SET NULL on user_id, and the UPDATE would find zero rows
+    // to stamp.
+    const sqls = mockQuery.mock.calls.map((c) => (c[0] as string) ?? "");
+    const stampIdx = sqls.findIndex((s) =>
+      /UPDATE purchase_receipts[\s\S]+SET deleted_user_id = user_id/.test(s)
+    );
+    const deleteIdx = sqls.findIndex((s) => /DELETE FROM users/.test(s));
+    expect(stampIdx).toBeGreaterThan(-1);
+    expect(deleteIdx).toBeGreaterThan(-1);
+    expect(stampIdx).toBeLessThan(deleteIdx);
+
+    // Stamp UPDATE was parameterized with the user id from the JWT.
+    const stampCall = mockQuery.mock.calls.find((c) =>
+      typeof c[0] === "string" &&
+      /UPDATE purchase_receipts[\s\S]+SET deleted_user_id/.test(c[0] as string)
+    );
+    expect((stampCall![1] as unknown[])[0]).toBe(1);
+  });
+
+  it("returns 404 when user row already gone (idempotent re-call)", async () => {
+    mockDemoCheck();
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 }); // active_account_id clear
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 }); // receipts stamp (no rows)
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 }); // DELETE returns nothing
+
+    const res = await request(app)
+      .delete("/api/auth/user")
+      .set("Authorization", `Bearer ${jwt}`);
+
+    expect(res.status).toBe(404);
+  });
+});

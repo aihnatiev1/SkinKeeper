@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api_client.dart';
 import '../models/auto_sell_execution.dart';
 import '../models/auto_sell_rule.dart';
+import '../models/auto_sell_stats.dart';
 
 /// Thin HTTP layer over the `/api/auto-sell/*` routes. Pure dio (no retrofit) —
 /// the project doesn't generate retrofit clients anywhere, and the surface
@@ -89,6 +90,16 @@ class AutoSellApi {
     return (res.data['executions'] as List)
         .map((j) => AutoSellExecution.fromJson(j as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Aggregated user-scoped stats over the last [days] days. Backend gates
+  /// on premium — non-premium callers will throw `PREMIUM_REQUIRED` 403.
+  Future<AutoSellStats> getStats({int days = 30}) async {
+    final res = await _client.get(
+      '/auto-sell/stats',
+      queryParameters: {'days': days},
+    );
+    return AutoSellStats.fromJson(res.data as Map<String, dynamic>);
   }
 
   /// Cancels a `pending_window` execution. Backend returns 409 if the

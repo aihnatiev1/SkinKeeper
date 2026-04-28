@@ -159,8 +159,17 @@ export async function handleGooglePlayNotification(
   // Resolve user via the purchase token. We stored it as both
   // transaction_id (Google's stable handle) and may have stored it as
   // original_transaction_id when latestOrderId was missing — check both.
-  const { rows } = await pool.query<{ user_id: number; revoked_at: Date | null }>(
-    `SELECT user_id, revoked_at
+  //
+  // HIGH-6 (migration 038): receipts now soft-delete via SET NULL on
+  // user_id + a deleted_user_id stamp. If the live user is gone but
+  // we know who the deleted owner was, log the refund for audit and
+  // bail without trying to revoke premium on a non-existent user row.
+  const { rows } = await pool.query<{
+    user_id: number | null;
+    deleted_user_id: number | null;
+    revoked_at: Date | null;
+  }>(
+    `SELECT user_id, deleted_user_id, revoked_at
        FROM purchase_receipts
        WHERE transaction_id = $1 OR original_transaction_id = $1
        ORDER BY created_at DESC
@@ -175,7 +184,24 @@ export async function handleGooglePlayNotification(
     return;
   }
 
-  const userId = rows[0].user_id;
+  const liveUserId = rows[0].user_id;
+  const deletedUserId = rows[0].deleted_user_id;
+
+  if (liveUserId == null) {
+    if (deletedUserId != null) {
+      console.log(
+        `[RTDN] type=${notificationType} sub=${subscriptionId} for deleted user ${deletedUserId} ` +
+          `token=${purchaseToken.slice(0, 12)}… — logged for audit, no further action`
+      );
+    } else {
+      console.warn(
+        `[RTDN] receipt user link missing for token ${purchaseToken.slice(0, 12)}… (type=${notificationType})`
+      );
+    }
+    return;
+  }
+
+  const userId = liveUserId;
   const alreadyRevoked = rows[0].revoked_at !== null;
 
   console.log(

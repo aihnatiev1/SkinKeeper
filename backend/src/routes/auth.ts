@@ -49,10 +49,14 @@ router.post("/refresh", async (req: Request, res: Response) => {
     }
     const oldToken = authHeader.substring(7);
 
-    // Verify with ignoreExpiration — allow recently expired tokens (up to 7 days past expiry)
+    // Verify with ignoreExpiration — allow recently expired tokens (up to 7 days past expiry).
+    // MED-1: pin algorithm to HS256 (matches signing path in this file and middleware/auth.ts).
     let decoded: any;
     try {
-      decoded = jwt.verify(oldToken, process.env.JWT_SECRET!, { ignoreExpiration: true });
+      decoded = jwt.verify(oldToken, process.env.JWT_SECRET!, {
+        ignoreExpiration: true,
+        algorithms: ["HS256"],
+      });
     } catch {
       res.status(401).json({ code: "TOKEN_EXPIRED", error: "Token invalid" });
       return;
@@ -681,9 +685,29 @@ router.delete("/user", authMiddleware, async (req: AuthRequest, res: Response) =
       [req.userId]
     );
 
+    // HIGH-6 (migration 038): preserve refund/chargeback audit trail.
+    // purchase_receipts.user_id flips to NULL on cascade now (was CASCADE
+    // delete pre-038), but we stash the original user id in
+    // deleted_user_id BEFORE the user row goes away so refund webhooks
+    // (Apple ASSN, Google RTDN, Stripe) that arrive AFTER deletion can
+    // still attribute the refund to the correct deleted user. Without
+    // this, refunds become permanently untraceable — a compliance and
+    // chargeback-dispute problem. GDPR Art. 17(3)(e) carves out exactly
+    // this case (retention for the establishment/exercise/defence of
+    // legal claims). No PII is preserved — only the integer user id.
+    await pool.query(
+      `UPDATE purchase_receipts
+          SET deleted_user_id = user_id
+        WHERE user_id = $1
+          AND deleted_user_id IS NULL`,
+      [req.userId]
+    );
+
     // Delete user — CASCADE handles: steam_accounts, inventory_items, transactions,
     // price_alerts, sell_operations, trade_offers, daily_pl_snapshots, user_devices,
-    // purchase_receipts, portfolios, item_cost_basis, sell_volume
+    // portfolios, item_cost_basis, sell_volume.
+    // purchase_receipts.user_id is SET NULL (post-038) so the row survives
+    // for refund/chargeback handling.
     const { rows } = await pool.query(
       `DELETE FROM users WHERE id = $1 RETURNING id, steam_id, display_name, created_at`,
       [req.userId]

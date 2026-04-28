@@ -270,6 +270,77 @@ describe("CRIT-1/2: Apple receipt user-binding", () => {
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("RECEIPT_ALREADY_LINKED");
   });
+
+  // CRIT-1/2 DB-level hardening (migration 038 — UNIQUE on
+  // original_transaction_id). The application-layer SELECT FOR UPDATE catches
+  // the common case; the unique index is the backstop for races / admin
+  // tools / manual SQL. When the INSERT raises 23505 with the
+  // uniq_purchase_receipts_orig_tx constraint name, activatePremium must:
+  //   - ROLLBACK the txn (no premium granted)
+  //   - throw ReceiptAlreadyLinkedError so the route returns 409
+  it("DB UNIQUE index race: INSERT 23505 → 409 RECEIPT_ALREADY_LINKED, premium NOT granted", async () => {
+    mockDemoCheck(2);
+    // Race scenario: SELECT FOR UPDATE finds nothing (the conflicting row
+    // didn't exist yet at probe time), then INSERT collides with a row that
+    // appeared mid-flight.
+    const uniqueViolation = Object.assign(new Error("duplicate key"), {
+      code: "23505",
+      constraint: "uniq_purchase_receipts_orig_tx",
+    });
+    mockClientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT FOR UPDATE — clean
+      .mockRejectedValueOnce(uniqueViolation) // INSERT raises 23505
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // ROLLBACK
+
+    const res = await request(app)
+      .post("/api/purchases/verify")
+      .set("Authorization", `Bearer ${userBJwt}`)
+      .send({
+        store: "apple",
+        receiptData: JSON.stringify(baseReceipt),
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("RECEIPT_ALREADY_LINKED");
+
+    // UPDATE users SET is_premium=TRUE must NOT have run.
+    const sqlCalls = mockClientQuery.mock.calls.map(
+      (c) => (c[0] as string) ?? ""
+    );
+    expect(
+      sqlCalls.some((s) => s.includes("UPDATE users SET is_premium"))
+    ).toBe(false);
+  });
+
+  it("DB UNIQUE index race: 23505 from a DIFFERENT constraint → bubbles as 500 (don't mask data bugs)", async () => {
+    // Defensive: if some OTHER unique constraint fires (e.g. someone adds
+    // a UNIQUE on transaction_id without ON CONFLICT, future bug), we must
+    // NOT silently convert it to RECEIPT_ALREADY_LINKED — that would hide
+    // legit data-integrity issues. Only our named constraint is converted.
+    mockDemoCheck(2);
+    const otherViolation = Object.assign(new Error("duplicate key"), {
+      code: "23505",
+      constraint: "some_other_unique_constraint",
+    });
+    mockClientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT — clean
+      .mockRejectedValueOnce(otherViolation) // INSERT — different unique
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // ROLLBACK (outer catch)
+
+    const res = await request(app)
+      .post("/api/purchases/verify")
+      .set("Authorization", `Bearer ${userBJwt}`)
+      .send({
+        store: "apple",
+        receiptData: JSON.stringify(baseReceipt),
+      });
+
+    // Generic 500 — the route's outer try/catch handles unknown errors.
+    expect(res.status).toBe(500);
+    expect(res.body.code).not.toBe("RECEIPT_ALREADY_LINKED");
+  });
 });
 
 describe("HIGH-4: empty transactionId rejection", () => {

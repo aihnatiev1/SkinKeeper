@@ -28,7 +28,13 @@ export async function authMiddleware(
 
   const token = header.slice(7);
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as {
+    // MED-1: pin algorithm to HS256 explicitly. jsonwebtoken@9 already rejects
+    // `alg: none` by default, but historical algorithm-confusion bugs (e.g.
+    // public-key supplied as HMAC secret) have crossed asymmetric→HMAC and
+    // pinning closes the door. We sign with HS256 below; verify must agree.
+    const payload = jwt.verify(token, process.env.JWT_SECRET!, {
+      algorithms: ["HS256"],
+    }) as {
       userId: number;
       steamId?: string; // legacy — no longer included in new tokens
       exp?: number;

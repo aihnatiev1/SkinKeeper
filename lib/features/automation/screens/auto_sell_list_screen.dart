@@ -82,7 +82,23 @@ class AutoSellListScreen extends ConsumerWidget {
                               .valueOrNull
                               ?.length ??
                           0;
-                      return _RuleCounterChip(used: count, max: rulesLimit);
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // P11 dashboard entry — chart icon next to the
+                          // counter chip. Premium-only because the
+                          // dashboard is gated and we don't tease here
+                          // (the list screen's own gate handles that).
+                          IconButton(
+                            tooltip: 'My auto-sell stats',
+                            icon: const Icon(Icons.insights_rounded,
+                                size: 20, color: AppTheme.textSecondary),
+                            onPressed: () =>
+                                context.push('/auto-sell/dashboard'),
+                          ),
+                          _RuleCounterChip(used: count, max: rulesLimit),
+                        ],
+                      );
                     }),
                 ],
               ),

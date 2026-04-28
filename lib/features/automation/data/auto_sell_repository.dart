@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/auto_sell_execution.dart';
 import '../models/auto_sell_rule.dart';
+import '../models/auto_sell_stats.dart';
 import 'auto_sell_api.dart';
 
 /// Repository over [AutoSellApi]. Right now it's a pass-through — we don't
@@ -69,6 +70,9 @@ class AutoSellRepository {
   }
 
   Future<void> cancelExecution(int id) => _api.cancelExecution(id);
+
+  Future<AutoSellStats> getStats({int days = 30}) =>
+      _api.getStats(days: days);
 }
 
 final autoSellRepositoryProvider = Provider<AutoSellRepository>((ref) {

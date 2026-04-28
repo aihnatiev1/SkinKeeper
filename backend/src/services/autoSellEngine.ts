@@ -547,6 +547,15 @@ async function bumpRuleFiredCounters(ruleId: number): Promise<void> {
 
 // ─── Push helpers ────────────────────────────────────────────────────────
 
+// MED-3: lock-screen privacy.
+//
+// Push title/body land on the device lock screen and may also show in
+// shoulder-surfing range or screenshots. Our visible payload still includes
+// the item identifier (the user needs context to act in the 60-second cancel
+// window) but NEVER the dollar amount — that's the portfolio-disclosure bit.
+// Full pricing is shipped in the data payload only, where the in-app modal
+// (`cancel_window_modal.dart`, `pendingExecutionTrigger`) reads it once the
+// app is open and authenticated.
 async function sendNotifyOnlyPush(
   rule: AutoSellRule,
   currentPrice: number,
@@ -557,17 +566,28 @@ async function sendNotifyOnlyPush(
   const tokens = await getUserFcmTokens(rule.user_id);
   if (tokens.length === 0) return;
 
-  const priceLine = intendedListPrice !== null
-    ? ` — would list at $${intendedListPrice.toFixed(2)}`
-    : "";
-  const title = refusalReason ? "Auto-sell rule refused" : "Auto-sell rule fired";
+  // Generic title — no portfolio context inferred from lock-screen alone.
+  const title = "SkinKeeper auto-sell";
+  // Body: identifies WHICH rule fired (user needs context) but never the
+  // dollar amount. The full refusalReason text (which can include $ amounts
+  // for audit/log clarity) is kept in error_message in DB and shipped in
+  // the data payload for the in-app modal — only the lock-screen body is
+  // sanitised.
   const body = refusalReason
-    ?? `${rule.market_hash_name} is $${currentPrice.toFixed(2)}${priceLine}. Enable auto-list in Settings to execute automatically.`;
+    ? `Your rule for ${rule.market_hash_name} was refused — open SkinKeeper for details`
+    : `Your rule for ${rule.market_hash_name} fired`;
 
   await sendPush(tokens, title, body, {
     type: "auto_sell_notify",
+    userId: String(rule.user_id),
     ruleId: String(rule.id),
     marketHashName: rule.market_hash_name,
+    // Pricing in data payload only — read by the in-app handler on cold open.
+    actualPriceUsd: currentPrice.toFixed(2),
+    ...(intendedListPrice !== null
+      ? { intendedPriceUsd: intendedListPrice.toFixed(2) }
+      : {}),
+    ...(refusalReason ? { refusalReason } : {}),
   });
 }
 
@@ -581,7 +601,11 @@ async function sendCancelWindowPush(
   const tokens = await getUserFcmTokens(rule.user_id);
   if (tokens.length === 0) return;
 
-  const body = `Listing ${rule.market_hash_name} for $${(intendedListPrice ?? currentPrice).toFixed(2)} in 60 seconds. Tap Undo to cancel.`;
+  // MED-3: same generic body as notify-only. The 60s cancel-window UX still
+  // works because the in-app handler reads the data payload (which keeps
+  // the dollar amount) once the user opens the app via the push.
+  const title = "SkinKeeper auto-sell";
+  const body = `Your rule for ${rule.market_hash_name} fired — tap to review (60s)`;
 
   // Native action categories (UNNotificationCategory / NotificationCompat.Action)
   // are deferred per P3-PLAN §2.4. Users cancel via in-app push handler that
@@ -593,13 +617,17 @@ async function sendCancelWindowPush(
   // for a different user than the one currently signed in (cold-start
   // edge case after a logout/re-login). Stringified to match FCM data type
   // constraints (everything in the data map must be a string).
-  await sendPush(tokens, "Auto-listing in 60s", body, {
+  await sendPush(tokens, title, body, {
     type: "auto_sell_cancel_window",
     userId: String(rule.user_id),
     ruleId: String(rule.id),
     executionId: String(executionId),
     marketHashName: rule.market_hash_name,
     category: "AUTO_SELL_CANCEL",
+    // Pricing in data payload only — used by `cancel_window_modal.dart` when
+    // the app is opened via tap. Lock screen never shows these.
+    intendedPriceUsd: (intendedListPrice ?? currentPrice).toFixed(2),
+    actualPriceUsd: currentPrice.toFixed(2),
   });
 }
 
@@ -618,15 +646,21 @@ async function sendPriceMoveCancelledPush(
   const tokens = await getUserFcmTokens(userId);
   if (tokens.length === 0) return;
 
+  // MED-3: same generic body pattern — no $ amounts on lock screen. The
+  // direction word ("up" / "down") is acceptable: it's a market direction,
+  // not a portfolio value. Full numbers ride in the data payload for the
+  // in-app drift-cancelled toast.
   const direction = currentPrice > intendedPrice ? "up" : "down";
+  const title = "SkinKeeper auto-sell";
   const body =
-    `Auto-sell cancelled — ${marketHashName} moved ${direction} ` +
-    `from $${intendedPrice.toFixed(2)} to $${currentPrice.toFixed(2)} during the 60s window. ` +
+    `Auto-sell cancelled — ${marketHashName} moved ${direction} during the 60s window. ` +
     `Re-arm the rule if you still want to sell.`;
-  await sendPush(tokens, "Auto-listing cancelled", body, {
+  await sendPush(tokens, title, body, {
     type: "auto_sell_drift_cancelled",
     userId: String(userId),
     marketHashName,
+    intendedPriceUsd: intendedPrice.toFixed(2),
+    actualPriceUsd: currentPrice.toFixed(2),
   });
 }
 

@@ -438,14 +438,36 @@ router.post(
       // Resolve the user that owns this original transaction. If we don't
       // know the transaction, silently acknowledge — likely a stale or
       // unrelated notification.
+      //
+      // HIGH-6 (migration 038): purchase_receipts now soft-deletes via
+      // user_id ON DELETE SET NULL plus a deleted_user_id stamp so that
+      // refund/revoke notifications that arrive AFTER the user deletes
+      // their account can still be attributed for audit/chargeback. Live
+      // user_id wins (still active subscription); fall back to
+      // deleted_user_id only when the live link is gone.
       const { rows } = await pool.query(
-        `SELECT user_id FROM purchase_receipts
+        `SELECT user_id, deleted_user_id FROM purchase_receipts
          WHERE original_transaction_id = $1 OR transaction_id = $1
          ORDER BY created_at DESC
          LIMIT 1`,
         [originalTransactionId]
       );
-      const userId = rows[0]?.user_id as number | undefined;
+      const liveUserId = rows[0]?.user_id as number | null | undefined;
+      const deletedUserId = rows[0]?.deleted_user_id as number | null | undefined;
+      const userId = liveUserId ?? null;
+
+      if (liveUserId == null && deletedUserId != null) {
+        // Account deleted — log the refund so finance/support has a paper
+        // trail. We don't try to revoke premium (no live user row to
+        // update) and don't process renewals for a deleted user.
+        console.log(
+          `[ASSN] ${notificationType}${subtype ? `/${subtype}` : ""} ` +
+            `tx=${transactionId} product=${productId} for deleted user ${deletedUserId} ` +
+            `— logged for audit, no further action`
+        );
+        res.status(200).json({ ok: true });
+        return;
+      }
 
       console.log(
         `[ASSN] ${notificationType}${subtype ? `/${subtype}` : ""} ` +

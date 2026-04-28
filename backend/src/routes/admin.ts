@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
+import { timingSafeEqual } from "crypto";
 import { getAllStats } from "../services/priceStats.js";
 import { getJobHealth } from "../services/priceJob.js";
 import { pool, getPoolStats as getDbPoolStats } from "../db/pool.js";
@@ -14,6 +15,29 @@ import { responseCache } from "../infra/ResponseCache.js";
 
 const router = Router();
 
+/**
+ * MED-4: constant-time compare for the admin shared secret.
+ *
+ * Short-circuit string equality (===) leaks length and partial-match
+ * progress through CPU timing. timingSafeEqual avoids both, but requires
+ * equal-length Buffers — so we length-check first. The length check itself
+ * leaks the secret length, which is fine: ADMIN_SECRET is published once
+ * to ops + CI and rotated as a unit, the length is not the secret.
+ *
+ * Buffer.from(str, "utf8") is explicit so two strings that differ only in
+ * encoding don't accidentally compare equal (defensive).
+ */
+export function safeCompareSecret(
+  provided: unknown,
+  secret: string
+): boolean {
+  if (typeof provided !== "string") return false;
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(secret, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 // Admin auth via header-only shared secret (never accept in query string — leaks to logs/caches)
 function requireAdminSecret(req: Request, res: Response, next: Function) {
   const secret = process.env.ADMIN_SECRET;
@@ -21,7 +45,7 @@ function requireAdminSecret(req: Request, res: Response, next: Function) {
     return res.status(503).json({ error: "Admin endpoint not configured" });
   }
   const provided = req.headers["x-admin-secret"];
-  if (provided !== secret) {
+  if (!safeCompareSecret(provided, secret)) {
     return res.status(403).json({ error: "Forbidden" });
   }
   next();

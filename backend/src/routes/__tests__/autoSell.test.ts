@@ -462,6 +462,140 @@ describe("Auto-sell routes", () => {
     });
   });
 
+  // ─── GET /api/auto-sell/stats — user dashboard aggregate ───────────────
+  describe("GET /api/auto-sell/stats", () => {
+    it("returns 401 without token", async () => {
+      const res = await request(app).get("/api/auto-sell/stats");
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 403 for non-premium user", async () => {
+      mockDemoCheck();
+      mockNotPremium();
+
+      const res = await request(app)
+        .get("/api/auto-sell/stats")
+        .set("Authorization", `Bearer ${jwt}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe("PREMIUM_REQUIRED");
+    });
+
+    it("returns aggregated stats + history for premium user", async () => {
+      mockDemoCheck();
+      mockPremium();
+      // First query: WITH e AS (...) SELECT counters
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            active_rules: 4,
+            auto_list_rules: 2,
+            total_fires: 12,
+            listed_count: 9,
+            cancelled_count: 1,
+            failed_count: 1,
+            notified_count: 1,
+            total_listed_value_usd: 1247.85,
+            avg_premium_over_trigger: 0.42,
+            top_refusal_reasons: [
+              { reason: "INSUFFICIENT_INVENTORY", count: 1 },
+            ],
+          },
+        ],
+      });
+      // Second query: per-day history rows
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          { date: "2026-04-22", fires: 3, listed: 2, listed_value: 240.5 },
+          { date: "2026-04-23", fires: 2, listed: 2, listed_value: 99.99 },
+        ],
+      });
+
+      const res = await request(app)
+        .get("/api/auto-sell/stats?days=30")
+        .set("Authorization", `Bearer ${jwt}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.stats.active_rules).toBe(4);
+      expect(res.body.stats.total_fires).toBe(12);
+      expect(res.body.stats.listed_count).toBe(9);
+      expect(res.body.stats.total_listed_value_usd).toBeCloseTo(1247.85);
+      expect(res.body.stats.top_refusal_reasons).toHaveLength(1);
+      expect(res.body.history).toHaveLength(2);
+      expect(res.body.period_days).toBe(30);
+    });
+
+    it("normalises null top_refusal_reasons to empty array", async () => {
+      mockDemoCheck();
+      mockPremium();
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            active_rules: 1,
+            auto_list_rules: 0,
+            total_fires: 0,
+            listed_count: 0,
+            cancelled_count: 0,
+            failed_count: 0,
+            notified_count: 0,
+            total_listed_value_usd: 0,
+            avg_premium_over_trigger: 0,
+            // PG returns NULL when the inner subquery has no rows; the route
+            // must coerce to [] so the Flutter parser doesn't blow up.
+            top_refusal_reasons: null,
+          },
+        ],
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const res = await request(app)
+        .get("/api/auto-sell/stats")
+        .set("Authorization", `Bearer ${jwt}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.stats.top_refusal_reasons).toEqual([]);
+      expect(res.body.history).toEqual([]);
+      // Default period 30d when ?days= not supplied.
+      expect(res.body.period_days).toBe(30);
+    });
+
+    it("rejects days=0 / days>365 via Zod", async () => {
+      mockDemoCheck();
+      mockPremium();
+
+      const res = await request(app)
+        .get("/api/auto-sell/stats?days=0")
+        .set("Authorization", `Bearer ${jwt}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it("scopes by user (IDOR): SQL filters on ar.user_id = $1", async () => {
+      mockDemoCheck();
+      mockPremium();
+      mockQuery.mockResolvedValueOnce({ rows: [{}] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(app)
+        .get("/api/auto-sell/stats")
+        .set("Authorization", `Bearer ${jwt}`);
+
+      // Both queries should join on auto_sell_rules and filter by user_id.
+      const statsCall = mockQuery.mock.calls.find(
+        (c) =>
+          typeof c[0] === "string" &&
+          (c[0] as string).includes("WITH e AS")
+      );
+      const historyCall = mockQuery.mock.calls.find(
+        (c) =>
+          typeof c[0] === "string" &&
+          (c[0] as string).includes("GROUP BY DATE")
+      );
+      expect((statsCall![0] as string)).toContain("ar.user_id = $1");
+      expect((historyCall![0] as string)).toContain("ar.user_id = $1");
+    });
+  });
+
   // ─── P0-2 / FIX H: requireFeatureFlag('auto_sell') gating ──────────────
   describe("auto_sell feature flag gating", () => {
     const originalKill = process.env.KILL_AUTO_SELL;

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auto_sell_repository.dart';
 import '../models/auto_sell_execution.dart';
 import '../models/auto_sell_rule.dart';
+import '../models/auto_sell_stats.dart';
 
 /// Active (non-cancelled) auto-sell rules for the current user. Driven by
 /// `GET /api/auto-sell/rules`. Mutations go through [autoSellRulesProvider]'s
@@ -181,6 +182,27 @@ final pendingExecutionsProvider =
   // up to date for "did a new fire arrive while I was on this screen?".
   await for (final _ in Stream.periodic(const Duration(seconds: 10))) {
     yield await fetchPending();
+  }
+});
+
+/// User-scoped auto-sell dashboard aggregate (P11). The family key is the
+/// period in days — chip selection in the dashboard rebuilds the provider
+/// for the chosen period. `autoDispose` so the request is cancelled when the
+/// user leaves the screen and a stale 1y query doesn't hold memory.
+///
+/// Failure mode: yield an empty stats object instead of bubbling the error
+/// up so the dashboard renders an "all zeros" state rather than the generic
+/// error screen — this matches `autoSellRulesProvider` / `alertsProvider`
+/// degradation pattern. The pull-to-refresh path lets users retry without
+/// the error UI getting in the way.
+final autoSellStatsProvider =
+    FutureProvider.family.autoDispose<AutoSellStats, int>((ref, days) async {
+  final repo = ref.read(autoSellRepositoryProvider);
+  try {
+    return await repo.getStats(days: days);
+  } catch (e) {
+    dev.log('Failed to fetch auto-sell stats: $e', name: 'AutoSell');
+    return AutoSellStats.empty(days);
   }
 });
 

@@ -24,6 +24,7 @@ import '../core/sync_state_provider.dart';
 import '../features/alerts/alerts_screen.dart';
 import '../features/alerts/create_alert_screen.dart';
 import '../features/automation/models/auto_sell_rule.dart';
+import '../features/automation/screens/auto_sell_dashboard_screen.dart';
 import '../features/automation/screens/auto_sell_detail_screen.dart';
 import '../features/automation/screens/auto_sell_list_screen.dart';
 import '../features/market/deals_screen.dart';
@@ -132,6 +133,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/auto-sell',
             pageBuilder: (_, _) =>
                 const NoTransitionPage(child: AutoSellListScreen()),
+          ),
+          GoRoute(
+            path: '/auto-sell/dashboard',
+            pageBuilder: (_, _) =>
+                const NoTransitionPage(child: AutoSellDashboardScreen()),
           ),
           GoRoute(
             path: '/auto-sell/:id',

@@ -385,23 +385,47 @@ export async function activatePremium(
       throw new ReceiptAlreadyLinkedError();
     }
 
-    // Save receipt
-    await client.query(
-      `INSERT INTO purchase_receipts (user_id, store, product_id, transaction_id,
-        original_transaction_id, purchase_date, expires_date, is_trial)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (transaction_id) DO NOTHING`,
-      [
-        userId,
-        store,
-        result.productId,
-        result.transactionId,
-        result.originalTransactionId || null,
-        result.purchaseDate || new Date(),
-        result.expiresDate || null,
-        result.isTrial || false,
-      ]
-    );
+    // Save receipt.
+    //
+    // CRIT-1/2 hardening (migration 038): the partial UNIQUE INDEX on
+    // `original_transaction_id` is the DB-level defense-in-depth backstop
+    // for the SELECT FOR UPDATE above. If a race somehow beats the
+    // application-layer check (or an admin tool / migration writes a
+    // duplicate by hand), Postgres surfaces SQLSTATE 23505 here — we
+    // catch and convert to ReceiptAlreadyLinkedError so the user-facing
+    // 409 RECEIPT_ALREADY_LINKED behavior stays identical.
+    try {
+      await client.query(
+        `INSERT INTO purchase_receipts (user_id, store, product_id, transaction_id,
+          original_transaction_id, purchase_date, expires_date, is_trial)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (transaction_id) DO NOTHING`,
+        [
+          userId,
+          store,
+          result.productId,
+          result.transactionId,
+          result.originalTransactionId || null,
+          result.purchaseDate || new Date(),
+          result.expiresDate || null,
+          result.isTrial || false,
+        ]
+      );
+    } catch (err) {
+      // 23505 = unique_violation. We only care about the partial unique
+      // on original_transaction_id (transaction_id has ON CONFLICT DO
+      // NOTHING above so it never raises). Any other 23505 falls through
+      // to the outer catch as an unexpected error.
+      const pgCode = (err as { code?: string }).code;
+      if (
+        pgCode === "23505" &&
+        (err as { constraint?: string }).constraint === "uniq_purchase_receipts_orig_tx"
+      ) {
+        await client.query("ROLLBACK");
+        throw new ReceiptAlreadyLinkedError();
+      }
+      throw err;
+    }
 
     // Activate premium on user
     await client.query(
