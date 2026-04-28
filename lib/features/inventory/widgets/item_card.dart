@@ -295,22 +295,31 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // Phase badge — top-right of image (full mode only)
+                      // Phase badge — top-right of image (full mode only).
+                      // Wrapped in RepaintBoundary so when the parent ListView
+                      // scrolls / shake-animates, the static gem/pill doesn't
+                      // re-rasterize on every frame (hot for 1000+ items).
                       if (!compact) ...[
                         if (item.isRareDoppler && item.dopplerPhase != null && item.dopplerColor != null)
                           Positioned(
                             top: 4, right: 6,
-                            child: DopplerPhaseGem(phase: item.dopplerPhase!, color: item.dopplerColor!, size: 13),
+                            child: RepaintBoundary(
+                              child: DopplerPhaseGem(phase: item.dopplerPhase!, color: item.dopplerColor!, size: 13),
+                            ),
                           )
                         else if (item.isDoppler && item.dopplerPhase != null)
                           Positioned(
                             top: 4, right: 6,
-                            child: DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor),
+                            child: RepaintBoundary(
+                              child: DopplerPhasePill(phase: item.dopplerPhase!, color: item.dopplerColor),
+                            ),
                           )
                         else if (item.isRareItem && item.rareReason != null)
                           Positioned(
                             top: 4, right: 6,
-                            child: RareBadge(reason: item.rareReason!),
+                            child: RepaintBoundary(
+                              child: RareBadge(reason: item.rareReason!),
+                            ),
                           ),
                       ],
 
@@ -349,51 +358,56 @@ class ItemCard extends StatelessWidget {
                           ),
                         ),
                       // Account badge removed from image Stack — now in footer
-                      // Stickers + charm row (only for weapons, hidden in ultraCompact)
+                      // Stickers + charm row (only for weapons, hidden in ultraCompact).
+                      // RepaintBoundary: stickers are cached PNGs, no need to
+                      // re-paint with the rest of the card.
+                      // CS2 weapons hold up to 4 stickers (positions 0..3) so
+                      // we clamp to 4 universally — leave room for the charm
+                      // and value badge on the right.
                       if (!compact && !ultraCompact && !item.isNonWeapon &&
                           (item.stickers.isNotEmpty || item.charms.isNotEmpty))
                         Positioned(
                           left: 6,
                           right: 6,
                           bottom: 2,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Limit stickers shown to avoid overflow (4 max if value badge present)
-                              for (int i = 0;
-                                  i < item.stickers.length &&
-                                  i < (item.stickerValue != null && item.stickerValue! > 10 ? 4 : 5);
-                                  i++)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 2),
-                                  child: StickerThumb(
-                                      sticker: item.stickers[i]),
-                                ),
-                              if (item.charms.isNotEmpty) ...[
-                                if (item.stickers.isNotEmpty)
+                          child: RepaintBoundary(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (int i = 0;
+                                    i < item.stickers.length && i < 4;
+                                    i++)
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                                    child: Text(
-                                      '+',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white.withValues(alpha: 0.3),
+                                    padding: const EdgeInsets.only(right: 2),
+                                    child: StickerThumb(
+                                        sticker: item.stickers[i]),
+                                  ),
+                                if (item.charms.isNotEmpty) ...[
+                                  if (item.stickers.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                                      child: Text(
+                                        '+',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white.withValues(alpha: 0.3),
+                                        ),
                                       ),
                                     ),
+                                  CharmThumb(charm: item.charms.first),
+                                ],
+                                // Sticker premium indicator
+                                if (item.stickerValue != null && item.stickerValue! > 10)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4),
+                                    child: StickerValueBadge(
+                                      value: item.stickerValue!,
+                                      currency: currency,
+                                    ),
                                   ),
-                                CharmThumb(charm: item.charms.first),
                               ],
-                              // Sticker premium indicator
-                              if (item.stickerValue != null && item.stickerValue! > 10)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 4),
-                                  child: StickerValueBadge(
-                                    value: item.stickerValue!,
-                                    currency: currency,
-                                  ),
-                                ),
-                            ],
+                            ),
                           ),
                         ),
                     ],

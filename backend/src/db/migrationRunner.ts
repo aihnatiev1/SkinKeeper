@@ -19,6 +19,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import * as Sentry from "@sentry/node";
 import type pg from "pg";
 import { pool } from "./pool.js";
 
@@ -251,10 +252,18 @@ export async function runMigrations(migrationsDir: string = MIGRATIONS_DIR): Pro
       } catch (err) {
         await client.query("ROLLBACK");
         const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
+        const migrationError = new Error(
           `[Migration] FAILED at ${migration.filename}: ${message}\n` +
           `The migration was rolled back. Fix the SQL and retry.`
         );
+        // level: fatal — a migration failure prevents the process from serving
+        // any traffic. This is the highest-priority alert in Sentry.
+        Sentry.captureException(migrationError, {
+          level: "fatal",
+          tags: { component: "migration" },
+          extra: { version: migration.version, filename: migration.filename },
+        });
+        throw migrationError;
       }
     }
 

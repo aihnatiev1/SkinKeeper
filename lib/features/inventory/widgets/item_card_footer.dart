@@ -338,6 +338,27 @@ class _MiniFloatBar extends StatelessWidget {
   }
 }
 
+/// Public helper for trade-lock urgency colors.
+/// Exposed so tests / shared widgets can reuse the same tier mapping.
+class TradeBanBadgeColor {
+  TradeBanBadgeColor._();
+
+  static const Color urgent = Color(0xFFEF4444); // <=2d (red)
+  static const Color mid = Color(0xFFFB923C);    // 3d   (orange)
+  static const Color safe = Color(0xFFF59E0B);   // >=4d (gold)
+
+  /// Tiered color for trade-lock urgency:
+  ///  - <=2 days   -> red    (almost done, plan your trade)
+  ///  - >=4 days   -> gold   (just locked, long way to go)
+  ///  - 3 days     -> orange (transition / mid-lock)
+  static Color forDaysLeft(int? daysLeft) {
+    if (daysLeft == null) return urgent;
+    if (daysLeft <= 2) return urgent;
+    if (daysLeft >= 4) return safe;
+    return mid;
+  }
+}
+
 class _TradeBanBadge extends StatelessWidget {
   final InventoryItem item;
   final bool compact;
@@ -346,7 +367,17 @@ class _TradeBanBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final daysLeft = item.tradeBanUntil?.difference(DateTime.now()).inDays;
+    final ban = item.tradeBanUntil;
+    // Steam stores tradeBanUntil in UTC, compare in UTC to avoid TZ drift.
+    final daysLeft =
+        ban?.difference(DateTime.now().toUtc()).inDays;
+    // If ban already expired, hide entirely — server may not have re-synced
+    // the tradable flag yet.
+    if (ban != null && ban.isBefore(DateTime.now().toUtc())) {
+      return const SizedBox.shrink();
+    }
+
+    final color = TradeBanBadgeColor.forDaysLeft(daysLeft);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -354,7 +385,7 @@ class _TradeBanBadge extends StatelessWidget {
         Icon(
           Icons.lock_rounded,
           size: compact ? 9 : 10,
-          color: const Color(0xFFEF4444),
+          color: color,
         ),
         if (daysLeft != null && daysLeft > 0) ...[
           const SizedBox(width: 2),
@@ -363,7 +394,7 @@ class _TradeBanBadge extends StatelessWidget {
             style: TextStyle(
               fontSize: compact ? 8 : 9,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFFEF4444),
+              color: color,
             ),
           ),
         ],

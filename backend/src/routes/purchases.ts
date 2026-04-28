@@ -17,6 +17,10 @@ import {
   ReceiptAlreadyLinkedError,
 } from "../services/purchases.js";
 import { getFeaturePreviews } from "../services/featurePreviews.js";
+import {
+  handleGooglePlayNotification,
+  GoogleRtdnPayload,
+} from "../services/googlePlayRtdn.js";
 import { pool } from "../db/pool.js";
 
 const APPLE_BUNDLE_ID =
@@ -501,6 +505,78 @@ router.post(
       console.error("[ASSN] Handler error:", err);
       // Always 200 so Apple doesn't hammer retries; we log and move on.
       res.status(200).json({ ok: true });
+    }
+  }
+);
+
+// ─── Google Play Real-Time Developer Notifications (RTDN) ───────────
+// https://developer.android.com/google/play/billing/rtdn-reference
+//
+// Pub/Sub push subscription delivers refunds, cancellations, renewals here.
+// Without this endpoint, refunded users keep Premium indefinitely.
+//
+// Inbound shape (Pub/Sub envelope):
+//   { message: { data: base64(JSON), messageId, publishTime }, subscription }
+//
+// We always return 204 — even on parse errors — because Pub/Sub retries on
+// non-2xx and a persistent error would create a delivery storm. All errors
+// go to logs / Sentry for investigation.
+//
+// Authentication: Pub/Sub doesn't send Bearer tokens, so we gate on a
+// hard-to-guess path token (GOOGLE_RTDN_PATH_TOKEN env var). The Pub/Sub
+// push subscription URL is configured in GCP Console as
+//   https://api.skinkeeper.store/api/purchases/google-rtdn-<TOKEN>
+// — anyone who doesn't know the token gets a 404. For stronger security
+// (post-MVP) we'd verify the OIDC token Pub/Sub signs each push with;
+// see docs/iap-receipt-verification.md for the upgrade path.
+//
+// Documented in operator runbook (backend/docs/iap-receipt-verification.md).
+const RTDN_TOKEN = process.env.GOOGLE_RTDN_PATH_TOKEN || "dev";
+if (RTDN_TOKEN === "dev" && process.env.NODE_ENV === "production") {
+  // Fail-safe warning on boot — in production the token MUST be set, otherwise
+  // anyone can hit /api/purchases/google-rtdn-dev with a forged refund event
+  // and revoke arbitrary users' premium.
+  console.warn(
+    "[RTDN] GOOGLE_RTDN_PATH_TOKEN unset in production — endpoint mounted at /google-rtdn-dev. " +
+      "Set GOOGLE_RTDN_PATH_TOKEN to a 32+ char random hex string."
+  );
+}
+
+router.post(
+  `/google-rtdn-${RTDN_TOKEN}`,
+  async (req: Request, res: Response) => {
+    // Always 204 — see comment above. Errors logged but never surfaced.
+    try {
+      const message = (
+        req.body as { message?: { data?: string; messageId?: string } }
+      )?.message;
+
+      if (!message?.data) {
+        console.warn("[RTDN] missing message.data — likely malformed Pub/Sub envelope");
+        res.status(204).end();
+        return;
+      }
+
+      let decoded: GoogleRtdnPayload;
+      try {
+        const json = Buffer.from(message.data, "base64").toString("utf-8");
+        decoded = JSON.parse(json) as GoogleRtdnPayload;
+      } catch (err) {
+        console.error(
+          "[RTDN] failed to decode message.data:",
+          (err as Error).message
+        );
+        res.status(204).end();
+        return;
+      }
+
+      await handleGooglePlayNotification(decoded, message.messageId);
+      res.status(204).end();
+    } catch (err) {
+      // Even unhandled errors return 204 — retry storm prevention. Sentry
+      // hooks would capture this in production.
+      console.error("[RTDN] handler error:", err);
+      res.status(204).end();
     }
   }
 );

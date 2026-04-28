@@ -27,6 +27,7 @@
  */
 
 import cron from "node-cron";
+import * as Sentry from "@sentry/node";
 import { pool } from "../db/pool.js";
 import { log } from "../utils/logger.js";
 import { sendPush, isFirebaseReady } from "./firebase.js";
@@ -102,53 +103,62 @@ interface AutoSellRule {
  * tick will pick it up.
  */
 export async function evaluateRules(): Promise<void> {
-  const { rows } = await pool.query<{ locked: boolean }>(
-    `SELECT pg_try_advisory_lock($1) AS locked`,
-    [ADVISORY_LOCK_KEY]
-  );
-  const locked = rows[0]?.locked === true;
-  if (!locked) {
-    log.warn("auto_sell_eval_skipped_locked", { lockKey: ADVISORY_LOCK_KEY });
-    return;
-  }
-
+  const span = Sentry.startInactiveSpan({ name: "autoSell.evaluateRules" });
   try {
-    const { rows: ruleRows } = await pool.query<AutoSellRule>(
-      `SELECT id, user_id, account_id, market_hash_name, trigger_type,
-              trigger_price_usd::float AS trigger_price_usd,
-              sell_price_usd::float AS sell_price_usd,
-              sell_strategy, mode, enabled, cooldown_minutes,
-              last_fired_at, times_fired
-         FROM auto_sell_rules
-        WHERE enabled = TRUE AND cancelled_at IS NULL`
+    const { rows } = await pool.query<{ locked: boolean }>(
+      `SELECT pg_try_advisory_lock($1) AS locked`,
+      [ADVISORY_LOCK_KEY]
     );
-
-    if (ruleRows.length === 0) {
-      // Still drain expired pending_window rows in case a previous run died
-      await drainExpiredCancelWindows();
+    const locked = rows[0]?.locked === true;
+    if (!locked) {
+      log.warn("auto_sell_eval_skipped_locked", { lockKey: ADVISORY_LOCK_KEY });
       return;
     }
 
-    log.info("auto_sell_eval_start", { ruleCount: ruleRows.length });
+    try {
+      const { rows: ruleRows } = await pool.query<AutoSellRule>(
+        `SELECT id, user_id, account_id, market_hash_name, trigger_type,
+                trigger_price_usd::float AS trigger_price_usd,
+                sell_price_usd::float AS sell_price_usd,
+                sell_strategy, mode, enabled, cooldown_minutes,
+                last_fired_at, times_fired
+           FROM auto_sell_rules
+          WHERE enabled = TRUE AND cancelled_at IS NULL`
+      );
 
-    let fired = 0;
-    let skipped = 0;
-    for (const rule of ruleRows) {
-      try {
-        const didFire = await evaluateRule(rule);
-        if (didFire) fired++;
-        else skipped++;
-      } catch (err) {
-        log.error("auto_sell_eval_rule_failed", { ruleId: rule.id }, err);
+      if (ruleRows.length === 0) {
+        // Still drain expired pending_window rows in case a previous run died
+        await drainExpiredCancelWindows();
+        return;
       }
+
+      log.info("auto_sell_eval_start", { ruleCount: ruleRows.length });
+
+      let fired = 0;
+      let skipped = 0;
+      for (const rule of ruleRows) {
+        try {
+          const didFire = await evaluateRule(rule);
+          if (didFire) fired++;
+          else skipped++;
+        } catch (err) {
+          log.error("auto_sell_eval_rule_failed", { ruleId: rule.id }, err);
+          Sentry.captureException(err, {
+            tags: { component: "autoSell", phase: "evaluate" },
+            extra: { ruleId: rule.id, marketHashName: rule.market_hash_name, userId: rule.user_id },
+          });
+        }
+      }
+
+      log.info("auto_sell_eval_done", { fired, skipped });
+
+      // Also drain any pending cancel-window executions that have expired
+      await drainExpiredCancelWindows();
+    } finally {
+      await pool.query(`SELECT pg_advisory_unlock($1)`, [ADVISORY_LOCK_KEY]);
     }
-
-    log.info("auto_sell_eval_done", { fired, skipped });
-
-    // Also drain any pending cancel-window executions that have expired
-    await drainExpiredCancelWindows();
   } finally {
-    await pool.query(`SELECT pg_advisory_unlock($1)`, [ADVISORY_LOCK_KEY]);
+    span.end();
   }
 }
 
@@ -426,6 +436,10 @@ export async function executeListing(executionId: number): Promise<void> {
         WHERE id = $2`,
       [err instanceof Error ? err.message : "Unknown listing error", executionId]
     );
+    Sentry.captureException(err, {
+      tags: { component: "autoSell", phase: "execute" },
+      extra: { executionId },
+    });
   }
 }
 
@@ -649,6 +663,7 @@ export function registerAutoSellCron(onRun?: HealthReporter): void {
       onRun?.(true);
     } catch (err) {
       log.error("auto_sell_cron_failed", {}, err);
+      Sentry.captureException(err, { tags: { component: "autoSell", phase: "cron" } });
       onRun?.(false, err instanceof Error ? err.message : String(err));
     }
   });

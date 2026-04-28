@@ -36,16 +36,62 @@ class StickerValueBadge extends StatelessWidget {
 
 class StickerThumb extends StatelessWidget {
   final StickerInfo sticker;
+  final double width;
+  final double height;
 
-  const StickerThumb({super.key, required this.sticker});
+  const StickerThumb({
+    super.key,
+    required this.sticker,
+    this.width = 30,
+    this.height = 22,
+  });
+
+  /// Scrape threshold above which we visually indicate wear (slight opacity
+  /// drop). Pristine stickers (wear ~0) are 3-5x more valuable so we want the
+  /// trader to see the difference at a glance.
+  static const double _scrapedThreshold = 0.05;
 
   @override
   Widget build(BuildContext context) {
+    final wear = sticker.wear;
+    final scraped = wear != null && wear > _scrapedThreshold;
+    final tooltip = StringBuffer(
+      sticker.name.isNotEmpty ? sticker.name : 'Sticker',
+    );
+    if (wear != null) {
+      // 0.0 = pristine, 1.0 = fully scraped. Show as scrape % so traders
+      // immediately recognize the convention (matches CSFloat).
+      final scrapePct = (wear * 100).clamp(0, 100).round();
+      tooltip.write(' • Scrape $scrapePct%');
+    }
+
+    final image = sticker.fullImageUrl.isNotEmpty
+        ? CachedNetworkImage(
+            imageUrl: sticker.fullImageUrl,
+            fit: BoxFit.contain,
+            // Stickers render tiny (~28px wide) — decode at 56px for retina
+            // and avoid keeping full-resolution Steam economy PNGs in memory
+            // for 1000+ item inventories.
+            memCacheWidth: 56,
+            placeholder: (_, _) => const SizedBox.shrink(),
+            errorWidget: (_, _, _) => const Icon(
+              Icons.sticky_note_2_rounded,
+              size: 12,
+              color: AppTheme.warningLight,
+            ),
+          )
+        : const Icon(
+            Icons.sticky_note_2_rounded,
+            size: 12,
+            color: AppTheme.warningLight,
+          );
+
     return Tooltip(
-      message: sticker.name.isNotEmpty ? sticker.name : 'Sticker',
+      message: tooltip.toString(),
+      waitDuration: const Duration(milliseconds: 400),
       child: Container(
-        width: 30,
-        height: 22,
+        width: width,
+        height: height,
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(5),
@@ -63,22 +109,11 @@ class StickerThumb extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.all(2),
-          child: sticker.fullImageUrl.isNotEmpty
-              ? CachedNetworkImage(
-                  imageUrl: sticker.fullImageUrl,
-                  fit: BoxFit.contain,
-                  placeholder: (_, _) => const SizedBox.shrink(),
-                  errorWidget: (_, _, _) => const Icon(
-                    Icons.sticky_note_2_rounded,
-                    size: 12,
-                    color: AppTheme.warningLight,
-                  ),
-                )
-              : const Icon(
-                  Icons.sticky_note_2_rounded,
-                  size: 12,
-                  color: AppTheme.warningLight,
-                ),
+          child: scraped
+              // Scraped stickers render at 50% opacity so traders can spot
+              // pristine ones (full opacity) instantly in a long list.
+              ? Opacity(opacity: 0.5, child: image)
+              : image,
         ),
       ),
     );

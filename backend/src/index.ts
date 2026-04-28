@@ -31,6 +31,7 @@ import usersRoutes from "./routes/users.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { log } from "./utils/logger.js";
 import { preloadCSGOData } from "./services/csgoData.js";
+import type { AuthRequest } from "./middleware/auth.js";
 
 dotenv.config({ override: true });
 
@@ -188,6 +189,18 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/auto-sell", autoSellRoutes);
 app.use("/api/data", dataRoutes);
 app.use("/api/users", usersRoutes);
+
+// Sentry: tag scope with authenticated userId so every captured exception is
+// linked to a specific user in the Sentry UI — makes triage orders of
+// magnitude faster than searching untagged events.
+// Must run after auth middleware has had a chance to set req.userId.
+// sendDefaultPii is false so IP/cookies are not sent — only the opaque user id.
+app.use((req: AuthRequest, _res, next) => {
+  if (req.userId) {
+    Sentry.setUser({ id: String(req.userId) });
+  }
+  next();
+});
 
 // Sentry error handler must come before the custom one
 Sentry.setupExpressErrorHandler(app);

@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import { pool } from "../db/pool.js";
 import { isAppleApiConfigured, getTransactionInfo } from "./appleStoreApi.js";
 import {
@@ -125,7 +126,10 @@ export async function verifyAppleReceipt(
         : undefined,
       isTrial: clientData.offerType === 2,
     };
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { component: "iap", store: "apple" },
+    });
     return {
       valid: false,
       productId: "",
@@ -422,6 +426,13 @@ export async function activatePremium(
       } catch {
         // pool may already have aborted the txn — swallow.
       }
+      // Unexpected failures in premium activation are critical — the user paid
+      // but may not have received their entitlement. Capture with high priority.
+      Sentry.captureException(err, {
+        level: "error",
+        tags: { component: "iap", flow: "activation", store },
+        extra: { userId, productId: result.productId, transactionId: result.transactionId },
+      });
     }
     throw err;
   } finally {

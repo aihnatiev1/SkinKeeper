@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import * as Sentry from "@sentry/node";
 import { pool } from "../db/pool.js";
 import { fetchSkinportPrices, savePrices, getUniqueInventoryNames, startSteamCrawlers, stopSteamCrawlers, runSteamBatchCrawl, pruneOldPrices, purgeStaleCurrentPrices, startHotSteamLoop, stopHotSteamLoop } from "./prices.js";
 import { startCSFloatCrawler, stopCSFloatCrawler } from "./csfloat.js";
@@ -108,9 +109,10 @@ export function startPriceJobs() {
   // setup. drainOnStartup is fire-and-forget — it picks up any
   // pending_window executions whose 60s window expired during downtime.
   registerAutoSellCron((success, err) => recordJobRun("autoSell", success, err));
-  drainAutoSellOnStartup().catch((err) =>
-    console.error("[INIT] auto-sell drain failed:", err)
-  );
+  drainAutoSellOnStartup().catch((err) => {
+    console.error("[INIT] auto-sell drain failed:", err);
+    Sentry.captureException(err, { tags: { component: "priceJob", source: "autoSellDrain" } });
+  });
 
   // Skinport: every 10 minutes (was 5 — reduced to stay well within 8 req/5min limit)
   scheduledTasks.push(cron.schedule("*/10 * * * *", async () => {
@@ -120,6 +122,7 @@ export function startPriceJobs() {
     } catch (err) {
       recordJobRun("skinport", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] Skinport price fetch failed:", err);
+      Sentry.captureException(err, { tags: { component: "priceJob", source: "skinport" } });
     }
   }));
 
@@ -144,6 +147,7 @@ export function startPriceJobs() {
     } catch (err) {
       recordJobRun("dmarket", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] DMarket price fetch failed:", err);
+      Sentry.captureException(err, { tags: { component: "priceJob", source: "dmarket" } });
     }
   }));
 
@@ -170,6 +174,7 @@ export function startPriceJobs() {
     } catch (err) {
       recordJobRun("plSnapshot", false, err instanceof Error ? err.message : String(err));
       console.error("[CRON] Daily P/L snapshot failed:", err);
+      Sentry.captureException(err, { tags: { component: "priceJob", source: "plSnapshot" } });
     }
   }));
 
