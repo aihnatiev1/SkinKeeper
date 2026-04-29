@@ -20,10 +20,32 @@ export async function getSteamProfile(
   return players[0];
 }
 
+/**
+ * Validates Steam OpenID 2.0 assertion. Per spec the relying party MUST verify
+ * `openid.return_to` and `openid.realm` match values it would have sent — without
+ * this check, an attacker can replay an assertion that Steam signed for a
+ * different relying party.
+ */
 export async function verifySteamOpenId(
   params: Record<string, string>
 ): Promise<string> {
-  // Change mode to check_authentication
+  // 1. Validate return_to / realm match our configured callback. This MUST happen
+  //    before the check_authentication round-trip — otherwise we'd accept replays.
+  const expectedReturnTo = `${process.env.BASE_URL || ""}/api/auth/steam/callback`;
+  const returnTo = params["openid.return_to"] || "";
+  // Steam preserves return_to byte-for-byte but appends its own query params
+  // (openid.* fields) — match by ignoring trailing query.
+  const returnToBase = returnTo.split("?")[0];
+  if (!process.env.BASE_URL || returnToBase !== expectedReturnTo) {
+    throw new Error("OpenID return_to does not match expected callback");
+  }
+  const realm = params["openid.realm"];
+  // realm must be a prefix of return_to per spec; here we set it equal in our flows
+  if (realm && realm !== expectedReturnTo) {
+    throw new Error("OpenID realm does not match expected callback");
+  }
+
+  // 2. Round-trip the assertion to Steam to confirm it's genuinely signed.
   const verifyParams = { ...params, "openid.mode": "check_authentication" };
 
   const { data } = await SteamGateway.request<string>({
@@ -36,10 +58,10 @@ export async function verifySteamOpenId(
     throw new Error("Steam OpenID verification failed");
   }
 
-  // Extract SteamID from claimed_id
+  // 3. Extract SteamID from claimed_id.
   // Format: https://steamcommunity.com/openid/id/76561198XXXXXXXXX
   const claimedId = params["openid.claimed_id"];
-  const match = claimedId?.match(/\/id\/(\d+)$/);
+  const match = claimedId?.match(/^https:\/\/steamcommunity\.com\/openid\/id\/(\d+)$/);
   if (!match) throw new Error("Invalid claimed_id");
   return match[1];
 }

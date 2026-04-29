@@ -753,7 +753,14 @@ router.post("/feature-flags/:userId", requireAdminSecret, async (req: Request, r
 
 // POST /api/admin/set-premium/:userId — manually set premium (for testing release builds)
 // Body: { premium: true/false, days?: number }
+// Disabled in production: if ADMIN_SECRET ever leaks the entire paywall would
+// be bypassable. Mirrors the /mock IAP routes which are also non-prod only.
 router.post("/set-premium/:userId", requireAdminSecret, async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
   const userId = parseInt(req.params.userId as string, 10);
   if (isNaN(userId)) {
     res.status(400).json({ error: "Invalid userId" });

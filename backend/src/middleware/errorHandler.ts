@@ -23,8 +23,10 @@ export function errorHandler(
     return;
   }
 
-  // Unknown errors
-  const message = err instanceof Error ? err.message : "Internal server error";
+  // Unknown errors — never echo raw err.message to clients. PG errors include
+  // SQL fragments and column names; axios errors include URLs with query
+  // params (potentially Steam API keys, session cookies). Log details server-
+  // side; return a generic message to the client.
   log.error("unhandled_error", { path: req.originalUrl }, err);
-  res.status(500).json({ error: message });
+  res.status(500).json({ error: "Internal server error" });
 }

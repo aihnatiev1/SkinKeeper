@@ -1059,7 +1059,15 @@ router.post("/token", async (req: Request, res: Response) => {
 router.post("/demo", async (req: Request, res: Response) => {
   try {
     const { code } = req.body;
-    const demoCode = process.env.DEMO_CODE || "SKINKEEPER_REVIEW_2026";
+    const demoCode = process.env.DEMO_CODE;
+
+    // Fail closed: when env unset, demo login is disabled entirely.
+    // Previously fell back to a hardcoded literal — anyone who knew it could
+    // mint a JWT for the shared demo user row.
+    if (!demoCode) {
+      res.status(503).json({ error: "Demo login is disabled" });
+      return;
+    }
 
     if (!code || code !== demoCode) {
       res.status(401).json({ error: "Invalid demo code" });

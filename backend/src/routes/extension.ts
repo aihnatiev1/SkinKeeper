@@ -99,56 +99,23 @@ router.post(
   }
 );
 
-// ─── POST /api/ext/prices/anon — anonymous crowdsourced price data ────
-// No auth required — anyone with the extension can contribute prices.
-// Stricter rate limit (10/min vs 20/min) and same upsert logic.
+// ─── POST /api/ext/prices/anon — DISABLED ─────────────────────────────
+// Previously accepted unauthenticated price submissions and wrote them to
+// current_prices, which feeds portfolio totals, paywall teasers, and alert
+// thresholds. An attacker rotating IPs through the 10/min limiter could
+// walk prices in either direction and corrupt the authoritative table.
+//
+// Crowdsourced prices are no longer promoted to current_prices. The
+// authoritative pricing pipeline (backend scrapers + CSFloat / Skinport /
+// DMarket) is unaffected. Endpoint kept as a 200 no-op so older extension
+// builds don't surface errors; new builds should call /ext/prices (auth'd)
+// or skip entirely. Re-enable only via a staging table reconciled with
+// vetted sources.
 router.post(
   "/prices/anon",
   anonPriceLimiter,
   async (req, res: Response) => {
-    try {
-      const { items } = req.body;
-      if (!Array.isArray(items) || items.length === 0) {
-        res.status(400).json({ error: "No items provided" });
-        return;
-      }
-
-      const batch = items.slice(0, 200);
-      let inserted = 0;
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        for (const item of batch) {
-          if (!item.market_hash_name || !item.price_cents || item.price_cents <= 0) continue;
-          const source = item.source === "steam_buyorder" ? "ext_buyorder" : "ext_steam";
-          await client.query(
-            `INSERT INTO current_prices (market_hash_name, source, price_usd, updated_at)
-             VALUES ($1, $2, $3, NOW())
-             ON CONFLICT (market_hash_name, source) DO UPDATE SET
-               price_usd = CASE
-                 WHEN current_prices.updated_at < NOW() - INTERVAL '30 seconds'
-                 THEN EXCLUDED.price_usd ELSE current_prices.price_usd END,
-               updated_at = CASE
-                 WHEN current_prices.updated_at < NOW() - INTERVAL '30 seconds'
-                 THEN NOW() ELSE current_prices.updated_at END`,
-            [item.market_hash_name, source, item.price_cents / 100]
-          );
-          inserted++;
-        }
-        await client.query("COMMIT");
-      } catch (err) {
-        await client.query("ROLLBACK");
-        throw err;
-      } finally {
-        client.release();
-      }
-
-      res.json({ ok: true, processed: inserted });
-    } catch (err) {
-      console.error("[Extension] Anonymous price ingestion error:", err);
-      res.status(500).json({ error: "Failed to process prices" });
-    }
+    res.json({ ok: true, processed: 0 });
   }
 );
 
