@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/settings_provider.dart';
+import '../../../core/sync_state_provider.dart';
 import '../../../core/theme.dart';
 import '../../../widgets/shared_ui.dart';
 import '../inventory_provider.dart';
@@ -29,6 +30,7 @@ class InventoryGrid extends ConsumerWidget {
     final selection = ref.watch(selectionProvider);
     final isSelecting = selection.isNotEmpty;
     final currency = ref.watch(currencyProvider);
+    final syncing = ref.watch(syncStateProvider).isSyncing;
 
     return Expanded(
       child: groupedInventory.when(
@@ -38,17 +40,24 @@ class InventoryGrid extends ConsumerWidget {
               child: ListView(
                 children: [
                   const SizedBox(height: 120),
-                  ref.read(searchQueryProvider).isNotEmpty
-                    ? const EmptyState(
-                        icon: Icons.search_off_rounded,
-                        title: 'No items match your search',
-                        subtitle: 'Try a different search term',
-                      )
-                    : const EmptyState(
-                        icon: Icons.inventory_2_outlined,
-                        title: 'No items in inventory',
-                        subtitle: 'Pull down to refresh or link a Steam account',
-                      ),
+                  if (ref.read(searchQueryProvider).isNotEmpty)
+                    const EmptyState(
+                      icon: Icons.search_off_rounded,
+                      title: 'No items match your search',
+                      subtitle: 'Try a different search term',
+                    )
+                  else if (syncing)
+                    const EmptyState(
+                      icon: Icons.sync_rounded,
+                      title: 'Syncing your inventory…',
+                      subtitle: 'This may take a moment',
+                    )
+                  else
+                    const EmptyState(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'No items in inventory',
+                      subtitle: 'Pull down to refresh or link a Steam account',
+                    ),
                 ],
               ),
             )

@@ -368,15 +368,11 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
       data: (tradesState) {
         final history = tradesState.offers.where((o) => !o.isPending).toList();
         if (history.isEmpty) {
-          return Center(
-            child: Text(
-              'No trade history',
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ).animate().fadeIn(duration: 400.ms);
+          return const EmptyState(
+            icon: Icons.history_rounded,
+            title: 'No trade history',
+            subtitle: 'Completed trades will appear here',
+          );
         }
         return RefreshIndicator(
           onRefresh: () => ref.read(tradesProvider.notifier).refresh(),

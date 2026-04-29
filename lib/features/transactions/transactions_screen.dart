@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../widgets/account_scope_chip.dart';
+import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../widgets/glass_sheet.dart';
 import '../../widgets/shared_ui.dart';
@@ -26,6 +27,31 @@ import 'widgets/transaction_stats_bar.dart';
 
 class TransactionsScreen extends ConsumerWidget {
   const TransactionsScreen({super.key});
+
+  /// Trigger Steam transactions sync and show a result snackbar.
+  /// On failure: shows friendlyError(e) with a Retry action that re-runs sync.
+  static Future<void> _runSync(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final fetched =
+          await ref.read(transactionsProvider.notifier).sync();
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Synced $fetched transactions')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e)),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => _runSync(context, ref),
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -86,22 +112,7 @@ class TransactionsScreen extends ConsumerWidget {
                   IconButton(
                     icon: Icon(Icons.sync_rounded, color: AppTheme.textMuted, size: 22),
                     tooltip: 'Sync from Steam',
-                    onPressed: () async {
-                      try {
-                        final fetched = await ref.read(transactionsProvider.notifier).sync();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Synced $fetched transactions')),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Sync failed')),
-                          );
-                        }
-                      }
-                    },
+                    onPressed: () => _runSync(context, ref),
                   ),
                   const SizedBox(width: 4),
                   const AccountScopeChip(),
@@ -311,13 +322,25 @@ class TransactionsScreen extends ConsumerWidget {
                 data: (list) {
                   if (list.isEmpty) {
                     final activeFilter = ref.read(txTypeFilterProvider);
-                    return Center(
-                      child: Text(
-                        activeFilter != null
-                            ? 'No $activeFilter transactions found.'
-                            : 'No transactions.\nTap sync to fetch from Steam.',
-                        textAlign: TextAlign.center,
-                        style: AppTheme.bodySmall.copyWith(color: AppTheme.textMuted),
+                    if (activeFilter != null) {
+                      return Center(
+                        child: Text(
+                          'No $activeFilter transactions found.',
+                          textAlign: TextAlign.center,
+                          style: AppTheme.bodySmall
+                              .copyWith(color: AppTheme.textMuted),
+                        ),
+                      );
+                    }
+                    return EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'No transactions yet',
+                      subtitle: 'Sync from Steam to import buys & sells',
+                      action: GradientButton(
+                        label: 'Sync now',
+                        icon: Icons.sync_rounded,
+                        expanded: false,
+                        onPressed: () => _runSync(context, ref),
                       ),
                     );
                   }

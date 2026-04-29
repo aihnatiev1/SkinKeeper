@@ -20,7 +20,7 @@ class GroupExpandSheet extends StatelessWidget {
     final rep = group.representative;
     final rarityColor = rep.rarityColor != null
         ? Color(int.parse('FF${rep.rarityColor!.replaceAll('#', '')}', radix: 16))
-        : Colors.grey;
+        : AppTheme.textDisabled;
 
     return GestureDetector(
       onTap: () => Navigator.of(context).pop(),

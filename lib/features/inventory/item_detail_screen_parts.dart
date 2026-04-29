@@ -122,6 +122,8 @@ class ItemDetailTitleBlock extends StatelessWidget {
         Text(
           item.displayName,
           textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: AppTheme.h2,
         ),
         if (item.isDoppler && item.dopplerPhase != null) ...[
