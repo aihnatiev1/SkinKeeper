@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Providers } from './providers';
 import './globals.css';
@@ -20,9 +20,8 @@ export const metadata: Metadata = {
   },
   description:
     'Track your CS2 skin portfolio value, analyze profit & loss, sell on Steam Market, manage trades between accounts, and get price alerts. Free for iOS, Android & Web.',
-  icons: { icon: '/favicon.ico', apple: '/icons/icon-192.png' },
+  icons: { icon: '/favicon.ico', apple: '/icons/apple-touch-icon.png' },
   manifest: '/manifest.json',
-  themeColor: '#6366F1',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -64,6 +63,10 @@ export const metadata: Metadata = {
     canonical: 'https://skinkeeper.store',
   },
   metadataBase: new URL('https://skinkeeper.store'),
+};
+
+export const viewport: Viewport = {
+  themeColor: '#6366F1',
 };
 
 export default function RootLayout({

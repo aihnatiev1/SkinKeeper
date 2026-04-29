@@ -7,6 +7,10 @@ class ApiError extends Error {
   }
 }
 
+// Set to true while a 401 redirect is in flight to avoid stampeding the
+// /login route with multiple concurrent expired requests.
+let isRedirectingToLogin = false;
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -22,6 +26,19 @@ async function request<T>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));
+    // Centralized 401 handling — clear the cookie session and bounce to /login
+    // so individual hooks/mutations don't have to surface a generic toast and
+    // leave the user wondering why their click did nothing.
+    if (res.status === 401 && typeof window !== 'undefined' && !isRedirectingToLogin) {
+      isRedirectingToLogin = true;
+      try { await authApi.clearSession(); } catch { /* best effort */ }
+      const here = window.location.pathname + window.location.search;
+      const isAuthRoute = here.startsWith('/login') || here.startsWith('/api/auth');
+      if (!isAuthRoute) {
+        const params = new URLSearchParams({ expired: '1', redirect: here });
+        window.location.assign(`/login?${params.toString()}`);
+      }
+    }
     throw new ApiError(res.status, body.message || res.statusText, body.code);
   }
 
