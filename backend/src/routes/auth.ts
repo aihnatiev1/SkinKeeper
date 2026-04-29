@@ -159,15 +159,19 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     if (state?.startsWith("link:")) {
       const userId = parseInt(state.split(":")[1]);
       if (userId) {
-        // If this steam_id is already linked to another user, move it
+        // If this steam_id is linked to another (live) user, detach it via
+        // soft-delete so historical transactions stay attributed to the
+        // original owner instead of being orphaned by the FK.
         await pool.query(
-          `DELETE FROM steam_accounts WHERE steam_id = $1 AND user_id != $2`,
+          `UPDATE steam_accounts SET deleted_at = NOW()
+            WHERE steam_id = $1 AND user_id != $2 AND deleted_at IS NULL`,
           [steamId, userId]
         );
         await pool.query(
           `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
            VALUES ($1, $2, $3, $4, 'active')
-           ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
+           ON CONFLICT (user_id, steam_id) DO UPDATE
+             SET display_name = $3, avatar_url = $4, status = 'active', deleted_at = NULL`,
           [userId, steamId, profile.personaname, profile.avatarfull]
         );
         res.redirect(`skinkeeper://account-linked?steamId=${steamId}`);
@@ -175,15 +179,31 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       }
     }
 
-    // Find user — steam_accounts is the source of truth, all accounts are equal
+    // Find user — active steam_accounts row first, then auto-undelete a
+    // soft-deleted row if no live one exists. The Steam OpenID handshake
+    // already proves "this is the same Steam ID", so reviving the user's
+    // own archived link is the right UX (vs. silently creating a new
+    // SkinKeeper user that can't see their old portfolio).
     const { rows: existingAcct } = await pool.query(
-      `SELECT sa.user_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      `SELECT sa.user_id, sa.id AS account_id, sa.deleted_at
+         FROM steam_accounts sa
+        WHERE sa.steam_id = $1
+        ORDER BY (sa.deleted_at IS NULL) DESC, sa.added_at DESC
+        LIMIT 1`,
       [steamId]
     );
 
     let user: any;
     if (existingAcct.length > 0) {
       // This Steam ID is linked to an existing user — log into that user
+      if (existingAcct[0].deleted_at) {
+        // Auto-undelete: the user is logging back in via Steam OpenID,
+        // restore their archived steam_account row.
+        await pool.query(
+          `UPDATE steam_accounts SET deleted_at = NULL, status = 'active' WHERE id = $1`,
+          [existingAcct[0].account_id]
+        );
+      }
       const { rows } = await pool.query(
         `SELECT id, steam_id, display_name, avatar_url, is_premium, premium_until
          FROM users WHERE id = $1`,
@@ -203,11 +223,15 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
       user = rows[0];
     }
 
-    // Ensure steam_accounts entry exists for the login account
+    // Ensure steam_accounts entry exists for the login account.
+    // ON CONFLICT clears deleted_at so a re-link via Steam OpenID undeletes
+    // the row (covers the case where the existing row was soft-deleted but
+    // the lookup above already auto-revived it — idempotent anyway).
     await pool.query(
       `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
        VALUES ($1, $2, $3, $4, 'active')
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
+       ON CONFLICT (user_id, steam_id) DO UPDATE
+         SET display_name = $3, avatar_url = $4, status = 'active', deleted_at = NULL`,
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
 
@@ -215,7 +239,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     await pool.query(
       `UPDATE users SET active_account_id = sa.id
        FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2 AND sa.deleted_at IS NULL`,
       [user.id, steamId]
     );
 
@@ -228,7 +252,7 @@ router.get("/steam/callback", async (req: Request, res: Response) => {
     // Try to auto-refresh Steam session if we have a refresh token
     try {
       const { rows: acctRows } = await pool.query(
-        `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`,
+        `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2 AND deleted_at IS NULL`,
         [user.id, steamId]
       );
       if (acctRows[0]) {
@@ -282,14 +306,25 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     const steamId = await verifySteamOpenId(params);
     const profile = await getSteamProfile(steamId);
 
-    // Find user — steam_accounts is the source of truth, all accounts are equal
+    // Find user — active row first, auto-undelete a soft-deleted one if
+    // that's the only match (see /steam/callback for rationale).
     const { rows: existingAcct } = await pool.query(
-      `SELECT sa.user_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      `SELECT sa.user_id, sa.id AS account_id, sa.deleted_at
+         FROM steam_accounts sa
+        WHERE sa.steam_id = $1
+        ORDER BY (sa.deleted_at IS NULL) DESC, sa.added_at DESC
+        LIMIT 1`,
       [steamId]
     );
 
     let user: any;
     if (existingAcct.length > 0) {
+      if (existingAcct[0].deleted_at) {
+        await pool.query(
+          `UPDATE steam_accounts SET deleted_at = NULL, status = 'active' WHERE id = $1`,
+          [existingAcct[0].account_id]
+        );
+      }
       const { rows } = await pool.query(
         `SELECT id, steam_id, display_name, avatar_url, is_premium, premium_until
          FROM users WHERE id = $1`,
@@ -311,7 +346,8 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     await pool.query(
       `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
        VALUES ($1, $2, $3, $4, 'active')
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
+       ON CONFLICT (user_id, steam_id) DO UPDATE
+         SET display_name = $3, avatar_url = $4, status = 'active', deleted_at = NULL`,
       [user.id, steamId, profile.personaname, profile.avatarfull]
     );
 
@@ -319,7 +355,7 @@ router.post("/steam/verify", async (req: Request, res: Response) => {
     await pool.query(
       `UPDATE users SET active_account_id = sa.id
        FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2 AND sa.deleted_at IS NULL`,
       [user.id, steamId]
     );
 
@@ -369,14 +405,24 @@ router.post("/desktop", async (req: Request, res: Response) => {
     // Fetch Steam profile
     const profile = await getSteamProfile(steamId);
 
-    // Find or create user
+    // Find or create user — prefer active row, auto-undelete soft-deleted.
     const { rows: existingAcct } = await pool.query(
-      `SELECT sa.user_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      `SELECT sa.user_id, sa.id AS account_id, sa.deleted_at
+         FROM steam_accounts sa
+        WHERE sa.steam_id = $1
+        ORDER BY (sa.deleted_at IS NULL) DESC, sa.added_at DESC
+        LIMIT 1`,
       [steamId]
     );
 
     let userId: number;
     if (existingAcct.length > 0) {
+      if (existingAcct[0].deleted_at) {
+        await pool.query(
+          `UPDATE steam_accounts SET deleted_at = NULL, status = 'active' WHERE id = $1`,
+          [existingAcct[0].account_id]
+        );
+      }
       userId = existingAcct[0].user_id;
     } else {
       const { rows } = await pool.query(
@@ -394,7 +440,8 @@ router.post("/desktop", async (req: Request, res: Response) => {
     await pool.query(
       `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
        VALUES ($1, $2, $3, $4, 'active')
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'`,
+       ON CONFLICT (user_id, steam_id) DO UPDATE
+         SET display_name = $3, avatar_url = $4, status = 'active', deleted_at = NULL`,
       [userId, steamId, profile.personaname, profile.avatarfull]
     );
 
@@ -402,7 +449,7 @@ router.post("/desktop", async (req: Request, res: Response) => {
     await pool.query(
       `UPDATE users SET active_account_id = sa.id
        FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2 AND sa.deleted_at IS NULL`,
       [userId, steamId]
     );
 
@@ -410,7 +457,7 @@ router.post("/desktop", async (req: Request, res: Response) => {
     if (sessionId) {
       try {
         const { rows: acctRows } = await pool.query(
-          `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`,
+          `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2 AND deleted_at IS NULL`,
           [userId, steamId]
         );
         if (acctRows[0]) {
@@ -511,7 +558,7 @@ router.get("/accounts", authMiddleware, async (req: AuthRequest, res: Response) 
               sa.steam_login_secure IS NOT NULL as has_session,
               sa.session_updated_at
        FROM steam_accounts sa
-       WHERE sa.user_id = $1
+       WHERE sa.user_id = $1 AND sa.deleted_at IS NULL
        ORDER BY sa.added_at`,
       [req.userId]
     );
@@ -568,7 +615,7 @@ router.post("/accounts/link", authMiddleware, async (req: AuthRequest, res: Resp
 
     if (!isPremium) {
       const { rows: countRow } = await pool.query(
-        `SELECT COUNT(*)::int as cnt FROM steam_accounts WHERE user_id = $1`,
+        `SELECT COUNT(*)::int as cnt FROM steam_accounts WHERE user_id = $1 AND deleted_at IS NULL`,
         [req.userId]
       );
       if (countRow[0].cnt >= 2) {
@@ -628,14 +675,25 @@ router.put("/accounts/:accountId/active", authMiddleware, async (req: AuthReques
   }
 });
 
-// DELETE /api/auth/accounts/:accountId — Disable an account (soft-delete)
+// DELETE /api/auth/accounts/:accountId — soft-delete an account
+//
+// Soft-delete (UPDATE deleted_at = NOW()) instead of hard DELETE so that:
+//   1. transactions.steam_account_id stays attached — the user keeps their
+//      historical per-account P/L if they re-link via Steam OpenID later.
+//   2. item_cost_basis / daily_pl_snapshots rows for this account survive,
+//      so the unique-index collision the old code was working around (NULL
+//      vs 0 conflict on the global rollup row) just doesn't happen anymore.
+//   3. Re-linking the same Steam ID auto-undeletes via the OpenID handlers,
+//      restoring full visibility 1:1.
 router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const accountId = parseInt(req.params.accountId as string);
 
-    // Verify the account belongs to this user
+    // Verify the account belongs to this user and is currently live.
     const { rows: accounts } = await pool.query(
-      `SELECT id, status FROM steam_accounts WHERE user_id = $1 ORDER BY added_at`,
+      `SELECT id, status FROM steam_accounts
+        WHERE user_id = $1 AND deleted_at IS NULL
+        ORDER BY added_at`,
       [req.userId]
     );
 
@@ -660,24 +718,9 @@ router.delete("/accounts/:accountId", authMiddleware, async (req: AuthRequest, r
       );
     }
 
-    // Before the hard delete, wipe per-account rollups that would otherwise
-    // be FK SET NULL'd and collide with the user's existing global (NULL)
-    // rollup row on the partial-unique indexes
-    // `(user_id, COALESCE(steam_account_id, 0), ...)`. Merging would be
-    // nicer for P/L continuity, but the simpler thing matches user intent:
-    // unlinking an account wipes its attribution, while the user-level
-    // roll-up row (steam_account_id IS NULL) stays intact. Sequential
-    // DELETEs are safe on retry (idempotent) — no transaction needed.
+    // Soft-delete: keep transactions and per-account rollups intact.
     await pool.query(
-      `DELETE FROM item_cost_basis WHERE user_id = $1 AND steam_account_id = $2`,
-      [req.userId, accountId]
-    );
-    await pool.query(
-      `DELETE FROM daily_pl_snapshots WHERE user_id = $1 AND steam_account_id = $2`,
-      [req.userId, accountId]
-    );
-    await pool.query(
-      `DELETE FROM steam_accounts WHERE id = $1 AND user_id = $2`,
+      `UPDATE steam_accounts SET deleted_at = NOW() WHERE id = $1 AND user_id = $2`,
       [accountId, req.userId]
     );
 
@@ -751,7 +794,7 @@ router.get("/accounts/:accountId/session/status", authMiddleware, async (req: Au
 
     // Verify ownership
     const { rows } = await pool.query(
-      `SELECT id FROM steam_accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT id FROM steam_accounts WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [accountId, req.userId]
     );
     if (rows.length === 0) {
@@ -832,15 +875,18 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
         return;
       }
       const profile = await getSteamProfile(steamId);
-      // Move account from another user if already linked elsewhere
+      // Detach account from another (live) user via soft-delete so historical
+      // attribution stays with the previous owner instead of being orphaned.
       await pool.query(
-        `DELETE FROM steam_accounts WHERE steam_id = $1 AND user_id != $2`,
+        `UPDATE steam_accounts SET deleted_at = NOW()
+          WHERE steam_id = $1 AND user_id != $2 AND deleted_at IS NULL`,
         [steamId, pending.linkUserId]
       );
       const { rows: saRows } = await pool.query(
         `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
          VALUES ($1, $2, $3, $4, 'active')
-         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
+         ON CONFLICT (user_id, steam_id) DO UPDATE
+           SET display_name = $3, avatar_url = $4, status = 'active', deleted_at = NULL
          RETURNING id`,
         [pending.linkUserId, steamId, profile.personaname, profile.avatarfull]
       );
@@ -861,9 +907,13 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
 
     const profile = await getSteamProfile(steamId);
 
-    // Find user — steam_accounts is the source of truth
+    // Find user — active row first, auto-undelete a soft-deleted match.
     const { rows: existingAcct } = await pool.query(
-      `SELECT sa.user_id, sa.id as account_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      `SELECT sa.user_id, sa.id AS account_id, sa.deleted_at
+         FROM steam_accounts sa
+        WHERE sa.steam_id = $1
+        ORDER BY (sa.deleted_at IS NULL) DESC, sa.added_at DESC
+        LIMIT 1`,
       [steamId]
     );
 
@@ -878,7 +928,7 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
       user = rows[0];
       accountId = existingAcct[0].account_id;
       await pool.query(
-        `UPDATE steam_accounts SET display_name = $1, avatar_url = $2, status = 'active' WHERE id = $3`,
+        `UPDATE steam_accounts SET display_name = $1, avatar_url = $2, status = 'active', deleted_at = NULL WHERE id = $3`,
         [profile.personaname, profile.avatarfull, accountId]
       );
     } else {
@@ -894,7 +944,8 @@ router.get("/qr/poll/:nonce", async (req: Request, res: Response) => {
       const { rows: saRows } = await pool.query(
         `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
          VALUES ($1, $2, $3, $4, 'active')
-         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
+         ON CONFLICT (user_id, steam_id) DO UPDATE
+           SET display_name = $3, avatar_url = $4, status = 'active', deleted_at = NULL
          RETURNING id`,
         [user.id, steamId, profile.personaname, profile.avatarfull]
       );
@@ -972,9 +1023,13 @@ router.post("/token", async (req: Request, res: Response) => {
 
     const profile = await getSteamProfile(steamId);
 
-    // Find user — steam_accounts is the source of truth
+    // Find user — active row first, auto-undelete a soft-deleted match.
     const { rows: existingAcct } = await pool.query(
-      `SELECT sa.user_id, sa.id as account_id FROM steam_accounts sa WHERE sa.steam_id = $1 LIMIT 1`,
+      `SELECT sa.user_id, sa.id AS account_id, sa.deleted_at
+         FROM steam_accounts sa
+        WHERE sa.steam_id = $1
+        ORDER BY (sa.deleted_at IS NULL) DESC, sa.added_at DESC
+        LIMIT 1`,
       [steamId]
     );
 
@@ -988,9 +1043,9 @@ router.post("/token", async (req: Request, res: Response) => {
       );
       user = rows[0];
       accountId = existingAcct[0].account_id;
-      // Update display info
+      // Update display info; clear deleted_at to undelete on re-link.
       await pool.query(
-        `UPDATE steam_accounts SET display_name = $1, avatar_url = $2 WHERE id = $3`,
+        `UPDATE steam_accounts SET display_name = $1, avatar_url = $2, deleted_at = NULL WHERE id = $3`,
         [profile.personaname, profile.avatarfull, accountId]
       );
     } else {
@@ -1006,7 +1061,8 @@ router.post("/token", async (req: Request, res: Response) => {
       const { rows: saRows } = await pool.query(
         `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url, status)
          VALUES ($1, $2, $3, $4, 'active')
-         ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4, status = 'active'
+         ON CONFLICT (user_id, steam_id) DO UPDATE
+           SET display_name = $3, avatar_url = $4, status = 'active', deleted_at = NULL
          RETURNING id`,
         [user.id, steamId, profile.personaname, profile.avatarfull]
       );
@@ -1114,13 +1170,13 @@ router.post("/demo", async (req: Request, res: Response) => {
     await pool.query(
       `UPDATE users SET active_account_id = sa.id
        FROM steam_accounts sa
-       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2`,
+       WHERE users.id = $1 AND sa.user_id = $1 AND sa.steam_id = $2 AND sa.deleted_at IS NULL`,
       [userId, demoSteamId]
     );
 
     // Seed demo data — clear and re-seed every login for freshness
     const accountId = (await pool.query(
-      `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`, [userId, demoSteamId]
+      `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2 AND deleted_at IS NULL`, [userId, demoSteamId]
     )).rows[0].id;
 
     // Clean up old demo data

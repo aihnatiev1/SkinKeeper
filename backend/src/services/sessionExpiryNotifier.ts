@@ -51,7 +51,8 @@ export async function runSessionExpiryNotifierSweep(): Promise<{
   const { rows } = await pool.query<CandidateRow>(
     `SELECT id, user_id, display_name, steam_refresh_token, expiry_notified_for
        FROM steam_accounts
-      WHERE status = 'active'
+      WHERE deleted_at IS NULL
+        AND status = 'active'
         AND user_id IS NOT NULL
         AND steam_refresh_token IS NOT NULL`,
   );

@@ -19,7 +19,7 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
              COUNT(*)::int AS qty,
              SUM(price_cents)::bigint AS total
       FROM transactions
-      WHERE user_id = $1 AND type = 'buy' ${accountFilter}
+      WHERE user_id = $1 AND type = 'buy' AND refunded_at IS NULL ${accountFilter}
       GROUP BY market_hash_name, steam_account_id
     ),
     sell_agg AS (
@@ -27,7 +27,7 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
              COUNT(*)::int AS qty,
              SUM(price_cents)::bigint AS total
       FROM transactions
-      WHERE user_id = $1 AND type = 'sell' ${accountFilter}
+      WHERE user_id = $1 AND type = 'sell' AND refunded_at IS NULL ${accountFilter}
       GROUP BY market_hash_name, steam_account_id
     ),
     combined AS (
@@ -119,7 +119,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
                COUNT(*)::int AS qty,
                SUM(price_cents)::bigint AS total
         FROM transactions
-        WHERE user_id = $1 AND type = 'buy' ${accountCond} ${portfolioCond}
+        WHERE user_id = $1 AND type = 'buy' AND refunded_at IS NULL ${accountCond} ${portfolioCond}
         GROUP BY market_hash_name
       ),
       sell_agg AS (
@@ -127,7 +127,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
                COUNT(*)::int AS qty,
                SUM(price_cents)::bigint AS total
         FROM transactions
-        WHERE user_id = $1 AND type = 'sell' ${accountCond} ${portfolioCond}
+        WHERE user_id = $1 AND type = 'sell' AND refunded_at IS NULL ${accountCond} ${portfolioCond}
         GROUP BY market_hash_name
       ),
       combined AS (
@@ -345,7 +345,7 @@ export async function getItemsPL(
                SUM(price_cents)::int AS total,
                MAX(icon_url) FILTER (WHERE icon_url IS NOT NULL AND icon_url != '') AS icon_url
         FROM transactions
-        WHERE user_id = $1 AND type = 'buy' ${extraFilter}
+        WHERE user_id = $1 AND type = 'buy' AND refunded_at IS NULL ${extraFilter}
         GROUP BY market_hash_name
       ),
       sell_agg AS (
@@ -353,7 +353,7 @@ export async function getItemsPL(
                COUNT(*)::int AS qty,
                SUM(price_cents)::int AS total
         FROM transactions
-        WHERE user_id = $1 AND type = 'sell' ${extraFilter}
+        WHERE user_id = $1 AND type = 'sell' AND refunded_at IS NULL ${extraFilter}
         GROUP BY market_hash_name
       ),
       combined AS (

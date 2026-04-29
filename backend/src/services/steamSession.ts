@@ -86,7 +86,7 @@ export class SteamSessionService {
 
     const { rows } = await pool.query(
       `SELECT steam_refresh_token, session_updated_at
-       FROM steam_accounts WHERE id = $1`,
+       FROM steam_accounts WHERE id = $1 AND deleted_at IS NULL`,
       [accountId]
     );
     const row = rows[0];
@@ -154,7 +154,7 @@ export class SteamSessionService {
   static async getSession(accountId: number): Promise<SteamSession | null> {
     const { rows } = await pool.query(
       `SELECT steam_session_id, steam_login_secure, steam_access_token
-       FROM steam_accounts WHERE id = $1`,
+       FROM steam_accounts WHERE id = $1 AND deleted_at IS NULL`,
       [accountId]
     );
     const row = rows[0];
@@ -719,10 +719,12 @@ export class SteamSessionService {
     const isPremium = userRows[0]?.is_premium ?? false;
     if (!isPremium) {
       const { rows: countRows } = await pool.query(
-        `SELECT COUNT(*)::int AS cnt FROM steam_accounts WHERE user_id = $1`, [userId]
+        `SELECT COUNT(*)::int AS cnt FROM steam_accounts WHERE user_id = $1 AND deleted_at IS NULL`, [userId]
       );
       if (countRows[0].cnt >= 2) {
-        // Check if this is just re-linking an existing account (not a new one)
+        // Check if this is just re-linking an existing account (not a new one).
+        // Match either a live or a soft-deleted record — re-linking a previously
+        // archived account is allowed (it's the same Steam ID, undelete flow).
         const { rows: existing } = await pool.query(
           `SELECT id FROM steam_accounts WHERE user_id = $1 AND steam_id = $2`, [userId, steamId]
         );
@@ -747,11 +749,13 @@ export class SteamSessionService {
       // Non-fatal — use steamId as display name
     }
 
-    // Upsert steam_accounts entry
+    // Upsert steam_accounts entry. ON CONFLICT clears deleted_at so a
+    // re-link via Steam OpenID undeletes a previously archived account.
     const { rows } = await pool.query(
       `INSERT INTO steam_accounts (user_id, steam_id, display_name, avatar_url)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, steam_id) DO UPDATE SET display_name = $3, avatar_url = $4
+       ON CONFLICT (user_id, steam_id) DO UPDATE
+         SET display_name = $3, avatar_url = $4, deleted_at = NULL
        RETURNING id`,
       [userId, steamId, displayName, avatarUrl]
     );

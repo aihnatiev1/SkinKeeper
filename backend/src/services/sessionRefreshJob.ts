@@ -30,7 +30,8 @@ async function findRefreshCandidates(): Promise<CandidateRow[]> {
   const { rows } = await pool.query(
     `SELECT id, session_updated_at
        FROM steam_accounts
-      WHERE steam_refresh_token IS NOT NULL
+      WHERE deleted_at IS NULL
+        AND steam_refresh_token IS NOT NULL
         AND steam_login_secure IS NOT NULL
         AND (
           session_updated_at IS NULL
