@@ -1,6 +1,5 @@
 import 'dart:developer' as dev;
 
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/account_scope_provider.dart';
@@ -340,34 +339,16 @@ class ListingsNotifier extends AutoDisposeAsyncNotifier<ListingsState> {
   Future<ListingsState> build() => _fetch();
 
   Future<ListingsState> _fetch() async {
-    // ignore: avoid_print
-    print('[Listings] _fetch called');
     final api = ref.read(apiClientProvider);
-    late final Response response;
-    try {
-      response = await api.get('/market/listings');
-      // ignore: avoid_print
-      print('[Listings] response ${response.statusCode}');
-    } catch (e) {
-      // ignore: avoid_print
-      print('[Listings] ERROR: $e');
-      rethrow;
-    }
+    final response = await api.get('/market/listings');
     final data = response.data as Map<String, dynamic>;
     final list = (data['listings'] as List<dynamic>?) ?? [];
-    // ignore: avoid_print
-    print('[Listings] list.length=${list.length}');
-    if (list.isNotEmpty) {
-      // ignore: avoid_print
-      print('[Listings] first item keys: ${(list.first as Map).keys.toList()}');
-    }
     final listings = <MarketListing>[];
     for (int i = 0; i < list.length; i++) {
       try {
         listings.add(MarketListing.fromJson(list[i] as Map<String, dynamic>));
       } catch (e) {
-        // ignore: avoid_print
-        print('[Listings] fromJson error at $i: $e | data: ${list[i]}');
+        dev.log('Listing parse error at $i: $e', name: 'Listings');
       }
     }
     return ListingsState(

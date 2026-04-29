@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api_client.dart';
 import '../../../core/theme.dart';
 import '../../../widgets/premium_gate.dart';
 import '../../../widgets/shared_ui.dart';
@@ -36,7 +37,7 @@ class PortfolioItemsTab extends ConsumerWidget {
             ),
             error: (err, _) => Center(child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Error: $err', style: const TextStyle(color: AppTheme.loss, fontSize: 11)),
+              child: Text(friendlyError(err), style: const TextStyle(color: AppTheme.loss, fontSize: 11)),
             )),
           ),
         ],

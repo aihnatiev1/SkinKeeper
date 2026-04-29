@@ -210,7 +210,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
     if (_lastHandledDeepLink == uri) return;
     _lastHandledDeepLink = uri;
 
-    debugPrint('DEEPLINK: $uri');
+    dev.log('Deep link: $uri', name: 'DeepLink');
 
     // skinkeeper://portfolio — no manual go(), router handles via auth state
 
@@ -244,7 +244,7 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
   Future<void> _saveReferralCode(String code) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('pending_referral_code', code);
-    debugPrint('REFERRAL: saved pending code $code');
+    dev.log('Saved pending referral code: $code', name: 'Referral');
   }
 
   /// Apply pending referral code after login (if any)
@@ -256,22 +256,21 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       final api = ref.read(apiClientProvider);
       await api.post('/auth/referral/apply', data: {'code': code});
       await prefs.remove('pending_referral_code');
-      debugPrint('REFERRAL: applied code $code');
+      dev.log('Applied referral code: $code', name: 'Referral');
     } catch (e) {
-      debugPrint('REFERRAL: apply failed: $e');
+      dev.log('Referral apply failed: $e', name: 'Referral');
     }
   }
 
   Future<void> _handleAuthToken(String token) async {
     try {
-      debugPrint('AUTH: saving token...');
       final api = ref.read(apiClientProvider);
       await api.saveToken(token);
+      if (!mounted) return;
 
-      debugPrint('AUTH: token saved, fetching user...');
       final resp = await api.get('/auth/me');
+      if (!mounted) return;
 
-      debugPrint('AUTH: user fetched, setting auth state...');
       final user = SteamUser.fromJson(resp.data as Map<String, dynamic>);
       ref.read(authStateProvider.notifier).setUser(user);
 
@@ -283,27 +282,24 @@ class _SkinKeeperAppState extends ConsumerState<SkinKeeperApp>
       ref.invalidate(transactionsProvider);
       ref.invalidate(accountsProvider);
 
-      // Apply pending referral code if user came via referral link
       _applyPendingReferral();
 
-      // Trigger background inventory sync from Steam
-      debugPrint('AUTH: triggering background sync...');
+      // Background inventory sync — guard ref access against widget disposal
       Future.microtask(() async {
+        if (!mounted) return;
         try {
           final api = ref.read(apiClientProvider);
           await api.post('/inventory/refresh');
+          if (!mounted) return;
           ref.invalidate(inventoryProvider);
           ref.invalidate(portfolioProvider);
-          debugPrint('AUTH: inventory synced from Steam');
         } catch (e) {
-          debugPrint('AUTH: background sync failed (non-critical): $e');
+          dev.log('Background sync failed: $e', name: 'Auth');
         }
       });
-
-      debugPrint('AUTH: done, all providers invalidated');
     } catch (e, st) {
-      debugPrint('AUTH ERROR: $e');
-      debugPrint('$st');
+      dev.log('Auth token handling failed: $e\n$st', name: 'Auth');
+      if (!mounted) return;
       ref.read(authStateProvider.notifier).clearUser();
     }
   }

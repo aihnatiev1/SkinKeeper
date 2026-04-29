@@ -31,6 +31,10 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
     super.initState();
     _pageCtrl = PageController();
     _showInfoBanner = !CacheService.sessionInfoDismissed;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(sessionLinkModeProvider.notifier).state = widget.linkMode;
+    });
   }
 
   @override
@@ -44,10 +48,6 @@ class _SteamSessionScreenState extends ConsumerState<SteamSessionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(sessionLinkModeProvider.notifier).state = widget.linkMode;
-    });
-
     final sessionStatus = ref.watch(sessionStatusProvider);
     final activeStatus = sessionStatus.valueOrNull?.status;
     final isExpired = !widget.linkMode &&

@@ -114,7 +114,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Demo login failed: $e'), backgroundColor: AppTheme.loss),
+          SnackBar(content: Text('Demo login failed: ${friendlyError(e)}'), backgroundColor: AppTheme.loss),
         );
       }
     }

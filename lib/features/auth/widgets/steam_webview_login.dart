@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../../../core/api_client.dart';
 import '../../../core/theme.dart';
 
 /// Result returned when the user successfully logs in via WebView.
@@ -116,7 +117,7 @@ class _SteamWebViewLoginState extends State<SteamWebViewLogin> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Login failed: ${friendlyError(e)}'),
             backgroundColor: AppTheme.loss,
           ),
         );

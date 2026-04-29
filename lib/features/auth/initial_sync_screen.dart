@@ -14,6 +14,8 @@ import '../../features/transactions/transactions_provider.dart';
 
 enum _StepStatus { waiting, syncing, done, error }
 
+enum _Step { inventory, transactions, trades }
+
 class InitialSyncScreen extends ConsumerStatefulWidget {
   const InitialSyncScreen({super.key});
 
@@ -22,75 +24,105 @@ class InitialSyncScreen extends ConsumerStatefulWidget {
 }
 
 class _InitialSyncScreenState extends ConsumerState<InitialSyncScreen> {
-  _StepStatus _inventory = _StepStatus.waiting;
-  _StepStatus _transactions = _StepStatus.waiting;
-  _StepStatus _trades = _StepStatus.waiting;
-  bool _done = false;
+  final Map<_Step, _StepStatus> _status = {
+    _Step.inventory: _StepStatus.waiting,
+    _Step.transactions: _StepStatus.waiting,
+    _Step.trades: _StepStatus.waiting,
+  };
+  bool _allDone = false;
+  bool _navigating = false;
+
+  bool get _hasErrors =>
+      _status.values.any((s) => s == _StepStatus.error);
+
+  bool get _allFinished => _status.values.every(
+      (s) => s == _StepStatus.done || s == _StepStatus.error);
 
   @override
   void initState() {
     super.initState();
-    _runSync();
+    _runAll();
   }
 
-  Future<void> _runSync() async {
+  Future<void> _runAll() async {
+    await _runStep(_Step.inventory);
+    if (!mounted) return;
+    await _runStep(_Step.transactions);
+    if (!mounted) return;
+    await _runStep(_Step.trades);
+    if (!mounted) return;
+
+    setState(() => _allDone = true);
+    ref.read(needsInitialSyncProvider.notifier).state = false;
+
+    // Force refresh all portfolio-related providers
+    ref.invalidate(inventoryProvider);
+    ref.invalidate(portfolioProvider);
+    ref.invalidate(portfolioPLProvider);
+    ref.invalidate(transactionsProvider);
+    ref.invalidate(tradesProvider);
+
+    if (!_hasErrors) {
+      // Auto-navigate only on full success
+      await Future.delayed(const Duration(milliseconds: 800));
+      _navigate();
+    }
+    // On errors: stay on screen, let user retry or continue manually.
+  }
+
+  Future<void> _runStep(_Step step) async {
+    if (!mounted) return;
+    setState(() => _status[step] = _StepStatus.syncing);
     final api = ref.read(apiClientProvider);
 
-    // 1. Inventory
-    setState(() => _inventory = _StepStatus.syncing);
     try {
-      await api.post('/inventory/refresh');
-      if (mounted) {
-        ref.invalidate(inventoryProvider);
-        ref.invalidate(portfolioProvider);
-        setState(() => _inventory = _StepStatus.done);
+      switch (step) {
+        case _Step.inventory:
+          await api.post('/inventory/refresh');
+          if (!mounted) return;
+          ref.invalidate(inventoryProvider);
+          ref.invalidate(portfolioProvider);
+          break;
+        case _Step.transactions:
+          await api.post('/transactions/sync');
+          if (!mounted) return;
+          ref.invalidate(transactionsProvider);
+          ref.invalidate(portfolioPLProvider);
+          ref.invalidate(portfolioProvider);
+          ref.invalidate(txStatsProvider);
+          break;
+        case _Step.trades:
+          await api.get('/trades',
+              queryParameters: {'limit': 20, 'offset': 0});
+          if (!mounted) return;
+          ref.invalidate(tradesProvider);
+          break;
       }
+      if (mounted) setState(() => _status[step] = _StepStatus.done);
     } catch (_) {
-      if (mounted) setState(() => _inventory = _StepStatus.error);
+      if (mounted) setState(() => _status[step] = _StepStatus.error);
     }
+  }
 
-    // 2. Transactions
-    if (mounted) setState(() => _transactions = _StepStatus.syncing);
-    try {
-      await api.post('/transactions/sync');
-      if (mounted) {
-        ref.invalidate(transactionsProvider);
-        ref.invalidate(portfolioPLProvider);
-        ref.invalidate(portfolioProvider);
-        ref.invalidate(txStatsProvider);
-        setState(() => _transactions = _StepStatus.done);
-      }
-    } catch (_) {
-      if (mounted) setState(() => _transactions = _StepStatus.error);
+  Future<void> _retryFailed() async {
+    final failed = _status.entries
+        .where((e) => e.value == _StepStatus.error)
+        .map((e) => e.key)
+        .toList();
+    for (final step in failed) {
+      if (!mounted) return;
+      await _runStep(step);
     }
-
-    // 3. Trades
-    if (mounted) setState(() => _trades = _StepStatus.syncing);
-    try {
-      await api.get('/trades', queryParameters: {'limit': 20, 'offset': 0});
-      if (mounted) {
-        ref.invalidate(tradesProvider);
-        setState(() => _trades = _StepStatus.done);
-      }
-    } catch (_) {
-      if (mounted) setState(() => _trades = _StepStatus.error);
+    if (!_hasErrors && mounted) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      _navigate();
     }
+  }
 
-    // Done — invalidate all portfolio data and navigate
-    if (mounted) {
-      setState(() => _done = true);
-      ref.read(needsInitialSyncProvider.notifier).state = false;
-
-      // Force refresh all portfolio-related providers before navigating
-      ref.invalidate(inventoryProvider);
-      ref.invalidate(portfolioProvider);
-      ref.invalidate(portfolioPLProvider);
-      ref.invalidate(transactionsProvider);
-      ref.invalidate(tradesProvider);
-
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (mounted) context.go('/portfolio');
-    }
+  void _navigate() {
+    if (!mounted || _navigating) return;
+    _navigating = true;
+    context.go('/portfolio');
   }
 
   @override
@@ -124,22 +156,31 @@ class _InitialSyncScreenState extends ConsumerState<InitialSyncScreen> {
               const SizedBox(height: 40),
               _SyncRow(
                 label: 'Inventory',
-                status: _inventory,
+                status: _status[_Step.inventory]!,
                 delay: 300,
+                onRetry: _status[_Step.inventory] == _StepStatus.error
+                    ? () => _runStep(_Step.inventory)
+                    : null,
               ),
               const SizedBox(height: 16),
               _SyncRow(
                 label: 'Transactions',
-                status: _transactions,
+                status: _status[_Step.transactions]!,
                 delay: 400,
+                onRetry: _status[_Step.transactions] == _StepStatus.error
+                    ? () => _runStep(_Step.transactions)
+                    : null,
               ),
               const SizedBox(height: 16),
               _SyncRow(
                 label: 'Trades',
-                status: _trades,
+                status: _status[_Step.trades]!,
                 delay: 500,
+                onRetry: _status[_Step.trades] == _StepStatus.error
+                    ? () => _runStep(_Step.trades)
+                    : null,
               ),
-              if (_done) ...[
+              if (_allDone && !_hasErrors) ...[
                 const SizedBox(height: 32),
                 const Text(
                   'All done!',
@@ -151,6 +192,39 @@ class _InitialSyncScreenState extends ConsumerState<InitialSyncScreen> {
                 ).animate().fadeIn(duration: 300.ms).scale(
                     begin: const Offset(0.9, 0.9),
                     end: const Offset(1, 1)),
+              ],
+              if (_allFinished && _hasErrors) ...[
+                const SizedBox(height: 32),
+                const Text(
+                  'Some data couldn\'t sync',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.loss,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'You can retry now or continue and sync later from settings.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton(
+                      onPressed: _navigate,
+                      child: const Text('Continue'),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: _retryFailed,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ).animate().fadeIn(duration: 300.ms),
               ],
             ],
           ),
@@ -164,11 +238,13 @@ class _SyncRow extends StatelessWidget {
   final String label;
   final _StepStatus status;
   final int delay;
+  final VoidCallback? onRetry;
 
   const _SyncRow({
     required this.label,
     required this.status,
     required this.delay,
+    this.onRetry,
   });
 
   @override
@@ -187,7 +263,9 @@ class _SyncRow extends StatelessWidget {
                   ? AppTheme.profit
                   : status == _StepStatus.syncing
                       ? Colors.white
-                      : AppTheme.textMuted,
+                      : status == _StepStatus.error
+                          ? AppTheme.loss
+                          : AppTheme.textMuted,
             ),
           ),
         ),
@@ -224,12 +302,26 @@ class _SyncRow extends StatelessWidget {
       case _StepStatus.waiting:
         return const SizedBox.shrink();
       case _StepStatus.syncing:
-        return Text('Syncing...', style: TextStyle(fontSize: 12, color: AppTheme.textMuted));
+        return const Text('Syncing...', style: TextStyle(fontSize: 12, color: AppTheme.textMuted));
       case _StepStatus.done:
-        return Text('Done', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.profit))
+        return const Text('Done', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.profit))
             .animate().fadeIn(duration: 200.ms);
       case _StepStatus.error:
-        return Text('Skipped', style: TextStyle(fontSize: 12, color: AppTheme.loss));
+        if (onRetry != null) {
+          return TextButton.icon(
+            onPressed: onRetry,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.refresh, size: 14, color: AppTheme.loss),
+            label: const Text('Retry',
+                style: TextStyle(fontSize: 12, color: AppTheme.loss)),
+          );
+        }
+        return const Text('Failed',
+            style: TextStyle(fontSize: 12, color: AppTheme.loss));
     }
   }
 }

@@ -86,7 +86,7 @@ class ItemTransactionsSheet extends ConsumerWidget {
             ),
             error: (e, _) => Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Error: $e', style: TextStyle(color: AppTheme.loss, fontSize: 12)),
+              child: Text(friendlyError(e), style: TextStyle(color: AppTheme.loss, fontSize: 12)),
             ),
             data: (txs) => _TxList(txs: txs, itemName: item.marketHashName),
           ),
