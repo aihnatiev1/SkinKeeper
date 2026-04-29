@@ -70,6 +70,18 @@ router.post("/refresh", async (req: Request, res: Response) => {
       return;
     }
 
+    // Verify user still exists (GDPR delete is a hard DELETE — see /user handler).
+    // Without this, a leaked token for a deleted account stays usable for up to
+    // 7 days past expiry, and the rotated JWT references a non-existent user_id.
+    const { rows: userRows } = await pool.query(
+      "SELECT id FROM users WHERE id = $1",
+      [decoded.userId]
+    );
+    if (userRows.length === 0) {
+      res.status(401).json({ code: "TOKEN_EXPIRED", error: "User no longer exists" });
+      return;
+    }
+
     // Issue new token
     const newToken = jwt.sign(
       { userId: decoded.userId },

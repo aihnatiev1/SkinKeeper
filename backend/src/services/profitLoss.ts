@@ -45,7 +45,7 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
         END AS avg_buy_price,
         COALESCE(s.total, 0) - (
           CASE WHEN COALESCE(b.qty, 0) > 0
-            THEN (COALESCE(b.total, 0)::float / COALESCE(b.qty, 1) * COALESCE(s.qty, 0))::int
+            THEN (COALESCE(b.total, 0) * COALESCE(s.qty, 0) / COALESCE(b.qty, 1))::bigint
             ELSE 0
           END
         ) AS realized_profit
@@ -137,7 +137,7 @@ export async function getPortfolioPL(userId: number, accountId?: number, portfol
           END AS avg_buy_price,
           COALESCE(s.total, 0) - (
             CASE WHEN COALESCE(b.qty, 0) > 0
-              THEN (COALESCE(b.total, 0)::float / COALESCE(b.qty, 1) * COALESCE(s.qty, 0))::int
+              THEN (COALESCE(b.total, 0) * COALESCE(s.qty, 0) / COALESCE(b.qty, 1))::bigint
               ELSE 0
             END
           ) AS realized_profit
@@ -363,7 +363,7 @@ export async function getItemsPL(
           END AS avg_buy_price,
           COALESCE(s.total, 0) - (
             CASE WHEN COALESCE(b.qty, 0) > 0
-              THEN (COALESCE(b.total, 0)::float / b.qty * COALESCE(s.qty, 0))::int
+              THEN (COALESCE(b.total, 0) * COALESCE(s.qty, 0) / b.qty)::bigint
               ELSE 0
             END
           ) AS realized_profit,

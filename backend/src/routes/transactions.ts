@@ -13,6 +13,7 @@ import {
 import { SteamSessionService } from "../services/steamSession.js";
 import { recalculateCostBasis } from "../services/profitLoss.js";
 import { pool } from "../db/pool.js";
+import { log } from "../utils/logger.js";
 
 const router = Router();
 
@@ -29,7 +30,11 @@ router.post(
       const forceFullSync = req.query.full === "1";
       // Optional ?accountId= lets the client sync a specific account (e.g. when scope chip differs from active account)
       const requestedAccountId = req.query.accountId ? parseInt(req.query.accountId as string) : null;
-      console.log(`[Transactions] Sync requested for user ${req.userId}${forceFullSync ? " (FULL)" : ""}${requestedAccountId ? ` (accountId=${requestedAccountId})` : ""}`);
+      log.info("transactions_sync_requested", {
+        userId: req.userId,
+        full: forceFullSync,
+        requestedAccountId: requestedAccountId ?? null,
+      });
 
       // Prevent parallel syncs for the same user — use advisory lock
       const lockKey = req.userId! + 1000000; // offset to avoid collisions
@@ -80,15 +85,17 @@ router.post(
       // No auto-detect — server IP gives wrong country.
       // User sets currency in Settings. Fallback to USD.
       walletCurrencyId = walletCurrencyId || 1;
-      console.log(`[Transactions] Wallet currency ID: ${walletCurrencyId}, accountId: ${steamAccountId}`);
+      log.info("transactions_wallet_currency", {
+        walletCurrencyId,
+        accountId: steamAccountId,
+      });
 
       // For incremental sync: get latest known tx date to estimate how far back we need to go
       const latestKnownDate = forceFullSync ? null : await getLatestTxDate(req.userId!, steamAccountId);
-      if (latestKnownDate) {
-        console.log(`[Transactions] Incremental sync — latest known tx: ${latestKnownDate.toISOString()}`);
-      } else {
-        console.log(`[Transactions] Full sync — no previous data`);
-      }
+      log.info("transactions_sync_mode", {
+        mode: latestKnownDate ? "incremental" : "full",
+        userId: req.userId,
+      });
 
       let totalFetched = 0;
       let totalNew = 0;
@@ -112,7 +119,7 @@ router.post(
             if (err?.response?.status === 429 && retries < 3) {
               retries++;
               const delay = retries * 10000; // 10s, 20s, 30s
-              console.log(`[Transactions] 429 rate limit, retry ${retries}/3 in ${delay / 1000}s`);
+              log.warn("transactions_steam_429", { retry: retries, delayMs: delay });
               await new Promise((r) => setTimeout(r, delay));
             } else {
               throw err;
@@ -134,10 +141,14 @@ router.post(
 
           if (newOnPage === 0) {
             consecutiveFullDupePages++;
-            console.log(`[Transactions] Page ${page}: all ${transactions.length} already exist (streak: ${consecutiveFullDupePages})`);
+            log.info("transactions_page_all_dupes", {
+              page,
+              pageSize: transactions.length,
+              streak: consecutiveFullDupePages,
+            });
             // 2 consecutive pages of all-dupes = we've caught up for sure
             if (consecutiveFullDupePages >= 2) {
-              console.log(`[Transactions] Incremental sync caught up — stopping early at page ${page}`);
+              log.info("transactions_sync_caught_up", { page });
               // Still save this page (updates icon_url etc.)
               await saveTransactions(req.userId!, transactions, steamAccountId);
               break;
@@ -152,9 +163,13 @@ router.post(
         totalFetched += transactions.length;
         start += batchSize;
 
-        console.log(
-          `[Transactions] Page ${page}: ${transactions.length} fetched, ${inserted} inserted/updated (${totalFetched}/${totalCount} total)`
-        );
+        log.info("transactions_page_complete", {
+          page,
+          fetched: transactions.length,
+          inserted,
+          totalFetched,
+          totalCount,
+        });
 
         if (start >= totalCount) break;
 
@@ -169,14 +184,19 @@ router.post(
           // Take a P/L snapshot immediately so charts work from day 1
           const { takeDailySnapshot } = await import("../services/profitLoss.js");
           await takeDailySnapshot(req.userId!);
-          console.log(`[Transactions] Cost basis + snapshot for user ${req.userId}`);
+          log.info("transactions_cost_basis_recalculated", { userId: req.userId });
         } catch (plErr) {
           console.error("[Transactions] Cost basis/snapshot failed:", plErr);
         }
       }
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[Transactions] Sync complete: ${totalFetched} fetched, ${totalNew} new in ${elapsed}s`);
+      log.info("transactions_sync_complete", {
+        userId: req.userId,
+        fetched: totalFetched,
+        newCount: totalNew,
+        elapsedSec: parseFloat(elapsed),
+      });
       res.json({ success: true, fetched: totalFetched, newCount: totalNew, elapsed: parseFloat(elapsed) });
 
       } finally {

@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import type { SteamSession } from "./steamSession.js";
 import { getLatestPrices } from "./prices.js";
 import { getExchangeRate } from "./currency.js";
+import { log } from "../utils/logger.js";
 
 export interface Transaction {
   id: string;
@@ -94,7 +95,13 @@ export async function fetchSteamTransactions(
 
   const assetKeys = data.assets ? Object.keys(data.assets) : [];
   const contextKeys = assetKeys.length > 0 ? Object.keys(data.assets[assetKeys[0]] ?? {}) : [];
-  console.log(`[Transactions] Steam response: success=${data.success}, total_count=${data.total_count}, events=${data.events?.length ?? 0}, asset_apps=${assetKeys}, contexts=${contextKeys}`);
+  log.info("transactions_steam_response", {
+    success: data.success,
+    totalCount: data.total_count,
+    events: data.events?.length ?? 0,
+    assetApps: assetKeys,
+    contexts: contextKeys,
+  });
 
   if (!data.success) {
     throw new Error("Failed to fetch transaction history");
@@ -108,11 +115,14 @@ export async function fetchSteamTransactions(
 
   const transactions: Transaction[] = [];
 
-  // Log event types for debugging
+  // Log event-type histogram for debugging (counts only — no listing IDs)
   const typeCounts: Record<number, number> = {};
   for (const e of events) typeCounts[e.event_type] = (typeCounts[e.event_type] || 0) + 1;
-  console.log(`[Transactions] Event types:`, typeCounts);
-  console.log(`[Transactions] Data: ${Object.keys(listings).length} listings, ${Object.keys(purchaseMap).length} purchases`);
+  log.info("transactions_parse_summary", {
+    eventTypes: typeCounts,
+    listings: Object.keys(listings).length,
+    purchases: Object.keys(purchaseMap).length,
+  });
 
   // Exchange rate cache for this batch — avoid repeated API calls
   const rateCache = new Map<number, number>();
@@ -201,7 +211,12 @@ export async function fetchSteamTransactions(
     });
   }
 
-  console.log(`[Transactions] Parsed: ${transactions.length} from ${events.length} events, ${Object.keys(assets).length} assets, lookupMisses=${lookupMisses}`);
+  log.info("transactions_parsed", {
+    parsed: transactions.length,
+    events: events.length,
+    assets: Object.keys(assets).length,
+    lookupMisses,
+  });
   return {
     transactions,
     totalCount: data.total_count ?? transactions.length,
