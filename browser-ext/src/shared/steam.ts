@@ -89,6 +89,7 @@ export interface SteamItem {
   rarityColor?: string;
   inspectLink?: string;
   stickers?: Array<{ name: string; slot: number; wear?: number; icon_url?: string }>;
+  charms?: Array<{ name: string; slot: number; icon_url?: string }>;
   casketItemCount?: number;
   // Data from m_rgAssetProperties (available without API!)
   floatValue?: number;
@@ -172,14 +173,46 @@ export function readInventoryFromPage(): SteamItem[] {
           // Steam encodes phase info in instanceid — mapped via CSFloat API as last resort
           if (d.descriptions) {
             var stickers = [];
+            var charms = [];
             for (var i = 0; i < d.descriptions.length; i++) {
               var desc = d.descriptions[i];
               if (desc.value && desc.value.indexOf('sticker_info') !== -1) {
+                // Extract icon URLs from <img src="..."> tags
+                var imgMatches = desc.value.match(/<img[^>]+src="([^"]+)"/g) || [];
+                var stickerIcons = [];
+                for (var k = 0; k < imgMatches.length; k++) {
+                  var srcMatch = imgMatches[k].match(/src="([^"]+)"/);
+                  if (srcMatch) stickerIcons.push(srcMatch[1]);
+                }
                 var names = desc.value.match(/Sticker: ([^<]+)/);
                 if (names && names[1]) {
                   var stickerNames = names[1].split(', ');
                   for (var j = 0; j < stickerNames.length; j++) {
-                    stickers.push({ name: stickerNames[j].trim(), slot: j });
+                    stickers.push({
+                      name: stickerNames[j].trim(),
+                      slot: j,
+                      icon_url: stickerIcons[j] || undefined
+                    });
+                  }
+                }
+              }
+              // Charms (CS2 keychains) — same description structure as stickers
+              if (desc.value && desc.value.indexOf('keychain_info') !== -1) {
+                var imgMatchesC = desc.value.match(/<img[^>]+src="([^"]+)"/g) || [];
+                var charmIcons = [];
+                for (var k2 = 0; k2 < imgMatchesC.length; k2++) {
+                  var srcMatchC = imgMatchesC[k2].match(/src="([^"]+)"/);
+                  if (srcMatchC) charmIcons.push(srcMatchC[1]);
+                }
+                var charmNames = desc.value.match(/Charm: ([^<]+)/);
+                if (charmNames && charmNames[1]) {
+                  var charmNameList = charmNames[1].split(', ');
+                  for (var c = 0; c < charmNameList.length; c++) {
+                    charms.push({
+                      name: charmNameList[c].trim(),
+                      slot: c,
+                      icon_url: charmIcons[c] || undefined
+                    });
                   }
                 }
               }
@@ -194,6 +227,7 @@ export function readInventoryFromPage(): SteamItem[] {
               }
             }
             if (stickers.length) item.stickers = stickers;
+            if (charms.length) item.charms = charms;
           }
           // Trade lock from owner_descriptions
           if (!item.tradeLockDate && d.owner_descriptions) {
