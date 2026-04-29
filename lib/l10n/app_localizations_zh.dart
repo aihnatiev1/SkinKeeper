@@ -351,6 +351,66 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingNext => '下一步';
 
   @override
+  String get onbDashTitle => '投资组合与盈亏看板';
+
+  @override
+  String get onbDashSub => '实时掌握所有皮肤的总价值与利润。';
+
+  @override
+  String get onbInventoryTitle => '全面掌控库存';
+
+  @override
+  String get onbInventorySub => '磨损值、印花、挂件，一目了然。直接出售或发起报价。';
+
+  @override
+  String get onbTradesTitle => '轻松收发报价';
+
+  @override
+  String get onbTradesSub => '无需打开 Steam 浏览器，在应用内即可发送和接受交易。';
+
+  @override
+  String get onbAccountsTitle => '多个 Steam 账号';
+
+  @override
+  String get onbAccountsSub => '一键切换账号，所有库存集中管理。';
+
+  @override
+  String get onbProTitle => '解锁 PRO';
+
+  @override
+  String get onbProSub => '多源价格、利润统计、批量出售、账号不限量。\n免费试用 7 天。';
+
+  @override
+  String get onbBtnSkip => '跳过';
+
+  @override
+  String get onbBtnNext => '下一步';
+
+  @override
+  String get onbBtnGetStarted => '开始使用';
+
+  @override
+  String get onbBtnTryPro => '免费试用 PRO 7 天';
+
+  @override
+  String get onbBtnMaybeLater => '稍后再说';
+
+  @override
+  String get onbProBullet1 => 'Skinport、CSFloat、DMarket 价格';
+
+  @override
+  String get onbProBullet2 => '投资组合盈亏';
+
+  @override
+  String get onbProBullet3 => '批量出售到 Steam Market';
+
+  @override
+  String get onbProBullet4 => '不限量 Steam 账号';
+
+  @override
+  String get onbProBullet5 => 'CSV/Excel 导出';
+
+  @override
   String get loginTitle => '欢迎';
 
   @override

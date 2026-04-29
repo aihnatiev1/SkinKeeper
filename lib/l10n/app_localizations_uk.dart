@@ -355,6 +355,71 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingNext => 'Далі';
 
   @override
+  String get onbDashTitle => 'Портфель і P/L дашборд';
+
+  @override
+  String get onbDashSub =>
+      'Слідкуйте за загальною вартістю та профітом усіх своїх скінів у реальному часі.';
+
+  @override
+  String get onbInventoryTitle => 'Повний контроль інвентарю';
+
+  @override
+  String get onbInventorySub =>
+      'Float, sticker\'и, charm\'и. Продавайте напряму або шліть trade offer\'и.';
+
+  @override
+  String get onbTradesTitle => 'Зручні trade offer\'и';
+
+  @override
+  String get onbTradesSub =>
+      'Надсилайте та приймайте обміни не виходячи з додатка. Без Steam-браузера.';
+
+  @override
+  String get onbAccountsTitle => 'Кілька Steam-акаунтів';
+
+  @override
+  String get onbAccountsSub =>
+      'Перемикайтесь між акаунтами миттєво. Весь інвентар в одному місці.';
+
+  @override
+  String get onbProTitle => 'Відкрийте PRO';
+
+  @override
+  String get onbProSub =>
+      'Ціни з кількох джерел, облік прибутку, bulk sell, безлімітні акаунти.\n7 днів безкоштовно.';
+
+  @override
+  String get onbBtnSkip => 'Пропустити';
+
+  @override
+  String get onbBtnNext => 'Далі';
+
+  @override
+  String get onbBtnGetStarted => 'Почати';
+
+  @override
+  String get onbBtnTryPro => 'Спробувати PRO 7 днів безкоштовно';
+
+  @override
+  String get onbBtnMaybeLater => 'Можливо пізніше';
+
+  @override
+  String get onbProBullet1 => 'Ціни Skinport, CSFloat, DMarket';
+
+  @override
+  String get onbProBullet2 => 'P/L по портфелю';
+
+  @override
+  String get onbProBullet3 => 'Bulk sell на Steam Market';
+
+  @override
+  String get onbProBullet4 => 'Безлімітні Steam-акаунти';
+
+  @override
+  String get onbProBullet5 => 'Експорт у CSV/Excel';
+
+  @override
   String get loginTitle => 'Ласкаво просимо';
 
   @override

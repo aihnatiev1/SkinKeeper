@@ -784,6 +784,126 @@ abstract class AppLocalizations {
   /// **'Next'**
   String get onboardingNext;
 
+  /// No description provided for @onbDashTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Portfolio & P/L Dashboard'**
+  String get onbDashTitle;
+
+  /// No description provided for @onbDashSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Track your total value and profit across all your skins in real time.'**
+  String get onbDashSub;
+
+  /// No description provided for @onbInventoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Full Inventory Control'**
+  String get onbInventoryTitle;
+
+  /// No description provided for @onbInventorySub.
+  ///
+  /// In en, this message translates to:
+  /// **'Float values, stickers, charms. Sell directly or send trade offers.'**
+  String get onbInventorySub;
+
+  /// No description provided for @onbTradesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Easy Trade Offers'**
+  String get onbTradesTitle;
+
+  /// No description provided for @onbTradesSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Send and accept trades without leaving the app. No Steam browser needed.'**
+  String get onbTradesSub;
+
+  /// No description provided for @onbAccountsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Multiple Steam Accounts'**
+  String get onbAccountsTitle;
+
+  /// No description provided for @onbAccountsSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch between accounts instantly. All inventory in one place.'**
+  String get onbAccountsSub;
+
+  /// No description provided for @onbProTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock PRO'**
+  String get onbProTitle;
+
+  /// No description provided for @onbProSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Multi-source prices, profit tracking, bulk sell, unlimited accounts.\nTry free for 7 days.'**
+  String get onbProSub;
+
+  /// No description provided for @onbBtnSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get onbBtnSkip;
+
+  /// No description provided for @onbBtnNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onbBtnNext;
+
+  /// No description provided for @onbBtnGetStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Started'**
+  String get onbBtnGetStarted;
+
+  /// No description provided for @onbBtnTryPro.
+  ///
+  /// In en, this message translates to:
+  /// **'Try PRO Free for 7 Days'**
+  String get onbBtnTryPro;
+
+  /// No description provided for @onbBtnMaybeLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Maybe Later'**
+  String get onbBtnMaybeLater;
+
+  /// No description provided for @onbProBullet1.
+  ///
+  /// In en, this message translates to:
+  /// **'Skinport, CSFloat, DMarket prices'**
+  String get onbProBullet1;
+
+  /// No description provided for @onbProBullet2.
+  ///
+  /// In en, this message translates to:
+  /// **'Portfolio profit & loss'**
+  String get onbProBullet2;
+
+  /// No description provided for @onbProBullet3.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk sell to Steam Market'**
+  String get onbProBullet3;
+
+  /// No description provided for @onbProBullet4.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited Steam accounts'**
+  String get onbProBullet4;
+
+  /// No description provided for @onbProBullet5.
+  ///
+  /// In en, this message translates to:
+  /// **'CSV/Excel export'**
+  String get onbProBullet5;
+
   /// No description provided for @loginTitle.
   ///
   /// In en, this message translates to:

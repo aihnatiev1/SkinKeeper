@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/analytics_service.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
+import '../../l10n/app_localizations.dart';
 import '../../widgets/shared_ui.dart';
 
 const _kOnboardingComplete = 'onboarding_completed';
@@ -35,37 +36,42 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  static const int _pageCount = 5;
+
   final _ctrl = PageController();
   int _page = 0;
 
-  static const _pages = [
-    _PageData(
-      image: 'assets/onboarding/dashboard.png',
-      title: 'Portfolio & P/L Dashboard',
-      subtitle: 'Track your total value and profit across all your skins in real time.',
-    ),
-    _PageData(
-      image: 'assets/onboarding/inventory.png',
-      title: 'Full Inventory Control',
-      subtitle: 'Float values, stickers, charms. Sell directly or send trade offers.',
-    ),
-    _PageData(
-      image: 'assets/onboarding/trades.png',
-      title: 'Easy Trade Offers',
-      subtitle: 'Send and accept trades without leaving the app. No Steam browser needed.',
-    ),
-    _PageData(
-      image: 'assets/onboarding/multi_account.png',
-      title: 'Multiple Steam Accounts',
-      subtitle: 'Switch between accounts instantly. All inventory in one place.',
-    ),
-    _PageData(
-      image: null, // premium slide uses icon instead
-      title: 'Unlock PRO',
-      subtitle: 'Multi-source prices, profit tracking, bulk sell, unlimited accounts.\nTry free for 7 days.',
-      isPremiumSlide: true,
-    ),
-  ];
+  List<_PageData> _pages(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return [
+      _PageData(
+        image: 'assets/onboarding/dashboard.png',
+        title: l10n.onbDashTitle,
+        subtitle: l10n.onbDashSub,
+      ),
+      _PageData(
+        image: 'assets/onboarding/inventory.png',
+        title: l10n.onbInventoryTitle,
+        subtitle: l10n.onbInventorySub,
+      ),
+      _PageData(
+        image: 'assets/onboarding/trades.png',
+        title: l10n.onbTradesTitle,
+        subtitle: l10n.onbTradesSub,
+      ),
+      _PageData(
+        image: 'assets/onboarding/multi_account.png',
+        title: l10n.onbAccountsTitle,
+        subtitle: l10n.onbAccountsSub,
+      ),
+      _PageData(
+        image: null, // premium slide uses icon instead
+        title: l10n.onbProTitle,
+        subtitle: l10n.onbProSub,
+        isPremiumSlide: true,
+      ),
+    ];
+  }
 
   @override
   void initState() {
@@ -81,7 +87,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _next() {
     HapticFeedback.lightImpact();
-    if (_page < _pages.length - 1) {
+    if (_page < _pageCount - 1) {
       _ctrl.nextPage(
         duration: 400.ms,
         curve: Curves.easeOutCubic,
@@ -110,6 +116,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final pages = _pages(context);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -126,7 +134,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 20, 8),
                     child: Text(
-                      'Skip',
+                      l10n.onbBtnSkip,
                       style: AppTheme.bodySmall.copyWith(
                         color: AppTheme.textDisabled,
                       ),
@@ -143,8 +151,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     setState(() => _page = i);
                     Analytics.onboardingSlide(slide: i);
                   },
-                  itemCount: _pages.length,
-                  itemBuilder: (_, i) => _OnboardingPage(data: _pages[i]),
+                  itemCount: pages.length,
+                  itemBuilder: (_, i) => _OnboardingPage(data: pages[i]),
                 ),
               ),
 
@@ -152,7 +160,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
-                  _pages.length,
+                  pages.length,
                   (i) => AnimatedContainer(
                     duration: 250.ms,
                     curve: Curves.easeOutCubic,
@@ -175,12 +183,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               // Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppTheme.s32),
-                child: _pages[_page].isPremiumSlide
+                child: pages[_page].isPremiumSlide
                     ? Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           GradientButton(
-                            label: 'Try PRO Free for 7 Days',
+                            label: l10n.onbBtnTryPro,
                             gradient: AppTheme.primaryGradient,
                             onPressed: () => _finish(showPaywall: true),
                           ),
@@ -188,7 +196,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           GestureDetector(
                             onTap: _finish,
                             child: Text(
-                              'Maybe Later',
+                              l10n.onbBtnMaybeLater,
                               style: AppTheme.bodySmall.copyWith(
                                 color: AppTheme.textDisabled,
                               ),
@@ -197,7 +205,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ],
                       )
                     : GradientButton(
-                  label: _page == _pages.length - 2 ? 'Get Started' : 'Next',
+                  label: _page == pages.length - 2
+                      ? l10n.onbBtnGetStarted
+                      : l10n.onbBtnNext,
                   gradient: AppTheme.primaryGradient,
                   onPressed: _next,
                 ),
@@ -233,6 +243,7 @@ class _OnboardingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       children: [
         // Screenshot or premium icon — upper 60% of slide
@@ -256,11 +267,11 @@ class _OnboardingPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 24),
                       for (final feature in [
-                        'Skinport, CSFloat, DMarket prices',
-                        'Portfolio profit & loss',
-                        'Bulk sell to Steam Market',
-                        'Unlimited Steam accounts',
-                        'CSV/Excel export',
+                        l10n.onbProBullet1,
+                        l10n.onbProBullet2,
+                        l10n.onbProBullet3,
+                        l10n.onbProBullet4,
+                        l10n.onbProBullet5,
                       ])
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),

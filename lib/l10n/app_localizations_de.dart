@@ -355,6 +355,71 @@ class AppLocalizationsDe extends AppLocalizations {
   String get onboardingNext => 'Weiter';
 
   @override
+  String get onbDashTitle => 'Portfolio & P/L-Dashboard';
+
+  @override
+  String get onbDashSub =>
+      'Behalte den Gesamtwert und Profit all deiner Skins in Echtzeit im Blick.';
+
+  @override
+  String get onbInventoryTitle => 'Volle Inventar-Kontrolle';
+
+  @override
+  String get onbInventorySub =>
+      'Floats, Sticker, Charms. Verkaufe direkt oder sende Trade Offers.';
+
+  @override
+  String get onbTradesTitle => 'Einfache Trade Offers';
+
+  @override
+  String get onbTradesSub =>
+      'Sende und akzeptiere Trades, ohne die App zu verlassen. Kein Steam-Browser nötig.';
+
+  @override
+  String get onbAccountsTitle => 'Mehrere Steam-Accounts';
+
+  @override
+  String get onbAccountsSub =>
+      'Wechsle blitzschnell zwischen Accounts. Alle Inventare an einem Ort.';
+
+  @override
+  String get onbProTitle => 'PRO freischalten';
+
+  @override
+  String get onbProSub =>
+      'Preise aus mehreren Quellen, Profit-Tracking, Bulk Sell, unbegrenzte Accounts.\n7 Tage kostenlos testen.';
+
+  @override
+  String get onbBtnSkip => 'Überspringen';
+
+  @override
+  String get onbBtnNext => 'Weiter';
+
+  @override
+  String get onbBtnGetStarted => 'Loslegen';
+
+  @override
+  String get onbBtnTryPro => 'PRO 7 Tage kostenlos testen';
+
+  @override
+  String get onbBtnMaybeLater => 'Vielleicht später';
+
+  @override
+  String get onbProBullet1 => 'Preise von Skinport, CSFloat, DMarket';
+
+  @override
+  String get onbProBullet2 => 'Portfolio Profit & Loss';
+
+  @override
+  String get onbProBullet3 => 'Bulk Sell auf Steam Market';
+
+  @override
+  String get onbProBullet4 => 'Unbegrenzte Steam-Accounts';
+
+  @override
+  String get onbProBullet5 => 'CSV/Excel-Export';
+
+  @override
   String get loginTitle => 'Willkommen';
 
   @override
