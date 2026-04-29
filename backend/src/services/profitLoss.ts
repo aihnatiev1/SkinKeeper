@@ -50,7 +50,14 @@ export async function recalculateCostBasis(userId: number, accountId?: number): 
           END
         ) AS realized_profit
       FROM buy_agg b
-      FULL OUTER JOIN sell_agg s USING (market_hash_name, steam_account_id)
+      FULL OUTER JOIN sell_agg s
+        ON b.market_hash_name = s.market_hash_name
+       -- NULL-safe: manual transactions have steam_account_id=NULL, and a
+       -- regular USING (or =) treats NULL=NULL as NULL, splitting buy and
+       -- sell aggregates into two combined rows that both collide on the
+       -- (user_id, COALESCE(account,0), name) unique index → "ON CONFLICT
+       -- DO UPDATE command cannot affect row a second time" (21000).
+       AND b.steam_account_id IS NOT DISTINCT FROM s.steam_account_id
     )
     INSERT INTO item_cost_basis (user_id, market_hash_name, steam_account_id,
       avg_buy_price_cents, total_quantity_bought, total_spent_cents,
