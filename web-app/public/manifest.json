@@ -30,8 +30,8 @@
   "related_applications": [
     {
       "platform": "play",
-      "url": "https://play.google.com/store/apps/details?id=app.skinkeeper.store",
-      "id": "app.skinkeeper.store"
+      "url": "https://play.google.com/store/apps/details?id=com.skinkeeper.app",
+      "id": "com.skinkeeper.app"
     },
     {
       "platform": "itunes",

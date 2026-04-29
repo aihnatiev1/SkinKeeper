@@ -10,6 +10,7 @@ import { CURRENCY_SYMBOLS } from '@/lib/constants';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useState, useEffect, Suspense } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useIsDesktop } from '@/lib/use-desktop';
 import { SteamConnect } from '@/components/steam-connect';
 import { SteamSessionModal } from '@/components/steam-session-modal';
@@ -33,6 +34,7 @@ function SettingsContent() {
   const user = useAuthStore((s) => s.user);
   const { currency, setCurrency } = useUIStore();
   const { data: accounts } = useAccounts();
+  const qc = useQueryClient();
   const switchAccount = useSwitchAccount();
   const isDesktopApp = useIsDesktop();
   const [refreshingSession, setRefreshingSession] = useState<number | null>(null);
@@ -113,8 +115,8 @@ function SettingsContent() {
     try {
       await api.post(`/session/refresh?accountId=${accountId}`);
       toast.success('Session refreshed');
-      // Refetch accounts to update status
-      window.location.reload();
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      qc.invalidateQueries({ queryKey: ['session'] });
     } catch {
       toast.error('Failed to refresh session');
     } finally {
@@ -128,7 +130,11 @@ function SettingsContent() {
     try {
       await api.delete(`/auth/accounts/${accountId}`);
       toast.success('Account removed');
-      window.location.reload();
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['portfolio'] });
+      qc.invalidateQueries({ queryKey: ['trades'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
     } catch {
       toast.error('Failed to remove account');
     } finally {
@@ -388,7 +394,9 @@ function SettingsContent() {
         onSuccess={() => {
           setQrOpen(false);
           toast.success('Steam session connected');
-          window.location.reload();
+          qc.invalidateQueries({ queryKey: ['accounts'] });
+          qc.invalidateQueries({ queryKey: ['session'] });
+          qc.invalidateQueries({ queryKey: ['inventory'] });
         }}
       />
     </div>

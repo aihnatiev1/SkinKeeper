@@ -163,7 +163,7 @@ export default function PortfolioPage() {
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v) => `${currency} ${v}`}
+                    tickFormatter={(v) => formatPrice(Number(v))}
                   />
                   <Tooltip
                     contentStyle={{

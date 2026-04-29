@@ -67,8 +67,12 @@ export function InitialSync() {
       updateStep('trades', 'error');
     }
 
-    // Invalidate all queries to refresh UI
-    qc.invalidateQueries();
+    // Invalidate just the data we synced — calling invalidateQueries() with no
+    // key flickers every screen (auth/accounts/currencies) on first login.
+    qc.invalidateQueries({ queryKey: ['inventory'] });
+    qc.invalidateQueries({ queryKey: ['transactions'] });
+    qc.invalidateQueries({ queryKey: ['trades'] });
+    qc.invalidateQueries({ queryKey: ['portfolio'] });
     localStorage.setItem(STORAGE_KEY, '1');
     setDone(true);
 

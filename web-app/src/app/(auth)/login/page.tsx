@@ -144,7 +144,7 @@ function LoginContent() {
     startQR();
 
     return () => { unsubQR(); unsubStatus(); unsubWebSession(); };
-  }, [desktop, startQR]);
+  }, [desktop, startQR, isLogout, redirect, router]);
 
   const startLogin = useCallback(async (existingPopup?: Window | null) => {
     // Open popup synchronously (in click handler) to avoid browser popup blockers

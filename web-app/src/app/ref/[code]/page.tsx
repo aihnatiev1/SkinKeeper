@@ -24,7 +24,7 @@ export default async function ReferralPage({ params }: Props) {
   // Deep link URIs for iOS/Android
   const appDeepLink = `skinkeeper://ref?code=${code}`;
   const iosStoreLink = 'https://apps.apple.com/us/app/skinkeeper/id6760600231';
-  const androidStoreLink = 'https://play.google.com/store/apps/details?id=app.skinkeeper.store';
+  const androidStoreLink = 'https://play.google.com/store/apps/details?id=com.skinkeeper.app';
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">

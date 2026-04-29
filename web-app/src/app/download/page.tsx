@@ -53,7 +53,7 @@ const mobilePlatforms = [
     name: 'Android',
     desc: 'Phone & Tablet',
     icon: <Smartphone size={24} />,
-    url: 'https://play.google.com/store/apps/details?id=store.skinkeeper.app',
+    url: 'https://play.google.com/store/apps/details?id=com.skinkeeper.app',
     badge: 'Google Play',
   },
 ];
