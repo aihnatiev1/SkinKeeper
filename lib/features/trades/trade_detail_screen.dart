@@ -9,6 +9,7 @@ import '../../core/review_service.dart';
 import '../../core/settings_provider.dart';
 import '../../core/theme.dart';
 import '../../models/trade_offer.dart';
+import '../../widgets/shared_ui.dart';
 import '../inventory/inventory_provider.dart';
 import 'trades_provider.dart';
 import 'widgets/trade_detail_parts.dart';
@@ -59,14 +60,45 @@ class TradeDetailScreen extends ConsumerWidget {
                   }
                   return _TradeDetailBody(offer: offer);
                 },
-                loading: () => const Center(
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppTheme.accent)),
+                loading: () => const _TradeDetailSkeleton(),
                 error: (e, _) => Center(child: Text('Failed to load trade', style: TextStyle(color: AppTheme.textSecondary))),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TradeDetailSkeleton extends StatelessWidget {
+  const _TradeDetailSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: const [
+          // Header card
+          ShimmerCard(height: 84),
+          SizedBox(height: 12),
+          // Value summary
+          ShimmerCard(height: 76),
+          SizedBox(height: 16),
+          // Give section header
+          ShimmerCard(height: 24),
+          SizedBox(height: 8),
+          ShimmerCard(height: 64),
+          SizedBox(height: 8),
+          ShimmerCard(height: 64),
+          SizedBox(height: 16),
+          // Receive section header
+          ShimmerCard(height: 24),
+          SizedBox(height: 8),
+          ShimmerCard(height: 64),
+        ],
       ),
     );
   }

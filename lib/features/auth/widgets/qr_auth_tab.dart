@@ -148,7 +148,7 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
             ),
             const SizedBox(height: 4),
             const Text('Redirecting...',
-                style: TextStyle(fontSize: 12, color: Colors.white38)),
+                style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
           ] else if (qrState.status == 'expired') ...[
             const Text(
               'QR code expired',
@@ -285,7 +285,7 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
                     textAlign: TextAlign.center),
                 const SizedBox(height: 4),
                 Text(state.error!.toString(),
-                    style: TextStyle(color: Colors.white24, fontSize: 9),
+                    style: const TextStyle(color: AppTheme.textDisabled, fontSize: 9),
                     textAlign: TextAlign.center,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis),
@@ -328,7 +328,7 @@ class _QrAuthTabState extends ConsumerState<QrAuthTab> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: const Center(
-        child: Icon(Icons.qr_code_2, size: 64, color: Colors.white24),
+        child: Icon(Icons.qr_code_2, size: 64, color: AppTheme.textDisabled),
       ),
     );
   }

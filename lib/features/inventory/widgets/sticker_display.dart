@@ -77,13 +77,8 @@ class _StickerChip extends StatelessWidget {
                       child: SizedBox(width: 20, height: 20,
                         child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.primary)),
                     ),
-                    errorWidget: (_, _, _) => Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.sticky_note_2_rounded, size: 28, color: AppTheme.warning.withValues(alpha: 0.5)),
-                        const SizedBox(height: 2),
-                        Text('Sticker', style: TextStyle(fontSize: 8, color: AppTheme.textDisabled)),
-                      ],
+                    errorWidget: (_, _, _) => const Center(
+                      child: Icon(Icons.image_not_supported_rounded, size: 28, color: AppTheme.textDisabled),
                     ),
                   )
                 : Column(
@@ -214,8 +209,8 @@ class _CompactStickerSlot extends StatelessWidget {
                   child: SizedBox(width: 14, height: 14,
                     child: CircularProgressIndicator(strokeWidth: 1.2, color: AppTheme.warning)),
                 ),
-                errorWidget: (_, _, _) => Center(
-                  child: Icon(Icons.sticky_note_2_rounded, size: 20, color: AppTheme.warning.withValues(alpha: 0.6)),
+                errorWidget: (_, _, _) => const Center(
+                  child: Icon(Icons.image_not_supported_rounded, size: 20, color: AppTheme.textDisabled),
                 ),
               )
             : Center(
@@ -263,7 +258,7 @@ class _CompactCharmSlot extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 1.2, color: Color(0xFF8B5CF6))),
                 ),
                 errorWidget: (_, _, _) => const Center(
-                  child: Icon(Icons.auto_awesome, size: 22, color: Color(0xFF8B5CF6)),
+                  child: Icon(Icons.image_not_supported_rounded, size: 22, color: AppTheme.textDisabled),
                 ),
               )
             : const Center(

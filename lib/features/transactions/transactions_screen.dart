@@ -417,6 +417,7 @@ class TransactionsScreen extends ConsumerWidget {
                   icon: Icons.cloud_off_rounded,
                   title: 'Failed to load transactions',
                   subtitle: 'Check your connection and try again',
+                  animate: false,
                   action: GradientButton(
                     label: 'Retry',
                     icon: Icons.refresh_rounded,

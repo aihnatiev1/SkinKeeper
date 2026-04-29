@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api_client.dart';
+import '../../../core/theme.dart';
 import '../session_provider.dart';
 import '../../settings/accounts_provider.dart';
 
@@ -275,8 +276,8 @@ class _CredentialsAuthTabState extends ConsumerState<CredentialsAuthTab> {
   InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Colors.white38),
-      prefixIcon: Icon(icon, color: Colors.white38, size: 20),
+      hintStyle: const TextStyle(color: AppTheme.textMuted),
+      prefixIcon: Icon(icon, color: AppTheme.textMuted, size: 20),
       filled: true,
       fillColor: Colors.white.withAlpha(10),
       border: OutlineInputBorder(
