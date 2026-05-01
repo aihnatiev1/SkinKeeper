@@ -400,7 +400,9 @@ export async function getTransactions(
       NULL::text AS note,
       to2.is_internal,
       NULL::int AS perspective_account_id,
-      NULL::text AS perspective
+      NULL::text AS perspective,
+      NULL::int AS db_id,
+      NULL::timestamptz AS refunded_at
     FROM trade_offers to2
     ${tradeAgg}`;
 
@@ -423,7 +425,9 @@ export async function getTransactions(
       NULL::text AS note,
       true AS is_internal,
       to2.account_id_from AS perspective_account_id,
-      'sent'::text AS perspective
+      'sent'::text AS perspective,
+      NULL::int AS db_id,
+      NULL::timestamptz AS refunded_at
     FROM trade_offers to2
     ${tradeAgg}
     UNION ALL
@@ -444,7 +448,9 @@ export async function getTransactions(
       NULL::text AS note,
       true AS is_internal,
       to2.account_id_to AS perspective_account_id,
-      'received'::text AS perspective
+      'received'::text AS perspective,
+      NULL::int AS db_id,
+      NULL::timestamptz AS refunded_at
     FROM trade_offers to2
     ${tradeAgg}`;
 
@@ -457,7 +463,9 @@ export async function getTransactions(
       t.icon_url, t.note,
       FALSE AS is_internal,
       NULL::int AS perspective_account_id,
-      NULL::text AS perspective
+      NULL::text AS perspective,
+      t.id AS db_id,
+      t.refunded_at
     FROM transactions t`;
 
   const onlyTrades = filters.type === "trade";
@@ -546,6 +554,7 @@ export async function getTransactions(
 
       return {
         id: r.id,
+        db_id: r.db_id ?? null,
         type: r.type,
         market_hash_name: r.market_hash_name,
         price: r.price_cents ?? 0,
@@ -565,6 +574,7 @@ export async function getTransactions(
         is_internal: r.is_internal ?? false,
         perspective_account_id: r.perspective_account_id ?? null,
         perspective: r.perspective ?? null,
+        refunded_at: r.refunded_at ?? null,
       };
     }),
     total: parseInt(countResult.rows[0].count),

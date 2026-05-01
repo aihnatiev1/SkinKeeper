@@ -282,6 +282,68 @@ router.delete("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/transactions/:id/refund — mark a buy/sell as refunded by Steam.
+// Idempotent: re-marking is a no-op (refunded_at preserved). Cost basis is
+// recalculated so the refunded buy stops inflating the user's spend total.
+router.post(
+  "/:id/refund",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) { res.status(400).json({ error: "Invalid transaction id" }); return; }
+
+      const { rows, rowCount } = await pool.query(
+        `UPDATE transactions
+            SET refunded_at = COALESCE(refunded_at, NOW())
+          WHERE user_id = $1 AND id = $2
+          RETURNING id, type, market_hash_name, price_cents, tx_date, refunded_at`,
+        [req.userId, id]
+      );
+      if (!rowCount) { res.status(404).json({ error: "Transaction not found" }); return; }
+
+      await recalculateCostBasis(req.userId!);
+      res.json({
+        id: rows[0].id,
+        type: rows[0].type,
+        market_hash_name: rows[0].market_hash_name,
+        price_cents: rows[0].price_cents,
+        tx_date: rows[0].tx_date,
+        refunded_at: rows[0].refunded_at,
+      });
+    } catch (err) {
+      console.error("Transaction refund error:", err);
+      res.status(500).json({ error: "Failed to mark refund" });
+    }
+  }
+);
+
+// DELETE /api/transactions/:id/refund — undo a manual refund mark.
+router.delete(
+  "/:id/refund",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) { res.status(400).json({ error: "Invalid transaction id" }); return; }
+
+      const { rowCount } = await pool.query(
+        `UPDATE transactions
+            SET refunded_at = NULL
+          WHERE user_id = $1 AND id = $2`,
+        [req.userId, id]
+      );
+      if (!rowCount) { res.status(404).json({ error: "Transaction not found" }); return; }
+
+      await recalculateCostBasis(req.userId!);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Transaction unrefund error:", err);
+      res.status(500).json({ error: "Failed to undo refund" });
+    }
+  }
+);
+
 // PUT /api/transactions/:id — edit price/date/type of a single transaction
 router.put("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {

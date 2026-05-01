@@ -140,6 +140,118 @@ describe("Transactions routes", () => {
     });
   });
 
+  describe("POST /api/transactions/:id/refund", () => {
+    it("returns 401 without token", async () => {
+      const res = await request(app).post("/api/transactions/42/refund");
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 400 on non-numeric id", async () => {
+      mockDemoCheck();
+      const res = await request(app)
+        .post("/api/transactions/not-a-number/refund")
+        .set("Authorization", `Bearer ${jwt}`);
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 404 when transaction does not belong to the user", async () => {
+      mockDemoCheck();
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+      const res = await request(app)
+        .post("/api/transactions/42/refund")
+        .set("Authorization", `Bearer ${jwt}`);
+      expect(res.status).toBe(404);
+    });
+
+    it("marks the transaction as refunded and recalculates cost basis", async () => {
+      mockDemoCheck();
+      const refundedAt = new Date().toISOString();
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 42,
+          type: "buy",
+          market_hash_name: "AK-47 | Redline (Field-Tested)",
+          price_cents: 1234,
+          tx_date: "2025-12-01T00:00:00.000Z",
+          refunded_at: refundedAt,
+        }],
+        rowCount: 1,
+      });
+      const { recalculateCostBasis } = await import("../../services/profitLoss.js");
+
+      const res = await request(app)
+        .post("/api/transactions/42/refund")
+        .set("Authorization", `Bearer ${jwt}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(42);
+      expect(res.body.refunded_at).toBe(refundedAt);
+      expect(recalculateCostBasis).toHaveBeenCalledWith(1);
+
+      const sql = mockQuery.mock.calls.at(-1)?.[0] ?? "";
+      expect(sql).toMatch(/refunded_at\s*=\s*COALESCE\(refunded_at,\s*NOW\(\)\)/);
+      expect(mockQuery.mock.calls.at(-1)?.[1]).toEqual([1, 42]);
+    });
+
+    it("is idempotent — second call preserves the original refunded_at", async () => {
+      // The COALESCE(refunded_at, NOW()) keeps the existing timestamp; the
+      // route only owes the caller a 200 + the still-marked row.
+      mockDemoCheck();
+      const originalRefund = "2025-11-01T00:00:00.000Z";
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 42,
+          type: "buy",
+          market_hash_name: "AK-47",
+          price_cents: 1234,
+          tx_date: "2025-10-01T00:00:00.000Z",
+          refunded_at: originalRefund,
+        }],
+        rowCount: 1,
+      });
+
+      const res = await request(app)
+        .post("/api/transactions/42/refund")
+        .set("Authorization", `Bearer ${jwt}`);
+      expect(res.status).toBe(200);
+      expect(res.body.refunded_at).toBe(originalRefund);
+    });
+  });
+
+  describe("DELETE /api/transactions/:id/refund", () => {
+    it("returns 401 without token", async () => {
+      const res = await request(app).delete("/api/transactions/42/refund");
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 404 when nothing matched", async () => {
+      mockDemoCheck();
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      const res = await request(app)
+        .delete("/api/transactions/42/refund")
+        .set("Authorization", `Bearer ${jwt}`);
+      expect(res.status).toBe(404);
+    });
+
+    it("clears refunded_at and recalculates cost basis", async () => {
+      mockDemoCheck();
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+      const { recalculateCostBasis } = await import("../../services/profitLoss.js");
+
+      const res = await request(app)
+        .delete("/api/transactions/42/refund")
+        .set("Authorization", `Bearer ${jwt}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true });
+      expect(recalculateCostBasis).toHaveBeenCalledWith(1);
+
+      const sql = mockQuery.mock.calls.at(-1)?.[0] ?? "";
+      expect(sql).toMatch(/refunded_at\s*=\s*NULL/);
+      expect(mockQuery.mock.calls.at(-1)?.[1]).toEqual([1, 42]);
+    });
+  });
+
   describe("GET /api/transactions/stats", () => {
     it("returns 401 without token", async () => {
       const res = await request(app).get("/api/transactions/stats");
