@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/settings_provider.dart';
@@ -162,10 +163,14 @@ class MarketTransactionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isBuy = tx.isBuy;
+    final isRefunded = tx.isRefunded;
     final badgeColor = isBuy ? AppTheme.accent : AppTheme.loss;
     final delta = tx.plDeltaCents;
     final deltaPct = tx.plDeltaPct;
-    final hasDelta = delta != null && tx.currentPriceCents != null;
+    // Refunded transactions are excluded from cost basis on the server, so the
+    // P/L delta is no longer meaningful for the user — hide it.
+    final hasDelta =
+        !isRefunded && delta != null && tx.currentPriceCents != null;
 
     final deltaColor = hasDelta
         ? (isBuy
@@ -204,6 +209,10 @@ class MarketTransactionTile extends StatelessWidget {
                   Row(
                     children: [
                       TransactionTypeBadge(label: isBuy ? 'Buy' : 'Sell', color: badgeColor),
+                      if (isRefunded) ...[
+                        const SizedBox(width: 6),
+                        TransactionTypeBadge(label: 'REFUNDED', color: AppTheme.textMuted),
+                      ],
                       const SizedBox(width: 6),
                       Text(
                         dateStr,
@@ -232,10 +241,16 @@ class MarketTransactionTile extends StatelessWidget {
               children: [
                 Text(
                   currency.format(tx.priceUsd),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
+                    color: isRefunded
+                        ? AppTheme.textMuted
+                        : AppTheme.textPrimary,
+                    decoration: isRefunded
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                    decorationColor: AppTheme.textMuted,
                   ),
                 ),
                 if (hasDelta) ...[
@@ -432,25 +447,71 @@ class TradeTransactionTile extends StatelessWidget {
   }
 }
 
-class PriceCheckSheet extends StatelessWidget {
+class PriceCheckSheet extends StatefulWidget {
   final TransactionItem tx;
   final CurrencyInfo currency;
   final double currentPrice;
+
+  /// Called when the user taps "Mark as refunded" / "Undo refund". Pass null to
+  /// hide the action (e.g. the tx has no `db_id` because it predates the
+  /// refund-tracking migration). Throwing from this callback shows an error
+  /// snackbar; the sheet does not pop.
+  final Future<void> Function(bool refunded)? onToggleRefund;
 
   const PriceCheckSheet({
     super.key,
     required this.tx,
     required this.currency,
     required this.currentPrice,
+    this.onToggleRefund,
   });
 
   @override
+  State<PriceCheckSheet> createState() => _PriceCheckSheetState();
+}
+
+class _PriceCheckSheetState extends State<PriceCheckSheet> {
+  late bool _refunded = widget.tx.isRefunded;
+  bool _busy = false;
+
+  Future<void> _handleToggle() async {
+    final cb = widget.onToggleRefund;
+    if (cb == null || _busy) return;
+    HapticFeedback.lightImpact();
+    final next = !_refunded;
+    setState(() => _busy = true);
+    try {
+      await cb(next);
+      if (!mounted) return;
+      setState(() {
+        _refunded = next;
+        _busy = false;
+      });
+      Navigator.of(context, rootNavigator: true).maybePop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Couldn\'t update refund: $e'),
+          backgroundColor: AppTheme.loss,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final tx = widget.tx;
+    final currency = widget.currency;
+    final currentPrice = widget.currentPrice;
     final txPrice = tx.priceUsd;
     final diff = currentPrice - txPrice;
     final pct = txPrice > 0 ? (diff / txPrice) * 100 : 0.0;
     final isUp = diff >= 0;
     final diffColor = isUp ? AppTheme.profit : AppTheme.loss;
+    final showRefundAction =
+        widget.onToggleRefund != null && tx.canMarkRefunded;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -467,6 +528,25 @@ class PriceCheckSheet extends StatelessWidget {
             style: AppTheme.title,
             textAlign: TextAlign.center,
           ),
+          if (_refunded) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.textMuted.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'REFUNDED',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -514,6 +594,53 @@ class PriceCheckSheet extends StatelessWidget {
               ],
             ),
           ),
+          if (showRefundAction) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _busy ? null : _handleToggle,
+                icon: _busy
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.textMuted,
+                        ),
+                      )
+                    : Icon(
+                        _refunded
+                            ? Icons.undo_rounded
+                            : Icons.assignment_return_rounded,
+                        size: 18,
+                        color: AppTheme.textSecondary,
+                      ),
+                label: Text(
+                  _refunded ? 'Undo refund' : 'Mark as refunded',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppTheme.divider),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _refunded
+                  ? 'Restoring this transaction adds it back to your cost basis.'
+                  : 'Excludes this transaction from your cost basis. Use when Steam refunded the order.',
+              style: AppTheme.captionSmall.copyWith(color: AppTheme.textMuted),
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: 8),
         ],
       ),

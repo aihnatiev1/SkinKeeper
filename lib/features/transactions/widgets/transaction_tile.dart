@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings_provider.dart';
 import '../../../core/theme.dart';
+import '../../portfolio/portfolio_pl_provider.dart';
 import '../transactions_provider.dart';
 import 'transaction_tile_parts.dart';
 
@@ -72,6 +73,16 @@ class TransactionTile extends ConsumerWidget {
         tx: tx,
         currency: currency,
         currentPrice: currentPrice,
+        onToggleRefund: tx.canMarkRefunded
+            ? (refunded) async {
+                await ref
+                    .read(transactionsProvider.notifier)
+                    .setRefunded(tx.dbId!, refunded: refunded);
+                // Cost basis changed — drop cached P/L so the next read recomputes.
+                ref.invalidate(portfolioPLProvider);
+                ref.invalidate(itemsPLProvider);
+              }
+            : null,
       ),
     );
   }

@@ -5,6 +5,9 @@ import '../../core/steam_image.dart';
 
 class TransactionItem {
   final String id;
+  /// Numeric `transactions.id` for market buys/sells. Null for trades (which
+  /// live in `trade_offers`). Required to call `/transactions/:id/refund`.
+  final int? dbId;
   final String type; // 'buy', 'sell', or 'trade'
   final String marketHashName;
   final int priceCents;
@@ -20,6 +23,7 @@ class TransactionItem {
   final String? iconUrl;
   final int? currentPriceCents;
   final String? note;
+  final DateTime? refundedAt;
 
   const TransactionItem({
     required this.id,
@@ -27,6 +31,7 @@ class TransactionItem {
     required this.marketHashName,
     required this.priceCents,
     required this.date,
+    this.dbId,
     this.tradeDirection,
     this.tradeStatus,
     this.valueGiveCents,
@@ -38,12 +43,15 @@ class TransactionItem {
     this.iconUrl,
     this.currentPriceCents,
     this.note,
+    this.refundedAt,
   });
 
   double get priceUsd => priceCents / 100.0;
   bool get isBuy => type == 'buy';
   bool get isSell => type == 'sell';
   bool get isTrade => type == 'trade';
+  bool get isRefunded => refundedAt != null;
+  bool get canMarkRefunded => dbId != null && (isBuy || isSell);
 
   String? get imageUrl =>
       iconUrl != null && iconUrl!.isNotEmpty
@@ -71,8 +79,10 @@ class TransactionItem {
   }
 
   factory TransactionItem.fromJson(Map<String, dynamic> json) {
+    final refundedRaw = json['refunded_at'] as String?;
     return TransactionItem(
       id: json['id'] as String,
+      dbId: (json['db_id'] as num?)?.toInt(),
       type: json['type'] as String,
       marketHashName: json['market_hash_name'] as String,
       priceCents: (json['price'] as num?)?.toInt() ?? 0,
@@ -88,6 +98,30 @@ class TransactionItem {
       iconUrl: json['icon_url'] as String?,
       currentPriceCents: (json['current_price_cents'] as num?)?.toInt(),
       note: json['note'] as String?,
+      refundedAt: refundedRaw != null ? DateTime.parse(refundedRaw) : null,
+    );
+  }
+
+  TransactionItem copyWith({DateTime? refundedAt, bool clearRefundedAt = false}) {
+    return TransactionItem(
+      id: id,
+      dbId: dbId,
+      type: type,
+      marketHashName: marketHashName,
+      priceCents: priceCents,
+      date: date,
+      tradeDirection: tradeDirection,
+      tradeStatus: tradeStatus,
+      valueGiveCents: valueGiveCents,
+      valueRecvCents: valueRecvCents,
+      giveCount: giveCount,
+      recvCount: recvCount,
+      giveTotal: giveTotal,
+      recvTotal: recvTotal,
+      iconUrl: iconUrl,
+      currentPriceCents: currentPriceCents,
+      note: note,
+      refundedAt: clearRefundedAt ? null : (refundedAt ?? this.refundedAt),
     );
   }
 }
@@ -202,6 +236,41 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionItem>> {
       state = AsyncData(await _fetch(0));
     } catch (e, st) {
       state = AsyncError(e, st);
+    }
+  }
+
+  /// Mark a market transaction as refunded by Steam (or undo it). Updates the
+  /// in-memory list optimistically; rolls back and rethrows on API failure so
+  /// the caller can show a snackbar.
+  Future<void> setRefunded(int dbId, {required bool refunded}) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final idx = current.indexWhere((tx) => tx.dbId == dbId);
+    if (idx < 0) return;
+
+    final original = current[idx];
+    final optimistic = refunded
+        ? original.copyWith(refundedAt: DateTime.now())
+        : original.copyWith(clearRefundedAt: true);
+    final updated = [...current]..[idx] = optimistic;
+    state = AsyncData(updated);
+
+    try {
+      final api = ref.read(apiClientProvider);
+      if (refunded) {
+        await api.post('/transactions/$dbId/refund');
+      } else {
+        await api.delete('/transactions/$dbId/refund');
+      }
+    } catch (_) {
+      // Rollback the optimistic change.
+      final rolled = [...(state.valueOrNull ?? updated)];
+      final ridx = rolled.indexWhere((tx) => tx.dbId == dbId);
+      if (ridx >= 0) {
+        rolled[ridx] = original;
+        state = AsyncData(rolled);
+      }
+      rethrow;
     }
   }
 
