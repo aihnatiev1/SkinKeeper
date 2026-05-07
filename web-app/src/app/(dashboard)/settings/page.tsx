@@ -2,7 +2,7 @@
 
 import { Header } from '@/components/header';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useAccounts, useSwitchAccount } from '@/lib/hooks';
+import { useAccounts, useSwitchAccount, useSubscriptionStatus } from '@/lib/hooks';
 import { api, authApi } from '@/lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Crown, LogOut, Globe, Link2, Check, Sparkles, ExternalLink, Loader2, Trash2, Smartphone } from 'lucide-react';
@@ -34,6 +34,7 @@ function SettingsContent() {
   const user = useAuthStore((s) => s.user);
   const { currency, setCurrency } = useUIStore();
   const { data: accounts } = useAccounts();
+  const { data: subStatus } = useSubscriptionStatus();
   const qc = useQueryClient();
   const switchAccount = useSwitchAccount();
   const isDesktopApp = useIsDesktop();
@@ -355,7 +356,7 @@ function SettingsContent() {
             initial="hidden" animate="show" variants={fadeUp}
             className="glass rounded-2xl border border-warning/20 p-6"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-warning/10">
                   <Crown size={18} className="text-warning" />
@@ -369,15 +370,7 @@ function SettingsContent() {
                   )}
                 </div>
               </div>
-              <a
-                href={APP_STORE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl glass hover:bg-surface-light transition-colors"
-              >
-                <ExternalLink size={14} />
-                Manage in App Store
-              </a>
+              <ManageSubscriptionLinks store={subStatus?.store ?? null} />
             </div>
           </motion.div>
         )}
@@ -468,6 +461,51 @@ function DeleteAccountButton() {
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+// Apple's account-wide subscription page (works on iOS Settings + iTunes
+// on the web). Google's equivalent — both deep-link to the active sub.
+const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
+const GOOGLE_MANAGE_URL = 'https://play.google.com/store/account/subscriptions?package=com.skinkeeper.app';
+
+/**
+ * Render the right "Manage subscription" CTA based on which store the
+ * receipt came from. When the store is unknown (no receipt — promo
+ * grant or pre-IAP user) we offer both so the user can find their
+ * platform without guessing.
+ */
+function ManageSubscriptionLinks({ store }: { store: string | null }) {
+  const linkClass =
+    'flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl glass hover:bg-surface-light transition-colors whitespace-nowrap';
+
+  if (store === 'apple') {
+    return (
+      <a href={APPLE_MANAGE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <ExternalLink size={14} />
+        Manage in App Store
+      </a>
+    );
+  }
+  if (store === 'google') {
+    return (
+      <a href={GOOGLE_MANAGE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <ExternalLink size={14} />
+        Manage in Google Play
+      </a>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      <a href={APPLE_MANAGE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <ExternalLink size={14} />
+        App Store
+      </a>
+      <a href={GOOGLE_MANAGE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <ExternalLink size={14} />
+        Google Play
+      </a>
     </div>
   );
 }

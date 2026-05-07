@@ -24,6 +24,7 @@ import type {
   Portfolio,
   QuickPrice,
   RefreshPricesResult,
+  SubscriptionStatus,
 } from './types';
 import { useAuthStore, useUIStore } from './store';
 
@@ -44,6 +45,25 @@ export function useMe() {
       return data;
     },
     retry: false,
+  });
+}
+
+/**
+ * Fetches subscription status from the backend (which knows the store
+ * the receipt came from). Used by the settings PRO panel so the
+ * "Manage subscription" CTA points at the right place — App Store for
+ * Apple receipts, Google Play for Android.
+ *
+ * Disabled until the user is loaded as premium — saves a request for
+ * free users where the panel is hidden anyway.
+ */
+export function useSubscriptionStatus() {
+  const user = useAuthStore((s) => s.user);
+  return useQuery({
+    queryKey: ['purchases', 'status'],
+    queryFn: () => api.get<SubscriptionStatus>('/purchases/status'),
+    enabled: !!user?.is_premium,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

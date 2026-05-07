@@ -339,6 +339,18 @@ export interface PriceHistoryPoint {
   price: number;
 }
 
+// ─── Subscription ─────────────────────────────────────────────────────
+// GET /api/purchases/status
+export interface SubscriptionStatus {
+  isPremium: boolean;
+  premiumUntil: string | null;
+  productId: string | null;
+  /** 'apple' | 'google' | null when no receipt on file (e.g. promo / manual grant) */
+  store: string | null;
+  isExpired: boolean;
+  autoRenewing: boolean;
+}
+
 // ─── Fee Calculator ───────────────────────────────────────────────────
 export interface FeeCalcResult {
   buyerPays: number;
