@@ -7,7 +7,6 @@ const API_KEY_URL = 'https://steamcommunity.com/dev/apikey';
 const STORAGE_KEY = 'sk_apikey_dismissed';
 const DISMISS_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 const CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-const KEY_PATTERN = /[0-9A-F]{32}/i;
 const BANNER_ID = 'sk-apikey-warning';
 
 async function isDismissedRecently(): Promise<boolean> {
@@ -131,24 +130,28 @@ async function checkApiKey() {
 
     if (!html || typeof html !== 'string') return;
 
-    // 3. Parse for active key
-    // If the page contains the registration form, no key exists — safe
-    if (html.includes('Register for a Steam Web API Key') || html.includes('registerkey')) {
-      // No API key registered — remove any stale banner
+    // 3. Positive detection: only warn when there is a clear "key exists"
+    // signal. Negative detection (looking for the "register" form) is
+    // brittle — Steam tweaks the copy ("Register for a new Steam Web API
+    // Key" vs "Register for a Steam Web API Key", localized variants),
+    // and a generic 32-hex regex matches asset hashes / CSS class IDs
+    // that are present on every Steam page, producing false positives.
+    //
+    // Two reliable signals when a key IS registered:
+    //   a) the page renders "Key: <32-hex>" explicitly
+    //   b) the page exposes "Revoke My Steam Web API Key" / `revokekey`
+    const keyLineMatch = html.match(/Key\s*:\s*(?:<[^>]*>\s*)?([0-9A-F]{32})/i);
+    const hasRevokeSignal =
+      html.includes('Revoke My Steam Web API Key') || html.includes('revokekey');
+
+    if (!keyLineMatch && !hasRevokeSignal) {
+      // No key — clear any stale banner and exit
       const existing = document.getElementById(BANNER_ID);
       if (existing) existing.remove();
       return;
     }
 
-    // Look for a 32-char hex key in the bodyContents area
-    const hasBodyContents = html.includes('bodyContents_ex') || html.includes('bodyContents');
-    const keyMatch = html.match(KEY_PATTERN);
-
-    if (hasBodyContents && keyMatch) {
-      // API key detected — extract domain and show warning
-      const domain = extractDomain(html);
-      showWarning(domain);
-    }
+    showWarning(extractDomain(html));
   } catch (err) {
     console.warn('[SkinKeeper] API key guard check failed:', err);
   }
