@@ -59,3 +59,15 @@ android {
 flutter {
     source = "../.."
 }
+
+// Firebase BoM — pins compatible versions of all Firebase SDKs.
+// FlutterFire pub packages (firebase_crashlytics / firebase_analytics)
+// transitively depend on these, but pinning the BoM here ensures
+// Crashlytics SDK is actually present on classpath even when other
+// plugins don't pull it in. Without this, `com.google.firebase.crashlytics`
+// gradle plugin can apply silently while no crash data is uploaded.
+dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-analytics")
+}
