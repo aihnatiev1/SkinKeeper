@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, Puzzle, Monitor, ArrowLeftRight, Store, RefreshCw, Check, Download, AlertCircle, QrCode } from 'lucide-react';
 
 interface SteamSessionModalProps {
@@ -8,6 +9,12 @@ interface SteamSessionModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+// Published Chrome Web Store extension ID. Used as a fallback when the
+// content script hasn't injected `window.__SK_EXT_ID` yet (race on first
+// visit, slow page load, content script blocked) — `externally_connectable`
+// in manifest lets us PING the background worker directly.
+const PROD_EXTENSION_ID = 'lbihgifhfhpeahokiegleeknffkihbpd';
 
 const STEAM_ICON = (
   <svg width="28" height="28" viewBox="0 0 256 259" fill="#66c0f4">
@@ -24,78 +31,87 @@ export function SteamSessionModal({ open, onClose, onSuccess }: SteamSessionModa
     if (open) setTab('extension');
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+  // Render via portal to document.body — bypasses any transformed motion.div
+  // ancestor that would otherwise capture our `position: fixed` and shift
+  // the modal off-center.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
-      <div
-        className="relative glass-strong rounded-2xl border border-border/50 w-full max-w-sm overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors z-10"
+      <div className="relative min-h-full flex items-center justify-center p-4">
+        <div
+          className="relative glass-strong rounded-2xl border border-border/50 w-full max-w-sm overflow-hidden my-auto"
+          onClick={(e) => e.stopPropagation()}
         >
-          <X size={18} />
-        </button>
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors z-10"
+          >
+            <X size={18} />
+          </button>
 
-        {/* Header */}
-        <div className="p-6 pb-4 text-center">
-          <div className="flex justify-center mb-3">{STEAM_ICON}</div>
-          <h3 className="text-lg font-bold">Connect Steam Session</h3>
-          <p className="text-xs text-muted mt-1.5">Enable trading, market access, and live inventory sync</p>
+          {/* Header */}
+          <div className="p-6 pb-4 text-center">
+            <div className="flex justify-center mb-3">{STEAM_ICON}</div>
+            <h3 className="text-lg font-bold">Connect Steam Session</h3>
+            <p className="text-xs text-muted mt-1.5">Enable trading, market access, and live inventory sync</p>
 
-          <div className="flex items-center justify-center gap-3 mt-3">
-            {[
-              { icon: <ArrowLeftRight size={11} />, label: 'Trading' },
-              { icon: <Store size={11} />, label: 'Market' },
-              { icon: <RefreshCw size={11} />, label: 'Live Sync' },
-            ].map((f) => (
-              <span
-                key={f.label}
-                className="flex items-center gap-1 text-[10px] text-muted px-2 py-1 rounded-full bg-surface-light/50"
+            <div className="flex items-center justify-center gap-3 mt-3">
+              {[
+                { icon: <ArrowLeftRight size={11} />, label: 'Trading' },
+                { icon: <Store size={11} />, label: 'Market' },
+                { icon: <RefreshCw size={11} />, label: 'Live Sync' },
+              ].map((f) => (
+                <span
+                  key={f.label}
+                  className="flex items-center gap-1 text-[10px] text-muted px-2 py-1 rounded-full bg-surface-light/50"
+                >
+                  {f.icon} {f.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-border/30 px-6">
+            {([
+              { key: 'extension' as Tab, icon: <Puzzle size={13} />, label: 'Extension' },
+              { key: 'desktop' as Tab, icon: <Monitor size={13} />, label: 'Desktop App' },
+              { key: 'qr' as Tab, icon: <QrCode size={13} />, label: 'QR Code' },
+            ]).map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                  tab === t.key
+                    ? 'text-primary border-primary'
+                    : 'text-muted border-transparent hover:text-foreground hover:bg-surface-light/50 hover:border-border/50'
+                }`}
               >
-                {f.icon} {f.label}
-              </span>
+                {t.icon} {t.label}
+              </button>
             ))}
           </div>
-        </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-border/30 px-6">
-          {([
-            { key: 'extension' as Tab, icon: <Puzzle size={13} />, label: 'Extension' },
-            { key: 'desktop' as Tab, icon: <Monitor size={13} />, label: 'Desktop App' },
-            { key: 'qr' as Tab, icon: <QrCode size={13} />, label: 'QR Code' },
-          ]).map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
-                tab === t.key
-                  ? 'text-primary border-primary'
-                  : 'text-muted border-transparent hover:text-foreground'
-              }`}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        <div className="p-6">
-          {tab === 'extension' ? (
-            <ExtensionTab onSuccess={onSuccess} />
-          ) : tab === 'desktop' ? (
-            <DesktopTab />
-          ) : (
-            <QRTab onSuccess={onSuccess} open={open && tab === 'qr'} />
-          )}
+          {/* Tab content */}
+          <div className="p-6">
+            {tab === 'extension' ? (
+              <ExtensionTab onSuccess={onSuccess} />
+            ) : tab === 'desktop' ? (
+              <DesktopTab />
+            ) : (
+              <QRTab onSuccess={onSuccess} open={open && tab === 'qr'} />
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -121,22 +137,28 @@ function ExtensionTab({ onSuccess }: { onSuccess: () => void }) {
   const [extId, setExtId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Poll for extension: check window flag + try PING
+  // Poll for extension: check window flag + try PING (with prod ID fallback)
   useEffect(() => {
     let active = true;
 
     const detect = async () => {
-      // Method 1: content script flag
+      // Method 1: content script flag (fast path, set on app.skinkeeper.store + skinkeeper.store)
       const w = window as any;
       if (w.__SK_EXT && w.__SK_EXT_ID) {
         if (active) { setExtId(w.__SK_EXT_ID); setState('installed'); }
         return true;
       }
-      // Method 2: try PING with known ID from content script
+      // Method 2: PING via known ID from content script
       if (w.__SK_EXT_ID) {
         const ok = await pingExtension(w.__SK_EXT_ID);
         if (ok && active) { setExtId(w.__SK_EXT_ID); setState('installed'); return true; }
       }
+      // Method 3: PING the published Chrome Web Store ID directly. Works
+      // even when the content script hasn't injected the window flag yet
+      // (race on first paint, slow extension boot, content blocker on
+      // skinkeeper.store, etc.) thanks to manifest's `externally_connectable`.
+      const ok = await pingExtension(PROD_EXTENSION_ID);
+      if (ok && active) { setExtId(PROD_EXTENSION_ID); setState('installed'); return true; }
       return false;
     };
 

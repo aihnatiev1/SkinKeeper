@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2 } from 'lucide-react';
 
 interface SteamQRModalProps {
@@ -84,16 +85,17 @@ export function SteamQRModal({ open, onClose, onSuccess }: SteamQRModalProps) {
     };
   }, [open, startQR, cleanup]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
       {/* Modal */}
+      <div className="relative min-h-full flex items-center justify-center p-4">
       <div
-        className="relative glass-strong rounded-2xl border border-border/50 p-8 w-full max-w-sm text-center"
+        className="relative glass-strong rounded-2xl border border-border/50 p-8 w-full max-w-sm text-center my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -179,6 +181,8 @@ export function SteamQRModal({ open, onClose, onSuccess }: SteamQRModalProps) {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </div>,
+    document.body
   );
 }

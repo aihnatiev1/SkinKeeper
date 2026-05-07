@@ -3,6 +3,7 @@
 import { X, Puzzle, Monitor, ShieldCheck, Store, ArrowLeftRight, RefreshCw } from 'lucide-react';
 import { SteamSessionModal } from './steam-session-modal';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ExtensionRequiredModalProps {
   open: boolean;
@@ -20,7 +21,7 @@ const ACTION_TEXT: Record<string, string> = {
 export function ExtensionRequiredModal({ open, onClose, action = 'general' }: ExtensionRequiredModalProps) {
   const [showConnect, setShowConnect] = useState(false);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   // If user chose to connect — delegate to the full SteamSessionModal
   if (showConnect) {
@@ -33,12 +34,13 @@ export function ExtensionRequiredModal({ open, onClose, action = 'general' }: Ex
     );
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
+      <div className="relative min-h-full flex items-center justify-center p-4">
       <div
-        className="relative glass-strong rounded-2xl border border-border/50 w-full max-w-sm overflow-hidden"
+        className="relative glass-strong rounded-2xl border border-border/50 w-full max-w-sm overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -121,6 +123,8 @@ export function ExtensionRequiredModal({ open, onClose, action = 'general' }: Ex
           </p>
         </div>
       </div>
-    </div>
+      </div>
+    </div>,
+    document.body
   );
 }

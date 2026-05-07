@@ -143,6 +143,7 @@ function SettingsContent() {
   };
 
   const APP_STORE_URL = 'https://apps.apple.com/ua/app/skinkeeper/id6760600231?l=uk';
+  const GOOGLE_PLAY_URL = 'https://play.google.com/store/apps/details?id=com.skinkeeper.app';
 
   return (
     <div>
@@ -318,19 +319,31 @@ function SettingsContent() {
                   </li>
                 ))}
               </ul>
-              <a
-                href={APP_STORE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2.5 px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-bold transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
-              >
-                <Smartphone size={16} />
-                Subscribe via iOS App
-                <ExternalLink size={12} className="opacity-60" />
-              </a>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <a
+                  href={APP_STORE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2.5 px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-bold transition-all hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
+                >
+                  <Smartphone size={16} />
+                  Subscribe via iOS App
+                  <ExternalLink size={12} className="opacity-60" />
+                </a>
+                <a
+                  href={GOOGLE_PLAY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2.5 px-6 py-3 glass border border-primary/30 text-primary rounded-xl text-sm font-bold transition-all hover:bg-primary/10 active:scale-[0.98]"
+                >
+                  <Smartphone size={16} />
+                  Subscribe via Android App
+                  <ExternalLink size={12} className="opacity-60" />
+                </a>
+              </div>
               <p className="text-xs text-muted mt-3 flex items-center gap-1.5">
                 <Smartphone size={12} />
-                PRO is available through the SkinKeeper iOS app. Your subscription works across all platforms.
+                PRO is available through the SkinKeeper mobile apps. Your subscription works across all platforms.
               </p>
             </div>
           </motion.div>

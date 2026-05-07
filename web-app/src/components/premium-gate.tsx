@@ -5,6 +5,7 @@ import { Crown, Smartphone, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 const APP_STORE_URL = 'https://apps.apple.com/ua/app/skinkeeper/id6760600231?l=uk';
+const GOOGLE_PLAY_URL = 'https://play.google.com/store/apps/details?id=com.skinkeeper.app';
 
 interface PremiumGateProps {
   children: React.ReactNode;
@@ -41,18 +42,30 @@ export function PremiumGate({ children, feature, inline }: PremiumGateProps) {
         {feature ? `${feature} is a PRO feature` : 'PRO feature'}
       </h3>
       <p className="text-xs text-muted mb-4">
-        Subscribe to SkinKeeper PRO via the iOS app. Works across all platforms.
+        Subscribe to SkinKeeper PRO via the mobile app. Works across all platforms.
       </p>
-      <a
-        href={APP_STORE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-warning to-orange-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-warning/25 transition-all"
-      >
-        <Smartphone size={14} />
-        Get PRO on iOS
-        <ExternalLink size={10} className="opacity-60" />
-      </a>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <a
+          href={APP_STORE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-warning to-orange-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-warning/25 transition-all"
+        >
+          <Smartphone size={14} />
+          Get PRO on iOS
+          <ExternalLink size={10} className="opacity-60" />
+        </a>
+        <a
+          href={GOOGLE_PLAY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-5 py-2 glass border border-warning/30 text-warning rounded-xl text-sm font-semibold hover:bg-warning/10 transition-all"
+        >
+          <Smartphone size={14} />
+          Get PRO on Android
+          <ExternalLink size={10} className="opacity-60" />
+        </a>
+      </div>
     </div>
   );
 }

@@ -53,7 +53,7 @@ export default function WatchlistPage() {
           icon="🔔"
           message="Get push notifications when watchlist items hit your target price. Download the mobile app."
           ctaText="Get the App"
-          ctaUrl="https://apps.apple.com/us/app/skinkeeper/id6760600231"
+          ctaUrl="/download"
         />
         {/* Toolbar */}
         <div className="flex items-center justify-between">

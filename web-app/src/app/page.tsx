@@ -173,7 +173,8 @@ export default async function LandingPage() {
           <div className="flex flex-wrap justify-center gap-3">
             {[
               { icon: <Monitor size={16} />, name: 'Desktop', accent: 'text-accent', ring: 'bg-accent/10 border-accent/20 hover:border-accent/50 hover:bg-accent/15', href: 'https://skinkeeper.store/download', external: true },
-              { icon: <Smartphone size={16} />, name: 'iOS & Android', accent: 'text-profit', ring: 'bg-profit/10 border-profit/20 hover:border-profit/50 hover:bg-profit/15', href: 'https://apps.apple.com/us/app/skinkeeper/id6760600231', external: true },
+              { icon: <Smartphone size={16} />, name: 'iOS', accent: 'text-profit', ring: 'bg-profit/10 border-profit/20 hover:border-profit/50 hover:bg-profit/15', href: 'https://apps.apple.com/us/app/skinkeeper/id6760600231', external: true },
+              { icon: <Smartphone size={16} />, name: 'Android', accent: 'text-profit', ring: 'bg-profit/10 border-profit/20 hover:border-profit/50 hover:bg-profit/15', href: 'https://play.google.com/store/apps/details?id=com.skinkeeper.app', external: true },
               { icon: <Puzzle size={16} />, name: 'Chrome Extension', accent: 'text-warning', ring: 'bg-warning/10 border-warning/20 hover:border-warning/50 hover:bg-warning/15', href: 'https://chromewebstore.google.com/detail/skinkeeper-%E2%80%94-cs2-inventor/lbihgifhfhpeahokiegleeknffkihbpd', external: true },
               { icon: <Globe size={16} />, name: 'Web App', accent: 'text-primary', ring: 'bg-primary/10 border-primary/20 hover:border-primary/50 hover:bg-primary/15', href: '/login', external: false },
             ].map((p) => (

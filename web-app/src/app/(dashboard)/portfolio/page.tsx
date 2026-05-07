@@ -45,7 +45,7 @@ export default function PortfolioPage() {
           icon="📱"
           message="Your portfolio changes while you sleep. Get price alerts straight to your phone."
           ctaText="Get the App"
-          ctaUrl="https://apps.apple.com/us/app/skinkeeper/id6760600231"
+          ctaUrl="/download"
         />
         {/* Portfolio selector */}
         <PortfolioSelector />
