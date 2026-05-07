@@ -59,10 +59,23 @@ export class DataStore {
 
       this.items.set(item.assetid, updated);
 
-      // Queue items that have float/seed/paint/sticker/charm data for backend sync
+      // Queue items that have float/seed/paint/sticker/charm data for backend
+      // sync, OR a fully resolved inspect_link (no %propid placeholders) — the
+      // backend can decode that locally to recover all fields.
       const hasStickers = item.stickers && item.stickers.length > 0;
       const hasCharms = item.charms && item.charms.length > 0;
-      if (item.float != null || item.paintSeed != null || item.paintIndex != null || hasStickers || hasCharms) {
+      const link = item.inspectLink;
+      const hasResolvedLink = typeof link === 'string'
+        && link.includes('csgo_econ_action_preview')
+        && !link.includes('%propid');
+      if (
+        item.float != null
+        || item.paintSeed != null
+        || item.paintIndex != null
+        || hasStickers
+        || hasCharms
+        || hasResolvedLink
+      ) {
         toSync.push({
           asset_id: item.assetid,
           float_value: item.float,
@@ -70,6 +83,7 @@ export class DataStore {
           paint_index: item.paintIndex,
           stickers: hasStickers ? item.stickers : null,
           charms: hasCharms ? item.charms : null,
+          inspect_link: hasResolvedLink ? link : null,
         });
       }
     });

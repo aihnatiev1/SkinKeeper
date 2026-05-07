@@ -221,14 +221,29 @@ async function init() {
 async function fetchEnrichedInventory() {
   // Sync float/seed/paint data to backend first
   if (isOwnInventory) {
+    // Sync if we have *any* enrichable signal — including a resolved
+    // inspect_link, which the backend can decode locally (cs2-inspect
+    // serializer) to recover float/seed/paint_index/stickers/charms even
+    // when the page state didn't expose them via m_rgAssetProperties.
+    const hasResolvedLink = (link?: string) =>
+      typeof link === 'string'
+      && link.includes('csgo_econ_action_preview')
+      && !link.includes('%propid');
     const toSync = items
-      .filter(i => i.floatValue != null || i.paintSeed != null || i.paintIndex != null || (i.stickers && i.stickers.length > 0))
+      .filter(i =>
+        i.floatValue != null
+        || i.paintSeed != null
+        || i.paintIndex != null
+        || (i.stickers && i.stickers.length > 0)
+        || hasResolvedLink(i.inspectLink)
+      )
       .map(i => ({
         asset_id: i.assetid,
         float_value: i.floatValue ?? null,
         paint_seed: i.paintSeed ?? null,
         paint_index: i.paintIndex ?? null,
         stickers: i.stickers && i.stickers.length > 0 ? i.stickers : null,
+        inspect_link: hasResolvedLink(i.inspectLink) ? i.inspectLink : null,
       }));
     console.log(`[SkinKeeper] Items to sync: ${toSync.length} (of ${items.length} total)`);
     if (toSync.length > 0) {

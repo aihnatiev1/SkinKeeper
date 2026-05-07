@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { pool } from "../db/pool.js";
+import { fetchInspectData } from "../services/inspect.js";
 import rateLimit from "express-rate-limit";
 
 const router = Router();
@@ -191,7 +192,13 @@ router.post(
         return;
       }
 
+      // Track diagnostics so we can answer "is the extension actually
+      // delivering data?" without grepping logs.
       let updated = 0;
+      let decodedFromLink = 0;
+      let linkUpdated = 0;
+      let skippedNoData = 0;
+
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -199,32 +206,86 @@ router.post(
         for (const item of batch) {
           if (!item.asset_id) continue;
 
+          // Treat empty arrays the same as missing — "stickers: []" carries
+          // no signal but used to flow through and refresh inspected_at,
+          // making the column useless as a real "we have data" marker.
+          let floatVal: number | null =
+            typeof item.float_value === "number" ? item.float_value : null;
+          let paintSeed: number | null =
+            typeof item.paint_seed === "number" ? item.paint_seed : null;
+          let paintIndex: number | null =
+            typeof item.paint_index === "number" ? item.paint_index : null;
+          let stickers: any[] | null =
+            Array.isArray(item.stickers) && item.stickers.length > 0
+              ? item.stickers
+              : null;
+          let charms: any[] | null =
+            Array.isArray(item.charms) && item.charms.length > 0
+              ? item.charms
+              : null;
+
+          // If the extension gave us a *resolved* inspect link (no %propid
+          // placeholders), decode it locally — the cs2-inspect-serializer
+          // recovers float / paintSeed / paintIndex / stickers / charms with
+          // real slot+wear+pattern that the page state never exposes.
+          const link = typeof item.inspect_link === "string" ? item.inspect_link : null;
+          const isResolvedLink =
+            link !== null
+            && link.includes("csgo_econ_action_preview")
+            && !link.includes("%propid");
+
+          if (isResolvedLink) {
+            const decoded = await fetchInspectData(link!);
+            if (!("failed" in decoded)) {
+              floatVal = floatVal ?? decoded.floatValue;
+              paintSeed = paintSeed ?? decoded.paintSeed;
+              paintIndex = paintIndex ?? decoded.paintIndex;
+              if (stickers === null && decoded.stickers.length > 0) {
+                stickers = decoded.stickers;
+              }
+              if (charms === null && decoded.charms.length > 0) {
+                charms = decoded.charms;
+              }
+              decodedFromLink++;
+            }
+          }
+
           const sets: string[] = [];
           const vals: any[] = [];
           let idx = 1;
 
-          if (item.float_value != null && typeof item.float_value === "number") {
+          if (floatVal !== null) {
             sets.push(`float_value = $${idx++}`);
-            vals.push(item.float_value);
+            vals.push(floatVal);
           }
-          if (item.paint_seed != null && typeof item.paint_seed === "number") {
+          if (paintSeed !== null) {
             sets.push(`paint_seed = $${idx++}`);
-            vals.push(item.paint_seed);
+            vals.push(paintSeed);
           }
-          if (item.paint_index != null && typeof item.paint_index === "number") {
+          if (paintIndex !== null) {
             sets.push(`paint_index = $${idx++}`);
-            vals.push(item.paint_index);
+            vals.push(paintIndex);
           }
-          if (item.stickers != null && Array.isArray(item.stickers)) {
+          if (stickers !== null) {
             sets.push(`stickers = $${idx++}`);
-            vals.push(JSON.stringify(item.stickers));
+            vals.push(JSON.stringify(stickers));
           }
-          if (item.charms != null && Array.isArray(item.charms)) {
+          if (charms !== null) {
             sets.push(`charms = $${idx++}`);
-            vals.push(JSON.stringify(item.charms));
+            vals.push(JSON.stringify(charms));
+          }
+          // Persist the resolved inspect_link separately so a future enrich
+          // call (or admin re-decode) doesn't need the extension again.
+          if (isResolvedLink) {
+            sets.push(`inspect_link = $${idx++}`);
+            vals.push(link);
+            linkUpdated++;
           }
 
-          if (sets.length === 0) continue;
+          if (sets.length === 0) {
+            skippedNoData++;
+            continue;
+          }
 
           sets.push(`inspected_at = NOW()`);
 
@@ -249,8 +310,11 @@ router.post(
         client.release();
       }
 
-      console.log(`[Extension] Enriched ${updated} items for user ${req.userId}`);
-      res.json({ ok: true, updated });
+      console.log(
+        `[Extension] Enriched ${updated} items for user ${req.userId} ` +
+        `(decoded=${decodedFromLink}, links=${linkUpdated}, skipped=${skippedNoData})`
+      );
+      res.json({ ok: true, updated, decoded: decodedFromLink, skipped: skippedNoData });
     } catch (err) {
       console.error("[Extension] Item enrich error:", err);
       res.status(500).json({ error: "Failed to enrich items" });

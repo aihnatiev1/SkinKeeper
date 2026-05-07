@@ -143,18 +143,13 @@ export function readInventoryFromPage(): SteamItem[] {
               }
             }
           }
-          if (d.actions) {
-            for (var i = 0; i < d.actions.length; i++) {
-              if (d.actions[i].link && d.actions[i].link.indexOf('csgo_econ_action_preview') !== -1) {
-                item.inspectLink = d.actions[i].link
-                  .replace('%assetid%', a.assetid)
-                  .replace('%owner_steamid%', typeof g_steamID !== 'undefined' ? g_steamID : '');
-              }
-            }
-          }
           // ── Extract float, paint_seed, paint_index from inv.m_rgAssetProperties ──
-          // Exact same approach as CSGO Trader — properties are on inventory, keyed by assetid
+          // Exact same approach as CSGO Trader — properties are on inventory, keyed by assetid.
+          // Also collect every property's string_value so we can resolve
+          // %propid:N% placeholders in the inspect_link below — Steam stores
+          // the encrypted preview blob there as property #6.
           var props = allProps[a.assetid];
+          var propStrings = {};
           if (props && Array.isArray(props)) {
             for (var pi = 0; pi < props.length; pi++) {
               var p = props[pi];
@@ -163,11 +158,32 @@ export function readInventoryFromPage(): SteamItem[] {
               if (p.propertyid === 2 && p.float_value) item.floatValue = parseFloat(p.float_value);
               if (p.propertyid === 3 && p.int_value) item.paintIndex = parseInt(p.int_value);
               if (p.propertyid === 5 && p.string_value) item.nameTag = p.string_value;
+              if (p.propertyid != null && p.string_value) {
+                propStrings[p.propertyid] = p.string_value;
+              }
             }
           }
           // Fallback paint_index from app_data
           if (!item.paintIndex && d.app_data && d.app_data.paint_index) {
             item.paintIndex = parseInt(d.app_data.paint_index);
+          }
+          if (d.actions) {
+            for (var i = 0; i < d.actions.length; i++) {
+              if (d.actions[i].link && d.actions[i].link.indexOf('csgo_econ_action_preview') !== -1) {
+                var rawLink = d.actions[i].link
+                  .replace('%assetid%', a.assetid)
+                  .replace('%owner_steamid%', typeof g_steamID !== 'undefined' ? g_steamID : '');
+                // Resolve %propid:N% (encrypted preview blob, S2-key, etc.)
+                // from per-asset properties. Without this, the link looks like
+                // "...+csgo_econ_action_preview %propid:6%" and the backend
+                // protobuf decoder can't recover float/seed/paint_index.
+                rawLink = rawLink.replace(/%propid:(\d+)%/g, function(_, idStr) {
+                  var v = propStrings[parseInt(idStr, 10)];
+                  return v != null ? v : '';
+                });
+                item.inspectLink = rawLink;
+              }
+            }
           }
           // Fallback: detect Doppler phase from instanceid mapping
           // Steam encodes phase info in instanceid — mapped via CSFloat API as last resort
