@@ -88,14 +88,13 @@ export function SteamQRModal({ open, onClose, onSuccess }: SteamQRModalProps) {
   if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative min-h-full flex items-center justify-center p-4">
       <div
-        className="relative glass-strong rounded-2xl border border-border/50 p-8 w-full max-w-sm text-center my-auto"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto glass-strong rounded-2xl border border-border/50 p-8 text-center"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -180,7 +179,6 @@ export function SteamQRModal({ open, onClose, onSuccess }: SteamQRModalProps) {
             </button>
           </div>
         </div>
-      </div>
       </div>
     </div>,
     document.body

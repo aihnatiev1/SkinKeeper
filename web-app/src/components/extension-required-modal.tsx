@@ -35,12 +35,11 @@ export function ExtensionRequiredModal({ open, onClose, action = 'general' }: Ex
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative min-h-full flex items-center justify-center p-4">
       <div
-        className="relative glass-strong rounded-2xl border border-border/50 w-full max-w-sm overflow-hidden my-auto"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto glass-strong rounded-2xl border border-border/50"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -122,7 +121,6 @@ export function ExtensionRequiredModal({ open, onClose, action = 'general' }: Ex
             Your password is never accessed. We only read the Steam session cookie to perform actions on your behalf.
           </p>
         </div>
-      </div>
       </div>
     </div>,
     document.body

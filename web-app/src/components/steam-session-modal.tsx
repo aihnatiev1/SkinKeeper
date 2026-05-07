@@ -33,21 +33,20 @@ export function SteamSessionModal({ open, onClose, onSuccess }: SteamSessionModa
 
   if (!open || typeof document === 'undefined') return null;
 
-  // Render via portal to document.body — bypasses any transformed motion.div
-  // ancestor that would otherwise capture our `position: fixed` and shift
-  // the modal off-center.
+  // Render via portal to document.body — bypasses any transformed
+  // motion.div ancestor that would otherwise capture our `position:
+  // fixed` and shift the modal off-center. Inner card uses absolute +
+  // translate centering directly so we don't rely on flex/min-height
+  // gymnastics that broke on tall pages (inventory at scroll 0 saw the
+  // modal appear ~100vh below the fold).
   return createPortal(
-    <div
-      className="fixed inset-0 z-50 overflow-y-auto"
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative min-h-full flex items-center justify-center p-4">
-        <div
-          className="relative glass-strong rounded-2xl border border-border/50 w-full max-w-sm overflow-hidden my-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto glass-strong rounded-2xl border border-border/50"
+        onClick={(e) => e.stopPropagation()}
+      >
           <button
             onClick={onClose}
             className="absolute top-4 right-4 p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-light transition-colors z-10"
@@ -108,7 +107,6 @@ export function SteamSessionModal({ open, onClose, onSuccess }: SteamSessionModa
               <QRTab onSuccess={onSuccess} open={open && tab === 'qr'} />
             )}
           </div>
-        </div>
       </div>
     </div>,
     document.body
