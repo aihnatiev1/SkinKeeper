@@ -12,6 +12,7 @@ import { useMe } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { PageLoader } from '@/components/loading';
 import { GlobalTransferBar } from '@/components/global-transfer-bar';
+import { AutoConnectBanner } from '@/components/auto-connect-banner';
 
 export default function DashboardLayout({
   children,
@@ -52,6 +53,7 @@ export default function DashboardLayout({
       <InitialSync />
       <CommandPalette />
       <GlobalTransferBar />
+      <AutoConnectBanner />
       <Sidebar />
       <main
         className="transition-all duration-300 min-h-screen pt-14 lg:pt-0"

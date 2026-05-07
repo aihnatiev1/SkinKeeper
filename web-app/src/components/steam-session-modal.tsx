@@ -136,6 +136,9 @@ function ExtensionTab({ onSuccess }: { onSuccess: () => void }) {
   const [state, setState] = useState<'checking' | 'not_installed' | 'installed' | 'connecting' | 'success'>('checking');
   const [extId, setExtId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // One-shot guard so we don't auto-retry forever when a recoverable error
+  // bounces state back to 'installed'.
+  const autoTriedRef = useRef(false);
 
   // Poll for extension: check window flag + try PING (with prod ID fallback)
   useEffect(() => {
@@ -203,6 +206,20 @@ function ExtensionTab({ onSuccess }: { onSuccess: () => void }) {
       setState('installed');
     }
   };
+
+  // Auto-trigger connect the moment we detect the extension. Skipping the
+  // "Extension detected — click Connect" intermediate step removes a
+  // pointless click for the common case (extension installed + Steam
+  // signed in). The autoTriedRef guard ensures we only do this once per
+  // tab session — if it fails, the user gets a manual retry button below.
+  useEffect(() => {
+    if (state !== 'installed') return;
+    if (autoTriedRef.current) return;
+    if (!extId) return;
+    autoTriedRef.current = true;
+    handleConnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, extId]);
 
   // ─── Success ────────────────────────────────────────
   if (state === 'success') {

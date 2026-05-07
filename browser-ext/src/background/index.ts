@@ -628,6 +628,51 @@ async function saveSteamSession(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
+// ─── Cookie watcher: auto-save session after Steam login ─────────────
+// When the user signs into Steam in any tab, Steam writes `steamLoginSecure`
+// to steamcommunity.com. If the user is already signed in to SkinKeeper,
+// grab the cookie and save the session server-side without requiring them
+// to come back to skinkeeper.store and click "Connect" — this powers the
+// "open Steam → sign in → done" UX initiated from AutoConnectBanner.
+
+let lastCookieSaveAt = 0;
+chrome.cookies.onChanged.addListener(async (changeInfo) => {
+  if (changeInfo.removed) return;
+  const c = changeInfo.cookie;
+  if (c.name !== 'steamLoginSecure') return;
+  if (!c.domain.includes('steamcommunity.com')) return;
+  if (!c.value) return;
+
+  // Steam writes steamLoginSecure (and a sessionid that follows shortly
+  // after) several times during login. Debounce so we attempt the save
+  // once per real login event.
+  const now = Date.now();
+  if (now - lastCookieSaveAt < 5000) return;
+  lastCookieSaveAt = now;
+
+  if (!(await isLoggedIn())) return;
+
+  // Small delay so sessionid lands too — saveSteamSession reads both.
+  setTimeout(async () => {
+    const result = await saveSteamSession();
+    if (!result.ok) {
+      console.warn('[SkinKeeper] cookie-watcher saveSteamSession failed:', result.error);
+      return;
+    }
+    console.log('[SkinKeeper] Auto-saved Steam session after Steam login');
+    try {
+      const tabs = await chrome.tabs.query({
+        url: ['https://skinkeeper.store/*', 'https://app.skinkeeper.store/*'],
+      });
+      for (const tab of tabs) {
+        if (tab.id != null) {
+          chrome.tabs.sendMessage(tab.id, { type: 'SK_SESSION_CONNECTED' }).catch(() => {});
+        }
+      }
+    } catch {}
+  }, 800);
+});
+
 // ─── External messages (from skinkeeper.store) ────────────────────────
 
 chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {

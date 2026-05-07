@@ -84,6 +84,14 @@
       "run_at": "document_idle"
     },
     {
+      "matches": [
+        "https://steamcommunity.com/login/*",
+        "https://store.steampowered.com/login/*"
+      ],
+      "js": ["content/loginBanner.js"],
+      "run_at": "document_idle"
+    },
+    {
       "matches": ["https://store.steampowered.com/agecheck/*", "https://steamcommunity.com/market/*"],
       "js": ["content/autoSkip.js"],
       "run_at": "document_idle"

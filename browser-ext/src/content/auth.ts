@@ -81,6 +81,18 @@ function injectPresenceFlag() {
   script.remove();
 }
 
+// Forward background broadcasts to the page so the auto-connect hook
+// can flip its state without a hard reload. Content script and page run
+// in isolated worlds — postMessage is the supported cross-world bridge.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === 'SK_SESSION_CONNECTED') {
+    window.postMessage(
+      { source: 'skinkeeper-ext', type: 'session-connected' },
+      window.location.origin,
+    );
+  }
+});
+
 // Run on page load
 injectPresenceFlag();
 syncToken();

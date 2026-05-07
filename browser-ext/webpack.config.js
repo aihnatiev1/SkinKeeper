@@ -18,6 +18,7 @@ module.exports = (env, argv) => {
       'content/apiKeyGuard': './src/content/apiKeyGuard.ts',
       'content/autoSkip': './src/content/autoSkip.ts',
       'content/auth': './src/content/auth.ts',
+      'content/loginBanner': './src/content/loginBanner.ts',
       'popup/popup': './src/popup/popup.ts',
       'options/options': './src/options/options.ts',
     },
