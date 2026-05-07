@@ -39,11 +39,21 @@ function pingExtension(extId: string): Promise<boolean> {
 }
 
 async function detectExtensionId(): Promise<string | null> {
+  // Method 1: dataset hint from extension content script — replaces the
+  // old `window.__SK_EXT*` injection, which CSP on skinkeeper.store blocks.
+  const html = typeof document !== 'undefined' ? document.documentElement : null;
+  const fromDataset = html?.dataset.skExt === '1' ? html.dataset.skExtId || null : null;
+  if (fromDataset) return fromDataset;
+
+  // Method 2: legacy window flag (older extension builds inline-injected it)
   const w = window as unknown as { __SK_EXT?: boolean; __SK_EXT_ID?: string };
   if (w.__SK_EXT_ID && w.__SK_EXT) return w.__SK_EXT_ID;
   if (w.__SK_EXT_ID) {
     if (await pingExtension(w.__SK_EXT_ID)) return w.__SK_EXT_ID;
   }
+
+  // Method 3: PING the published Web Store id directly. Works even when
+  // the content script hasn't run yet (slow boot, racing the auth hook).
   if (await pingExtension(PROD_EXTENSION_ID)) return PROD_EXTENSION_ID;
   return null;
 }
@@ -100,9 +110,11 @@ export function useAutoConnectExtension() {
     if (ranRef.current) return;
 
     // Re-use the previous result for this tab so navigations don't ping the
-    // extension on every page change.
+    // extension on every page change. We deliberately do NOT cache
+    // `no_extension` — the user may install/reload the extension mid-
+    // session, and we want the next nav to pick that up immediately.
     const cached = sessionStorage.getItem(FLAG_KEY) as AutoConnectStatus | null;
-    if (cached === 'connected' || cached === 'no_steam_login' || cached === 'no_extension') {
+    if (cached === 'connected' || cached === 'no_steam_login') {
       setStatus(cached);
       ranRef.current = true;
       return;
@@ -117,7 +129,6 @@ export function useAutoConnectExtension() {
       if (cancelled) return;
       if (!extId) {
         setStatus('no_extension');
-        sessionStorage.setItem(FLAG_KEY, 'no_extension');
         return;
       }
       const res = await callConnect(extId);
@@ -137,7 +148,14 @@ export function useAutoConnectExtension() {
       const noSteamLogin = /not logged in to steam|steamLoginSecure/i.test(res.error || '');
       const next: AutoConnectStatus = noSteamLogin ? 'no_steam_login' : 'error';
       setStatus(next);
-      sessionStorage.setItem(FLAG_KEY, next);
+      // Only persist statuses where re-running on every nav would be
+      // wasteful and the next correction will come from another signal
+      // (visibilitychange retry, postMessage from extension).
+      if (next === 'no_steam_login') {
+        sessionStorage.setItem(FLAG_KEY, next);
+      } else {
+        sessionStorage.removeItem(FLAG_KEY);
+      }
     })();
 
     return () => {

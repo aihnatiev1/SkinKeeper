@@ -73,12 +73,17 @@ function showBanner(message: string, type: 'success' | 'info') {
   }
 }
 
-// Inject extension presence flag so the web app can detect us
+// Announce our presence to the web app via DOM attributes on <html>.
+// We can't inject an inline <script> that sets `window.__SK_EXT`/_ID
+// because skinkeeper.store ships a strict CSP without 'unsafe-inline'
+// (and we don't want to weaken it). Page-side detection now reads
+// `documentElement.dataset.skExt` / `.skExtId` first, then falls back
+// to a chrome.runtime PING with the published Web Store id.
 function injectPresenceFlag() {
-  const script = document.createElement('script');
-  script.textContent = `window.__SK_EXT=true;window.__SK_EXT_ID="${chrome.runtime.id}";`;
-  document.documentElement.appendChild(script);
-  script.remove();
+  try {
+    document.documentElement.setAttribute('data-sk-ext', '1');
+    document.documentElement.setAttribute('data-sk-ext-id', chrome.runtime.id);
+  } catch {}
 }
 
 // Forward background broadcasts to the page so the auto-connect hook

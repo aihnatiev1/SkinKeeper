@@ -145,21 +145,28 @@ function ExtensionTab({ onSuccess }: { onSuccess: () => void }) {
     let active = true;
 
     const detect = async () => {
-      // Method 1: content script flag (fast path, set on app.skinkeeper.store + skinkeeper.store)
+      // Method 1: dataset hint set by the extension auth content script.
+      // Replaces the old inline-script `window.__SK_EXT*` approach, which
+      // skinkeeper.store CSP blocks ("Executing inline script violates ...").
+      const html = document.documentElement;
+      if (html.dataset.skExt === '1' && html.dataset.skExtId) {
+        if (active) { setExtId(html.dataset.skExtId); setState('installed'); }
+        return true;
+      }
+      // Method 2: legacy window flag for older extension builds
       const w = window as any;
       if (w.__SK_EXT && w.__SK_EXT_ID) {
         if (active) { setExtId(w.__SK_EXT_ID); setState('installed'); }
         return true;
       }
-      // Method 2: PING via known ID from content script
       if (w.__SK_EXT_ID) {
         const ok = await pingExtension(w.__SK_EXT_ID);
         if (ok && active) { setExtId(w.__SK_EXT_ID); setState('installed'); return true; }
       }
       // Method 3: PING the published Chrome Web Store ID directly. Works
-      // even when the content script hasn't injected the window flag yet
-      // (race on first paint, slow extension boot, content blocker on
-      // skinkeeper.store, etc.) thanks to manifest's `externally_connectable`.
+      // even when the content script hasn't run yet (race on first paint,
+      // slow extension boot, content blocker on skinkeeper.store, etc.)
+      // thanks to manifest's `externally_connectable`.
       const ok = await pingExtension(PROD_EXTENSION_ID);
       if (ok && active) { setExtId(PROD_EXTENSION_ID); setState('installed'); return true; }
       return false;
