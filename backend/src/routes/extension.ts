@@ -4,6 +4,27 @@ import { pool } from "../db/pool.js";
 import { fetchInspectData } from "../services/inspect.js";
 import rateLimit from "express-rate-limit";
 
+/**
+ * Parse Steam's "Tradable After" date format ("Apr 30, 2026 (06:00:00) GMT")
+ * into an ISO string. Returns null on parse failure or absurd dates so a
+ * malformed payload from the extension can't pollute trade_ban_until.
+ *
+ * Bounded to ±2 years from now — Steam's lock is at most 7 days, but
+ * other "Marketable After" dates can run a few months out for items just
+ * pulled from Storage. Anything outside that window is almost certainly a
+ * bad parse (e.g. a localized month name turning into year 2001).
+ */
+function parseSteamLockDate(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/[()]/g, "").trim();
+  const t = Date.parse(cleaned);
+  if (!Number.isFinite(t)) return null;
+  const now = Date.now();
+  if (t < now - 24 * 60 * 60 * 1000) return null; // already past
+  if (t > now + 730 * 24 * 60 * 60 * 1000) return null; // implausibly far future
+  return new Date(t).toISOString();
+}
+
 const router = Router();
 
 // Rate limit price submissions: 20 per minute per user/IP
@@ -197,6 +218,7 @@ router.post(
       let updated = 0;
       let decodedFromLink = 0;
       let linkUpdated = 0;
+      let lockUpdated = 0;
       let skippedNoData = 0;
 
       const client = await pool.connect();
@@ -282,6 +304,17 @@ router.post(
             linkUpdated++;
           }
 
+          // Trade lock — extension sees newly-traded items in real time,
+          // ahead of the backend's periodic inventory sweep. Accept the
+          // raw Steam string and parse server-side (single source of
+          // truth, validates against absurd dates).
+          const lockIso = parseSteamLockDate(item.trade_lock_date);
+          if (lockIso !== null) {
+            sets.push(`trade_ban_until = $${idx++}`);
+            vals.push(lockIso);
+            lockUpdated++;
+          }
+
           if (sets.length === 0) {
             skippedNoData++;
             continue;
@@ -312,9 +345,16 @@ router.post(
 
       console.log(
         `[Extension] Enriched ${updated} items for user ${req.userId} ` +
-        `(decoded=${decodedFromLink}, links=${linkUpdated}, skipped=${skippedNoData})`
+        `(decoded=${decodedFromLink}, links=${linkUpdated}, ` +
+        `lock=${lockUpdated}, skipped=${skippedNoData})`
       );
-      res.json({ ok: true, updated, decoded: decodedFromLink, skipped: skippedNoData });
+      res.json({
+        ok: true,
+        updated,
+        decoded: decodedFromLink,
+        lock: lockUpdated,
+        skipped: skippedNoData,
+      });
     } catch (err) {
       console.error("[Extension] Item enrich error:", err);
       res.status(500).json({ error: "Failed to enrich items" });

@@ -236,6 +236,7 @@ async function fetchEnrichedInventory() {
         || i.paintIndex != null
         || (i.stickers && i.stickers.length > 0)
         || hasResolvedLink(i.inspectLink)
+        || typeof i.tradeLockDate === 'string'
       )
       .map(i => ({
         asset_id: i.assetid,
@@ -244,12 +245,23 @@ async function fetchEnrichedInventory() {
         paint_index: i.paintIndex ?? null,
         stickers: i.stickers && i.stickers.length > 0 ? i.stickers : null,
         inspect_link: hasResolvedLink(i.inspectLink) ? i.inspectLink : null,
+        trade_lock_date: typeof i.tradeLockDate === 'string' ? i.tradeLockDate : null,
       }));
-    console.log(`[SkinKeeper] Items to sync: ${toSync.length} (of ${items.length} total)`);
     if (toSync.length > 0) {
+      const withFloat = toSync.filter(t => t.float_value != null).length;
+      const withSeed = toSync.filter(t => t.paint_seed != null).length;
+      const withPaintIdx = toSync.filter(t => t.paint_index != null).length;
+      const withStickers = toSync.filter(t => t.stickers != null).length;
+      const withLinks = toSync.filter(t => t.inspect_link != null).length;
+      const withLock = toSync.filter(t => t.trade_lock_date != null).length;
+      console.log(
+        `[SkinKeeper Sync] ${toSync.length}/${items.length}: ` +
+        `float=${withFloat} seed=${withSeed} paintIdx=${withPaintIdx} ` +
+        `stickers=${withStickers} links=${withLinks} lock=${withLock}`
+      );
       sendMessage({ type: 'SYNC_ITEMS', items: toSync })
-        .then(r => console.log('[SkinKeeper] Sync result:', r))
-        .catch(e => console.error('[SkinKeeper] Sync error:', e));
+        .then(r => console.log('[SkinKeeper Sync] Result:', r))
+        .catch(e => console.error('[SkinKeeper Sync] Error:', e));
     }
   }
 

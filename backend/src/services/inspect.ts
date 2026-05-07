@@ -1,5 +1,9 @@
 import { decodeLink } from "@csfloat/cs2-inspect-serializer";
 import { pool } from "../db/pool.js";
+import {
+  resolveSticker,
+  resolveKeychain,
+} from "./csgoCatalog.js";
 
 export interface StickerInfo {
   slot: number;
@@ -11,6 +15,11 @@ export interface StickerInfo {
 
 export interface CharmInfo {
   slot: number;
+  // The keychain's def_index — matches `def_index` in ByMykel's keychains.json.
+  // Previously named `pattern`, which conflated it with the in-game decorative
+  // pattern variant; the resolver actually keys off the type id (stickerId in
+  // the protobuf, def_index in the catalog).
+  charm_id: number;
   pattern: number;
   name: string;
   image: string;
@@ -53,19 +62,35 @@ export async function fetchInspectData(
   try {
     const decoded = decodeLink(inspectLink);
 
-    const stickers: StickerInfo[] = (decoded.stickers ?? []).map((s) => ({
+    // Resolve sticker/keychain names + images via the ByMykel catalog.
+    // resolveSticker/resolveKeychain are cached after first hit (24h TTL),
+    // so the await is effectively free on every subsequent decode.
+    const stickerSrc = decoded.stickers ?? [];
+    const stickerEntries = await Promise.all(
+      stickerSrc.map((s) => resolveSticker(s.stickerId ?? 0))
+    );
+    const stickers: StickerInfo[] = stickerSrc.map((s, i) => ({
       slot: s.slot ?? 0,
       sticker_id: s.stickerId ?? 0,
-      name: "",
+      name: stickerEntries[i]?.name ?? "",
       wear: s.wear ?? null,
-      image: "",
+      image: stickerEntries[i]?.image ?? "",
     }));
 
-    const charms: CharmInfo[] = (decoded.keychains ?? []).map((k) => ({
+    // Keychains share the Sticker proto; the catalog key is stickerId
+    // (= def_index in keychains.json), not pattern. Pattern is a
+    // decorative variant kept around for UI but not used as a resolver
+    // key — that conflation was the previous bug.
+    const charmSrc = decoded.keychains ?? [];
+    const charmEntries = await Promise.all(
+      charmSrc.map((k) => resolveKeychain(k.stickerId ?? 0))
+    );
+    const charms: CharmInfo[] = charmSrc.map((k, i) => ({
       slot: k.slot ?? 0,
+      charm_id: k.stickerId ?? 0,
       pattern: k.pattern ?? 0,
-      name: "",
-      image: "",
+      name: charmEntries[i]?.name ?? "",
+      image: charmEntries[i]?.image ?? "",
     }));
 
     return {

@@ -206,6 +206,61 @@ describe("POST /api/ext/items/enrich", () => {
     expect(res.body.updated).toBe(1);
   });
 
+  it("accepts trade_lock_date and writes parsed ISO to trade_ban_until", async () => {
+    setupAuthHappyPath();
+
+    // Future-dated lock the parser must accept (within ±2y).
+    const future = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    const month = future.toLocaleString("en-US", { month: "short" });
+    const lockRaw = `${month} ${future.getDate()}, ${future.getFullYear()} (06:00:00) GMT`;
+
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/ext/items/enrich")
+      .set("Authorization", `Bearer ${authToken()}`)
+      .send({
+        items: [{ asset_id: "a1", trade_lock_date: lockRaw }],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.lock).toBe(1);
+    expect(res.body.updated).toBe(1);
+
+    const updateCall = mockClientQuery.mock.calls.find((c) =>
+      typeof c[0] === "string" && c[0].includes("UPDATE inventory_items")
+    );
+    const sql = updateCall![0] as string;
+    expect(sql).toContain("trade_ban_until");
+    const params = updateCall![1] as any[];
+    // Find the ISO timestamp in params — it should be a parsed Date string.
+    const iso = params.find(
+      (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)
+    );
+    expect(iso).toBeTruthy();
+    // Same day as the input lock.
+    expect(iso!.startsWith(future.toISOString().slice(0, 10))).toBe(true);
+  });
+
+  it("rejects trade_lock_date that's already past or implausibly far future", async () => {
+    setupAuthHappyPath();
+
+    const app = makeApp();
+    const res = await request(app)
+      .post("/api/ext/items/enrich")
+      .set("Authorization", `Bearer ${authToken()}`)
+      .send({
+        items: [
+          { asset_id: "a1", trade_lock_date: "Jan 1, 2010 (06:00:00) GMT" }, // past
+          { asset_id: "a2", trade_lock_date: "Jan 1, 2099 (06:00:00) GMT" }, // far future
+          { asset_id: "a3", trade_lock_date: "garbage" },                    // unparseable
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.lock).toBe(0);
+    expect(res.body.skipped).toBe(3);
+  });
+
   it("preserves existing UPDATE param ordering (inspect_link goes after array fields)", async () => {
     setupAuthHappyPath();
     mockFetchInspectData.mockResolvedValueOnce({

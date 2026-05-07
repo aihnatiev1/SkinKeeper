@@ -31,6 +31,7 @@ import usersRoutes from "./routes/users.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { log } from "./utils/logger.js";
 import { preloadCSGOData } from "./services/csgoData.js";
+import { preloadCSGOCatalog } from "./services/csgoCatalog.js";
 import type { AuthRequest } from "./middleware/auth.js";
 
 dotenv.config({ override: true });
@@ -258,8 +259,9 @@ async function start() {
     cleanupOrphanedOperations().catch((err) => console.warn("[Cleanup] sell ops:", err.message))
   );
 
-  // Pre-warm CSGO-API static data cache
+  // Pre-warm CSGO-API static data cache (skins, stickers, keychains)
   preloadCSGOData();
+  preloadCSGOCatalog();
 
   // Seed Steam item_nameids for histogram API (non-blocking)
   import("./services/steamHistogram.js").then(({ seedItemNameIds }) =>
