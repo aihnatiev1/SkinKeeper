@@ -96,6 +96,44 @@ describe("getExchangeRate", () => {
     const rate = await getExchangeRate(18);
     expect(rate).toBeNull();
   });
+
+  it("short-circuits to forex on first 429 instead of probing all items", async () => {
+    // Regression: previously, a 429 from Steam was logged at warn level
+    // for *each* of 3 probe items, plus 3s delays — 6 hits + 9s wasted
+    // before the forex fallback. New behavior: bail on first 429.
+    const err429 = Object.assign(new Error("Request failed"), {
+      response: { status: 429 },
+    });
+    mockedAxios.get = vi.fn()
+      .mockRejectedValueOnce(err429)
+      // Forex fallback succeeds. If short-circuit didn't work, axios would
+      // have been called 6+ times before reaching this mock.
+      .mockResolvedValueOnce({ data: { rates: { UAH: 41.0 } } });
+
+    const { getExchangeRate } = await import("../currency.js");
+    const rate = await getExchangeRate(18);
+    expect(rate).toBe(41.0);
+    // 1 Steam probe + 1 forex call = 2 total. NOT 7 (6 Steam + 1 forex).
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("negative cache prevents hammering Steam after a fail", async () => {
+    // Regression: a failing fetch cached nothing, so every getExchangeRate
+    // call retried Steam end-to-end. Now we cache the failure for ~10 min.
+    mockedAxios.get = vi.fn().mockRejectedValue(new Error("network error"));
+
+    const { getExchangeRate } = await import("../currency.js");
+
+    const r1 = await getExchangeRate(18);
+    expect(r1).toBeNull();
+    const callsAfterFirst = mockedAxios.get.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    const r2 = await getExchangeRate(18);
+    expect(r2).toBeNull();
+    // Second call MUST NOT have hit Steam at all — negative cache served it.
+    expect(mockedAxios.get.mock.calls.length).toBe(callsAfterFirst);
+  });
 });
 
 describe("convertUsdToWallet", () => {

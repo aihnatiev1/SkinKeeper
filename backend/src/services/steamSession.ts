@@ -612,6 +612,31 @@ export class SteamSessionService {
   // ─── Session Refresh ────────────────────────────────────────────────
 
   /**
+   * Classify a refreshSession() error as either permanently fatal (the
+   * refresh token will never work again — user must re-auth) or transient
+   * (network blip, Steam 502, etc — safe to retry next sweep).
+   *
+   * Permanently fatal:
+   *   - eresult 15 (AccessDenied) — token revoked / password changed
+   *   - eresult  5 (InvalidPassword)
+   *   - eresult 65 (AccountLocked)
+   *   - "Malformed login response" — Steam can't parse our token
+   *
+   * Anything else (timeouts, 5xx) we keep retrying on schedule.
+   */
+  private static isFatalRefreshError(err: unknown): boolean {
+    const e = err as { eresult?: number; message?: string };
+    if (typeof e?.eresult === "number") {
+      // 15=AccessDenied, 5=InvalidPassword, 65=AccountLocked
+      if (e.eresult === 15 || e.eresult === 5 || e.eresult === 65) return true;
+    }
+    if (typeof e?.message === "string" && e.message.includes("Malformed login response")) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Attempt to refresh a Steam session using stored refresh token.
    */
   static async refreshSession(
@@ -651,6 +676,33 @@ export class SteamSessionService {
 
       return { refreshed: true };
     } catch (err) {
+      if (this.isFatalRefreshError(err)) {
+        // Token is dead. Clearing it removes this account from the
+        // sessionRefreshJob candidate set (which filters
+        // steam_refresh_token IS NOT NULL), so we stop hammering Steam
+        // every sweep with a token Steam already rejected.
+        // The account stays linked; user re-authenticates via the app.
+        console.warn(
+          `[Session] Refresh token rejected for account ${accountId} (fatal):`,
+          (err as Error)?.message || err
+        );
+        try {
+          await pool.query(
+            `UPDATE steam_accounts
+                SET steam_refresh_token = NULL,
+                    session_method = 'invalid'
+              WHERE id = $1`,
+            [accountId]
+          );
+        } catch (clearErr) {
+          console.error(
+            `[Session] Failed to clear dead refresh token for account ${accountId}:`,
+            clearErr
+          );
+        }
+        return { refreshed: false, reason: "refresh_token_revoked" };
+      }
+
       console.error(`[Session] Refresh failed for account ${accountId}:`, err);
       return { refreshed: false, reason: "refresh_failed" };
     }

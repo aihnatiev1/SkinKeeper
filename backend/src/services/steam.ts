@@ -265,8 +265,11 @@ async function fetchInventoryViaAPI(
 ): Promise<ParsedInventoryItem[]> {
   const items: ParsedInventoryItem[] = [];
   let lastAssetId: string | undefined;
+  let trulyPartial = false;
+  let lastPage = -1;
 
   for (let page = 0; page < 20; page++) {
+    lastPage = page;
     const params: Record<string, string> = {
       access_token: accessToken,
       steamid: steamId,
@@ -371,11 +374,26 @@ async function fetchInventoryViaAPI(
 
     if (!result.more_items) break;
     lastAssetId = result.last_assetid || assets[assets.length - 1]?.assetid;
-    if (!lastAssetId) break;
+    if (!lastAssetId) {
+      // Steam said "more_items=true" but didn't give us a cursor —
+      // genuine partial fetch. Caller should retry.
+      trulyPartial = true;
+      break;
+    }
   }
 
-  if (items.length > 0 && items.length < 10) {
-    console.warn(`[Steam] API inventory returned only ${items.length} items — possible partial fetch`);
+  // A real partial fetch is when (a) Steam paginated us off the end without
+  // a cursor, or (b) we hit the 20-page safety cap. The previous heuristic
+  // ("items.length < 10") fired for any small inventory and produced 68
+  // false-positive warnings per sweep — drowning real partial fetches.
+  if (trulyPartial) {
+    console.warn(
+      `[Steam] API inventory partial fetch for ${steamId}: ${items.length} items, no continuation cursor`
+    );
+  } else if (lastPage === 19) {
+    console.warn(
+      `[Steam] API inventory hit page cap (20) for ${steamId}: ${items.length} items — likely truncated`
+    );
   }
 
   return items;

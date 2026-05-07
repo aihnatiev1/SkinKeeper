@@ -54,6 +54,10 @@ async function refreshOne(accountId: number): Promise<void> {
     const { refreshed, reason } = await SteamSessionService.refreshSession(accountId);
     if (refreshed) {
       console.log(`[SessionRefresh] accountId=${accountId} refreshed OK (was ${status})`);
+    } else if (reason === "refresh_token_revoked") {
+      // refreshSession already cleared the dead token + logged a one-line warn.
+      // Don't log again — just note that this sweep skipped it cleanly.
+      console.log(`[SessionRefresh] accountId=${accountId} disabled — token revoked`);
     } else {
       console.log(`[SessionRefresh] accountId=${accountId} skip — ${reason}`);
     }

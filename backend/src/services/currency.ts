@@ -88,9 +88,16 @@ export function getCurrencyInfo(steamCurrencyId: number): CurrencyInfo | null {
 
 // ─── Exchange rate cache ────────────────────────────────────────────────
 
-const RATE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const RATE_TTL_MS = 60 * 60 * 1000; // 1 hour for successful rates
+// Negative cache: when Steam + forex both fail (typically Steam-wide 429),
+// remember "we tried, give it a rest" for 10 min so a busy autoSell loop
+// doesn't burn 6 Steam hits per item every cycle. 10 min ≪ Steam 429
+// window typically clears in 1–5 min, so we won't be needlessly stale.
+const NEGATIVE_CACHE_TTL_MS = 10 * 60 * 1000;
 const rateCache = new TTLCache<number, number>(RATE_TTL_MS, 50);
+const negativeRateCache = new TTLCache<number, true>(NEGATIVE_CACHE_TTL_MS, 50);
 registerCache("exchangeRate", rateCache as unknown as TTLCache<unknown, unknown>);
+registerCache("exchangeRateNegative", negativeRateCache as unknown as TTLCache<unknown, unknown>);
 
 // Multiple probe items for resilience against rate limits
 const RATE_PROBE_ITEMS = [
@@ -123,13 +130,19 @@ export function parseSteamPrice(s: string | undefined): number | null {
  * Fetch the exchange rate from USD to a Steam currency.
  * Uses Steam's own priceoverview endpoint to derive the real rate.
  * Tries multiple items in case of rate limiting.
+ *
+ * If Steam returns 429 on the *first* probe, we abort and short-circuit
+ * to the forex fallback — subsequent probes would just compound the
+ * rate-limit window. Earlier behavior burned 6 hits per call cycle which
+ * spammed err logs without any chance of success.
  */
 async function fetchExchangeRate(
   targetCurrencyId: number
 ): Promise<number | null> {
   if (targetCurrencyId === 1) return 1;
 
-  for (const item of RATE_PROBE_ITEMS) {
+  for (let i = 0; i < RATE_PROBE_ITEMS.length; i++) {
+    const item = RATE_PROBE_ITEMS[i];
     try {
       // Sequential calls to avoid double rate-limiting
       const usdRes = await axios.get(
@@ -174,9 +187,17 @@ async function fetchExchangeRate(
       );
       return rate;
     } catch (err: any) {
-      console.warn(
+      const status = err?.response?.status;
+      // 429 is Steam-wide and persistent for minutes — retrying other
+      // probe items just compounds the cooldown. Log once at info level
+      // (not warn → keeps err log clean), then bail to forex fallback.
+      if (status === 429) {
+        console.log(`[Currency] Steam priceoverview 429 — falling back to forex`);
+        break;
+      }
+      console.log(
         `[Currency] Rate probe failed for "${item}":`,
-        err.response?.status || err.message
+        status || err.message
       );
       // Wait before trying next item
       await new Promise((r) => setTimeout(r, 3000));
@@ -231,9 +252,18 @@ export async function getExchangeRate(
     return cached;
   }
 
+  // Negative cache: if we recently failed to fetch, stop hammering Steam
+  // until the cooldown clears. Caller gets null (already a documented
+  // possibility) — same as if fetch had just failed.
+  if (negativeRateCache.get(targetCurrencyId) !== undefined) {
+    return null;
+  }
+
   const rate = await fetchExchangeRate(targetCurrencyId);
   if (rate !== null) {
     rateCache.set(targetCurrencyId, rate);
+  } else {
+    negativeRateCache.set(targetCurrencyId, true);
   }
 
   return rate;

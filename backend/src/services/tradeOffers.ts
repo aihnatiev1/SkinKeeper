@@ -1904,7 +1904,9 @@ async function scrapeTradeOffersHtml(accountId: number): Promise<{ synced: numbe
              CASE WHEN xmax = 0 THEN NULL ELSE $6 END AS was_insert`,
           [
             userId, direction, offer.steamOfferId,
-            offer.partnerSteamId || offer.partnerName,
+            // partner_steam_id holds a real 17-digit Steam ID or NULL.
+            // Display name lives in offer.partnerName; do NOT overflow varchar(17).
+            offer.partnerSteamId || null,
             offer.message, dbStatus, isInternal,
             direction === "outgoing" ? accountId : partnerAccountId,
             direction === "incoming" ? accountId : partnerAccountId,
@@ -2584,7 +2586,9 @@ async function scrapeTradeHistoryHtml(
            RETURNING id, (xmax = 0) AS is_new`,
           [
             userId, direction, syntheticOfferId,
-            trade.partnerSteamId || trade.partnerName,
+            // partner_steam_id holds a real 17-digit Steam ID or NULL.
+            // Display name goes to partner_name; never spill it into varchar(17).
+            trade.partnerSteamId || null,
             trade.partnerName,
             giveValue, recvValue, isInternal,
             direction === "outgoing" ? accountId : partnerAccountId,

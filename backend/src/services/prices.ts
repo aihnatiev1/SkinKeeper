@@ -1147,7 +1147,9 @@ export function startHotSteamLoop(): void {
           HOT_LOOP_COOLING_MAX_MS,
           soonest - Date.now() + Math.floor(Math.random() * 3_000),
         );
-        console.warn(
+        // Informational — not an error. Same reasoning as the per-slot
+        // "slot cooling" log: this is the circuit breaker doing its job.
+        console.log(
           `[HotSteam] All slots cooling — parking ${Math.ceil(waitMs / 1000)}s`
         );
         await new Promise((r) => setTimeout(r, waitMs));
@@ -1219,7 +1221,10 @@ async function hotWorker(
     // If the pool put my slot on cooldown, exit the cycle — don't bang the wall.
     // Main loop's circuit breaker will park until we're welcome back.
     if (!isSlotAvailable(slotIdx, HOT_STEAM_DOMAIN)) {
-      console.warn(`[HotSteam:${slotName}] slot cooling — yielding to main loop`);
+      // Cooldown is by design (rate-limit backoff) — informational, not an
+      // error. Logging at warn level floods the err log (~84 lines per
+      // sweep × 3 slots) and drowns real errors out.
+      console.log(`[HotSteam:${slotName}] slot cooling — yielding to main loop`);
       return updated;
     }
 
